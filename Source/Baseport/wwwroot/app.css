@@ -2102,6 +2102,10 @@ li.CodeMirror-hint-active {
     border-bottom: none;
 }
 
+.setting-row:has(> .switch) {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .setting-label label {
     font-size: .875rem;
     font-weight: 500;

@@ -605,7 +605,7 @@ function openFieldEditor(fieldId) {
     const wrap = document.createElement('div');
 
     wrap.appendChild(fieldInputRow('Field name', 'feName', f.name, 'e.g. UnitPrice'));
-    wrap.appendChild(fieldInputRow('Label (shown to visitors)', 'feLabel', f.label, 'Unit price'));
+    wrap.appendChild(fieldInputRow('Label (shown externally)', 'feLabel', f.label, 'Unit price'));
     wrap.appendChild(fieldInputRow('Help text', 'feHelp', f.helpText, 'Excluding VAT'));
 
     const typeRow = ui.combobox('Data type', {
@@ -866,7 +866,6 @@ function openFieldEditor(fieldId) {
             );
             document.getElementById('feConfig').addEventListener('input', syncFeDefault);
         } else if (t === 'reference') {
-            row.appendChild(fieldInputRow('Target table name', 'feConfig', '', 'Customers'));
             const sel = document.createElement('select');
             sel.className = 'input';
             sel.id = 'feConfig';
