@@ -8,11 +8,26 @@
 function element(tag = 'div') {
     const node = {
         tagName: String(tag).toUpperCase(),
-        children: [], attributes: {}, dataset: {}, style: {},
-        _classes: new Set(), _text: '', _html: '', parentNode: null, hidden: false, disabled: false, value: '', checked: false, selectionStart: 0,
+        children: [],
+        attributes: {},
+        dataset: {},
+        style: {},
+        _classes: new Set(),
+        _text: '',
+        _html: '',
+        parentNode: null,
+        hidden: false,
+        disabled: false,
+        value: '',
+        checked: false,
+        selectionStart: 0,
         classList: {
-            add(...c) { c.forEach(x => node._classes.add(x)); },
-            remove(...c) { c.forEach(x => node._classes.delete(x)); },
+            add(...c) {
+                c.forEach(x => node._classes.add(x));
+            },
+            remove(...c) {
+                c.forEach(x => node._classes.delete(x));
+            },
             contains: c => node._classes.has(c),
             toggle(c, force) {
                 const on = force === undefined ? !node._classes.has(c) : !!force;
@@ -20,23 +35,60 @@ function element(tag = 'div') {
                 return on;
             }
         },
-        get className() { return [...node._classes].join(' '); },
-        set className(v) { node._classes = new Set(String(v).split(/\s+/).filter(Boolean)); },
-        get innerText() { return node._text; },
-        set innerText(v) { node._text = String(v); },
-        get textContent() { return node._text; },
-        set textContent(v) { node._text = String(v); },
-        get innerHTML() { return node._html; },
-        set innerHTML(v) { node._html = String(v); node.children = []; },
-        append(...kids) { kids.forEach(k => { if (k && typeof k === 'object') { k.parentNode = node; node.children.push(k); } }); },
-        appendChild(k) { node.append(k); return k; },
+        get className() {
+            return [...node._classes].join(' ');
+        },
+        set className(v) {
+            node._classes = new Set(String(v).split(/\s+/).filter(Boolean));
+        },
+        get innerText() {
+            return node._text;
+        },
+        set innerText(v) {
+            node._text = String(v);
+        },
+        get textContent() {
+            return node._text;
+        },
+        set textContent(v) {
+            node._text = String(v);
+        },
+        get innerHTML() {
+            return node._html;
+        },
+        set innerHTML(v) {
+            node._html = String(v);
+            node.children = [];
+        },
+        append(...kids) {
+            kids.forEach(k => {
+                if (k && typeof k === 'object') {
+                    k.parentNode = node;
+                    node.children.push(k);
+                }
+            });
+        },
+        appendChild(k) {
+            node.append(k);
+            return k;
+        },
         replaceWith() {},
-        remove() { if (node.parentNode) node.parentNode.children = node.parentNode.children.filter(c => c !== node); },
-        setAttribute(k, v) { node.attributes[k] = String(v); },
+        remove() {
+            if (node.parentNode) node.parentNode.children = node.parentNode.children.filter(c => c !== node);
+        },
+        setAttribute(k, v) {
+            node.attributes[k] = String(v);
+        },
         getAttribute: k => node.attributes[k],
-        addEventListener() {}, removeEventListener() {}, focus() {}, select() {}, scrollIntoView() {},
+        addEventListener() {},
+        removeEventListener() {},
+        focus() {},
+        select() {},
+        scrollIntoView() {},
         setSelectionRange() {},
-        querySelector: () => null, querySelectorAll: () => [], closest: () => null
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        closest: () => null
     };
     return node;
 }
@@ -44,10 +96,21 @@ function element(tag = 'div') {
 /** Installs globals and returns a registry so a test can assert on elements by id. */
 function install(ids = []) {
     const byId = {};
-    ids.forEach(id => { byId[id] = element(); byId[id].id = id; });
+    ids.forEach(id => {
+        byId[id] = element();
+        byId[id].id = id;
+    });
 
     const store = {};
-    global.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+    global.localStorage = {
+        getItem: k => (k in store ? store[k] : null),
+        setItem: (k, v) => {
+            store[k] = String(v);
+        },
+        removeItem: k => {
+            delete store[k];
+        }
+    };
     global.document = {
         documentElement: element('html'),
         body: element('body'),
@@ -55,15 +118,33 @@ function install(ids = []) {
         createElement: tag => element(tag),
         querySelector: () => null,
         querySelectorAll: () => [],
-        addEventListener() {}, removeEventListener() {}
+        addEventListener() {},
+        removeEventListener() {}
     };
     global.window = {
-        matchMedia: () => ({ matches: false, addEventListener() {}, addListener() {} }),
-        addEventListener() {}, location: { pathname: '/', origin: 'http://test' }
+        matchMedia: () => ({
+            matches: false,
+            addEventListener() {},
+            addListener() {}
+        }),
+        addEventListener() {},
+        location: {
+            pathname: '/',
+            origin: 'http://test'
+        }
     };
-    global.navigator = { language: 'en' };
+    global.navigator = {
+        language: 'en'
+    };
     global.requestAnimationFrame = fn => fn();
-    return { byId, store, element };
+    return {
+        byId,
+        store,
+        element
+    };
 }
 
-module.exports = { install, element };
+module.exports = {
+    install,
+    element
+};

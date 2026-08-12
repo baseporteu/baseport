@@ -10,6 +10,7 @@ let formTableIsProxy = false;
 let layout = {
     rows: []
 };
+let formOriginalSnapshot = null; // set once the editor finishes loading; hasUnsavedFormChanges diffs against it
 
 const ACTION_HINTS = {
     submit: 'Collects a new record. Design the matrix below.',
@@ -96,6 +97,7 @@ function newForm() {
     document.getElementById('formEditor').scrollIntoView({
         behavior: 'smooth'
     });
+    formOriginalSnapshot = JSON.stringify(formSnapshot());
 }
 
 // selectForm navigates, editForm paints; skipping navigate() draws the editor under the table instead of over it
@@ -134,10 +136,12 @@ async function editForm(id) {
     document.getElementById('formEditor').scrollIntoView({
         behavior: 'smooth'
     });
+    formOriginalSnapshot = JSON.stringify(formSnapshot());
 }
 
 function closeFormEditor() {
     formEditingId = null;
+    formOriginalSnapshot = null;
     refreshSidebar('forms');
     document.getElementById('formEditor').classList.add('hidden');
 }
@@ -692,21 +696,32 @@ function parseConfig(json) {
 
 /* save */
 
+// same shape saveForm posts; also doubles as the dirty-check snapshot so both read one definition of "the form's state"
+function formSnapshot() {
+    return {
+        tableId: document.getElementById('formTable').value,
+        kind: formKind,
+        actions: formActions,
+        title: document.getElementById('formTitle').value.trim(),
+        description: document.getElementById('formDescription').value.trim(),
+        layoutJson: formKind === 'form' && formActions.includes('submit') ? JSON.stringify(layout) : '[]',
+        configJson: JSON.stringify({
+            ...formConfigDraft,
+            ...collectConfig()
+        }),
+        isPublished: document.getElementById('formPublished').checked,
+    };
+}
+
+function hasUnsavedFormChanges() {
+    const editor = document.getElementById('formEditor');
+    if (!editor || editor.classList.contains('hidden')) return false;
+    return formOriginalSnapshot !== null && JSON.stringify(formSnapshot()) !== formOriginalSnapshot;
+}
+
 async function saveForm(btn) {
     await ui.busy(btn, async () => {
-        const body = {
-            tableId: document.getElementById('formTable').value,
-            kind: formKind,
-            actions: formActions,
-            title: document.getElementById('formTitle').value.trim(),
-            description: document.getElementById('formDescription').value.trim(),
-            layoutJson: formKind === 'form' && formActions.includes('submit') ? JSON.stringify(layout) : '[]',
-            configJson: JSON.stringify({
-                ...formConfigDraft,
-                ...collectConfig()
-            }),
-            isPublished: document.getElementById('formPublished').checked,
-        };
+        const body = formSnapshot();
 
         if (!body.title) {
             ui.toast('Form title is required.', 'error');
@@ -734,6 +749,7 @@ async function saveForm(btn) {
             failure: 'Failed to save the form.',
         });
         if (!saved) return;
+        formOriginalSnapshot = JSON.stringify(body); // just persisted; navigate() below must not think this is still unsaved
         await loadTables();
         await navigate(`/forms/${saved.id}`);
     });

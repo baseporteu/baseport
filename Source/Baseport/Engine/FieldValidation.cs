@@ -54,6 +54,10 @@ public static class FieldValidation
         RegexOptions.Compiled);
     private static readonly Regex SlugPattern = new(@"^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.Compiled);
 
+    // A field name is a JSON key, a bare identifier in JsExpr expressions (data.Name / data["Name"]), and an OpenAPI property
+    // name all at once, so it is restricted the same way an identifier is, not left free-form like a label.
+    private static readonly Regex FieldNamePattern = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
+
     // mirrors RefTableId's { "tableId": ... } shape
     public static string? SlugSourceField(string optionsJson)
     {
@@ -288,6 +292,8 @@ public static class FieldValidation
         if (string.IsNullOrWhiteSpace(f.Name)) errs.Add("Field name is required.");
         else if (otherNames.Contains(f.Name)) errs.Add($"Field name '{f.Name}' already exists.");
         else if (f.Name.Length > 64) errs.Add("Field name is too long (max 64 characters).");
+        else if (!FieldNamePattern.IsMatch(f.Name))
+            errs.Add("Field name must start with a letter or underscore, and contain only letters, digits and underscores.");
 
         if (f.Label.Length > 128) errs.Add("Field label is too long (max 128 characters).");
         if (f.HelpText.Length > 512) errs.Add("Field help text is too long (max 512 characters).");

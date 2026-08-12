@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 using System.Text.Json.Nodes;
 
 namespace Baseport;
@@ -337,6 +338,14 @@ public static class AdminEndpoints
             var s = await db.SettingsAsync() ?? new AppSettings();
             var dbPath = db.Database.GetDbConnection().DataSource;
             long? dbSizeBytes = dbPath != ":memory:" && File.Exists(dbPath) ? new FileInfo(dbPath).Length : null;
+
+            // Same estimate the tables list sorts "Index size" by, summed instance-wide.
+            var indexTables = await db.Tables.Include(t => t.Fields).ToListAsync();
+            var indexRecordCounts = await db.Records.GroupBy(r => r.TableId)
+                .Select(g => new { TableId = g.Key, Count = g.Count() }).ToListAsync();
+            var estimatedIndexBytes = indexTables.Sum(t =>
+                RecordIndexes.EstimateIndexBytes(t, indexRecordCounts.FirstOrDefault(r => r.TableId == t.Id)?.Count ?? 0));
+
             return Results.Ok(new
             {
                 s.AppName,
@@ -348,12 +357,19 @@ public static class AdminEndpoints
                 s.ApiDescription,
                 s.AllowedOrigins,
                 s.OpenApiEnabled,
-                version = "0.2.0",
+                s.PostgresEnabled,
+                s.PostgresPort,
+                s.PostgresBindAddress,
+                s.TdsEnabled,
+                s.TdsPort,
+                s.TdsBindAddress,
+                version = "0.1.0", // to-do: hardcoded for now, but should be the actual version of the running app on first minor release
                 uptime = DateTime.UtcNow - Ids.StartedAt,
                 openapiPath = "/api/openapi.json",
                 docsPath = "/docs",
                 dbPath,
                 dbSizeBytes,
+                estimatedIndexBytes,
                 tables = await db.Tables.CountAsync(),
                 fields = await db.Fields.CountAsync(),
                 forms = await db.FormConfigs.CountAsync(),
@@ -411,8 +427,15 @@ public static class AdminEndpoints
             if (body["openApiEnabled"] is JsonValue oav && oav.TryGetValue<bool>(out var openApiEnabled))
                 s.OpenApiEnabled = openApiEnabled;
 
+            var providerError = ApplyProviderSettings(body, s);
+            if (providerError is not null) return Results.BadRequest(new { errors = new[] { providerError } });
+
             await db.SaveChangesAsync();
-            return Results.Ok(new { s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.BackupRetention, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled });
+            return Results.Ok(new
+            {
+                s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.BackupRetention, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled,
+                s.PostgresEnabled, s.PostgresPort, s.PostgresBindAddress, s.TdsEnabled, s.TdsPort, s.TdsBindAddress
+            });
         });
 
         // Read-only SQL console against the SQLite store.
@@ -494,6 +517,38 @@ public static class AdminEndpoints
             return Results.Ok(new { columns = run.Columns, rows = run.Rows, truncated = run.Truncated, rowCount = run.Rows.Count });
         });
 
+    }
+
+    // shared by the settings put endpoint: keeps postgres/tds bind-address and port validation in one place
+    private static string? ApplyProviderSettings(JsonObject body, AppSettings s)
+    {
+        if (body["postgresEnabled"] is JsonValue pev && pev.TryGetValue<bool>(out var postgresEnabled))
+            s.PostgresEnabled = postgresEnabled;
+        if (body["postgresPort"] is JsonValue ppv && ppv.TryGetValue<int>(out var postgresPort))
+        {
+            if (postgresPort is < 1 or > 65535) return "Postgres port must be between 1 and 65535.";
+            s.PostgresPort = postgresPort;
+        }
+        if (body["postgresBindAddress"] is JsonValue pbv && pbv.TryGetValue<string>(out var postgresBind))
+        {
+            if (!IPAddress.TryParse(postgresBind, out _)) return "Postgres bind address must be a valid IP address.";
+            s.PostgresBindAddress = postgresBind;
+        }
+
+        if (body["tdsEnabled"] is JsonValue tev && tev.TryGetValue<bool>(out var tdsEnabled))
+            s.TdsEnabled = tdsEnabled;
+        if (body["tdsPort"] is JsonValue tpv && tpv.TryGetValue<int>(out var tdsPort))
+        {
+            if (tdsPort is < 1 or > 65535) return "TDS port must be between 1 and 65535.";
+            s.TdsPort = tdsPort;
+        }
+        if (body["tdsBindAddress"] is JsonValue tbv && tbv.TryGetValue<string>(out var tdsBind))
+        {
+            if (!IPAddress.TryParse(tdsBind, out _)) return "TDS bind address must be a valid IP address.";
+            s.TdsBindAddress = tdsBind;
+        }
+
+        return null;
     }
 
     // AccountValidation.Validate returns flat messages; the ones it writes always name the field they're about

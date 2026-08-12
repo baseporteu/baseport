@@ -78,7 +78,7 @@
                 </button>
                 <button type='button' class='rail-btn' data-section='sql' onclick='goSection("sql")' ondblclick='toggleRail()' title='SQL console'>
                     <svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='22' height='22'><path d='M17 3a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6M3 21l9-9M12.2 6.3 11 5l-3.5 3.5 1.2 1.2z'/><path d='M5 3l1.5 1.5M5 3 3.5 4.5M12.8 17.3 14 18.6l3.5-3.5-1.2-1.2zM14.5 12.5h2M17 21l-1.5-1.5M17 21l1.5-1.5'/></svg>
-                    <span class='rail-label'>SQL</span>
+                    <span class='rail-label'>Query</span>
                 </button>
                 <button type='button' class='rail-btn' data-section='schema' onclick='goSection("schema")' ondblclick='toggleRail()' title='Schema'>
                     <svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='22' height='22'><circle cx='12' cy='5' r='2'/><circle cx='5' cy='19' r='2'/><circle cx='19' cy='19' r='2'/><path d='M12 7v6M5 17l2.5-4M19 17l-2.5-4M12 13l-4.5 4M12 13l4.5 4'/></svg>
@@ -98,17 +98,24 @@
                 </button>
             </nav>
             <div class='rail-footer'>
-                <button type='button' class='rail-btn' onclick='toggleTheme()' title='Toggle theme'>
-                    <svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='22' height='22'><path d='M8 12a4 4 0 1 0 8 0 4 4 0 1 0-8 0M3 12h1m8-9v1m8 8h1m-9 8v1M5.6 5.6l.7.7m12.1-.7-.7.7m0 11.4.7.7m-12.1-.7-.7.7'/></svg>
-                </button>
-                <button type='button' class='rail-btn' onclick='signOut()' title='Sign out'>
-                    <svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='22' height='22'><path d='M14 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2M9 12h12l-3-3m3 3-3 3'/></svg>
-                </button>
-                <button type='button' class='rail-btn' onclick="window.open('/docs', '_blank', 'noopener')" title='API reference'>
-                    <svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='22' height='22'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6M9 13h6M9 17h4'/></svg>
-                </button>
-                <div class='rail-avatar' id='railAvatar' title='Signed in'>A</div>
-                <div class='rail-version'>v0.1.0</div>
+                <div class='rail-utils'>
+                    <button type='button' class='rail-btn' onclick="window.open('/docs', '_blank', 'noopener')" title='API reference'>
+                        <svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='22' height='22'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6M9 13h6M9 17h4'/></svg>
+                    </button>
+                    <button type='button' class='rail-btn' onclick='toggleTheme()' title='Toggle theme'>
+                        <svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='22' height='22'><path d='M8 12a4 4 0 1 0 8 0 4 4 0 1 0-8 0M3 12h1m8-9v1m8 8h1m-9 8v1M5.6 5.6l.7.7m12.1-.7-.7.7m0 11.4.7.7m-12.1-.7-.7.7'/></svg>
+                    </button>
+                    <button type='button' class='rail-btn' onclick='signOut()' title='Sign out'>
+                        <svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='22' height='22'><path d='M14 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2M9 12h12l-3-3m3 3-3 3'/></svg>
+                    </button>
+                </div>
+                <div class='rail-account'>
+                    <div class='rail-avatar' id='railAvatar' title='Signed in'>A</div>
+                    <div class='rail-account-text'>
+                        <span class='rail-account-name' id='railAccountName'></span>
+                        <span class='rail-version' id='railVersion'>v0.1.0</span>
+                    </div>
+                </div>
             </div>
         </aside>
 

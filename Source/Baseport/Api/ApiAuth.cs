@@ -19,9 +19,16 @@ public static class ApiAuth
 
         var presented = header["Bearer ".Length..].Trim();
         if (presented.Length == 0) return null;
+        return await ResolveByTokenAsync(db, presented);
+    }
+
+    // same resolution, for callers with no HttpContext to pull a bearer header from (the postgres/tds wire listeners authenticate off the password field instead)
+    public static async Task<UserAccount?> ResolveByTokenAsync(AppDbContext db, string token)
+    {
+        if (string.IsNullOrEmpty(token)) return null;
 
         // One indexed lookup, not a scan of every api-enabled account.
-        var hash = HashToken(presented);
+        var hash = HashToken(token);
         var account = await db.UserAccounts.FirstOrDefaultAsync(u => u.ApiTokenHash == hash);
         if (account is null || !account.ApiEnabled || account.IsDisabled) return null;
         // An expired token is refused rather than renewed silently.

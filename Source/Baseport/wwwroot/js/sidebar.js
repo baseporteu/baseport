@@ -88,6 +88,7 @@ const SIDEBARS = {
         items: () => [
             ['host', 'Host'],
             ['auth', 'Authentication'],
+            ['providers', 'Providers'],
             ['sites', 'Sites'],
             ['jobs', 'Jobs'],
             ['backups', 'Backups'],

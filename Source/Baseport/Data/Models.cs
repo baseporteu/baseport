@@ -230,6 +230,16 @@ public class AppSettings
     // OpenAPI specification description (Markdown).
     public string ApiDescription { get; set; } =
         "A secure REST API for managing your resources. All endpoints are under `/api/v1/` and require a bearer token.";
+
+    // Postgres wire-protocol listener: off by default, it's a second authentication surface.
+    public bool PostgresEnabled { get; set; } = false;
+    public int PostgresPort { get; set; } = 5432;
+    public string PostgresBindAddress { get; set; } = "127.0.0.1";
+
+    // TDS (SQL Server) wire-protocol listener: off by default, it's a second authentication surface.
+    public bool TdsEnabled { get; set; } = false;
+    public int TdsPort { get; set; } = 1433;
+    public string TdsBindAddress { get; set; } = "127.0.0.1";
 }
 
 public class AuditLog

@@ -7,14 +7,12 @@
   A single-executable backend for your data, with a type-safe REST API, realtime subscriptions, an admin console and embeddable forms, built on .NET 11 and SQLite.
 <p>
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-EUPL%201.2-blue" alt="License - EUPL 1.2" /></a>
-  <img src="https://img.shields.io/badge/.NET-11-512BD4?logo=dotnet&logoColor=white" alt=".NET 11" />
-  <img src="https://img.shields.io/badge/database-SQLite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
-  <img src="https://img.shields.io/badge/status-pre--alpha-orange" alt="Status - pre-alpha" />
-</p>
-
 # Baseport
+
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-EUPL%201.2-blue" alt="License - EUPL 1.2" /></a>
+<img src="https://img.shields.io/badge/.NET-11-512BD4?logo=dotnet&logoColor=white" alt=".NET 11" />
+<img src="https://img.shields.io/badge/database-SQLite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
+<img src="https://img.shields.io/badge/status-pre--alpha-orange" alt="Status - pre-alpha" />
 
 Meet Baseport: define your tables in the console and you get a typed REST API, live updates and an admin UI over them, without writing any of it. Point your mobile, web or desktop app at it and build the rest.
 

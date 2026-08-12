@@ -99,6 +99,11 @@
             .baserow-embed input[type='date'],
             .baserow-embed input[type='datetime-local'],
             .baserow-embed input[type='url'],
+            .baserow-embed input[type='email'],
+            .baserow-embed input[type='tel'],
+            .baserow-embed input[type='color'],
+            .baserow-embed input[type='time'],
+            .baserow-embed input[type='password'],
             .baserow-embed select,
             .baserow-embed textarea {
                 display: block;
@@ -114,6 +119,7 @@
                 margin: 0 0 .75rem;
                 transition: border-color .15s, box-shadow .15s;
             }
+            .baserow-embed [hidden] { display: none !important; }
             .baserow-embed input:focus-visible,
             .baserow-embed select:focus-visible,
             .baserow-embed textarea:focus-visible {
@@ -173,6 +179,10 @@
             .baserow-combobox-list li:hover, .baserow-combobox-list li.active { background: var(--baserow-border); }
             .baserow-combobox-empty { color: var(--baserow-muted); cursor: default !important; }
             .baserow-combobox-empty:hover { background: transparent !important; }
+            .baserow-combobox-chip { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .5rem .5rem .5rem .625rem; margin: 0; font-size: .9375rem; border: 1px solid #c9c9c9; border-radius: .375rem; background: var(--baserow-border); }
+            .baserow-combobox-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .baserow-embed .baserow-combobox-chip-remove { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; padding: 0; margin: 0; border: none; border-radius: 999px; background: transparent; color: var(--baserow-muted); font-size: 1rem; line-height: 1; cursor: pointer; }
+            .baserow-embed .baserow-combobox-chip-remove:hover { background: rgb(0 0 0 / .08); color: var(--baserow-fg); }
         `;
         document.head.appendChild(style);
     }
@@ -712,18 +722,16 @@
 
             // A file field's value is a File object; sending one forces multipart/form-data for the whole submission.
             const hasFile = Object.values(data).some((v) => typeof File !== 'undefined' && v instanceof File);
-            const fetchOptions = hasFile ?
-                {
-                    method: 'POST',
-                    body: toFormData(data)
-                } :
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                };
+            const fetchOptions = hasFile ? {
+                method: 'POST',
+                body: toFormData(data)
+            } : {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            };
 
             fetch(`${apiBase}/api/forms/${formId}/form`, fetchOptions)
                 .then((r) => r.json().then((res) => ({
@@ -1049,11 +1057,25 @@
         hidden.type = 'hidden';
         hidden.dataset.name = field.name;
 
+        // a single chosen value renders as a removable chip, not editable text: there is only ever one reference, so there
+        // is nothing to reselect until the current pick is explicitly cleared
+        const chip = document.createElement('div');
+        chip.className = 'baserow-combobox-chip';
+        chip.hidden = true;
+        const chipLabel = document.createElement('span');
+        chipLabel.className = 'baserow-combobox-chip-label';
+        const chipRemove = document.createElement('button');
+        chipRemove.type = 'button';
+        chipRemove.className = 'baserow-combobox-chip-remove';
+        chipRemove.setAttribute('aria-label', 'Remove');
+        chipRemove.innerText = '×';
+        chip.append(chipLabel, chipRemove);
+
         const list = document.createElement('ul');
         list.className = 'baserow-combobox-list';
         list.hidden = true;
 
-        wrap.append(search, hidden, list);
+        wrap.append(chip, search, hidden, list);
 
         let debounceTimer = null;
         let controller = null;
@@ -1065,15 +1087,37 @@
             active = -1;
         }
 
+        function showChip(label) {
+            chipLabel.innerText = label;
+            chip.hidden = false;
+            search.hidden = true;
+            search.value = '';
+        }
+
+        function hideChip() {
+            chip.hidden = true;
+            search.hidden = false;
+        }
+
         function selectOption(id, label) {
             hidden.value = id;
             hidden.dispatchEvent(new Event('change', {
                 bubbles: true
             }));
-            search.value = label;
+            showChip(label);
             search.classList.remove('baserow-invalid');
             closeList();
         }
+
+        chipRemove.addEventListener('click', (e) => {
+            e.preventDefault();
+            hidden.value = '';
+            hidden.dispatchEvent(new Event('change', {
+                bubbles: true
+            }));
+            hideChip();
+            search.focus();
+        });
 
         function renderOptions(rows) {
             list.innerHTML = '';

@@ -254,8 +254,7 @@ const ui = (() => {
             const res = await fetch(
                 url,
                 options.body === undefined ?
-                undefined :
-                {
+                undefined : {
                     method: options.method || 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -376,20 +375,33 @@ const ui = (() => {
         }));
 
         const box = el('div', 'combobox-box');
-        const search = el('input', 'input', {
+        const search = el('input', 'input' + (value ? ' hidden' : ''), {
             type: 'text',
             placeholder,
             autocomplete: 'off',
-            value: valueLabel
         });
         const hidden = el('input', null, {
             type: 'hidden',
             value
         });
         if (id) hidden.id = id;
+
+        // a single chosen value renders as a removable chip, not editable text: this is a searchable select, one value at a
+        // time, so there is nothing to reselect until the current pick is explicitly cleared
+        const chip = el('div', 'combobox-chip' + (value ? '' : ' hidden'));
+        const chipLabel = el('span', 'combobox-chip-label', {
+            textContent: valueLabel || value
+        });
+        const chipRemove = el('button', 'combobox-chip-remove', {
+            type: 'button',
+            textContent: '×'
+        });
+        chipRemove.setAttribute('aria-label', 'Remove');
+        chip.append(chipLabel, chipRemove);
+
         const spinner = el('span', 'btn-spinner combobox-spinner hidden');
         const list = el('ul', 'combobox-list hidden');
-        box.append(search, spinner, list);
+        box.append(chip, search, hidden, spinner, list);
         wrap.append(box);
         if (help) wrap.append(el('span', 'field-help', {
             textContent: help
@@ -406,14 +418,52 @@ const ui = (() => {
             active = -1;
         }
 
+        // a searchable select's typed text must resolve to a chosen option; leftover free text with no match is invalid, not a custom value
+        function markValidity() {
+            search.classList.toggle('input-invalid', search.value.trim() !== '' && !hidden.value);
+        }
+
+        function showChip(label) {
+            chipLabel.textContent = label;
+            chip.classList.remove('hidden');
+            search.classList.add('hidden');
+            search.value = '';
+        }
+
+        function hideChip() {
+            chip.classList.add('hidden');
+            search.classList.remove('hidden');
+        }
+
+        // set while the chip is removed but nothing new has been picked yet, so an unpicked blur can put it back
+        let pendingValue = null;
+        let pendingLabel = null;
+
         function selectOption(v, l) {
             hidden.value = v;
             hidden.dispatchEvent(new Event('change', {
                 bubbles: true
             }));
-            search.value = l;
+            showChip(l);
             closeList();
+            markValidity();
+            pendingValue = null;
+            pendingLabel = null;
         }
+
+        chipRemove.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (search.disabled) return; // locked by the caller (e.g. a systemid field's type can't be changed)
+            pendingValue = hidden.value;
+            pendingLabel = chipLabel.textContent;
+            hidden.value = '';
+            hidden.dispatchEvent(new Event('change', {
+                bubbles: true
+            }));
+            hideChip();
+            search.classList.remove('input-invalid'); // an explicit clear, not an error
+            search.focus();
+        });
 
         function renderOptions(rows) {
             list.innerHTML = '';
@@ -436,6 +486,11 @@ const ui = (() => {
             }
             active = -1;
             list.classList.remove('hidden');
+            // opening on an already-chosen value should land on it, not always at the top of the list
+            const selected = list.querySelector('.combobox-option.selected');
+            if (selected) selected.scrollIntoView({
+                block: 'nearest'
+            });
         }
 
         function runSearch(query) {
@@ -460,6 +515,7 @@ const ui = (() => {
                     bubbles: true
                 }));
             }
+            search.classList.remove('input-invalid'); // reds only on blur, not while still typing
             clearTimeout(debounceTimer);
             const query = search.value.trim();
             if (!query) {
@@ -478,9 +534,12 @@ const ui = (() => {
                 e.preventDefault();
                 active = (active - 1 + options.length) % options.length;
             } else if (e.key === 'Enter') {
-                if (active >= 0 && options[active]) {
+                // no arrow-key highlight yet: take the top match, but only when the user actually typed a filter --
+                // an untouched browseAll list (opened by focus alone) must not hijack Enter and swap the committed value
+                const idx = active >= 0 ? active : (search.value.trim() ? 0 : -1);
+                if (idx >= 0 && options[idx]) {
                     e.preventDefault();
-                    options[active].dispatchEvent(new Event('mousedown'));
+                    options[idx].dispatchEvent(new Event('mousedown'));
                 }
                 return;
             } else if (e.key === 'Escape') {
@@ -497,7 +556,19 @@ const ui = (() => {
 
         search.addEventListener('blur', () => {
             // delayed close: an option's mousedown fires before this blur, so it only closes an unpicked list
-            setTimeout(closeList, 100);
+            setTimeout(() => {
+                closeList();
+                if (!hidden.value && pendingValue) {
+                    hidden.value = pendingValue;
+                    hidden.dispatchEvent(new Event('change', {
+                        bubbles: true
+                    }));
+                    showChip(pendingLabel);
+                    pendingValue = null;
+                    pendingLabel = null;
+                }
+                markValidity();
+            }, 100);
         });
 
         if (browseAll) {
@@ -618,6 +689,45 @@ const ui = (() => {
         if (ev.key === 'Escape') attemptCloseSheet();
     }
 
+    // Centered modal: the panel is a child of the overlay so `place-items: center` places it, and a click inside is stopped from bubbling to the overlay's close.
+    function renderModal(title, bodyEl, actionsEl) {
+        closeModal();
+        const overlay = el('div', 'modal-overlay');
+        overlay.onclick = closeModal;
+
+        const panel = el('div', 'modal');
+        panel.addEventListener('click', (ev) => ev.stopPropagation());
+        panel.append(
+            el('h3', null, {
+                textContent: title
+            }),
+        );
+        const body = el('div', 'modal-body');
+        body.append(bodyEl);
+        panel.append(body);
+        if (actionsEl) {
+            const actions = el('div', 'modal-actions');
+            actions.append(actionsEl);
+            panel.append(actions);
+        }
+        overlay.append(panel);
+        document.body.append(overlay);
+        requestAnimationFrame(() => overlay.classList.add('open'));
+        document.addEventListener('keydown', escapeModalToClose);
+        const first = panel.querySelector('input, select, textarea, button');
+        if (first) first.focus();
+        return panel;
+    }
+
+    function closeModal() {
+        document.querySelector('.modal-overlay')?.remove();
+        document.removeEventListener('keydown', escapeModalToClose);
+    }
+
+    function escapeModalToClose(ev) {
+        if (ev.key === 'Escape') closeModal();
+    }
+
     // Single-value input. Resolves the trimmed string, or null on cancel; exists because the native prompt() cannot be styled.
     function ask({
         title,
@@ -663,24 +773,26 @@ const ui = (() => {
         });
     }
 
-    // Confirmation. Resolves true when confirmed, false otherwise.
+    // Confirmation. Resolves true when confirmed, false otherwise. Render as a sheet (default) or a centered modal.
     function confirm({
         title,
         message,
         confirmLabel = 'Confirm',
         cancelLabel = 'Cancel',
-        danger = false
+        danger = false,
+        modal = false
     }) {
         return new Promise((resolve) => {
             const body = el('p', 'muted', {
                 textContent: message
             });
             const actions = el('div', 'row');
+            const close = () => (modal ? closeModal() : closeSheet());
             actions.append(
                 button(
                     cancelLabel,
                     () => {
-                        closeSheet();
+                        close();
                         resolve(false);
                     }, {
                         variant: 'btn-outline'
@@ -689,14 +801,15 @@ const ui = (() => {
                 button(
                     confirmLabel,
                     () => {
-                        closeSheet();
+                        close();
                         resolve(true);
                     }, {
                         variant: danger ? 'btn-danger' : ''
                     },
                 ),
             );
-            sheet(title, body, actions);
+            if (modal) renderModal(title, body, actions);
+            else sheet(title, body, actions);
         });
     }
 
@@ -716,6 +829,8 @@ const ui = (() => {
         busy,
         sheet,
         closeSheet,
+        modal: renderModal,
+        closeModal,
         confirm,
         ask,
         theme,

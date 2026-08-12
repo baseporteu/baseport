@@ -380,7 +380,7 @@ function renderFields(fields) {
         tr.draggable = true;
         tr.dataset.index = i;
         tr.tabIndex = 0;
-        const key = f.id;
+        const key = fieldKey(f);
         const extras = [fieldLimits(f), f.defaultValue ? `default: ${f.defaultValue}` : ''].filter(Boolean).join(' · ');
         tr.innerHTML = `<td class="drag-cell" title="Drag to reorder, or Alt+Arrow" aria-hidden="true">⋮⋮</td>
                     <td>
@@ -497,6 +497,7 @@ function wireFieldExprValidation() {
     const input = document.getElementById('fieldExpr');
     const hint = document.getElementById('fieldTypeHint');
     let timer = null;
+    let requestId = 0;
     input.addEventListener('input', () => {
         clearTimeout(timer);
         timer = setTimeout(validateFieldExpr, 400);
@@ -507,20 +508,18 @@ function wireFieldExprValidation() {
             testFieldExpr();
         }
     });
+    // leaving the field must judge what it holds now, not wait out a debounce that tabbing away skips
+    input.addEventListener('blur', () => {
+        clearTimeout(timer);
+        validateFieldExpr();
+    });
     async function validateFieldExpr() {
-        const type = document.getElementById('fieldType').value;
+        const typeEl = document.getElementById('fieldType');
+        if (!typeEl) return; // the type combobox hasn't mounted (stale page load); nothing to validate against yet
+        const type = typeEl.value;
         const expr = input.value.trim();
-        if (!currentTablePublicId) {
-            hint.innerText = '';
-            hint.style.color = '';
-            return;
-        }
-        if (!expr) {
-            hint.innerText = '';
-            hint.style.color = '';
-            return;
-        }
-        if (type !== 'calculated' && type !== 'derived') {
+        const id = ++requestId;
+        if (!currentTablePublicId || !expr || (type !== 'calculated' && type !== 'derived')) {
             hint.innerText = '';
             hint.style.color = '';
             return;
@@ -538,6 +537,7 @@ function wireFieldExprValidation() {
                 tableId: currentTablePublicId
             }),
         }).then((res) => res.json());
+        if (id !== requestId) return; // a newer request already landed; this reply is stale
         if (r.valid) {
             const refs = (r.referencedFields || []).join(', ') || 'no field references';
             hint.innerText = '✓ Valid, ' + refs + (r.sampleOutput ? ` · example result: ${r.sampleOutput}` : '');
@@ -550,9 +550,11 @@ function wireFieldExprValidation() {
 }
 
 async function testFieldExpr() {
-    const type = document.getElementById('fieldType').value;
-    const val = document.getElementById('fieldExpr').value.trim();
+    const typeEl = document.getElementById('fieldType');
     const hint = document.getElementById('fieldTypeHint');
+    if (!typeEl || !hint) return; // the type combobox hasn't mounted (stale page load)
+    const type = typeEl.value;
+    const val = document.getElementById('fieldExpr').value.trim();
     const btn = document.getElementById('fieldExprTestBtn');
     if (!currentTablePublicId) {
         hint.innerText = 'Select a table first.';
@@ -628,10 +630,12 @@ async function testFieldExpr() {
 }
 
 async function addField() {
-    const name = document.getElementById('fieldName').value.trim();
-    const dataType = document.getElementById('fieldType').value;
-    const opt = document.getElementById('fieldExpr').value.trim();
+    const typeEl = document.getElementById('fieldType');
     const hint = document.getElementById('fieldTypeHint');
+    if (!typeEl || !hint) { ui.toast('The page is out of date. Reload and try again.', 'error'); return; }
+    const name = document.getElementById('fieldName').value.trim();
+    const dataType = typeEl.value;
+    const opt = document.getElementById('fieldExpr').value.trim();
     hint.innerText = '';
     hint.style.color = '';
     if (!currentTablePublicId) return;
@@ -642,9 +646,7 @@ async function addField() {
         return;
     }
 
-    // Rejected here, before staging: without this, a bad expression was accepted silently and only
-    // surfaced much later at commit time, by which point the row had already cleared itself, looking
-    // like the add had succeeded.
+    // Rejected pre-staging: prevents silent invalid expression acceptance from failing silently at commit time.
     if (dataType === 'calculated' || dataType === 'derived') {
         const table = currentTables.find((t) => t.id === currentTablePublicId);
         const fieldNames = (table ? table.fields : []).map((f) => f.name);
@@ -717,12 +719,22 @@ function closeSheet() {
     editingFieldId = null;
 }
 
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && document.getElementById('sheet').classList.contains('open')) closeSheet();
-    if (e.key === 'Escape' && document.getElementById('modalOverlay').classList.contains('open')) closeModal();
+// the browser's back/forward buttons change location.href before this fires, bypassing navigate()'s unsaved-changes guard entirely; restore the URL bar if the user backs out
+window.addEventListener('popstate', async () => {
+    if (hasUnsavedChanges()) {
+        const leave = await ui.confirm({
+            title: 'Discard changes?',
+            message: 'You have unsaved changes here. Leave without saving?',
+            confirmLabel: 'Discard',
+            danger: true,
+        });
+        if (!leave) {
+            history.pushState({}, '', lastRenderedUrl);
+            return;
+        }
+    }
+    render();
 });
-
-window.addEventListener('popstate', () => render());
 
 /* Reusable modal */
 
@@ -769,6 +781,7 @@ function openFieldEditor(fieldId) {
     const f = fieldDraft.find((x) => String(fieldKey(x)) === String(fieldId));
     if (!f) return;
     editingFieldId = fieldKey(f);
+    let exprRequestId = 0; // read by validateExprLive below, which is declared after this function's own early return
 
     const wrap = document.createElement('div');
 
@@ -786,7 +799,14 @@ function openFieldEditor(fieldId) {
         fetchOptions: (q) => fieldTypeOptions(q),
     });
     const typeSel = typeRow.control; // hidden input, .value works like the old <select>
-    if (f.dataType === 'systemid') typeRow.querySelector('.combobox-box input[type="text"]').disabled = true;
+    const owningTable = currentTables.find((t) => t.id === currentTablePublicId);
+    const hasData = !!f.id && (owningTable?.recordCount || 0) > 0;
+    if (f.dataType === 'systemid' || hasData) {
+        typeRow.querySelector('.combobox-box input[type="text"]').disabled = true;
+        typeRow.querySelector('.combobox-chip-remove').classList.add('hidden');
+        if (hasData)
+            typeRow.title = `"${f.name}" already has data in ${owningTable.recordCount} record(s); its type can't be changed.`;
+    }
     typeSel.onchange = () => syncFeConfig();
     wrap.appendChild(typeRow);
 
@@ -794,19 +814,36 @@ function openFieldEditor(fieldId) {
     cfgRow.id = 'feCfgRow';
     wrap.appendChild(cfgRow);
 
-    const reqRow = document.createElement('label');
-    reqRow.className = 'check-row';
-    const reqCb = document.createElement('input');
-    reqCb.type = 'checkbox';
-    reqCb.id = 'feRequired';
-    reqCb.checked = !!f.isRequired;
-    reqRow.appendChild(reqCb);
-    reqRow.appendChild(document.createTextNode(' Required, submissions without a value are rejected'));
-    wrap.appendChild(reqRow);
+    // Stacked settings-style rows (label + one-line description + a slider), matching the table settings panel.
+    const settingSwitch = (id, checked, label, desc) => {
+        const row = document.createElement('div');
+        row.className = 'setting-row';
+        const info = document.createElement('div');
+        info.className = 'setting-label';
+        const lab = document.createElement('label');
+        lab.setAttribute('for', id);
+        lab.innerText = label;
+        const p = document.createElement('p');
+        p.className = 'muted';
+        p.innerText = desc;
+        info.append(lab, p);
+        const sw = document.createElement('label');
+        sw.className = 'switch';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = id;
+        cb.checked = !!checked;
+        sw.append(cb, document.createElement('span'), document.createElement('span'));
+        sw.children[1].className = 'track';
+        sw.children[2].className = 'thumb';
+        row.append(info, sw);
+        return row;
+    };
+    wrap.appendChild(settingSwitch('feRequired', f.isRequired, 'Required', 'Submissions without a value are rejected.'));
 
-    wrap.appendChild(
-        fieldInputRow('Default value', 'feDefault', f.defaultValue, 'Applied when the submission omits this field'),
-    );
+    const defaultRow = document.createElement('div');
+    defaultRow.id = 'feDefaultRow';
+    wrap.appendChild(defaultRow);
     wrap.appendChild(fieldInputRow('Currency code', 'feCurrency', f.currency, 'EUR'));
     const currencyHint = document.createElement('p');
     currencyHint.className = 'sheet-note';
@@ -837,22 +874,9 @@ function openFieldEditor(fieldId) {
     patHint.innerText = 'Leave blank for no format check. Validated on submit and against the example value.';
     wrap.appendChild(patHint);
 
-    const checkbox = (id, checked, text) => {
-        const row = document.createElement('label');
-        row.className = 'check-row';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.id = id;
-        cb.checked = !!checked;
-        row.appendChild(cb);
-        row.appendChild(document.createTextNode(' ' + text));
-        return row;
-    };
-    wrap.appendChild(checkbox('feUnique', f.isUnique, 'Unique, reject a submission whose value already exists'));
-    wrap.appendChild(
-        checkbox('feIdentifier', f.isIdentifier, 'Identifier, offer this field as a match key in lookup forms'),
-    );
-    wrap.appendChild(checkbox('feHidden', f.isHidden, 'Hidden, not rendered in forms, value set via API / server only'));
+    wrap.appendChild(settingSwitch('feUnique', f.isUnique, 'Unique', 'Reject a submission whose value already exists.'));
+    wrap.appendChild(settingSwitch('feIdentifier', f.isIdentifier, 'Identifier', 'Offer this field as a match key in lookup forms.'));
+    wrap.appendChild(settingSwitch('feHidden', f.isHidden, 'Hidden', 'Not rendered in forms; value set via API or server only.'));
 
     const valPanel = document.createElement('div');
     valPanel.id = 'feValidation';
@@ -883,9 +907,78 @@ function openFieldEditor(fieldId) {
 
     openSheet('Edit field · ' + f.name, wrap, actions);
     syncFeConfig();
+    syncFeDefault();
     syncBoundsHint();
+    typeSel.addEventListener('change', syncFeDefault);
     typeSel.addEventListener('change', syncBoundsHint);
     return;
+
+    // Default value must respect the type's actual allowed values instead of being a blank free-text box:
+    // a fixed choice for booleans, the configured options for select/multiselect, free text otherwise.
+    function syncFeDefault() {
+        const t = typeSel.value;
+        const row = document.getElementById('feDefaultRow');
+        const existing = document.getElementById('feDefault');
+        const current = existing ? existing.value : f.defaultValue || '';
+        row.innerHTML = '';
+        if (t === 'boolean') {
+            row.appendChild(defaultSelectRow(['true', 'false'], current));
+            return;
+        }
+        if (t === 'select' || t === 'multiselect') {
+            const opts = currentOptionDraft();
+            if (!opts.length) {
+                row.appendChild(fieldInputRow('Default value', 'feDefault', current, 'Define options above first'));
+                return;
+            }
+            if (t === 'select') {
+                row.appendChild(defaultSelectRow(opts, current));
+                return;
+            }
+            row.appendChild(fieldInputRow('Default value', 'feDefault', current, opts.join(', ')));
+            const hint = document.createElement('p');
+            hint.className = 'sheet-note';
+            hint.innerText = `Allowed: ${opts.join(', ')}. One value, or a JSON array for more than one.`;
+            row.appendChild(hint);
+            return;
+        }
+        row.appendChild(fieldInputRow('Default value', 'feDefault', current, 'Applied when the submission omits this field'));
+    }
+
+    // options as currently drafted in the config row when it's live text, else the field's saved options
+    function currentOptionDraft() {
+        const cfg = document.getElementById('feConfig');
+        if (cfg && cfg.tagName === 'INPUT' && (typeSel.value === 'select' || typeSel.value === 'multiselect'))
+            return cfg.value.split(',').map((s) => s.trim()).filter(Boolean);
+        try {
+            const o = JSON.parse(f.optionsJson || '[]');
+            return Array.isArray(o) ? o : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function defaultSelectRow(options, current) {
+        const lab = document.createElement('label');
+        lab.className = 'field-label';
+        lab.innerText = 'Default value';
+        const sel = document.createElement('select');
+        sel.className = 'input';
+        sel.id = 'feDefault';
+        const none = document.createElement('option');
+        none.value = '';
+        none.innerText = '- Unset -';
+        sel.appendChild(none);
+        options.forEach((o) => {
+            const op = document.createElement('option');
+            op.value = o;
+            op.innerText = o;
+            if (o === current) op.selected = true;
+            sel.appendChild(op);
+        });
+        lab.appendChild(sel);
+        return lab;
+    }
 
     function syncBoundsHint() {
         const t = typeSel.value;
@@ -929,6 +1022,11 @@ function openFieldEditor(fieldId) {
             row.appendChild(hint);
             const inp = document.getElementById('feConfig');
             inp.addEventListener('input', debounceExprValidate);
+            // leaving the field must judge what it holds now, not wait out a debounce that tabbing away skips
+            inp.addEventListener('blur', () => {
+                clearTimeout(debounceExprValidate._t);
+                validateExprLive();
+            });
             debounceExprValidate();
         } else if (t === 'select' || t === 'multiselect') {
             row.appendChild(
@@ -946,6 +1044,7 @@ function openFieldEditor(fieldId) {
                     'red, blue, green',
                 ),
             );
+            document.getElementById('feConfig').addEventListener('input', syncFeDefault);
         } else if (t === 'reference') {
             row.appendChild(fieldInputRow('Target table name', 'feConfig', '', 'Customers'));
             const sel = document.createElement('select');
@@ -1012,6 +1111,7 @@ function openFieldEditor(fieldId) {
         const expr = inp.value.trim();
         const hint = document.getElementById('feExprStatus');
         if (!hint) return;
+        const id = ++exprRequestId;
         if (!expr) {
             hint.className = 'expr-status';
             hint.innerText = '';
@@ -1029,6 +1129,7 @@ function openFieldEditor(fieldId) {
                 tableId: currentTablePublicId
             }),
         }).then((res) => res.json());
+        if (id !== exprRequestId) return; // a newer request already landed; this reply is stale
         if (r.valid) {
             hint.className = 'expr-status ok';
             hint.innerText =
@@ -1179,18 +1280,13 @@ async function saveFieldChanges() {
     const newIdentifier = document.getElementById('feIdentifier').checked;
     const newHidden = document.getElementById('feHidden').checked;
 
-    // Retyping doesn't touch stored records -- existing values just stop matching the new type until re-saved.
+    // The type picker is locked in the sheet whenever the field already has data; this only catches a stale
+    // recordCount from before the sheet opened -- it's a hard block, not a "change anyway" prompt.
     if (draft.id && draft.dataType !== newType) {
         const table = currentTables.find((t) => t.id === currentTablePublicId);
         if ((table?.recordCount || 0) > 0) {
-            const ok = await ui.confirm({
-                title: 'Change field type?',
-                message: `"${draft.name}" already has data in ${table.recordCount} record(s). Existing values are not converted -- they may no longer match ${TYPE_LABELS.get(newType) || newType} until each record is re-saved.`,
-                confirmLabel: 'Change anyway',
-                cancelLabel: 'Cancel',
-                danger: true,
-            });
-            if (!ok) return;
+            ui.toast(`"${draft.name}" already has data in ${table.recordCount} record(s); its type can't be changed.`, 'error');
+            return;
         }
     }
 

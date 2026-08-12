@@ -80,6 +80,72 @@
                                 <p id='apiTablesEmpty' class='muted empty-hint'>No tables.</p>
                             </div>
                         </div>
+                        <div class='settings-pane hidden' data-pane='providers'>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>PostgreSQL</h2><p class='muted'>Speak the Postgres wire protocol on this port.</p></div></div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsPostgresEnabled'>Enabled</label>
+                                        <p class='muted'>Opens the port below.</p>
+                                    </div>
+                                    <label class='switch'>
+                                        <input type='checkbox' id='settingsPostgresEnabled'>
+                                        <span class='track'></span>
+                                        <span class='thumb'></span>
+                                    </label>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsPostgresPort'>Port</label>
+                                        <p class='muted'>What Postgres clients connect to.</p>
+                                    </div>
+                                    <input type='number' id='settingsPostgresPort' class='input' min='1' max='65535'>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsPostgresBindAddress'>Bind address</label>
+                                        <p class='muted'>127.0.0.1 for local only, 0.0.0.0 to accept remote connections.</p>
+                                    </div>
+                                    <input type='text' id='settingsPostgresBindAddress' class='input' placeholder='127.0.0.1'>
+                                </div>
+                                <div class='card-footer'>
+                                    <span class='muted'></span>
+                                    <button class='btn' onclick='saveProviderSettings(this)'>Save</button>
+                                </div>
+                            </div>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>SQL Server (TDS)</h2><p class='muted'>Speak the TDS wire protocol on this port.</p></div></div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsTdsEnabled'>Enabled</label>
+                                        <p class='muted'>Opens the port below.</p>
+                                    </div>
+                                    <label class='switch'>
+                                        <input type='checkbox' id='settingsTdsEnabled'>
+                                        <span class='track'></span>
+                                        <span class='thumb'></span>
+                                    </label>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsTdsPort'>Port</label>
+                                        <p class='muted'>What TDS clients connect to.</p>
+                                    </div>
+                                    <input type='number' id='settingsTdsPort' class='input' min='1' max='65535'>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsTdsBindAddress'>Bind address</label>
+                                        <p class='muted'>127.0.0.1 for local only, 0.0.0.0 to accept remote connections.</p>
+                                    </div>
+                                    <input type='text' id='settingsTdsBindAddress' class='input' placeholder='127.0.0.1'>
+                                </div>
+                                <div class='card-footer'>
+                                    <span class='muted'></span>
+                                    <button class='btn' onclick='saveProviderSettings(this)'>Save</button>
+                                </div>
+                            </div>
+                        </div>
                         <div class='settings-pane hidden' data-pane='sites'>
                             <div class='card'>
                                 <div class='card-header'><div><h2>Allowed sites</h2><p class='muted'>Where a published form may be embedded. One origin per line. Empty allows any site.</p></div></div>

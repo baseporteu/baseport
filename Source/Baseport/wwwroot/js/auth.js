@@ -51,6 +51,9 @@ async function boot() {
     avatar.innerText = (username || 'A').slice(0, 1).toUpperCase();
     avatar.title = `Signed in as ${username}`;
 
+    const accountName = document.getElementById('railAccountName');
+    if (accountName) accountName.textContent = username;
+
     // Tables and settings came down with the page, so the router paints straight away.
     if (me.tables) currentTables = me.tables;
     if (me.settings) settingsData = {
@@ -279,6 +282,14 @@ async function signIn(ev) {
 }
 
 async function signOut() {
+    const ok = await ui.confirm({
+        title: 'Sign out',
+        message: 'End this session?',
+        confirmLabel: 'Sign out',
+        modal: true,
+        danger: true,
+    });
+    if (!ok) return;
     await fetch('/api/auth/logout', {
         method: 'POST'
     });

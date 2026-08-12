@@ -3,6 +3,7 @@ let currentTablePublicId = null;
 let currentTableProxyUrl = '';
 let currentTables = [];
 let currentSection = 'tables';
+let lastRenderedUrl = location.href; // where popstate falls back to if the user cancels leaving unsaved changes
 let proxyOps = [];
 let editingFieldId = null;
 let tableDirty = false;
@@ -169,16 +170,17 @@ function parseRoute() {
 }
 
 // none of these are visible to the browser's own "leave site?" prompt since nothing was submitted
-function hasUnsavedTableChanges() {
+function hasUnsavedChanges() {
     if (tableDirty || fieldsDirty) return true;
     const draftName = document.getElementById('tableName');
-    return !!(draftName && draftName.value.trim());
+    if (draftName && draftName.value.trim()) return true;
+    return typeof hasUnsavedFormChanges === 'function' && hasUnsavedFormChanges();
 }
 
 async function navigate(path, {
     replace = false
 } = {}) {
-    if (hasUnsavedTableChanges()) {
+    if (hasUnsavedChanges()) {
         const leave = await ui.confirm({
             title: 'Discard changes?',
             message: 'You have unsaved changes here. Leave without saving?',
@@ -266,6 +268,7 @@ async function render() {
     renderSidebar(route.section);
     await SECTION_ROUTES[route.section](route.id);
     renderSidebar(route.section); // the loader may have changed what is listed or active
+    lastRenderedUrl = location.href;
 }
 
 // Kept because the rail markup and call sites read better this way.

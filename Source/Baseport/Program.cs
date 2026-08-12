@@ -1,8 +1,23 @@
 using Baseport;
+using Baseport.Providers.Postgres;
+using Baseport.Providers.Tds;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Serilog;
+
+// Defaults ship inside the executable and extract beside it; an operator's own copy sits in the directory they run from and wins.
+var bundledSettings = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+var localSettings = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json");
+if (!File.Exists(bundledSettings) && !File.Exists(localSettings))
+{
+    Console.Error.WriteLine($"Baseport could not find appsettings.json in {AppContext.BaseDirectory} or {Directory.GetCurrentDirectory()}.");
+    return 1;
+}
+
+// A short-lived CLI mode that edits the same settings row the admin UI does, instead of standing up the web server.
+if (args.Length > 0 && args[0] == "providers")
+    return await ProvidersCli.RunAsync(args, bundledSettings, localSettings);
 
 // Logging is not up yet, so a failure here can only report itself.
 var logDirectory = Path.Combine(Directory.GetCurrentDirectory(), "log");
@@ -13,15 +28,6 @@ try
 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
 {
     Console.Error.WriteLine($"Baseport could not create its log directory at {logDirectory}: {ex.Message}");
-    return 1;
-}
-
-// Defaults ship inside the executable and extract beside it; an operator's own copy sits in the directory they run from and wins.
-var bundledSettings = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
-var localSettings = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json");
-if (!File.Exists(bundledSettings) && !File.Exists(localSettings))
-{
-    Console.Error.WriteLine($"Baseport could not find appsettings.json in {AppContext.BaseDirectory} or {Directory.GetCurrentDirectory()}.");
     return 1;
 }
 
@@ -102,6 +108,10 @@ try
     // One instance, reachable both as the queue the middleware writes to and as the background service that drains it.
     builder.Services.AddSingleton<AuditLogWriter>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditLogWriter>());
+
+    // optional wire-protocol listeners: always registered, but each polls its own AppSettings row and only opens its port once an operator enables it from the admin ui or the cli — a second authentication surface (password field = api token) alongside the rest api
+    builder.Services.AddHostedService<PostgresServer>();
+    builder.Services.AddHostedService<TdsServer>();
 
     var app = builder.Build();
     Ids.StartedAt = DateTime.UtcNow;

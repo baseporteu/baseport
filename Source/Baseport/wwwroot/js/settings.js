@@ -57,6 +57,7 @@ function applySettingsPage(page) {
     const titles = {
         host: 'Host',
         auth: 'Authentication',
+        providers: 'Providers',
         sites: 'Sites',
         jobs: 'Jobs',
         backups: 'Backups'
@@ -64,6 +65,7 @@ function applySettingsPage(page) {
     const subs = {
         host: 'Application and database overview.',
         auth: 'User accounts, REST API tokens and per-table access.',
+        providers: 'Native database wire-protocol listeners.',
         sites: 'Where published forms may be embedded.',
         jobs: 'Background maintenance tasks.',
         backups: 'Stored snapshots of the database.',
@@ -86,6 +88,12 @@ async function loadSettings() {
     document.getElementById('settingsOpenApiEnabled').checked = settingsData.openApiEnabled !== false;
     document.getElementById('settingsApiTitle').value = settingsData.apiTitle || '';
     document.getElementById('settingsApiDescription').value = settingsData.apiDescription || '';
+    document.getElementById('settingsPostgresEnabled').checked = settingsData.postgresEnabled === true;
+    document.getElementById('settingsPostgresPort').value = settingsData.postgresPort ?? 5432;
+    document.getElementById('settingsPostgresBindAddress').value = settingsData.postgresBindAddress || '127.0.0.1';
+    document.getElementById('settingsTdsEnabled').checked = settingsData.tdsEnabled === true;
+    document.getElementById('settingsTdsPort').value = settingsData.tdsPort ?? 1433;
+    document.getElementById('settingsTdsBindAddress').value = settingsData.tdsBindAddress || '127.0.0.1';
     await loadApiTables();
     await loadJobs();
     await loadBackups();
@@ -113,11 +121,12 @@ function renderSettingsInfo() {
         ['API reference', s.docsPath],
         ['Database path', s.dbPath],
         ['Database size', s.dbSizeBytes != null ? fmtSize(s.dbSizeBytes) : 'n/a'],
-        ['Tables', s.tables],
-        ['Fields', s.fields],
-        ['Forms', s.forms],
-        ['Records', s.records],
-        ['Tables with API enabled', s.apiEnabledTables],
+        ['Estimated index size', s.estimatedIndexBytes != null ? fmtSize(s.estimatedIndexBytes) : 'n/a'],
+        ['Tables', (s.tables ?? 0).toLocaleString()],
+        ['Fields', (s.fields ?? 0).toLocaleString()],
+        ['Forms', (s.forms ?? 0).toLocaleString()],
+        ['Records', (s.records ?? 0).toLocaleString()],
+        ['Tables with API enabled', (s.apiEnabledTables ?? 0).toLocaleString()],
     ];
     const el = document.getElementById('settingsInfoRows');
     el.innerHTML = rows
@@ -178,6 +187,28 @@ async function submitApiInfo(btn) {
         };
         document.getElementById('settingsApiTitle').value = saved.apiTitle || '';
         document.getElementById('settingsApiDescription').value = saved.apiDescription || '';
+    });
+}
+
+async function saveProviderSettings(btn) {
+    await ui.busy(btn, async () => {
+        const saved = await ui.send('/api/_admin/settings', {
+            method: 'PUT',
+            body: {
+                postgresEnabled: document.getElementById('settingsPostgresEnabled').checked,
+                postgresPort: Number(document.getElementById('settingsPostgresPort').value) || 5432,
+                postgresBindAddress: document.getElementById('settingsPostgresBindAddress').value.trim() || '127.0.0.1',
+                tdsEnabled: document.getElementById('settingsTdsEnabled').checked,
+                tdsPort: Number(document.getElementById('settingsTdsPort').value) || 1433,
+                tdsBindAddress: document.getElementById('settingsTdsBindAddress').value.trim() || '127.0.0.1',
+            },
+            success: 'Provider settings have been updated. Listening ports apply within a few seconds.',
+        });
+        if (!saved) return;
+        settingsData = {
+            ...settingsData,
+            ...saved
+        };
     });
 }
 

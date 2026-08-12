@@ -285,7 +285,8 @@ function openNewRecordModal() {
                 help: f.helpText
             });
         }
-        row.control.dataset.field = f.name.toLowerCase();
+        // a combobox's .control is the hidden value input, not what the visitor sees; markInvalid needs the visible search box, or the red never shows
+        (row.querySelector('.combobox-box input[type="text"]') || row.control).dataset.field = f.name.toLowerCase();
         if (f.isIdentifier) {
             const labelText = row.querySelector('.field-label-text');
             if (labelText) labelText.insertAdjacentHTML('beforeend', ' ' + IDENTIFIER_ICON);

@@ -7,41 +7,61 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { install } = require('./dom-stub');
+const {
+    install
+} = require('./dom-stub');
 
 const wwwroot = path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot');
 // The console is split across files that share one scope; tests read them all.
 const ADMIN_SCRIPTS = ['ui.js', 'js/core.js', 'js/proxy.js', 'js/tables.js', 'js/records.js',
-                       'js/sidebar.js', 'js/schema.js', 'js/sql.js', 'js/accounts.js',
-                       'js/settings.js', 'forms.js', 'js/auth.js'];
+    'js/sidebar.js', 'js/schema.js', 'js/sql.js', 'js/accounts.js',
+    'js/settings.js', 'forms.js', 'js/auth.js'
+];
 const readAll = () => ADMIN_SCRIPTS.map(read).join('\n');
 
 // The console page is composed server-side from these parts, in this order.
 // Tests read the same list, so a part added to one and not the other shows up.
 const HTML_PARTS = ['admin/_shell.html', 'admin/views/tables.html', 'admin/views/forms.html',
-                    'admin/views/sql.html', 'admin/views/schema.html', 'admin/views/auth.html',
-                    'admin/views/logs.html', 'admin/views/settings.html', 'admin/_footer.html'];
+    'admin/views/sql.html', 'admin/views/schema.html', 'admin/views/auth.html',
+    'admin/views/logs.html', 'admin/views/settings.html', 'admin/_footer.html'
+];
 // The login card is a separate page that never loads the console scripts.
 const AUTH_PART = ['admin/_auth.html'];
 const readHtml = () => [...HTML_PARTS, ...AUTH_PART].map(read).join('\n');
 const read = f => fs.readFileSync(path.join(wwwroot, f), 'utf8');
 
-let passed = 0, failed = 0;
+let passed = 0,
+    failed = 0;
+
 function test(name, fn) {
-    try { fn(); console.log(`  ok   ${name}`); passed++; }
-    catch (e) { console.log(`  FAIL ${name}\n       ${e.message}`); failed++; }
+    try {
+        fn();
+        console.log(`  ok   ${name}`);
+        passed++;
+    } catch (e) {
+        console.log(`  FAIL ${name}\n       ${e.message}`);
+        failed++;
+    }
 }
 
 /* forms.js: which panel the editor shows */
 
 function loadFormsModule() {
     const ids = ['kindSubmit', 'kindLookup', 'kindList', 'formKinds', 'formActions',
-                 'formKindHint', 'formKindBadge', 'formProxyNote', 'listSortField', 'listSortDir',
-                 'listPageSize', 'lookupNotFound', 'listFilters', 'listPalette', 'listCanvas',
-                 'formTable', 'formLayout', 'layoutCanvas', 'paletteFields',
-                 'lookupMatchFields', 'lookupResultFields', 'listSearchFields'];
+        'formKindHint', 'formKindBadge', 'formProxyNote', 'listSortField', 'listSortDir',
+        'listPageSize', 'lookupNotFound', 'listFilters', 'listPalette', 'listCanvas',
+        'formTable', 'formLayout', 'layoutCanvas', 'paletteFields',
+        'lookupMatchFields', 'lookupResultFields', 'listSearchFields'
+    ];
     const dom = install(ids);
-    global.ui = { toast() {}, el: (t, c) => { const e = dom.element(t); if (c) e.className = c; return e; } };
+    global.ui = {
+        toast() {},
+        el: (t, c) => {
+            const e = dom.element(t);
+            if (c) e.className = c;
+            return e;
+        }
+    };
     global.escapeHtml = s => String(s == null ? '' : s);
     global.currentTables = [];
     global.refreshSidebar = () => {};
@@ -54,15 +74,24 @@ function loadFormsModule() {
         .replace(/^document\.getElementById\('formLayout'\)[\s\S]*?\}\);/m, '')
         .replace(/^document\.querySelectorAll\('\.builder-palette[\s\S]*?\}\);/m, '')
         .replace(/^\(function wireSuccessRedirectTest[\s\S]*?\}\)\(\);/m, '');
-    const module = { applyFormShape: null, normalizeActions: null };
+    const module = {
+        applyFormShape: null,
+        normalizeActions: null
+    };
     eval(src + '\n;module.applyFormShape = applyFormShape; module.normalizeActions = normalizeActions; module.applyKindConfig = applyKindConfig;');
-    return { dom, module };
+    return {
+        dom,
+        module
+    };
 }
 
 test('a lookup-only form shows the lookup panel, not the submit panel', () => {
     // The bug: applyFormShape received kind 'form' and matched no panel, so the
     // editor rendered completely blank for every form.
-    const { dom, module } = loadFormsModule();
+    const {
+        dom,
+        module
+    } = loadFormsModule();
     module.applyFormShape('form', ['lookup']);
     assert.ok(dom.byId.kindLookup.classList.contains('hidden') === false, 'lookup panel hidden');
     assert.ok(dom.byId.kindSubmit.classList.contains('hidden'), 'submit panel shown');
@@ -70,21 +99,30 @@ test('a lookup-only form shows the lookup panel, not the submit panel', () => {
 });
 
 test('a submit-only form shows the submit panel', () => {
-    const { dom, module } = loadFormsModule();
+    const {
+        dom,
+        module
+    } = loadFormsModule();
     module.applyFormShape('form', ['submit']);
     assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'));
     assert.ok(dom.byId.kindLookup.classList.contains('hidden'));
 });
 
 test('a form with both actions shows both panels', () => {
-    const { dom, module } = loadFormsModule();
+    const {
+        dom,
+        module
+    } = loadFormsModule();
     module.applyFormShape('form', ['submit', 'lookup']);
     assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'), 'submit panel hidden');
     assert.ok(!dom.byId.kindLookup.classList.contains('hidden'), 'lookup panel hidden');
 });
 
 test('a list shows only the list panel and hides the action picker', () => {
-    const { dom, module } = loadFormsModule();
+    const {
+        dom,
+        module
+    } = loadFormsModule();
     module.applyFormShape('list', []);
     assert.ok(!dom.byId.kindList.classList.contains('hidden'));
     assert.ok(dom.byId.kindSubmit.classList.contains('hidden'));
@@ -94,7 +132,10 @@ test('a list shows only the list panel and hides the action picker', () => {
 test('enabling a second action repopulates its panel instead of leaving it blank', () => {
     // The bug: toggling an action showed the panel but never rendered its
     // pickers, so the revealed half could not be edited.
-    const { dom, module } = loadFormsModule();
+    const {
+        dom,
+        module
+    } = loadFormsModule();
     module.applyFormShape('form', ['submit']);
     module.applyFormShape('form', ['submit', 'lookup']);
     assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'), 'submit panel hidden');
@@ -104,7 +145,9 @@ test('enabling a second action repopulates its panel instead of leaving it blank
 });
 
 test('a form is never left with no action', () => {
-    const { module } = loadFormsModule();
+    const {
+        module
+    } = loadFormsModule();
     assert.deepStrictEqual(module.normalizeActions([]), ['submit']);
     assert.deepStrictEqual(module.normalizeActions(['nonsense']), ['submit']);
     assert.deepStrictEqual(module.normalizeActions(['lookup']), ['lookup']);
@@ -124,11 +167,24 @@ function chooseRenderer(form) {
 test('the embed dispatches on kind then actions', () => {
     // The bug: it branched on kind === 'lookup', which after the kind/mode split
     // is never true, so every lookup rendered as an empty submit form.
-    assert.strictEqual(chooseRenderer({ kind: 'list' }), 'list');
-    assert.strictEqual(chooseRenderer({ kind: 'form', actions: ['lookup'] }), 'lookup');
-    assert.strictEqual(chooseRenderer({ kind: 'form', actions: ['submit'] }), 'form');
-    assert.strictEqual(chooseRenderer({ kind: 'form', actions: ['submit', 'lookup'] }), 'lookup+form');
-    assert.strictEqual(chooseRenderer({ kind: 'form' }), 'form');
+    assert.strictEqual(chooseRenderer({
+        kind: 'list'
+    }), 'list');
+    assert.strictEqual(chooseRenderer({
+        kind: 'form',
+        actions: ['lookup']
+    }), 'lookup');
+    assert.strictEqual(chooseRenderer({
+        kind: 'form',
+        actions: ['submit']
+    }), 'form');
+    assert.strictEqual(chooseRenderer({
+        kind: 'form',
+        actions: ['submit', 'lookup']
+    }), 'lookup+form');
+    assert.strictEqual(chooseRenderer({
+        kind: 'form'
+    }), 'form');
 });
 
 test('embed.js still branches on kind and actions, not the old mode field', () => {
@@ -163,7 +219,11 @@ test('embed paints the invalid fields red, from client validation and from the s
 test('an explicit theme choice survives a reload and outranks the system', () => {
     const dom = install([]);
     let systemDark = true;
-    global.window.matchMedia = () => ({ matches: systemDark, addEventListener() {}, addListener() {} });
+    global.window.matchMedia = () => ({
+        matches: systemDark,
+        addEventListener() {},
+        addListener() {}
+    });
 
     const boot = () => {
         const stored = localStorage.getItem('baseport.theme');
@@ -189,7 +249,8 @@ test('every id the scripts read exists in the markup or is created at runtime', 
     const html = readHtml();
     const js = readAll();
     const runtime = new Set(['toasts', 'sheetOverlay', 'tableName', 'createMenu', 'pwCurrent', 'pwNew', 'fieldEditError',
-                             'bootstrap']);
+        'bootstrap'
+    ]);
     const present = new Set([...html.matchAll(/id='([\w-]+)'/g)].map(m => m[1]));
     const missing = [...new Set([...js.matchAll(/getElementById\('([\w-]+)'\)/g)].map(m => m[1]))]
         .filter(id => !present.has(id) && !runtime.has(id) && !/^(fe|px|acc)/.test(id));
@@ -275,20 +336,36 @@ function loadRouter(pathname) {
     const slice = core.slice(core.indexOf("const BASE = "), core.indexOf('// Each section owns its route'));
     const module = {};
     const written = [];
-    global.location = { pathname };
-    global.history = { pushState: (s, t, u) => written.push(u), replaceState: (s, t, u) => written.push(u) };
+    global.location = {
+        pathname
+    };
+    global.history = {
+        pushState: (s, t, u) => written.push(u),
+        replaceState: (s, t, u) => written.push(u)
+    };
     global.render = () => {};
     eval(slice + '\n;module.parseRoute = parseRoute; module.navigate = navigate;');
-    return { module, written };
+    return {
+        module,
+        written
+    };
 }
 
 test('the console is mounted under /_/admin and routes are still written from the root', () => {
     // The bug it guards: a route string that forgets the prefix silently
     // navigates out of the console, and a deep link parses as the root section.
-    assert.deepStrictEqual(loadRouter('/_/admin').module.parseRoute(), { section: 'tables' });
-    assert.deepStrictEqual(loadRouter('/_/admin/tables/abc/records').module.parseRoute(),
-                           { section: 'tables', id: 'abc', view: 'records' });
-    assert.deepStrictEqual(loadRouter('/_/admin/settings').module.parseRoute(), { section: 'settings', id: 'host' });
+    assert.deepStrictEqual(loadRouter('/_/admin').module.parseRoute(), {
+        section: 'tables'
+    });
+    assert.deepStrictEqual(loadRouter('/_/admin/tables/abc/records').module.parseRoute(), {
+        section: 'tables',
+        id: 'abc',
+        view: 'records'
+    });
+    assert.deepStrictEqual(loadRouter('/_/admin/settings').module.parseRoute(), {
+        section: 'settings',
+        id: 'host'
+    });
 
     const nav = loadRouter('/_/admin');
     nav.module.navigate('/forms/xyz');
@@ -303,26 +380,32 @@ function loadApiNameGuard() {
     // the rest of both files reaches for a page this test does not build.
     const tables = read('js/tables.js');
     const slice = tables.slice(tables.indexOf('const API_NAME_PATTERN'),
-                               tables.indexOf('function tableSettingsPayload'));
+        tables.indexOf('function tableSettingsPayload'));
     const core = read('js/core.js');
     const buttons = core.slice(core.indexOf('function updateSaveButtons'),
-                               core.indexOf('function greet'));
+        core.indexOf('function greet'));
     const module = {};
     global.fieldsDirty = false;
     global.tableDirty = true;
     global.markTableDirty = () => {};
     eval(slice + buttons +
-         '\n;module.refreshApiNameState = refreshApiNameState;' +
-         'module.updateSaveButtons = updateSaveButtons;' +
-         'module.normalizeApiName = normalizeApiName;');
-    return { dom, module };
+        '\n;module.refreshApiNameState = refreshApiNameState;' +
+        'module.updateSaveButtons = updateSaveButtons;' +
+        'module.normalizeApiName = normalizeApiName;');
+    return {
+        dom,
+        module
+    };
 }
 
 test('the save button is blocked while the API name would be rejected', () => {
     // The bug: clearing the API name of a published table sent a save the API
     // rejected, and the console kept showing the cleared field while the stored
     // table still had its name.
-    const { dom, module } = loadApiNameGuard();
+    const {
+        dom,
+        module
+    } = loadApiNameGuard();
     dom.byId.tableApiEnabled.checked = true;
     dom.byId.tableApiName.value = '';
 
@@ -333,7 +416,10 @@ test('the save button is blocked while the API name would be rejected', () => {
 });
 
 test('the save button is free once the API name is valid', () => {
-    const { dom, module } = loadApiNameGuard();
+    const {
+        dom,
+        module
+    } = loadApiNameGuard();
     dom.byId.tableApiEnabled.checked = true;
     dom.byId.tableApiName.value = 'sales-orders';
 
@@ -343,7 +429,10 @@ test('the save button is free once the API name is valid', () => {
 });
 
 test('an unpublished table may have no API name at all', () => {
-    const { dom, module } = loadApiNameGuard();
+    const {
+        dom,
+        module
+    } = loadApiNameGuard();
     dom.byId.tableApiEnabled.checked = false;
     dom.byId.tableApiName.value = '';
 
@@ -354,7 +443,10 @@ test('an unpublished table may have no API name at all', () => {
 
 test('typed input is shaped into a valid API name', () => {
     // The author should not have to know the rule to satisfy it.
-    const { dom, module } = loadApiNameGuard();
+    const {
+        dom,
+        module
+    } = loadApiNameGuard();
     const input = dom.byId.tableApiName;
     input.value = 'Sales Orders_2024!';
     module.normalizeApiName(input);
@@ -377,12 +469,19 @@ test('the client mirrors the API name pattern the server enforces', () => {
 // auth.js boots itself on load; the checks below want its functions, not its boot.
 function loadAuthModule() {
     const dom = install(['curPass', 'newPass', 'newPass2', 'changeHint',
-                         'loginScreen', 'loginForm', 'forgotCard', 'changeCard']);
-    global.ui = { toast() {}, handle: async () => null };
+        'loginScreen', 'loginForm', 'forgotCard', 'changeCard'
+    ]);
+    global.ui = {
+        toast() {},
+        handle: async () => null
+    };
     const module = {};
     eval(read('js/auth.js').replace(/\bboot\(\);\s*$/, '') +
-         '\n;module.changeProblem = changeProblem; module.refreshChangeState = refreshChangeState;');
-    return { dom, module };
+        '\n;module.changeProblem = changeProblem; module.refreshChangeState = refreshChangeState;');
+    return {
+        dom,
+        module
+    };
 }
 
 test('the login card never tells a visitor where the code went', () => {
@@ -519,8 +618,13 @@ test('a toast carries its kind in tokens, not in a coloured stripe', () => {
 });
 
 test('the change card reds the field that is wrong', () => {
-    const { dom, module } = loadAuthModule();
-    const set = (id, value) => { dom.byId[id].value = value; };
+    const {
+        dom,
+        module
+    } = loadAuthModule();
+    const set = (id, value) => {
+        dom.byId[id].value = value;
+    };
 
     set('curPass', 'one-time-pass');
     set('newPass', 'short');
@@ -546,7 +650,10 @@ test('the change card reds the field that is wrong', () => {
 });
 
 test('typing does not red a field that is merely unfinished', () => {
-    const { dom, module } = loadAuthModule();
+    const {
+        dom,
+        module
+    } = loadAuthModule();
     dom.byId.curPass.value = 'one-time-pass';
     assert.strictEqual(module.changeProblem(true), null, 'an empty new password is called wrong while typing');
     dom.byId.newPass.value = 'a-real-password';
@@ -713,7 +820,7 @@ test('the API reference is served entirely from this origin', () => {
     assert.deepStrictEqual(external, [], `docs.html loads something off-origin: ${external.join(', ')}`);
     assert.ok(docs.includes("src='/js/vendor/scalar-api-reference.js'"), 'the vendored Scalar bundle is not loaded');
     assert.ok(fs.existsSync(path.join(wwwroot, 'js/vendor/scalar-api-reference.js')),
-              'the vendored bundle is missing; run Scripts/pull-vendors.sh');
+        'the vendored bundle is missing; run Scripts/pull-vendors.sh');
     assert.ok(/withDefaultFonts:\s*false/.test(docs), 'Scalar would fetch fonts from fonts.scalar.com');
     assert.ok(/proxyUrl:\s*''/.test(docs), "Scalar would route try-it requests through proxy.scalar.com");
 });
