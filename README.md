@@ -18,7 +18,7 @@
 
 Meet Baseport: define your tables in the console and you get a typed REST API, live updates and an admin UI over them, without writing any of it. Point your mobile, web or desktop app at it and build the rest.
 
-Built on the modern .NET stack, Baseport runs as one process over one SQLite file. There is no database server to run alongside it, no cache to keep warm and no broker in the middle. Copy the binary to a server, back up the file, and that is the deployment. Reads stay in single-digit milliseconds at a quarter of a million rows, so a cache would have nothing to add anyway.
+Built on the modern .NET stack, Baseport runs as one process over one SQLite file. There is no database server to run alongside it, allowing for blazing-fast product development. Copy the binary to a server, back up the file, and that is the deployment. Reads stay in single-digit milliseconds at a quarter of a million rows.
 
 > **Pre-alpha.** Not yet v0.0.1. The database format and the API surface both still move between commits. Do not put production data in it.
 
@@ -78,7 +78,7 @@ Create a table and add its fields. Fields are typed rather than plain text: numb
 
 Tick `Required`, `Unique` or `Identifier` and it is enforced on every write, whether the record arrives from a form, the REST API or the console.
 
-You won't have to create database index manually. Though if you want, you can flag a field and Baseport builds the column and the index behind it as it'll handle this for you.
+Indexing is handled automatically.
 
 #### Reading and writing it
 
@@ -93,7 +93,7 @@ DELETE /api/v1/{apiName}/records/{id}
 GET    /api/v1/{apiName}/subscribe        Server-Sent Events
 ```
 
-When you subscribe once, you'll receive updates for every write, even from form submissions:
+When you subscribe once, you'll receive updates for every write:
 
 ```bash
 curl -N -H "Authorization: Bearer $TOKEN" \
@@ -103,7 +103,7 @@ event: record
 data: {"action":"create","id":"gAOPLyJDI5UU","record":{"OrderNo":"SO-100000",...}}
 ```
 
-You choose the name a table publishes under, and it's separate use the name you work with in the console. So you can rename a table whenever you want without breaking anything you already shipped. You'll find the browsable reference at `/docs` and the OpenAPI 3.2 document at `/api/openapi.json`.
+You choose the name a table publishes under, and it's separate use the name you work with in the console.
 
 #### Forms
 
