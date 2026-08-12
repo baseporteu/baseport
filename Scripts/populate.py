@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import random
+import re
 import sqlite3
 import sys
 import time
@@ -85,6 +86,10 @@ PRODUCTS_DOC = """The catalogue order lines point at.
 
 `Sku` is unique and is the practical way to find an article. Inactive products
 stay readable so historic order lines keep resolving.
+
+`Slug` auto-generates from `Name`. `Attributes` is a category-specific spec
+sheet (thread size, bore diameter, ...) that would otherwise need a column
+per possible attribute across every category.
 """
 
 FIRST = ["Anna", "Bram", "Chloe", "Daan", "Eva", "Femke", "Gijs", "Hanna", "Ivo", "Julia",
@@ -105,6 +110,30 @@ CATEGORIES = ["Fasteners", "Bearings", "Seals", "Tooling", "Electrical", "Packag
 MATERIAL = ["Steel", "Brass", "Nylon", "Alu", "Copper", "Rubber", "Ceramic", "Titanium"]
 ARTICLE = ["Bolt", "Nut", "Washer", "Bushing", "Gasket", "Clamp", "Bracket", "Coupler",
            "Sleeve", "Spacer", "Pin", "Ring"]
+# Category-specific spec sheets, the PIM staple: attributes that vary by category live in
+# one JSON field instead of a column per possible attribute across every category.
+CATEGORY_ATTRS = {
+    "Fasteners": lambda: {"thread": random.choice(["M4", "M6", "M8", "M10", "M12"]),
+                           "head": random.choice(["hex", "socket", "flange", "countersunk"]),
+                           "length_mm": random.choice([10, 16, 20, 30, 40, 60])},
+    "Bearings": lambda: {"bore_mm": random.choice([8, 10, 12, 15, 20, 25]),
+                          "od_mm": random.choice([22, 26, 32, 42, 47]),
+                          "type": random.choice(["ball", "roller", "needle"])},
+    "Seals": lambda: {"id_mm": random.choice([6, 10, 15, 20]), "od_mm": random.choice([16, 22, 28, 35]),
+                       "profile": random.choice(["O-ring", "lip", "quad"])},
+    "Tooling": lambda: {"drive": random.choice(["1/4in", "3/8in", "1/2in"]),
+                         "torque_nm": random.choice([20, 40, 80, 150])},
+    "Electrical": lambda: {"voltage": random.choice(["24V", "230V", "400V"]),
+                            "amperage_a": random.choice([6, 10, 16, 32]), "ip_rating": random.choice(["IP54", "IP65", "IP67"])},
+    "Packaging": lambda: {"units_per_box": random.choice([50, 100, 250, 500]),
+                           "recyclable": random.random() > 0.3},
+    "Safety": lambda: {"standard": random.choice(["EN388", "EN166", "EN20345"]),
+                        "size": random.choice(["S", "M", "L", "XL"])},
+}
+PRODUCT_TAGS = ["bestseller", "new", "clearance", "eco", "heavy-duty", "premium"]
+# Common finish colors on hardware, not decorative -- what black oxide/zinc/anodizing actually look like.
+FINISHES = ["#1c1c1c", "#c9c9c9", "#b5a642", "#dbe4e6", "#8a3324", "#2e5cb0"]
+COUNTRY_DIAL = {"Netherlands": "31", "Belgium": "32", "Germany": "49", "France": "33"}
 STATUSES = ["open", "picking", "shipped", "closed", "cancelled"]
 STATUS_WEIGHTS = [12, 8, 20, 55, 5]
 CHANNELS = ["web", "phone", "edi", "counter"]
@@ -193,6 +222,11 @@ def layout(*groups):
 
 def short_id(length=12):
     return "".join(random.choices(ALPHABET, k=length))
+
+
+def slugify(text):
+    """Mirrors FieldValidation.Slugify: bulk inserts bypass RecordEngine, so nothing else derives this."""
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
 class Bulk:
@@ -292,18 +326,30 @@ def product_fields():
         {"name": "Sku", "label": "SKU", "dataType": "text", "isRequired": True,
          "isUnique": True, "isIdentifier": True, "helpText": "Printed on the packing slip."},
         {"name": "Name", "label": "Description", "dataType": "text", "isRequired": True},
+        {"name": "Slug", "dataType": "slug", "optionsJson": json.dumps({"sourceField": "Name"}),
+         "helpText": "Auto-generated from the name; used in the storefront product URL."},
         {"name": "Category", "dataType": "select", "optionsJson": json.dumps(CATEGORIES),
          "defaultValue": CATEGORIES[0]},
         {"name": "UnitPrice", "label": "List price", "dataType": "currency", "min": 0},
         {"name": "Active", "dataType": "boolean", "defaultValue": "true"},
+        {"name": "Body", "label": "Description (long)", "dataType": "richtext",
+         "helpText": "Storefront copy. Sanitized on save."},
+        {"name": "Attributes", "dataType": "json",
+         "helpText": "Category-specific spec sheet, e.g. thread size or bore diameter."},
+        {"name": "Tags", "dataType": "array", "helpText": "Merchandising tags."},
+        {"name": "Rating", "dataType": "rating", "helpText": "Average customer rating."},
+        {"name": "Finish", "dataType": "color", "helpText": "Swatch shown on the product card."},
+        {"name": "Datasheet", "dataType": "url", "helpText": "Link to the PDF spec sheet."},
     ]
 
 
 def customer_fields():
     return [
-        {"name": "Email", "label": "Email address", "dataType": "text",
+        # dataType email replaces the hand-rolled pattern this field used before the type existed.
+        {"name": "Email", "label": "Email address", "dataType": "email",
          "isRequired": True, "isUnique": True, "isIdentifier": True,
-         "pattern": r"^[^@\s]+@[^@\s]+\.[^@\s]+$", "helpText": "We use this to find your account."},
+         "helpText": "We use this to find your account."},
+        {"name": "Phone", "dataType": "phone"},
         {"name": "Name", "label": "Account name", "dataType": "text", "isRequired": True},
         {"name": "City", "dataType": "text"},
         {"name": "Country", "dataType": "select", "optionsJson": json.dumps(COUNTRIES),
@@ -346,16 +392,19 @@ def line_fields(orders, products):
 
 
 def product_forms(products):
+    # Slug is derived server-side from Name when left blank, so it has no place in a visitor-facing form.
+    # Attributes/Tags are structured PIM data, filled through the admin grid or an import, not typed by hand here.
     form(products, kind="form", actions=["submit"], title="Products - Create new",
          description="A new article for the catalogue.",
-         layoutJson=layout(["Sku", "Name"], ["Category", "UnitPrice", "Active"]))
+         layoutJson=layout(["Sku", "Name"], ["Category", "UnitPrice", "Active"],
+                            ["Body"], ["Finish", "Datasheet"]))
     form(products, kind="form", actions=["lookup"], title="Products - Look up", isReadOnly=True,
          description="Enter a SKU.",
-         configJson={"matchFields": ["Sku"], "resultFields": ["Sku", "Name", "Category", "UnitPrice"],
+         configJson={"matchFields": ["Sku"], "resultFields": ["Sku", "Name", "Category", "UnitPrice", "Rating"],
                      "notFoundText": "No product with that SKU."})
     form(products, kind="list", title="Products - Catalogue",
          description="Every article, by description.",
-         configJson={"columns": ["Sku", "Name", "Category", "UnitPrice"],
+         configJson={"columns": ["Sku", "Name", "Category", "UnitPrice", "Rating"],
                      "searchFields": ["Sku", "Name"],
                      "sortField": "Name", "sortDir": "asc", "pageSize": 25})
 
@@ -467,13 +516,27 @@ def fill(db_path, counts, products, customers, orders, lines):
     catalogue = []
     for i in range(counts["products"]):
         price = round(random.uniform(0.45, 480.0), 2)
+        material = random.choice(MATERIAL)
+        article = random.choice(ARTICLE)
+        size = random.choice(["M4", "M6", "M8", "M10", "12mm", "18mm", "24mm"])
+        name = f"{material} {article} {size}"
+        category = random.choice(CATEGORIES)
         data = {
             "Sku": f"P-{i:05d}",
-            "Name": f"{random.choice(MATERIAL)} {random.choice(ARTICLE)} {random.choice(['M4', 'M6', 'M8', 'M10', '12mm', '18mm', '24mm'])}",
-            "Category": random.choice(CATEGORIES),
+            "Name": name,
+            "Slug": f"{slugify(name)}-{i:05d}",  # size/material repeat a lot, the row index is what actually makes it unique
+            "Category": category,
             "UnitPrice": price,
             "Active": random.random() > 0.08,
+            "Body": f"<p>{material} {article.lower()}, {size} &mdash; engineered for {category.lower()} applications.</p>"
+                    f"<ul><li>Corrosion-resistant finish</li><li>ISO-compliant dimensions</li></ul>",
+            "Attributes": CATEGORY_ATTRS[category](),
+            "Tags": random.sample(PRODUCT_TAGS, k=random.randint(0, 3)),
+            "Finish": random.choice(FINISHES),
+            "Datasheet": f"https://cdn.example.test/datasheets/P-{i:05d}.pdf",
         }
+        if random.random() > 0.15:  # some products have no reviews yet
+            data["Rating"] = round(random.uniform(2.5, 5.0), 1)
         catalogue.append((bulk.add(products, data, stamp(START)), price))
 
     accounts = []
@@ -482,6 +545,7 @@ def fill(db_path, counts, products, customers, orders, lines):
         signed = random.randint(START, END - 30)
         data = {
             "Email": f"{random.choice(FIRST)}.{random.choice(LAST)}{i}@{random.choice(['acme', 'nova', 'delta', 'orion', 'vertex'])}.test".lower().replace(" ", ""),
+            "Phone": f"+{COUNTRY_DIAL[country]} {random.randint(100, 999)} {random.randint(100000, 999999)}",
             "Name": f"{random.choice(LAST)} {random.choice(SUFFIX)}",
             "City": random.choice(CITIES[country]),
             "Country": country,
