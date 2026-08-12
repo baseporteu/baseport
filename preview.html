@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fully Configurable AST Engine</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --bg-panel: #1e293b;
+      --bg-card: #334155;
+      --border: #475569;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+      --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-ui); }
+    body { background-color: var(--bg-dark); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    header { background-color: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand h1 { font-size: 1.05rem; font-weight: 600; color: var(--text-main); }
+    .badge { background: rgba(56, 189, 248, 0.15); color: var(--accent); font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3); font-weight: 500; }
+
+    .header-controls { display: flex; align-items: center; gap: 14px; }
+    .control-group { display: flex; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; padding: 2px; }
+    .btn-toggle { background: transparent; color: var(--text-muted); border: none; padding: 4px 10px; font-size: 0.75rem; font-weight: 500; cursor: pointer; border-radius: 4px; }
+    .btn-toggle.active { background: var(--bg-card); color: var(--text-main); }
+    .btn-action-main { background: var(--primary); color: white; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+    .btn-action-main:hover { background: var(--primary-hover); }
+
+    .workspace { display: grid; grid-template-columns: 280px 1fr 340px; flex: 1; overflow: hidden; }
+
+    .panel { background-color: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+    .panel-right { border-right: none; border-left: 1px solid var(--border); }
+    .panel-section { padding: 16px; border-bottom: 1px solid var(--border); }
+    .panel-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; margin-bottom: 12px; }
+
+    .select-input, .text-input { width: 100%; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text-main); padding: 8px 10px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 10px; }
+    .select-input:focus, .text-input:focus { border-color: var(--accent); outline: none; }
+
+    .draggable-item { background: var(--bg-card); border: 1px solid var(--border); padding: 9px 12px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 8px; cursor: grab; display: flex; justify-content: space-between; align-items: center; user-select: none; }
+    .draggable-item:hover { border-color: var(--accent); }
+    .type-tag { font-size: 0.7rem; color: var(--text-muted); background: var(--bg-dark); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); }
+
+    .canvas-container { padding: 24px; overflow-y: auto; background: var(--bg-dark); display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .canvas { width: 100%; max-width: 960px; min-height: 600px; background: var(--bg-panel); border: 2px dashed var(--border); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 16px; transition: max-width 0.2s ease; }
+    .canvas.tablet { max-width: 680px; }
+    .canvas.mobile { max-width: 400px; }
+
+    .canvas-block { border: 1px solid var(--border); border-radius: 8px; background: rgba(15, 23, 42, 0.6); padding: 14px; position: relative; cursor: grab; }
+    .canvas-block.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+    .block-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 0.75rem; color: var(--text-muted); }
+    .drag-handle { background: var(--bg-card); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border); font-weight: 600; cursor: grab; font-size: 0.7rem; }
+    
+    .block-actions { display: flex; gap: 6px; align-items: center; }
+    .btn-sm { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
+    .btn-sm:hover { background: var(--border); }
+    .btn-sm.danger { color: var(--danger); border-color: rgba(239, 68, 68, 0.4); }
+    .btn-sm.danger:hover { background: var(--danger); border-color: var(--danger); color: white; }
+
+    .grid-row-container { border: 1px dashed rgba(71, 85, 105, 0.6); border-radius: 6px; padding: 10px; margin-bottom: 10px; background: rgba(30, 41, 59, 0.3); }
+    .row-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 8px; }
+
+    .grid-layout { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px; }
+    
+    .column-target { background: rgba(15, 23, 42, 0.4); border: 1px dashed var(--border); border-radius: 6px; min-height: 70px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .column-target.drag-over-col { background: rgba(56, 189, 248, 0.12); border-color: var(--accent); }
+
+    .field-chip { background: var(--bg-card); border: 1px solid var(--border); padding: 7px 10px; border-radius: 5px; font-size: 0.8rem; cursor: grab; display: flex; justify-content: space-between; align-items: center; }
+    .field-chip.selected { border-color: var(--accent); background: rgba(56, 189, 248, 0.12); }
+
+    .line-items-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.8rem; }
+    .line-items-table th, .line-items-table td { border: 1px solid var(--border); padding: 8px; text-align: left; }
+    .line-items-table th { background: var(--bg-card); color: var(--text-muted); font-weight: 600; }
+
+    .button-group-bar { display: flex; gap: 10px; width: 100%; }
+
+    .json-area { width: 100%; max-width: 960px; height: 140px; background: var(--bg-panel); border: 1px solid var(--border); color: var(--accent); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.8rem; padding: 10px; border-radius: 6px; resize: vertical; }
+
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 500; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <h1>Dynamic Form & Grid AST Engine</h1>
+    </div>
+
+    <div class="header-controls">
+      <div class="control-group">
+        <button class="btn-toggle" onclick="undo()">Undo</button>
+        <button class="btn-toggle" onclick="redo()">Redo</button>
+      </div>
+
+      <div class="control-group">
+        <button class="btn-toggle active" onclick="setViewport('desktop', this)">Desktop</button>
+        <button class="btn-toggle" onclick="setViewport('tablet', this)">Tablet</button>
+        <button class="btn-toggle" onclick="setViewport('mobile', this)">Mobile</button>
+      </div>
+
+    </div>
+  </header>
+
+  <div class="workspace">
+    <!-- LEFT PANEL -->
+    <div class="panel">
+      <div class="panel-section">
+        <div class="panel-title">Target Schema</div>
+        <select id="tableSelect" class="select-input" onchange="changeTable()">
+          <option value="RMA">RMA Claims</option>
+          <option value="Order">Sales Orders</option>
+        </select>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">Available Fields</div>
+        <div id="fieldsPalette"></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">Block Types</div>
+        <div class="draggable-item" draggable="true" ondragstart="handleBlockPaletteDragStart(event, 'container')">
+          <span>Grid Container</span>
+          <span class="type-tag">1-12 Col</span>
+        </div>
+        <div class="draggable-item" draggable="true" ondragstart="handleBlockPaletteDragStart(event, 'line_items')">
+          <span>Order Line Items</span>
+          <span class="type-tag">Table</span>
+        </div>
+        <div class="draggable-item" draggable="true" ondragstart="handleBlockPaletteDragStart(event, 'subtotal')">
+          <span>Subtotal / Formula</span>
+          <span class="type-tag">Calc</span>
+        </div>
+        <div class="draggable-item" draggable="true" ondragstart="handleBlockPaletteDragStart(event, 'action_bar')">
+          <span>Action Button Row</span>
+          <span class="type-tag">Buttons</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CENTER CANVAS -->
+    <div class="canvas-container">
+      <div class="canvas" id="canvas" ondragover="event.preventDefault()" ondrop="handleCanvasDrop(event)"></div>
+      <textarea id="jsonOutput" class="json-area" readonly></textarea>
+    </div>
+
+    <!-- RIGHT PANEL: INSPECTOR -->
+    <div class="panel panel-right">
+      <div class="panel-section">
+        <div class="panel-title">Inspector</div>
+        <div id="inspectorContent">
+          <p style="font-size:0.85rem; color:var(--text-muted);">Select any block, column, button, or field on the canvas to configure properties.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const schemas = {
+      RMA: [
+        { name: 'RMANumber', type: 'text' },
+        { name: 'CustomerName', type: 'text' },
+        { name: 'CustomerEmail', type: 'email' },
+        { name: 'InvoiceNo', type: 'text' },
+        { name: 'BillingStreet', type: 'text' },
+        { name: 'BillingCity', type: 'text' },
+        { name: 'BillingZip', type: 'text' },
+        { name: 'DeliveryStreet', type: 'text' },
+        { name: 'DeliveryCity', type: 'text' },
+        { name: 'DeliveryZip', type: 'text' },
+        { name: 'ReasonForReturn', type: 'select' }
+      ],
+      Order: [
+        { name: 'OrderNo', type: 'text' },
+        { name: 'AccountName', type: 'text' },
+        { name: 'ShippingAddress', type: 'text' },
+        { name: 'PaymentTerms', type: 'select' }
+      ]
+    };
+
+    let currentTable = 'RMA';
+    let selectedId = null;
+
+    let history = [];
+    let historyIndex = -1;
+
+    // AST state - 100% dynamic arrays for rows, cols, buttons, and fields
+    let formState = [
+      {
+        id: 'block-addresses',
+        type: 'container',
+        title: 'Customer & Addresses (3 Columns)',
+        rows: [
+          {
+            id: 'row-3-cols',
+            columns: [
+              { span: 4, fields: ['CustomerName', 'CustomerEmail', 'ReasonForReturn'] },
+              { span: 4, fields: ['InvoiceNo', 'BillingStreet', 'BillingCity', 'BillingZip'] },
+              { span: 4, fields: ['RMANumber', 'DeliveryStreet', 'DeliveryCity', 'DeliveryZip'] }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'block-lines',
+        type: 'line_items',
+        title: 'Returned Line Items',
+        columns: ['SKU / Item', 'Quantity', 'Unit Price', 'Return Reason', 'Line Total']
+      },
+      {
+        id: 'block-calc',
+        type: 'subtotal',
+        label: 'Calculated Refund Subtotal',
+        expression: 'SUM(LineItems.LineTotal)'
+      },
+      {
+        id: 'block-actions',
+        type: 'action_bar',
+        align: 'flex-end',
+        buttons: [
+          { label: 'Cancel', action: 'reset', style: 'btn-sm' },
+          { label: 'Save Draft', action: 'draft', style: 'btn-sm' },
+          { label: 'Submit RMA Claim', action: 'submit', style: 'btn-action-main' }
+        ]
+      }
+    ];
+
+    let fieldConfigs = {
+      CustomerName: { label: 'Customer Name', required: true },
+      CustomerEmail: { label: 'Customer Email', required: true },
+      ReasonForReturn: { label: 'Return Reason', required: true },
+      InvoiceNo: { label: 'Invoice No.', required: true },
+      BillingStreet: { label: 'Billing Street', required: false },
+      BillingCity: { label: 'Billing City', required: false },
+      BillingZip: { label: 'Billing Zip', required: false },
+      RMANumber: { label: 'RMA Reference', required: true },
+      DeliveryStreet: { label: 'Delivery Street', required: false },
+      DeliveryCity: { label: 'Delivery City', required: false },
+      DeliveryZip: { label: 'Delivery Zip', required: false }
+    };
+
+    function saveState() {
+      history = history.slice(0, historyIndex + 1);
+      history.push(JSON.stringify({ formState, fieldConfigs }));
+      historyIndex++;
+    }
+
+    function undo() {
+      if (historyIndex > 0) {
+        historyIndex--;
+        const state = JSON.parse(history[historyIndex]);
+        formState = state.formState;
+        fieldConfigs = state.fieldConfigs;
+        renderCanvas();
+        renderInspector();
+      }
+    }
+
+    function redo() {
+      if (historyIndex < history.length - 1) {
+        historyIndex++;
+        const state = JSON.parse(history[historyIndex]);
+        formState = state.formState;
+        fieldConfigs = state.fieldConfigs;
+        renderCanvas();
+        renderInspector();
+      }
+    }
+
+    function init() {
+      renderPalette();
+      saveState();
+      renderCanvas();
+    }
+
+    function changeTable() {
+      currentTable = document.getElementById('tableSelect').value;
+      renderPalette();
+    }
+
+    function renderPalette() {
+      const palette = document.getElementById('fieldsPalette');
+      palette.innerHTML = schemas[currentTable].map(f => `
+        <div class="draggable-item" draggable="true" ondragstart="handleFieldPaletteDragStart(event, '${f.name}')">
+          <span>${f.name}</span>
+          <span class="type-tag">${f.type}</span>
+        </div>
+      `).join('');
+    }
+
+    function setViewport(size, btn) {
+      document.querySelectorAll('.header-controls .btn-toggle').forEach(b => {
+        if (['Desktop', 'Tablet', 'Mobile'].includes(b.innerText)) b.classList.remove('active');
+      });
+      btn.classList.add('active');
+      const canvas = document.getElementById('canvas');
+      canvas.className = 'canvas ' + (size === 'desktop' ? '' : size);
+    }
+
+    function renderCanvas() {
+      const canvas = document.getElementById('canvas');
+      canvas.innerHTML = '';
+
+      formState.forEach((block, bIdx) => {
+        const blockEl = document.createElement('div');
+        blockEl.className = `canvas-block ${selectedId === block.id ? 'selected' : ''}`;
+        blockEl.draggable = true;
+
+        blockEl.ondragstart = (e) => handleBlockDragStart(e, bIdx);
+        blockEl.ondragover = (e) => e.preventDefault();
+        blockEl.ondrop = (e) => handleBlockDrop(e, bIdx);
+        blockEl.onclick = (e) => { e.stopPropagation(); selectElement(block.id); };
+
+        if (block.type === 'container') {
+          blockEl.innerHTML = renderContainerBlock(block, bIdx);
+        } else if (block.type === 'line_items') {
+          blockEl.innerHTML = renderLineItemsBlock(block, bIdx);
+        } else if (block.type === 'subtotal') {
+          blockEl.innerHTML = renderSubtotalBlock(block, bIdx);
+        } else if (block.type === 'action_bar') {
+          blockEl.innerHTML = renderActionBarBlock(block, bIdx);
+        }
+
+        canvas.appendChild(blockEl);
+      });
+
+      document.getElementById('jsonOutput').value = JSON.stringify(formState, null, 2);
+    }
+
+    function renderContainerBlock(block, bIdx) {
+      const rowsHTML = block.rows.map((row, rIdx) => {
+        const colsHTML = row.columns.map((col, cIdx) => `
+          <div style="grid-column: span ${col.span};">
+            <div style="font-size:0.68rem; color:var(--text-muted); margin-bottom:4px;">Col ${cIdx + 1} (Span ${col.span}/12)</div>
+            <div class="column-target" 
+                 ondragover="event.preventDefault(); this.classList.add('drag-over-col');" 
+                 ondragleave="this.classList.remove('drag-over-col');"
+                 ondrop="handleFieldDropOnColumn(event, '${block.id}', ${rIdx}, ${cIdx})">
+              ${col.fields.map((fieldName, fIdx) => {
+                const cfg = fieldConfigs[fieldName] || { label: fieldName };
+                return `
+                  <div class="field-chip ${selectedId === fieldName ? 'selected' : ''}" 
+                       draggable="true" 
+                       ondragstart="handleFieldDragStart(event, '${block.id}', ${rIdx}, ${cIdx}, ${fIdx}, '${fieldName}')"
+                       onclick="event.stopPropagation(); selectElement('${fieldName}');">
+                    <span>${cfg.label || fieldName}${cfg.required ? ' *' : ''}</span>
+                    <button class="btn-sm danger" onclick="event.stopPropagation(); removeField('${block.id}', ${rIdx}, ${cIdx}, ${fIdx});">x</button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `).join('');
+
+        return `
+          <div class="grid-row-container">
+            <div class="row-header">
+              <span>ROW ${rIdx + 1} LAYOUT SPLIT</span>
+              <div style="display:flex; gap:6px;">
+                <select class="btn-sm" onchange="event.stopPropagation(); setRowPreset('${block.id}', ${rIdx}, this.value)">
+                  <option value="">Set Column Presets</option>
+                  <option value="12">1 Column (Full - 12)</option>
+                  <option value="6-6">2 Columns (Half - 6/6)</option>
+                  <option value="4-4-4">3 Columns (Thirds - 4/4/4)</option>
+                  <option value="3-3-3-3">4 Columns (Quarters - 3/3/3/3)</option>
+                  <option value="8-4">2 Columns (Main/Side - 8/4)</option>
+                </select>
+                <button class="btn-sm" onclick="event.stopPropagation(); addColumnToRow('${block.id}', ${rIdx})">+ Add Col</button>
+                <button class="btn-sm danger" onclick="event.stopPropagation(); removeRowFromBlock('${block.id}', ${rIdx})">Delete Row</button>
+              </div>
+            </div>
+            <div class="grid-layout">${colsHTML}</div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="block-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="drag-handle">MOVE</span>
+            <strong style="color:var(--text-main); font-size:0.85rem;">${block.title}</strong>
+          </div>
+          <div class="block-actions">
+            <button class="btn-sm" onclick="event.stopPropagation(); addRowToBlock('${block.id}')">+ Add Grid Row</button>
+            <button class="btn-sm danger" onclick="event.stopPropagation(); removeBlock('${block.id}')">Delete Block</button>
+          </div>
+        </div>
+        <div>${rowsHTML}</div>
+      `;
+    }
+
+    function renderLineItemsBlock(block, bIdx) {
+      return `
+        <div class="block-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="drag-handle">MOVE</span>
+            <strong style="color:var(--text-main);">${block.title}</strong>
+          </div>
+          <button class="btn-sm danger" onclick="event.stopPropagation(); removeBlock('${block.id}')">Delete Block</button>
+        </div>
+        <table class="line-items-table">
+          <thead>
+            <tr>
+              ${block.columns.map(c => `<th>${c}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              ${block.columns.map((c, i) => `<td>Sample ${c} ${i + 1}</td>`).join('')}
+            </tr>
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderSubtotalBlock(block, bIdx) {
+      return `
+        <div class="block-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="drag-handle">MOVE</span>
+            <span>CALCULATION ENGINE</span>
+          </div>
+          <button class="btn-sm danger" onclick="event.stopPropagation(); removeBlock('${block.id}')">Delete Block</button>
+        </div>
+        <div style="font-size:0.9rem; font-weight:600;">${block.label}: <span style="color:var(--accent); font-family:monospace;">${block.expression}</span></div>
+      `;
+    }
+
+    function renderActionBarBlock(block, bIdx) {
+      return `
+        <div class="block-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="drag-handle">MOVE</span>
+            <span>ACTION BUTTON BAR</span>
+          </div>
+          <button class="btn-sm danger" onclick="event.stopPropagation(); removeBlock('${block.id}')">Delete Block</button>
+        </div>
+        <div class="button-group-bar" style="justify-content: ${block.align || 'flex-end'};">
+          ${block.buttons.map(b => `<button class="${b.style}">${b.label}</button>`).join('')}
+        </div>
+      `;
+    }
+
+    // DRAG AND DROP
+    function handleBlockPaletteDragStart(e, blockType) {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'palette-block', blockType }));
+    }
+
+    function handleBlockDragStart(e, bIdx) {
+      e.stopPropagation();
+      e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'canvas-block', bIdx }));
+    }
+
+    function handleBlockDrop(e, targetIdx) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      if (data.source === 'canvas-block' && data.bIdx !== targetIdx) {
+        const moved = formState.splice(data.bIdx, 1)[0];
+        formState.splice(targetIdx, 0, moved);
+        saveState();
+        renderCanvas();
+      }
+    }
+
+    function handleCanvasDrop(e) {
+      e.preventDefault();
+      const dataStr = e.dataTransfer.getData('text/plain');
+      if (!dataStr) return;
+
+      const data = JSON.parse(dataStr);
+      if (data.source === 'palette-block') {
+        const newId = 'block-' + Date.now();
+        if (data.blockType === 'container') {
+          formState.push({
+            id: newId,
+            type: 'container',
+            title: 'New Container Block',
+            rows: [{ id: 'row-' + Date.now(), columns: [{ span: 12, fields: [] }] }]
+          });
+        } else if (data.blockType === 'line_items') {
+          formState.push({
+            id: newId,
+            type: 'line_items',
+            title: 'Order Line Items',
+            columns: ['Item Description', 'Qty', 'Unit Price', 'Total']
+          });
+        } else if (data.blockType === 'subtotal') {
+          formState.push({ id: newId, type: 'subtotal', label: 'Calculated Total', expression: 'SUM(LineTotal)' });
+        } else if (data.blockType === 'action_bar') {
+          formState.push({
+            id: newId,
+            type: 'action_bar',
+            align: 'flex-end',
+            buttons: [
+              { label: 'Cancel', action: 'reset', style: 'btn-sm' },
+              { label: 'Submit', action: 'submit', style: 'btn-action-main' }
+            ]
+          });
+        }
+        saveState();
+        renderCanvas();
+      }
+    }
+
+    function handleFieldPaletteDragStart(e, fieldName) {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'palette-field', name: fieldName }));
+    }
+
+    function handleFieldDragStart(e, blockId, rIdx, cIdx, fIdx, fieldName) {
+      e.stopPropagation();
+      e.dataTransfer.setData('text/plain', JSON.stringify({
+        source: 'canvas-field', blockId, rIdx, cIdx, fIdx, name: fieldName
+      }));
+    }
+
+    function handleFieldDropOnColumn(e, blockId, targetRIdx, targetCIdx) {
+      e.preventDefault();
+      e.stopPropagation();
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      const block = formState.find(b => b.id === blockId);
+
+      if (data.source === 'palette-field') {
+        if (!block.rows[targetRIdx].columns[targetCIdx].fields.includes(data.name)) {
+          block.rows[targetRIdx].columns[targetCIdx].fields.push(data.name);
+          if (!fieldConfigs[data.name]) {
+            fieldConfigs[data.name] = { label: data.name, required: false };
+          }
+          saveState();
+          renderCanvas();
+        }
+      } else if (data.source === 'canvas-field') {
+        const sourceBlock = formState.find(b => b.id === data.blockId);
+        sourceBlock.rows[data.rIdx].columns[data.cIdx].fields.splice(data.fIdx, 1);
+        block.rows[targetRIdx].columns[targetCIdx].fields.push(data.name);
+        saveState();
+        renderCanvas();
+      }
+    }
+
+    // GRID ROW AND COLUMN ACTIONS
+    function addRowToBlock(blockId) {
+      const block = formState.find(b => b.id === blockId);
+      if (block) {
+        block.rows.push({ id: 'row-' + Date.now(), columns: [{ span: 4, fields: [] }, { span: 4, fields: [] }, { span: 4, fields: [] }] });
+        saveState();
+        renderCanvas();
+      }
+    }
+
+    function removeRowFromBlock(blockId, rIdx) {
+      const block = formState.find(b => b.id === blockId);
+      if (block) {
+        block.rows.splice(rIdx, 1);
+        saveState();
+        renderCanvas();
+      }
+    }
+
+    function addColumnToRow(blockId, rIdx) {
+      const block = formState.find(b => b.id === blockId);
+      if (block && block.rows[rIdx]) {
+        const cols = block.rows[rIdx].columns;
+        const newSpan = Math.max(1, Math.floor(12 / (cols.length + 1)));
+        cols.forEach(c => c.span = newSpan);
+        cols.push({ span: newSpan, fields: [] });
+        saveState();
+        renderCanvas();
+      }
+    }
+
+    function setRowPreset(blockId, rIdx, preset) {
+      if (!preset) return;
+      const block = formState.find(b => b.id === blockId);
+      if (!block || !block.rows[rIdx]) return;
+
+      const allFields = block.rows[rIdx].columns.flatMap(c => c.fields);
+      const spans = preset.split('-').map(Number);
+      
+      block.rows[rIdx].columns = spans.map((span, idx) => ({
+        span: span,
+        fields: idx === 0 ? allFields : []
+      }));
+
+      saveState();
+      renderCanvas();
+    }
+
+    function selectElement(id) {
+      selectedId = id;
+      renderCanvas();
+      renderInspector();
+    }
+
+    // INSPECTOR CONTROLS FOR ALL AST ELEMENTS
+    function renderInspector() {
+      const inspector = document.getElementById('inspectorContent');
+      if (!selectedId) {
+        inspector.innerHTML = `<p style="font-size:0.85rem; color:var(--text-muted);">Select any block, column, button, or field on the canvas to configure properties.</p>`;
+        return;
+      }
+
+      const block = formState.find(b => b.id === selectedId);
+
+      if (block && block.type === 'container') {
+        inspector.innerHTML = `
+          <div class="form-group">
+            <label>Container Block Title</label>
+            <input type="text" class="text-input" value="${block.title || ''}" oninput="updateBlockProperty('${selectedId}', 'title', this.value)">
+          </div>
+        `;
+      } else if (block && block.type === 'line_items') {
+        const colsHTML = block.columns.map((colName, idx) => `
+          <div style="display:flex; gap:6px; margin-bottom:6px; align-items:center;">
+            <input type="text" class="text-input" style="margin-bottom:0;" value="${colName}" onchange="updateLineItemColName('${selectedId}', ${idx}, this.value)">
+            <button class="btn-sm danger" onclick="removeLineItemCol('${selectedId}', ${idx})">x</button>
+          </div>
+        `).join('');
+
+        inspector.innerHTML = `
+          <div class="form-group">
+            <label>Table Block Title</label>
+            <input type="text" class="text-input" value="${block.title || ''}" oninput="updateBlockProperty('${selectedId}', 'title', this.value)">
+          </div>
+          <div class="panel-title" style="margin-top:12px;">Table Columns (${block.columns.length})</div>
+          ${colsHTML}
+          <button class="btn-sm" style="width:100%; font-weight:600; margin-top:6px;" onclick="addLineItemCol('${selectedId}')">+ Add Table Column</button>
+        `;
+      } else if (block && block.type === 'subtotal') {
+        inspector.innerHTML = `
+          <div class="form-group">
+            <label>Formula Field Label</label>
+            <input type="text" class="text-input" value="${block.label || ''}" oninput="updateBlockProperty('${selectedId}', 'label', this.value)">
+          </div>
+          <div class="form-group">
+            <label>AST Expression</label>
+            <input type="text" class="text-input" value="${block.expression || ''}" oninput="updateBlockProperty('${selectedId}', 'expression', this.value)">
+          </div>
+        `;
+      } else if (block && block.type === 'action_bar') {
+        const btnsHTML = block.buttons.map((btn, idx) => `
+          <div style="background:var(--bg-dark); padding:10px; border-radius:6px; margin-bottom:10px; border:1px solid var(--border);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="font-size:0.75rem; color:var(--accent);">Button ${idx + 1}</strong>
+              <button class="btn-sm danger" onclick="removeButtonFromActionBar('${selectedId}', ${idx})">Delete</button>
+            </div>
+            <div class="form-group">
+              <label>Button Label</label>
+              <input type="text" class="text-input" value="${btn.label}" onchange="updateButtonProp('${selectedId}', ${idx}, 'label', this.value)">
+            </div>
+            <div class="form-group">
+              <label>Action</label>
+              <select class="select-input" onchange="updateButtonProp('${selectedId}', ${idx}, 'action', this.value)">
+                <option value="submit" ${btn.action==='submit'?'selected':''}>Submit Form</option>
+                <option value="reset" ${btn.action==='reset'?'selected':''}>Reset Form</option>
+                <option value="draft" ${btn.action==='draft'?'selected':''}>Save Draft</option>
+                <option value="custom" ${btn.action==='custom'?'selected':''}>Custom Script</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Visual Style Variant</label>
+              <select class="select-input" onchange="updateButtonProp('${selectedId}', ${idx}, 'style', this.value)">
+                <option value="btn-action-main" ${btn.style==='btn-action-main'?'selected':''}>Primary (Solid)</option>
+                <option value="btn-sm" ${btn.style==='btn-sm'?'selected':''}>Secondary (Outline)</option>
+                <option value="btn-sm danger" ${btn.style==='btn-sm danger'?'selected':''}>Danger (Red)</option>
+              </select>
+            </div>
+          </div>
+        `).join('');
+
+        inspector.innerHTML = `
+          <div class="form-group">
+            <label>Horizontal Alignment</label>
+            <select class="select-input" onchange="updateBlockProperty('${selectedId}', 'align', this.value)">
+              <option value="flex-start" ${block.align==='flex-start'?'selected':''}>Left Align</option>
+              <option value="center" ${block.align==='center'?'selected':''}>Center Align</option>
+              <option value="flex-end" ${block.align==='flex-end'?'selected':''}>Right Align</option>
+              <option value="space-between" ${block.align==='space-between'?'selected':''}>Space Between</option>
+            </select>
+          </div>
+          <div class="panel-title" style="margin-top:12px;">Buttons (${block.buttons.length})</div>
+          ${btnsHTML}
+          <button class="btn-sm" style="width:100%; font-weight:600;" onclick="addButtonToActionBar('${selectedId}')">+ Add New Button</button>
+        `;
+      } else if (fieldConfigs[selectedId]) {
+        const cfg = fieldConfigs[selectedId];
+        inspector.innerHTML = `
+          <div class="form-group">
+            <label>Field Display Label</label>
+            <input type="text" class="text-input" value="${cfg.label || selectedId}" onchange="updateFieldConfig('${selectedId}', 'label', this.value)">
+          </div>
+        `;
+      }
+    }
+
+    // DYNAMIC ACTION BAR MUTATIONS
+    function addButtonToActionBar(blockId) {
+      const block = formState.find(b => b.id === blockId);
+      if (block && block.buttons) {
+        block.buttons.push({ label: 'New Action', action: 'submit', style: 'btn-sm' });
+        saveState();
+        renderCanvas();
+        renderInspector();
+      }
+    }
+
+    function removeButtonFromActionBar(blockId, btnIdx) {
+      const block = formState.find(b => b.id === blockId);
+      if (block && block.buttons) {
+        block.buttons.splice(btnIdx, 1);
+        saveState();
+        renderCanvas();
+        renderInspector();
+      }
+    }
+
+    function updateButtonProp(blockId, btnIdx, key, val) {
+      const block = formState.find(b => b.id === blockId);
+      if (block && block.buttons && block.buttons[btnIdx]) {
+        block.buttons[btnIdx][key] = val;
+        saveState();
+        renderCanvas();
+      }
+    }
+
+    // DYNAMIC LINE ITEMS TABLE MUTATIONS
+    function addLineItemCol(blockId) {
+      const block = formState.find(b => b.id === blockId);
+      if (block && block.columns) {
+        block.columns.push('New Column');
+        saveState();
+        renderCanvas();
+        renderInspector();
+      }
+    }
+
+    function removeLineItemCol(blockId, colIdx) {
+      const block = formState.find(b => b.id === blockId);
+      if (block && block.columns) {
+        block.columns.splice(colIdx, 1);
+        saveState();
+        renderCanvas();
+        renderInspector();
+      }
+    }
+
+    function updateLineItemColName(blockId, colIdx, name) {
+      const block = formState.find(b => b.id === blockId);
+      if (block && block.columns) {
+        block.columns[colIdx] = name;
+        saveState();
+        renderCanvas();
+      }
+    }
+
+    function updateBlockProperty(id, key, val) {
+      const block = formState.find(b => b.id === id);
+      if (block) {
+        block[key] = val;
+        saveState();
+        renderCanvas();
+      }
+    }
+
+    function updateFieldConfig(fieldName, key, val) {
+      if (!fieldConfigs[fieldName]) fieldConfigs[fieldName] = {};
+      fieldConfigs[fieldName][key] = val;
+      saveState();
+      renderCanvas();
+    }
+
+    function removeField(blockId, rIdx, cIdx, fIdx) {
+      const block = formState.find(b => b.id === blockId);
+      if (block && block.rows[rIdx]) {
+        block.rows[rIdx].columns[cIdx].fields.splice(fIdx, 1);
+        saveState();
+        renderCanvas();
+      }
+    }
+
+    function removeBlock(id) {
+      formState = formState.filter(b => b.id !== id);
+      selectedId = null;
+      saveState();
+      renderCanvas();
+      renderInspector();
+    }
+
+    init();
+  </script>
+</body>
+</html>

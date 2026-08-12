@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Baseport/Baseport.csproj" />
+  <Project Path="Baseport.Tests/Baseport.Tests.csproj" />
+</Solution>

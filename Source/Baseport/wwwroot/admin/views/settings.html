@@ -1,0 +1,146 @@
+            <div id='settingsView' class='view'>
+                <div class='page-header'>
+                    <div>
+                        <p class='settings-breadcrumb'><span class='crumb'>Settings</span> › <span id='settingsCrumb'>Host</span></p>
+                        <h1 id='settingsTitle'>Host</h1>
+                        <p class='page-sub' id='settingsSub'>Application and database overview.</p>
+                    </div>
+                </div>
+                <div class='settings-layout'>
+                    <div class='settings-content'>
+                        <div class='settings-pane' data-pane='host'>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>Info</h2></div></div>
+                                <div class='info-rows' id='settingsInfoRows'></div>
+                            </div>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>Settings</h2><p class='muted'>Application-level configuration.</p></div></div>
+                                <div class='settings-form'>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsAppName'>App name</label>
+                                        <input type='text' class='input' id='settingsAppName'>
+                                    </div>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsSiteUrl'>Site URL</label>
+                                        <input type='text' class='input' id='settingsSiteUrl' placeholder='https://example.com'>
+                                        <p class='desc'>Used for absolute links and embed callbacks.</p>
+                                    </div>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsLogRetention'>Log retention (seconds)</label>
+                                        <input type='number' class='input' id='settingsLogRetention' min='0'>
+                                        <p class='desc'>Audit entries older than this are pruned. 0 disables pruning.</p>
+                                    </div>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsCurrency'>Default currency</label>
+                                        <input type='text' class='input' id='settingsCurrency' maxlength='3' placeholder='EUR'>
+                                        <p class='desc'>Three-letter ISO code used by currency fields that do not set their own.</p>
+                                    </div>
+                                    <div class='settings-form-footer'>
+                                        <button class='btn' onclick='submitSettings(this)'>Save</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class='settings-pane hidden' data-pane='auth'>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>API reference</h2><p class='muted'>What consumers read at the top of <a href='/docs' target='_blank' rel='noopener'>the published reference</a>.</p></div></div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsOpenApiEnabled'>OpenAPI document</label>
+                                        <p class='muted'>Hides the OpenAPI document, beware it does not disable the API endpoints.</p>
+                                    </div>
+                                    <label class='switch'>
+                                        <input type='checkbox' id='settingsOpenApiEnabled'>
+                                        <span class='track'></span>
+                                        <span class='thumb'></span>
+                                    </label>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsApiTitle'>Title</label>
+                                        <p class='muted'>Names the API in the reference and in generated clients.</p>
+                                    </div>
+                                    <input type='text' id='settingsApiTitle' class='input' maxlength='120' placeholder='Baseport REST API'>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsApiDescription'>Description</label>
+                                        <p class='muted'>The opening section of the reference.</p>
+                                    </div>
+                                    <textarea id='settingsApiDescription' class='input textarea' rows='6' maxlength='8000' placeholder='What this API is for, and how to get a token.'></textarea>
+                                </div>
+                                <div class='card-footer'>
+                                    <span class='muted'></span>
+                                    <button class='btn' onclick='submitApiInfo(this)'>Save</button>
+                                </div>
+                            </div>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>API per table</h2><p class='muted'>Expose at <code>/api/v1</code>, and whether that shows up in the document above. Endpoint name, documentation and methods are configured on the table itself.</p></div></div>
+                                <ul class='api-table-list' id='apiTableList'></ul>
+                                <p id='apiTablesEmpty' class='muted empty-hint'>No tables.</p>
+                            </div>
+                        </div>
+                        <div class='settings-pane hidden' data-pane='sites'>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>Allowed sites</h2><p class='muted'>Where a published form may be embedded. One origin per line. Empty allows any site.</p></div></div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsAllowedOrigins'>Origins</label>
+                                        <p class='muted'>Scheme and domain, for example <code>https://shop.example.com</code>. A bare domain is read as https.</p>
+                                    </div>
+                                    <textarea id='settingsAllowedOrigins' class='input textarea' rows='6' spellcheck='false' placeholder='https://shop.example.com&#10;https://portal.example.org'></textarea>
+                                </div>
+                                <div class='card-footer'>
+                                    <p class='muted'>
+                                    </p>
+                                    <button class='btn btn-primary' onclick='saveAllowedOrigins(this)'>Save</button>
+                                </div>
+                            </div>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>In use</h2><p class='muted'>Origins currently accepted, after normalisation.</p></div></div>
+                                <ul class='api-table-list' id='allowedOriginList'></ul>
+                                <p id='allowedOriginsEmpty' class='muted empty-hint'>No restriction: any site may embed a form.</p>
+                            </div>
+                        </div>
+
+                        <div class='settings-pane hidden' data-pane='jobs'>
+                            <div class='card'>
+                                <div class='table-wrap'>
+                                    <table class='table'>
+                                        <thead><tr><th>Name</th><th>Schedule</th><th>Next run</th><th>Last run</th><th>Enabled</th><th></th></tr></thead>
+                                        <tbody id='jobsBody'></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class='settings-pane hidden' data-pane='backups'>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>Backup settings</h2><p class='muted'>Retention for the snapshots below.</p></div></div>
+                                <div class='settings-form'>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsBackupRetention'>Retention window</label>
+                                        <input type='number' class='input' id='settingsBackupRetention' min='1' max='50'>
+                                        <p class='desc'>How many backups to keep. Older ones are deleted automatically. Restore by replacing the store file while the service is stopped.</p>
+                                    </div>
+                                    <div class='settings-form-footer'>
+                                        <button class='btn' onclick='saveBackupSettings(this)'>Save</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class='card'>
+                                <div class='card-header'>
+                                    <div><h2>Snapshots</h2><p class='muted'>Stored database snapshots.</p></div>
+                                    <button class='btn btn-outline' onclick='triggerBackup(this)'>Trigger backup</button>
+                                </div>
+                                <div class='table-wrap'>
+                                    <table class='table'>
+                                        <thead><tr><th>Time</th><th>Size</th><th></th></tr></thead>
+                                        <tbody id='backupsBody'></tbody>
+                                    </table>
+                                </div>
+                                <p id='backupsEmpty' class='muted empty-hint hidden'>No backups yet.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>

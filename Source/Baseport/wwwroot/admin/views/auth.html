@@ -1,0 +1,28 @@
+            <div id='authView' class='view'>
+                <div class='page-header'>
+                    <div>
+                        <h1>Users</h1>
+                        <p class='page-sub'>User accounts and authentication settings.</p>
+                    </div>
+                    <div class='page-actions'>
+                        <button class='btn btn-outline' onclick='loadAccounts()'>Refresh</button>
+                        <button class='btn' onclick='openAccountForm()'>New user</button>
+                    </div>
+                </div>
+                <div class='accounts-toolbar'>
+                    <div class='search-box'>
+                        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg>
+                        <input type='text' class='input input-sm' id='accountsFilter' placeholder='Search…' oninput='renderAccounts()'>
+                    </div>
+                    <div class='table-pager' id='accountsPager'></div>
+                </div>
+                <div class='table-wrap'>
+                    <table class='table accounts-table'>
+                        <thead><tr>
+                            <th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Access</th><th>Updated</th><th>Created</th><th></th>
+                        </tr></thead>
+                        <tbody id='accountsBody'></tbody>
+                    </table>
+                </div>
+                <p id='accountsEmpty' class='muted empty-hint'>No accounts.</p>
+            </div>

@@ -1,0 +1,100 @@
+using System.Text;
+
+namespace Baseport;
+
+// Builds the HTML fragments the console swaps into the page.
+public static class Html
+{
+    // Escapes a value for use as element text or an attribute value.
+    public static string Text(object? value)
+    {
+        var raw = value switch
+        {
+            null => "",
+            string s => s,
+            DateTime d => d.ToString("u"),
+            _ => value.ToString() ?? ""
+        };
+
+        var sb = new StringBuilder(raw.Length);
+        foreach (var c in raw)
+        {
+            switch (c)
+            {
+                case '&': sb.Append("&amp;"); break;
+                case '<': sb.Append("&lt;"); break;
+                case '>': sb.Append("&gt;"); break;
+                case '"': sb.Append("&quot;"); break;
+                case '\'': sb.Append("&#39;"); break;
+                default: sb.Append(c); break;
+            }
+        }
+        return sb.ToString();
+    }
+
+    // A table row. Cells are raw HTML, so each must already be escaped.
+    public static string Row(params string[] cells) => $"<tr>{string.Concat(cells)}</tr>";
+
+    // A cell whose content is escaped for you.
+    public static string Cell(object? value, string? className = null) =>
+        $"<td{Class(className)}>{Text(value)}</td>";
+
+    // A cell whose content is already-built HTML.
+    public static string RawCell(string html, string? className = null) =>
+        $"<td{Class(className)}>{html}</td>";
+
+    public static string Muted(object? value) => $"<span class=\"muted\">{Text(value)}</span>";
+
+    // invariant text is the fallback if js never runs; ui.fragment() reformats data-n with the browser's locale
+    public static string Num(double value, int decimals = 0)
+    {
+        var s = value.ToString("F" + decimals, System.Globalization.CultureInfo.InvariantCulture);
+        return $"<span class=\"num\" data-n=\"{s}\">{s}</span>";
+    }
+
+    public static string BytesHtml(double bytes)
+    {
+        var (v, unit) = bytes switch
+        {
+            < 1024 => (bytes, "B"),
+            < 1024 * 1024 => (bytes / 1024, "KB"),
+            _ => (bytes / 1024 / 1024, "MB"),
+        };
+        return $"{Num(v, unit == "B" ? 0 : 1)} {unit}";
+    }
+
+    public static string Tag(object? value) => $"<span class=\"tag\">{Text(value)}</span>";
+
+    public static string Badge(object? value, string? extra = null) =>
+        $"<span class=\"badge{(extra is null ? "" : " " + extra)}\">{Text(value)}</span>";
+
+    // A button that calls a console function with string arguments.
+    public static string Button(string label, string function, params string[] args)
+    {
+        var call = $"{function}({string.Join(", ", args.Select(a => $"'{JsString(a)}'"))})";
+        return $"<button class=\"btn btn-ghost btn-sm\" onclick=\"{Text(call)}\">{Text(label)}</button>";
+    }
+
+    public static string IconButton(string icon, string title, string function, params string[] args)
+    {
+        var call = $"{function}({string.Join(", ", args.Select(a => $"'{JsString(a)}'"))})";
+        return $"<button class=\"icon-btn\" title=\"{Text(title)}\" onclick=\"{Text(call)}\">{icon}</button>";
+    }
+
+    // Escapes a value for a single-quoted JavaScript string literal.
+    public static string JsString(string value) =>
+        value.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\r", "").Replace("\n", "\\n");
+
+    // Renders a value the way the grid should show it.
+    public static string DisplayValue(System.Text.Json.Nodes.JsonNode? node)
+    {
+        if (node is null) return "";
+        if (node is System.Text.Json.Nodes.JsonArray arr)
+            return string.Join(", ", arr.Select(a => a?.ToString() ?? ""));
+        if (node is System.Text.Json.Nodes.JsonObject) return node.ToJsonString();
+        return node.ToString();
+    }
+
+    private static string Class(string? className) =>
+        className is null ? "" : $" class=\"{Text(className)}\"";
+}

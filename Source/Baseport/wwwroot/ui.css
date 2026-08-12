@@ -1,0 +1,262 @@
+[hidden] {
+  display: none !important;
+}
+
+.toasts {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  max-width: min(26rem, calc(100vw - 2rem));
+}
+/* The sheet docks bottom-right too (its actions bar sits right where a toast would), so move
+   toasts out of its way for as long as one is open, rather than stacking on top of Cancel/Save. */
+body:has(.sheet.open) .toasts {
+  right: auto;
+  left: 1rem;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: .625rem;
+  padding: .625rem .75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: .5rem;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font-size: .875rem;
+  line-height: 1.4;
+  box-shadow: 0 4px 16px rgb(0 0 0 / .12);
+  animation: toast-in .16s ease-out;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.toast:hover {
+  border-color: hsl(var(--ring) / .45);
+  box-shadow: 0 6px 22px rgb(0 0 0 / .16);
+}
+.toast-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: .0625rem;
+  transition: color .15s ease;
+}
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+  user-select: text;
+}
+.toast-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: .125rem;
+}
+.toast-btn {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: none;
+  border-radius: .25rem;
+  background: none;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.toast-btn:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+.toast-btn:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 1px;
+}
+.toast-success .toast-icon {
+  color: hsl(var(--success));
+}
+.toast-error {
+  border-color: hsl(var(--destructive) / .4);
+}
+.toast-error .toast-icon {
+  color: hsl(var(--destructive));
+}
+.toast-info .toast-icon {
+  color: hsl(var(--primary));
+}
+.toast.toast-copied {
+  border-color: hsl(var(--success) / .55);
+}
+.toast-copied .toast-icon {
+  color: hsl(var(--success));
+}
+.toast-out {
+  opacity: 0;
+  transform: translateY(.25rem);
+  transition: opacity .15s ease, transform .15s ease;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+  .toast-out {
+    transition: none;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  margin-bottom: .75rem;
+  font-size: .875rem;
+}
+.field-label-text {
+  font-weight: 500;
+}
+.field-id-icon {
+  vertical-align: -1px;
+  margin-left: .25rem;
+  color: hsl(var(--muted-foreground));
+}
+.field-help {
+  font-size: .75rem;
+  color: hsl(var(--muted-foreground));
+}
+.combobox-box {
+  position: relative;
+}
+.combobox-spinner {
+  position: absolute;
+  top: 50%;
+  right: .625rem;
+  transform: translateY(-50%);
+}
+.combobox-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + .25rem);
+  left: 0;
+  right: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: .25rem;
+  list-style: none;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .12);
+}
+.combobox-option {
+  padding: .375rem .5rem;
+  border-radius: calc(var(--radius) - 4px);
+  cursor: pointer;
+  font-size: .875rem;
+}
+.combobox-option:hover,
+.combobox-option.active {
+  background: hsl(var(--accent));
+}
+.combobox-empty {
+  padding: .375rem .5rem;
+  font-size: .8125rem;
+  color: hsl(var(--muted-foreground));
+}
+.input.mono {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: .8125rem;
+}
+.row {
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgb(0 0 0 / .45);
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.overlay.open {
+  opacity: 1;
+}
+
+.sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 91;
+  width: min(42rem, 92vw);
+  min-width: 20rem;
+  display: flex;
+  flex-direction: column;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border-left: 1px solid hsl(var(--border));
+  box-shadow: -12px 0 32px rgb(0 0 0 / .12);
+  transform: translateX(100%);
+  transition: transform .25s ease;
+}
+.sheet.open {
+  transform: translateX(0);
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+}
+.sheet-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  padding: 1.25rem;
+  overflow-y: auto;
+}
+.sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+}
+.cell-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay, .sheet {
+    transition: none;
+  }
+}

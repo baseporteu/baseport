@@ -1,0 +1,493 @@
+/* Activity log and instance settings. */
+/* Logs: server-side filter / sort / pagination */
+
+let logsPage = 1;
+let logsPerPage = 25;
+let logsSort = 'createdAt';
+let logsOrder = 'desc';
+
+function sortLogs(field) {
+  if (logsSort === field) logsOrder = logsOrder === 'desc' ? 'asc' : 'desc';
+  else {
+    logsSort = field;
+    logsOrder = 'desc';
+  }
+  document.querySelectorAll('.logs-table th.th-sort').forEach((th) => {
+    th.classList.toggle('sort-asc', th.dataset.sort === logsSort && logsOrder === 'asc');
+    th.classList.toggle('sort-desc', th.dataset.sort === logsSort && logsOrder === 'desc');
+  });
+  loadLogs(1);
+}
+
+async function loadLogs(page) {
+  logsPage = page || logsPage;
+  const filter = (document.getElementById('logsFilter').value || '').trim();
+  // Rows arrive rendered; paging comes back in headers.
+  const meta = await ui.fragment(
+    'logsList',
+    `/api/_admin/fragments/logs?page=${logsPage}&perPage=${logsPerPage}&sort=${logsSort}&order=${logsOrder}` +
+      (filter ? `&filter=${encodeURIComponent(filter)}` : ''),
+  );
+  if (!meta) return;
+
+  document.getElementById('logsEmpty').classList.toggle('hidden', meta.total > 0);
+  makePager(document.getElementById('logsPager'), {
+    page: meta.page,
+    total: meta.total,
+    perPage: meta.pageSize,
+    onPage: (p) => loadLogs(p),
+    onPerPage: (n) => {
+      logsPerPage = n;
+      loadLogs(1);
+    },
+  });
+}
+
+/* Settings: Host / Auth / Jobs / Backups */
+
+let settingsData = null;
+
+function settingsPage(page) {
+  navigate(`/settings/${page}`);
+}
+
+function applySettingsPage(page) {
+  settingsCurrentPage = page;
+  document.querySelectorAll('.settings-pane').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== page));
+  const titles = { host: 'Host', auth: 'Authentication', sites: 'Sites', jobs: 'Jobs', backups: 'Backups' };
+  const subs = {
+    host: 'Application and database overview.',
+    auth: 'User accounts, REST API tokens and per-table access.',
+    sites: 'Where published forms may be embedded.',
+    jobs: 'Background maintenance tasks.',
+    backups: 'Stored snapshots of the database.',
+  };
+  document.getElementById('settingsCrumb').innerText = titles[page];
+  document.getElementById('settingsTitle').innerText = titles[page];
+  document.getElementById('settingsSub').innerText = subs[page];
+}
+
+async function loadSettings() {
+  settingsData = await fetch('/api/_admin/settings').then((r) => r.json());
+  renderSettingsInfo();
+  document.getElementById('settingsAppName').value = settingsData.appName || 'Baseport';
+  document.getElementById('settingsSiteUrl').value = settingsData.siteUrl || '';
+  document.getElementById('settingsLogRetention').value = settingsData.logRetentionSec ?? 0;
+  document.getElementById('settingsCurrency').value = settingsData.currency || 'EUR';
+  document.getElementById('settingsAllowedOrigins').value = settingsData.allowedOrigins || '';
+  renderAllowedOrigins(settingsData.allowedOrigins || '');
+  document.getElementById('settingsBackupRetention').value = settingsData.backupRetention ?? 5;
+  document.getElementById('settingsOpenApiEnabled').checked = settingsData.openApiEnabled !== false;
+  document.getElementById('settingsApiTitle').value = settingsData.apiTitle || '';
+  document.getElementById('settingsApiDescription').value = settingsData.apiDescription || '';
+  await loadApiTables();
+  await loadJobs();
+  await loadBackups();
+}
+
+function formatUptime(u) {
+  if (!u) return '0s';
+  const m = String(u).match(/(?:(\d+)\.)?(\d+):(\d+):(\d+)/);
+  if (!m) return String(u);
+  const [, d, h, min, sec] = m;
+  const parts = [];
+  if (Number(d) > 0) parts.push(Number(d) + 'd');
+  if (Number(h) > 0 || Number(d) > 0) parts.push(Number(h) + 'h');
+  if (Number(min) > 0 || Number(h) > 0) parts.push(Number(min) + 'm');
+  parts.push(Number(sec) + 's');
+  return parts.join(' ');
+}
+
+function renderSettingsInfo() {
+  const s = settingsData;
+  const rows = [
+    ['Version', s.version],
+    ['Uptime', formatUptime(s.uptime)],
+    ['OpenAPI spec', s.openapiPath],
+    ['API reference', s.docsPath],
+    ['Database path', s.dbPath],
+    ['Database size', s.dbSizeBytes != null ? fmtSize(s.dbSizeBytes) : 'n/a'],
+    ['Tables', s.tables],
+    ['Fields', s.fields],
+    ['Forms', s.forms],
+    ['Records', s.records],
+    ['Tables with API enabled', s.apiEnabledTables],
+  ];
+  const el = document.getElementById('settingsInfoRows');
+  el.innerHTML = rows
+    .map(([k, v]) => `<span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(String(v))}</span>`)
+    .join('');
+}
+
+async function submitSettings(btn) {
+  await ui.busy(btn, async () => {
+    const body = {
+      appName: document.getElementById('settingsAppName').value,
+      siteUrl: document.getElementById('settingsSiteUrl').value,
+      logRetentionSec: Number(document.getElementById('settingsLogRetention').value) || 0,
+      currency: document.getElementById('settingsCurrency').value.trim().toUpperCase(),
+      backupRetention: Number(document.getElementById('settingsBackupRetention').value) || 5,
+    };
+    const res = await fetch('/api/_admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      openModal({
+        title: 'Could not save settings',
+        message: (data.errors || ['Failed to save settings.']).join(' '),
+        confirmLabel: 'OK',
+      });
+      return;
+    }
+    settingsData = { ...settingsData, ...data };
+    renderSettingsInfo();
+    ui.toast('Application settings have been updated.', 'success');
+  });
+}
+
+// Separate from the instance settings save: this group is published to anyone who opens /docs, and saving it should not depend on the Host page being valid.
+async function submitApiInfo(btn) {
+  await ui.busy(btn, async () => {
+    const saved = await ui.send('/api/_admin/settings', {
+      method: 'PUT',
+      body: {
+        apiTitle: document.getElementById('settingsApiTitle').value,
+        apiDescription: document.getElementById('settingsApiDescription').value,
+        openApiEnabled: document.getElementById('settingsOpenApiEnabled').checked,
+      },
+      success: 'The API reference has been updated.',
+    });
+    if (!saved) return;
+    settingsData = { ...settingsData, ...saved };
+    document.getElementById('settingsApiTitle').value = saved.apiTitle || '';
+    document.getElementById('settingsApiDescription').value = saved.apiDescription || '';
+  });
+}
+
+function apiSwitch(id, checked, onChange) {
+  const sw = document.createElement('label');
+  sw.className = 'switch';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.id = id;
+  cb.checked = checked;
+  cb.onchange = () => onChange(cb.checked);
+  sw.append(cb, document.createElement('span'), document.createElement('span'));
+  sw.children[1].className = 'track';
+  sw.children[2].className = 'thumb';
+  return sw;
+}
+
+// just the two live/docs toggles; endpoint name, docs and methods are configured on the table itself now
+async function loadApiTables() {
+  const tables = await fetch('/api/_admin/tables').then((r) => r.json());
+  const list = document.getElementById('apiTableList');
+  list.innerHTML = '';
+  document.getElementById('apiTablesEmpty').classList.toggle('hidden', tables.length > 0);
+  tables.forEach((t) => {
+    const li = document.createElement('li');
+    li.className = 'api-table-row';
+    const name = document.createElement('span');
+    name.className = 'api-table-name';
+    name.textContent = t.name;
+
+    const apiGroup = document.createElement('span');
+    apiGroup.className = 'api-table-state';
+    apiGroup.append('REST API');
+    const apiToggle = apiSwitch(`apiEnabled-${t.id}`, !!t.apiEnabled, (checked) => toggleTableApi(t.id, checked));
+    apiGroup.append(apiToggle);
+
+    const docsGroup = document.createElement('span');
+    docsGroup.className = 'api-table-state';
+    docsGroup.title = 'Whether this table appears in the OpenAPI document. It stays live at /api/v1 either way.';
+    docsGroup.append('OpenAPI');
+    const docsToggle = apiSwitch(`apiDocs-${t.id}`, t.apiDocsEnabled !== false, (checked) => toggleTableApiDocs(t.id, checked));
+    docsGroup.append(docsToggle);
+
+    li.append(name, apiGroup, docsGroup);
+    list.appendChild(li);
+  });
+}
+
+// refreshes currentTables too, so opening the table right after doesn't show stale data until a hard refresh
+async function toggleTableApi(pid, enabled) {
+  const res = await fetch(`/api/_admin/tables/${pid}/api`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) {
+    ui.toast('The change could not be saved.', 'error');
+    await loadApiTables();
+    return;
+  }
+  if (settingsData) settingsData.apiEnabledTables = (settingsData.apiEnabledTables || 0) + (enabled ? 1 : -1);
+  if (settingsData) renderSettingsInfo();
+  await loadTables();
+}
+
+async function toggleTableApiDocs(pid, enabled) {
+  const saved = await ui.send(`/api/_admin/tables/${pid}`, {
+    method: 'PATCH',
+    body: { apiDocsEnabled: enabled },
+    failure: 'The change could not be saved.',
+  });
+  if (!saved) {
+    await loadApiTables();
+    return;
+  }
+  await loadTables();
+}
+
+/* Jobs: cron schedules, run now, enabled toggle */
+
+function formatWhen(iso) {
+  if (!iso) return 'never';
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleString();
+}
+
+function switchHtml(id, checked) {
+  const label = document.createElement('label');
+  label.className = 'switch';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.id = id;
+  input.checked = checked;
+  const track = document.createElement('span');
+  track.className = 'track';
+  const thumb = document.createElement('span');
+  thumb.className = 'thumb';
+  label.append(input, track, thumb);
+  return label;
+}
+
+async function loadJobs() {
+  const jobs = await fetch('/api/_admin/jobs').then((r) => r.json());
+  const body = document.getElementById('jobsBody');
+  body.innerHTML = '';
+  jobs.forEach((job) => {
+    const tr = document.createElement('tr');
+
+    const name = document.createElement('td');
+    name.textContent = job.name;
+    tr.appendChild(name);
+
+    const scheduleTd = document.createElement('td');
+    const schedule = document.createElement('input');
+    schedule.type = 'text';
+    schedule.className = 'input input-sm';
+    schedule.value = job.schedule;
+    scheduleTd.appendChild(schedule);
+    tr.appendChild(scheduleTd);
+
+    const next = document.createElement('td');
+    next.className = 'muted';
+    next.textContent = formatWhen(job.nextRunAt);
+    tr.appendChild(next);
+
+    const last = document.createElement('td');
+    last.className = 'muted';
+    last.textContent = formatWhen(job.lastRunAt);
+    if (job.lastResult) last.title = job.lastResult;
+    tr.appendChild(last);
+
+    const enabledTd = document.createElement('td');
+    const toggle = switchHtml(job.key, job.enabled);
+    toggle.querySelector('input').addEventListener('change', (ev) => saveJob(job.key, { enabled: ev.target.checked }));
+    enabledTd.appendChild(toggle);
+    tr.appendChild(enabledTd);
+
+    const actionTd = document.createElement('td');
+    actionTd.className = 'cell-actions';
+    const save = ui.button('Save', () => saveJob(job.key, { schedule: schedule.value }, save), { size: 'btn-sm' });
+    save.disabled = true;
+    schedule.addEventListener('input', () => { save.disabled = schedule.value === job.schedule; });
+    schedule.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter') return;
+      if (schedule.value !== job.schedule) saveJob(job.key, { schedule: schedule.value }, save);
+    });
+    const run = ui.button('Run now', () => runJobNow(job.key, job.name, run), { size: 'btn-sm' });
+    actionTd.append(save, run);
+    tr.appendChild(actionTd);
+
+    body.appendChild(tr);
+  });
+}
+
+async function saveJob(key, patch, btn) {
+  await ui.busy(btn, async () => {
+    const res = await ui.send(`/api/_admin/jobs/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: patch,
+      failure: 'The job could not be saved.',
+    });
+    if (!res) return;
+    ui.toast('Job updated.', 'success');
+    loadJobs();
+  });
+}
+
+async function runJobNow(key, name, btn) {
+  const ok = await ui.confirm({
+    title: 'Run job now',
+    message: `Run "${name}" now, outside its schedule?`,
+    confirmLabel: 'Run now',
+  });
+  if (!ok) return;
+  await ui.busy(btn, async () => {
+    const res = await ui.send(`/api/_admin/jobs/${encodeURIComponent(key)}/run`, {
+      method: 'POST',
+      failure: 'The job could not be run.',
+    });
+    if (!res) return;
+    ui.toast('Job ran.', 'success');
+    loadJobs();
+  });
+}
+
+/* Backups: stored snapshots on a rolling window */
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+async function loadBackups() {
+  const data = await fetch('/api/_admin/backups').then((r) => r.json());
+  const list = data.backups || [];
+  document.getElementById('backupsEmpty').classList.toggle('hidden', list.length > 0);
+  const body = document.getElementById('backupsBody');
+  body.innerHTML = '';
+  list.forEach((b) => {
+    const tr = document.createElement('tr');
+    const time = document.createElement('td');
+    time.textContent = formatWhen(b.createdAt);
+    const size = document.createElement('td');
+    size.className = 'muted';
+    size.textContent = fmtSize(b.size);
+    const actions = document.createElement('td');
+    actions.className = 'cell-actions';
+    actions.append(
+      ui.button('Download', () => downloadBackup(b.name), { size: 'btn-sm', variant: 'btn-outline' }),
+      ui.button('Delete', () => deleteBackup(b.name), { size: 'btn-sm', variant: 'btn-danger' }),
+    );
+    tr.append(time, size, actions);
+    body.appendChild(tr);
+  });
+}
+
+async function triggerBackup(btn) {
+  const ok = await ui.confirm({
+    title: 'Trigger backup',
+    message: 'Create a new database snapshot now?',
+    confirmLabel: 'Trigger backup',
+  });
+  if (!ok) return;
+  await ui.busy(btn, async () => {
+    const res = await ui.send('/api/_admin/backups', {
+      method: 'POST',
+      failure: 'The backup could not be created.',
+    });
+    if (!res) return;
+    ui.toast('Backup created.', 'success');
+    loadBackups();
+  });
+}
+
+async function saveBackupSettings(btn) {
+  await ui.busy(btn, async () => {
+    const retention = Number(document.getElementById('settingsBackupRetention').value);
+    const res = await ui.send('/api/_admin/settings', {
+      method: 'PUT',
+      body: { backupRetention: retention },
+      failure: 'The retention window could not be saved.',
+    });
+    if (!res) return;
+    ui.toast('Backup retention updated.', 'success');
+    if (settingsData) settingsData.backupRetention = retention;
+  });
+}
+
+async function downloadBackup(name) {
+  const ok = await ui.confirm({
+    title: 'Download backup',
+    message: `Download "${name}"? It contains a full copy of your database.`,
+    confirmLabel: 'Download',
+  });
+  if (!ok) return;
+  location.href = '/api/_admin/backups/' + encodeURIComponent(name);
+}
+
+async function deleteBackup(name) {
+  const ok = await ui.confirm({
+    title: 'Delete backup',
+    message: `Delete the backup "${name}"? There is no way back.`,
+    confirmLabel: 'Delete',
+    danger: true,
+  });
+  if (!ok) return;
+  const res = await ui.send(`/api/_admin/backups/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+    failure: 'The backup could not be deleted.',
+  });
+  if (!res) return;
+  ui.toast('Backup deleted.', 'success');
+  loadBackups();
+}
+
+function deleteCurrentTable() {
+  if (!currentTablePublicId) return;
+  const table = currentTables.find((t) => t.id === currentTablePublicId);
+  openModal({
+    title: 'Delete table',
+    message: `Are you sure you want to delete the table "${table ? table.name : ''}"? This will irreversibly delete all the data contained. There is no way back.`,
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    danger: true,
+    onConfirm: async () => {
+      const res = await fetch(`/api/_admin/tables/${currentTablePublicId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        ui.toast('The table could not be deleted.', 'error');
+        return;
+      }
+      currentTablePublicId = null;
+      await loadTables();
+      await navigate('/tables');
+    },
+  });
+}
+
+
+function renderAllowedOrigins(stored) {
+  const list = document.getElementById('allowedOriginList');
+  const empty = document.getElementById('allowedOriginsEmpty');
+  if (!list) return;
+  const origins = (stored || '').split('\n').map((o) => o.trim()).filter(Boolean);
+  list.replaceChildren(
+    ...origins.map((origin) => {
+      const li = document.createElement('li');
+      li.textContent = origin;
+      return li;
+    }),
+  );
+  empty.classList.toggle('hidden', origins.length > 0);
+}
+
+async function saveAllowedOrigins(btn) {
+  await ui.busy(btn, async () => {
+    const saved = await ui.send('/api/_admin/settings', {
+      method: 'PUT',
+      body: { allowedOrigins: document.getElementById('settingsAllowedOrigins').value },
+      ok: 'Allowed sites saved.',
+    });
+    if (!saved) return;
+    // Re-read rather than echo the textarea: the server normalises what was typed, and an author should see what is actually in force.
+    document.getElementById('settingsAllowedOrigins').value = saved.allowedOrigins || '';
+    renderAllowedOrigins(saved.allowedOrigins || '');
+  });
+}

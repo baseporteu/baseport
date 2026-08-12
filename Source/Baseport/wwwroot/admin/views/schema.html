@@ -1,0 +1,22 @@
+            <div id='schemaView' class='view'>
+                <div class='page-header'>
+                    <div>
+                        <h1>Schema</h1>
+                        <p class='page-sub'>Tables, fields and relations. Drag to arrange, wheel to zoom, right-click for actions.</p>
+                    </div>
+                    <div class='page-actions'>
+                        <button class='btn btn-outline' onclick='loadSchema()'>Refresh</button>
+                    </div>
+                </div>
+                <div class='schema-canvas' id='schemaCanvas'>
+                    <div class='schema-stage' id='schemaStage'>
+                        <svg class='schema-links' id='schemaLinks'></svg>
+                        <div class='schema-nodes' id='schemaNodes'></div>
+                    </div>
+                    <div class='schema-zoom'>
+                        <button class='btn btn-outline btn-sm' onclick='schemaZoom(0.8)' title='Zoom out'>−</button>
+                        <span class='schema-zoom-pct' id='schemaZoomPct'>100%</span>
+                        <button class='btn btn-outline btn-sm' onclick='schemaZoom(1.25)' title='Zoom in'>+</button>
+                    </div>
+                </div>
+            </div>

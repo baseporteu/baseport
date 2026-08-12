@@ -1,0 +1,191 @@
+            <div id='formsView' class='view'>
+                <div id='formsOverview'>
+                    <div class='page-header'>
+                        <div>
+                            <h1>Forms</h1>
+                            <p class='page-sub'>Submit, lookup and list builders. A form is bound to a table but lives on its own, publish it anywhere with one script tag.</p>
+                        </div>
+                        <div class='page-actions'>
+                            <select id='formsFilterKind' class='input' onchange='renderFormsList()'>
+                                <option value=''>All types</option>
+                                <option value='form'>Forms</option>
+                                <option value='list'>Lists</option>
+                            </select>
+                            <button class='btn' onclick='navigate("/forms/new")'>New form</button>
+                        </div>
+                    </div>
+
+                    <div class='table-wrap'>
+                        <table class='table'>
+                            <thead><tr id='formsHead'>
+                                <th data-sort='title'>Title</th>
+                                <th data-sort='kind'>Kind</th>
+                                <th data-sort='table'>Table</th>
+                                <th data-sort='status'>Status</th>
+                                <th>Embed</th>
+                                <th></th>
+                            </tr></thead>
+                            <tbody id='formsRows'></tbody>
+                        </table>
+                    </div>
+                    <p id='formsEmpty' class='muted empty-hint'>No forms yet. Create one to get started.</p>
+                </div>
+
+                <div class='hidden' id='formEditor'>
+                    <div class='page-header'>
+                        <div>
+                            <h1 id='formEditorTitle'>New form</h1>
+                            <p class='page-sub' id='formEditorHint'>Pick a table and a kind, then configure what the form does.</p>
+                        </div>
+                        <div class='page-actions'>
+                            <button class='btn btn-outline hidden' id='formPreviewBtn' onclick='previewCurrentForm()'>Preview ↗</button>
+                            <button class='btn btn-outline' onclick='cancelFormEditor()'>Cancel</button>
+                            <button class='btn' id='saveFormBtn' onclick='saveForm(this)'>Publish form</button>
+                        </div>
+                    </div>
+
+                    <div class='grid-form two'>
+                        <input type='text' id='formTitle' class='input' placeholder='Form title'>
+                        <select id='formTable' class='input' onchange='onFormTableChange()'></select>
+                    </div>
+                    <input type='text' id='formDescription' class='input' placeholder='Description (optional)'>
+
+                    <!-- Kind is chosen once, at creation. A form renders fields; a
+                         list renders rows. One cannot become the other, so the
+                         editor states it rather than offering it. -->
+                    <div class='form-shape'>
+                        <div class='segmented' id='formKinds'>
+                            <button type='button' class='seg-btn active' data-kind='form' onclick='chooseKind("form")'>Form</button>
+                            <button type='button' class='seg-btn' data-kind='list' onclick='chooseKind("list")'>List</button>
+                        </div>
+                        <span class='badge hidden' id='formKindBadge'></span>
+                        <div class='form-actions-pick' id='formActions'>
+                            <label class='check-inline'><input type='checkbox' value='submit' onchange='onActionsChange()'> Create records</label>
+                            <label class='check-inline'><input type='checkbox' value='lookup' onchange='onActionsChange()'> Look up a record</label>
+                        </div>
+                    </div>
+                    <p class='muted field-hint' id='formKindHint'></p>
+                    <p class='muted field-hint hidden' id='formProxyNote'></p>
+
+                    <!-- SUBMIT: matrix layout designer -->
+                    <div id='kindSubmit'>
+                        <div class='builder'>
+                            <div class='builder-palette'>
+                                <h4>Fields</h4>
+                                <ul id='paletteFields' class='palette-list'></ul>
+                                <h4>Blocks</h4>
+                                <ul class='palette-list'>
+                                    <li class='palette-item' draggable='true' data-block='row'>Row</li>
+                                    <li class='palette-item' draggable='true' data-block='group'>Group</li>
+                                    <li class='palette-item' draggable='true' data-block='subtotal'>Subtotal</li>
+                                    <li class='palette-item' draggable='true' data-block='button'>Button</li>
+                                </ul>
+                            </div>
+                            <div class='builder-canvas' id='layoutCanvas'>
+                                <div class='canvas-empty' id='canvasEmpty'>Drag fields into columns, or drop a block here to start.</div>
+                            </div>
+                        </div>
+                        <details>
+                            <summary class='muted'>Raw layout JSON</summary>
+                            <textarea id='formLayout' class='input textarea' rows='4'></textarea>
+                        </details>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label for='formSuccessRedirect'>Redirect on success</label>
+                                <p class='muted'>A URL expression, evaluated against the submitted data. Blank stays on the form.</p>
+                            </div>
+                            <div class='input-group'>
+                                <input type='text' id='formSuccessRedirect' class='input mono' placeholder="'/thanks?id=' + data.Id">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- LOOKUP: match on an identifier, show chosen fields -->
+                    <div id='kindLookup' class='hidden'>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label>Match on</label>
+                                <p class='muted'>The visitor types one of these values. Only fields the visitor could already hold, such as an id, a reference, or an e-mail.</p>
+                            </div>
+                            <div class='check-grid' id='lookupMatchFields'></div>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label>Show</label>
+                                <p class='muted'>Fields rendered when a record is found. Everything else stays on the server.</p>
+                            </div>
+                            <div class='check-grid' id='lookupResultFields'></div>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label for='lookupNotFound'>Not-found message</label>
+                                <p class='muted'>Shown when nothing matches. Keep it identical for every miss so it reveals nothing.</p>
+                            </div>
+                            <input type='text' id='lookupNotFound' class='input' placeholder='No matching record was found.'>
+                        </div>
+                    </div>
+
+                    <!-- LIST: paged overview builder -->
+                    <div id='kindList' class='hidden'>
+                        <div class='builder'>
+                            <div class='builder-palette'>
+                                <h4>Fields</h4>
+                                <ul id='listPalette' class='palette-list'></ul>
+                            </div>
+                            <div class='builder-canvas' id='listCanvas'>
+                                <div class='canvas-empty' id='listCanvasEmpty'>Drag fields here to make them columns.</div>
+                            </div>
+                        </div>
+                        <p class='muted field-hint'>Drag fields in to add or reorder columns. Each column can use a render expression.</p>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label>Searchable</label>
+                                <p class='muted'>Choose which columns to search. Leave empty to search everything shown.</p>
+                            </div>
+                            <div class='check-grid' id='listSearchFields'></div>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label>Filters</label>
+                                <p class='muted'>Limits the records displayed in the list.</p>
+                            </div>
+                            <div>
+                                <div id='listFilters'></div>
+                                <button type='button' class='btn btn-outline btn-sm' onclick='addListFilter()'>Add filter</button>
+                            </div>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label>Row actions</label>
+                                <p class='muted'>A button per row, e.g. "View" or "Approve". The URL is built from that row's data.</p>
+                            </div>
+                            <div>
+                                <div id='listActions'></div>
+                                <button type='button' class='btn btn-outline btn-sm' onclick='addListAction()'>Add action</button>
+                            </div>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label for='listSortField'>Sort</label>
+                                <p class='muted'>Defaults to newest first.</p>
+                            </div>
+                            <div class='input-group'>
+                                <select id='listSortField' class='input'></select>
+                                <select id='listSortDir' class='input'>
+                                    <option value='desc'>Descending</option>
+                                    <option value='asc'>Ascending</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label for='listPageSize'>Rows per page</label>
+                                <p class='muted'>Sets the maximum limit a visitor can request.</p>
+                            </div>
+                            <input type='number' id='listPageSize' class='input' min='0' max='200' value='25'>
+                        </div>
+                    </div>
+
+                    <label class='check-inline'><input type='checkbox' id='formPublished' checked>Turning this off hides the form and returns a 404 on public links.</label>
+                </div>
+            </div>

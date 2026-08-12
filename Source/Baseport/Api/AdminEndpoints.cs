@@ -1,0 +1,512 @@
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Nodes;
+
+namespace Baseport;
+
+// Accounts, API switch, SQL console, saved queries, logs, settings.
+public static class AdminEndpoints
+{
+    public static void MapAdminEndpoints(this WebApplication app)
+    {
+        static object JobDto(JobConfig j) => new
+        {
+            j.Key, j.Name, j.Schedule, j.Enabled,
+            NextRunAt = Utc(j.NextRunAt),
+            LastRunAt = Utc(j.LastRunAt),
+            j.LastResult
+        };
+        static DateTime? Utc(DateTime? d) => d is null ? null : DateTime.SpecifyKind(d.Value, DateTimeKind.Utc);
+
+        app.MapGet("/api/_admin/accounts", async (AppDbContext db) =>
+        {
+            var accounts = await db.UserAccounts.OrderBy(u => u.Id).ToListAsync();
+            // The token itself is returned once, when it is generated, and never again.
+            return Results.Ok(accounts.Select(a => new
+            {
+                a.Id, a.Username, a.Email, a.Role, a.IsDisabled,
+                a.CreatedAt, a.UpdatedAt, a.LastLoginAt,
+                a.ApiEnabled, a.ApiTokenExpiresAt,
+                HasApiToken = !string.IsNullOrEmpty(a.ApiTokenHash),
+                ApiTokenExpired = a.ApiTokenExpiresAt is { } e && e <= DateTime.UtcNow
+            }));
+        });
+
+        app.MapPost("/api/_admin/accounts", async (AppDbContext db, JsonObject body) =>
+        {
+            var username = body["username"] is JsonValue uv && uv.TryGetValue<string>(out var u) ? u.Trim() : "";
+            var email = body["email"] is JsonValue ev && ev.TryGetValue<string>(out var em) ? em.Trim() : "";
+            var errors = AccountValidation.Validate(username, email);
+            if (errors.Count > 0)
+                return Results.BadRequest(new { errors, invalid = InvalidAccountFields(errors) });
+            if (await db.UserAccounts.AnyAsync(a => a.Username == username))
+                return Results.BadRequest(new { errors = new[] { "Username already exists." }, invalid = new[] { "username" } });
+            if (!string.IsNullOrWhiteSpace(email) && await db.UserAccounts.AnyAsync(a => a.Email == email))
+                return Results.BadRequest(new { errors = new[] { "That email is already on another account." }, invalid = new[] { "email" } });
+            var role = body["role"] is JsonValue av && av.TryGetValue<string>(out var r) ? AccountRoles.Normalize(r) : AccountRoles.Consumer;
+            if (role is null) return Results.BadRequest(new { errors = new[] { "Role must be admin or consumer." } });
+            var now = DateTime.UtcNow;
+            var account = new UserAccount
+            {
+                Id = Ids.NewShortId(12),
+                Username = username,
+                Email = email,
+                CreatedAt = now,
+                UpdatedAt = now,
+                Role = role,
+                ApiTokenHash = "",
+                ApiEnabled = false
+            };
+            db.UserAccounts.Add(account);
+            await db.SaveChangesAsync();
+            return Results.Ok(new
+            {
+                account.Id, account.Username, account.Email, account.Role, account.IsDisabled,
+                account.CreatedAt, account.UpdatedAt, account.LastLoginAt,
+                account.ApiEnabled, account.ApiTokenExpiresAt,
+                HasApiToken = !string.IsNullOrEmpty(account.ApiTokenHash)
+            });
+        });
+
+        app.MapPatch("/api/_admin/accounts/{pid}", async (AppDbContext db, string pid, JsonObject body) =>
+        {
+            var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Id == pid);
+            if (account == null) return Results.NotFound();
+            // Validate the resulting account, not just the supplied keys: a PATCH that sets only an e-mail must still be checked against the rules.
+            var nextUsername = body["username"] is JsonValue uv && uv.TryGetValue<string>(out var uname) ? uname.Trim() : account.Username;
+            var nextEmail = body["email"] is JsonValue ev && ev.TryGetValue<string>(out var mail) ? mail.Trim() : account.Email;
+
+            var errors = AccountValidation.Validate(nextUsername, nextEmail);
+            if (errors.Count > 0)
+                return Results.BadRequest(new { errors, invalid = InvalidAccountFields(errors) });
+            if (await db.UserAccounts.AnyAsync(a => a.Username == nextUsername && a.Id != account.Id))
+                return Results.BadRequest(new { errors = new[] { "Username already exists." }, invalid = new[] { "username" } });
+            if (!string.IsNullOrWhiteSpace(nextEmail) && await db.UserAccounts.AnyAsync(a => a.Email == nextEmail && a.Id != account.Id))
+                return Results.BadRequest(new { errors = new[] { "That email is already on another account." }, invalid = new[] { "email" } });
+
+            account.Username = nextUsername;
+            account.Email = nextEmail;
+            if (body["role"] is JsonValue av && av.TryGetValue<string>(out var rawRole))
+            {
+                var role = AccountRoles.Normalize(rawRole);
+                if (role is null) return Results.BadRequest(new { errors = new[] { "Role must be admin or consumer." } });
+                // Demotion locks the console just as surely as deletion does, so it is refused the same way.
+                if (role != AccountRoles.Admin && await IsLastEnabledAdmin(db, account))
+                    return Results.BadRequest(new { errors = new[] { "This is the last enabled admin and cannot be demoted." } });
+                account.Role = role;
+            }
+
+            if (body["isDisabled"] is JsonValue dv2 && dv2.TryGetValue<bool>(out var disabled))
+            {
+                // Disabling the last account that can sign in locks the console.
+                if (disabled && !account.IsDisabled && await db.UserAccounts.CountAsync(a => !a.IsDisabled && a.Id != account.Id) == 0)
+                    return Results.BadRequest(new { errors = new[] { "This is the last enabled account and cannot be disabled." } });
+                if (disabled && await IsLastEnabledAdmin(db, account))
+                    return Results.BadRequest(new { errors = new[] { "This is the last enabled admin and cannot be disabled." } });
+
+                account.IsDisabled = disabled;
+                // A disabled account must not keep a live console session.
+                if (disabled) AdminAuth.EndSessionsFor(account.Id);
+            }
+
+            if (body["apiEnabled"] is JsonValue ae && ae.TryGetValue<bool>(out var apiEnabled))
+            {
+                if (apiEnabled && string.IsNullOrEmpty(account.ApiTokenHash))
+                    return Results.BadRequest(new { errors = new[] { "Generate a token before enabling API access." } });
+                if (apiEnabled && account.ApiTokenExpiresAt is null)
+                    return Results.BadRequest(new { errors = new[] { "An enabled token must have an expiry date." } });
+                account.ApiEnabled = apiEnabled;
+            }
+
+            if (body.ContainsKey("apiTokenExpiresAt"))
+            {
+                var raw = body["apiTokenExpiresAt"]?.GetValue<string>();
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    if (account.ApiEnabled)
+                        return Results.BadRequest(new { errors = new[] { "An enabled token must have an expiry date." } });
+                    account.ApiTokenExpiresAt = null;
+                }
+                else if (!DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture,
+                                            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var expiry))
+                {
+                    return Results.BadRequest(new { errors = new[] { "Token expiry is not a valid date." } });
+                }
+                else if (expiry <= DateTime.UtcNow)
+                {
+                    return Results.BadRequest(new { errors = new[] { "Token expiry must be in the future." } });
+                }
+                else
+                {
+                    account.ApiTokenExpiresAt = expiry;
+                }
+            }
+            account.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new
+            {
+                account.Id, account.Username, account.Email, account.Role, account.IsDisabled,
+                account.CreatedAt, account.UpdatedAt, account.LastLoginAt,
+                account.ApiEnabled, account.ApiTokenExpiresAt,
+                HasApiToken = !string.IsNullOrEmpty(account.ApiTokenHash)
+            });
+        });
+
+        app.MapDelete("/api/_admin/accounts/{pid}", async (AppDbContext db, HttpContext ctx, string pid) =>
+        {
+            var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Id == pid);
+            if (account == null) return Results.NotFound();
+
+            // Deleting the last account that can still sign in locks everyone out of the console permanently, with no way back in.
+            var otherEnabled = await db.UserAccounts.CountAsync(a => a.Id != account.Id && !a.IsDisabled);
+            if (otherEnabled == 0)
+                return Results.BadRequest(new { errors = new[] { "This is the last enabled account. Enable another before deleting it." } });
+            if (await IsLastEnabledAdmin(db, account))
+                return Results.BadRequest(new { errors = new[] { "This is the last enabled admin. Promote another before deleting it." } });
+
+            AdminAuth.EndSessionsFor(account.Id);
+            db.UserAccounts.Remove(account);
+            await db.SaveChangesAsync();
+            return Results.Ok(new { deleted = account.Id });
+        });
+
+        // Rotating a token is per account: the credential belongs to the caller that uses it, so revoking one must not revoke everyone else's.
+        app.MapPost("/api/_admin/accounts/{pid}/token", async (AppDbContext db, string pid, JsonObject body) =>
+        {
+            var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Id == pid);
+            if (account == null) return Results.NotFound();
+
+            var raw = body["expiresAt"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(raw))
+                return Results.BadRequest(new { errors = new[] { "Choose an expiry date for the token." } });
+            if (!DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture,
+                                   System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var expiresAt))
+                return Results.BadRequest(new { errors = new[] { "Token expiry is not a valid date." } });
+            if (expiresAt <= DateTime.UtcNow)
+                return Results.BadRequest(new { errors = new[] { "Token expiry must be in the future." } });
+            if (expiresAt > DateTime.UtcNow.AddYears(10))
+                return Results.BadRequest(new { errors = new[] { "Token expiry cannot be more than ten years away." } });
+
+            var token = Ids.NewShortId(48);
+            account.ApiTokenHash = ApiAuth.HashToken(token);
+            account.ApiEnabled = true;
+            // Stored to the end of the chosen day, so a token picked for "today" is not already dead.
+            account.ApiTokenExpiresAt = expiresAt.TimeOfDay == TimeSpan.Zero ? expiresAt.AddDays(1).AddSeconds(-1) : expiresAt;
+            account.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            // The only moment the token is ever returned: only its hash is kept, so nothing can read it back afterwards.
+            return Results.Ok(new { apiToken = token, expiresAt = account.ApiTokenExpiresAt });
+        });
+
+        app.MapDelete("/api/_admin/accounts/{pid}/token", async (AppDbContext db, string pid) =>
+        {
+            var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Id == pid);
+            if (account == null) return Results.NotFound();
+            account.ApiTokenHash = "";
+            account.ApiEnabled = false;
+            account.ApiTokenExpiresAt = null;
+            account.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { revoked = true });
+        });
+
+        // Per-table switch for the public REST API.
+        app.MapPut("/api/_admin/tables/{pid}/api", async (AppDbContext db, string pid, JsonObject body) =>
+        {
+            var enabled = body["enabled"] is JsonValue ev && ev.TryGetValue<bool>(out var e) && e;
+            var table = await db.Tables.FirstOrDefaultAsync(t => t.Id == pid);
+            if (table == null) return Results.NotFound();
+            if (enabled && string.IsNullOrWhiteSpace(table.ApiName))
+                return Results.BadRequest(new { errors = new[] { "Give this table an API name before publishing it." } });
+            table.ApiEnabled = enabled;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { apiEnabled = table.ApiEnabled });
+        });
+
+        app.MapGet("/api/_admin/logs", async (AppDbContext db, string? filter, string? sort, string? order, int page, int perPage) =>
+        {
+            page = page < 1 ? 1 : page;
+            perPage = perPage < 1 ? 50 : (perPage > 100 ? 100 : perPage);
+            IQueryable<AuditLog> query = db.AuditLogs;
+            if (!string.IsNullOrWhiteSpace(filter))
+            {
+                var f = filter.Trim();
+                query = query.Where(l => l.Method.Contains(f) || l.Path.Contains(f) ||
+                                         (l.TableName != null && l.TableName.Contains(f)) ||
+                                         (l.Message != null && l.Message.Contains(f)));
+            }
+            var sortKey = (sort ?? "createdAt").Trim().ToLowerInvariant();
+            var desc = string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase) ? false : true;
+            query = sortKey switch
+            {
+                "method" => desc ? query.OrderByDescending(l => l.Method) : query.OrderBy(l => l.Method),
+                "path" => desc ? query.OrderByDescending(l => l.Path) : query.OrderBy(l => l.Path),
+                "status" => desc ? query.OrderByDescending(l => l.Status) : query.OrderBy(l => l.Status),
+                "tablename" => desc ? query.OrderByDescending(l => l.TableName) : query.OrderBy(l => l.TableName),
+                "message" => desc ? query.OrderByDescending(l => l.Message) : query.OrderBy(l => l.Message),
+                _ => desc ? query.OrderByDescending(l => l.CreatedAt) : query.OrderBy(l => l.CreatedAt)
+            };
+            var total = await query.CountAsync();
+            var logs = await query.Skip((page - 1) * perPage).Take(perPage).ToListAsync();
+            return Results.Ok(new
+            {
+                total,
+                page,
+                perPage,
+                logs = logs.Select(l => new { l.Id, l.CreatedAt, l.Method, l.Path, l.Status, l.TableName, l.Message })
+            });
+        });
+
+        // Scheduled maintenance jobs: read schedules, edit cron/enabled, trigger a one-off run.
+        app.MapGet("/api/_admin/jobs", async (AppDbContext db) =>
+        {
+            var jobs = await db.JobConfigs.OrderBy(j => j.Name).ToListAsync();
+            return Results.Ok(jobs.Select(JobDto));
+        });
+
+        app.MapPut("/api/_admin/jobs/{key}", async (AppDbContext db, string key, JsonObject body) =>
+        {
+            var job = await db.JobConfigs.FirstOrDefaultAsync(j => j.Key == key);
+            if (job is null) return Results.NotFound(new { errors = new[] { "Unknown job." } });
+            if (body["schedule"] is JsonValue sv && sv.TryGetValue<string>(out var schedule))
+            {
+                var cron = schedule.Trim();
+                var err = Jobs.Validate(cron);
+                if (err != null) return Results.BadRequest(new { errors = new[] { err } });
+                job.Schedule = cron;
+                job.NextRunAt = Jobs.NextRun(job.Schedule, DateTime.UtcNow) ?? DateTime.UtcNow.AddHours(1);
+            }
+            if (body["enabled"] is JsonValue ev && ev.TryGetValue<bool>(out var enabled))
+                job.Enabled = enabled;
+            await db.SaveChangesAsync();
+            return Results.Ok(JobDto(job));
+        });
+
+        app.MapPost("/api/_admin/jobs/{key}/run", async (AppDbContext db, string key) =>
+        {
+            var job = await db.JobConfigs.FirstOrDefaultAsync(j => j.Key == key);
+            var def = Jobs.Find(key);
+            if (job is null || def is null) return Results.NotFound(new { errors = new[] { "Unknown job." } });
+            var now = DateTime.UtcNow;
+            job.LastRunAt = now;
+            job.NextRunAt = Jobs.NextRun(job.Schedule, now) ?? now.AddHours(1);
+            // The ambient Serilog logger, not a bound parameter: a minimal API lambda treats a Serilog.ILogger parameter as a JSON body value and 500s on every request that carries one.
+            var log = Serilog.Log.Logger;
+            try
+            {
+                job.LastResult = await def.Run(db, log, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                job.LastResult = $"Failed: {ex.Message}";
+                log.Error(ex, "Job {Key} failed on manual run", key);
+            }
+            await db.SaveChangesAsync();
+            return Results.Ok(JobDto(job));
+        });
+
+        // Stored backups: consistent SQLite snapshots on a rolling window.
+        app.MapGet("/api/_admin/backups", (AppDbContext db) =>
+            Results.Ok(new { backups = BackupStore.List(BackupStore.Dir(db)) }));
+
+        app.MapPost("/api/_admin/backups", async (AppDbContext db) =>
+        {
+            var settings = await db.SettingsAsync() ?? new AppSettings();
+            var created = await BackupStore.CreateAsync(BackupStore.Dir(db), db, settings.BackupRetention);
+            return Results.Ok(new { created, backups = BackupStore.List(BackupStore.Dir(db)) });
+        });
+
+        app.MapGet("/api/_admin/backups/{name}", (AppDbContext db, string name) =>
+        {
+            var path = BackupStore.Resolve(BackupStore.Dir(db), name);
+            return path is null
+                ? Results.NotFound(new { errors = new[] { "No such backup." } })
+                : Results.File(path, "application/vnd.sqlite3", name);
+        });
+
+        app.MapDelete("/api/_admin/backups/{name}", (AppDbContext db, string name) =>
+        {
+            var deleted = BackupStore.Delete(BackupStore.Dir(db), name);
+            return deleted
+                ? Results.Ok(new { ok = true })
+                : Results.NotFound(new { errors = new[] { "No such backup." } });
+        });
+
+        app.MapGet("/api/_admin/settings", async (AppDbContext db) =>
+        {
+            var s = await db.SettingsAsync() ?? new AppSettings();
+            var dbPath = db.Database.GetDbConnection().DataSource;
+            long? dbSizeBytes = dbPath != ":memory:" && File.Exists(dbPath) ? new FileInfo(dbPath).Length : null;
+            return Results.Ok(new
+            {
+                s.AppName,
+                s.SiteUrl,
+                s.LogRetentionSec,
+                s.Currency,
+                s.BackupRetention,
+                s.ApiTitle,
+                s.ApiDescription,
+                s.AllowedOrigins,
+                s.OpenApiEnabled,
+                version = "0.2.0",
+                uptime = DateTime.UtcNow - Ids.StartedAt,
+                openapiPath = "/api/openapi.json",
+                docsPath = "/docs",
+                dbPath,
+                dbSizeBytes,
+                tables = await db.Tables.CountAsync(),
+                fields = await db.Fields.CountAsync(),
+                forms = await db.FormConfigs.CountAsync(),
+                records = await db.Records.CountAsync(),
+                apiEnabledTables = await db.Tables.CountAsync(t => t.ApiEnabled)
+            });
+        });
+
+        app.MapPut("/api/_admin/settings", async (AppDbContext db, JsonObject body) =>
+        {
+            var s = await db.SettingsAsync();
+            if (s == null) { s = new AppSettings(); db.AppSettings.Add(s); }
+            if (body["appName"] is JsonValue nv && nv.TryGetValue<string>(out var name))
+                s.AppName = string.IsNullOrWhiteSpace(name) ? "Baseport" : name.Trim();
+            if (body["siteUrl"] is JsonValue uv && uv.TryGetValue<string>(out var url))
+                s.SiteUrl = url.Trim();
+            if (body["logRetentionSec"] is JsonValue lv && lv.TryGetValue<int>(out var retention))
+                s.LogRetentionSec = retention;
+            if (body["backupRetention"] is JsonValue bv && bv.TryGetValue<int>(out var backupRetention))
+            {
+                if (backupRetention < 1 || backupRetention > 50)
+                    return Results.BadRequest(new { errors = new[] { "Backup retention must be between 1 and 50 backups." } });
+                s.BackupRetention = backupRetention;
+            }
+            if (body["allowedOrigins"] is JsonValue ov && ov.TryGetValue<string>(out var origins))
+            {
+                // Stored normalised, so what an author typed and what a browser sends are compared as the same thing.
+                var parsed = AllowedOrigins.Parse(origins);
+                s.AllowedOrigins = AllowedOrigins.Serialize(parsed);
+                EmbedOrigins.Set(s.AllowedOrigins);
+            }
+
+            if (body["currency"] is JsonValue cv && cv.TryGetValue<string>(out var currency))
+            {
+                var code = (currency ?? "").Trim().ToUpperInvariant();
+                if (code.Length != 3 || !code.All(char.IsAsciiLetterUpper))
+                    return Results.BadRequest(new { errors = new[] { "Currency must be a three-letter ISO 4217 code, for example EUR." } });
+                s.Currency = code;
+            }
+            // What the API reference says about itself.
+            if (body["apiTitle"] is JsonValue tv && tv.TryGetValue<string>(out var title))
+            {
+                var trimmed = (title ?? "").Trim();
+                if (trimmed.Length > 120)
+                    return Results.BadRequest(new { errors = new[] { "The API title is too long (max 120 characters)." } });
+                s.ApiTitle = trimmed.Length == 0 ? new AppSettings().ApiTitle : trimmed;
+            }
+            if (body["apiDescription"] is JsonValue adv && adv.TryGetValue<string>(out var apiDescription))
+            {
+                var text = apiDescription ?? "";
+                if (text.Length > 8000)
+                    return Results.BadRequest(new { errors = new[] { "The API description is too long (max 8000 characters)." } });
+                s.ApiDescription = text;
+            }
+            if (body["openApiEnabled"] is JsonValue oav && oav.TryGetValue<bool>(out var openApiEnabled))
+                s.OpenApiEnabled = openApiEnabled;
+
+            await db.SaveChangesAsync();
+            return Results.Ok(new { s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.BackupRetention, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled });
+        });
+
+        // Read-only SQL console against the SQLite store.
+        app.MapPost("/api/_admin/sql", async (AppDbContext db, JsonObject body) =>
+        {
+            var sql = body["sql"] is JsonValue sv && sv.TryGetValue<string>(out var s) ? s.Trim() : "";
+            var validationError = SqlEngine.Validate(sql);
+            if (validationError != null)
+                return Results.BadRequest(new { errors = new[] { validationError } });
+            var run = await SqlEngine.ReadAsync(db, sql);
+            return run.Error is not null
+                ? Results.BadRequest(new { errors = new[] { run.Error } })
+                : Results.Ok(new { columns = run.Columns, rows = run.Rows, truncated = run.Truncated, rowCount = run.Rows.Count });
+        });
+
+        // Saved queries: CRUD + execute.
+        app.MapGet("/api/_admin/queries", async (AppDbContext db) =>
+            Results.Ok(await db.SavedQueries.OrderBy(q => q.Name).Select(q => new
+            {
+                q.Id, q.Name, q.Sql, q.CreatedAt, q.UpdatedAt, q.LastExecutedAt
+            }).ToListAsync()));
+
+        app.MapPost("/api/_admin/queries", async (AppDbContext db, JsonObject body) =>
+        {
+            var name = body["name"] is JsonValue nv && nv.TryGetValue<string>(out var n) ? n.Trim() : "";
+            var sql = body["sql"] is JsonValue sv && sv.TryGetValue<string>(out var s) ? s.Trim() : "";
+            if (string.IsNullOrWhiteSpace(name))
+                return Results.BadRequest(new { errors = new[] { "Query name is required." } });
+            var validationError = SqlEngine.Validate(sql);
+            if (validationError != null)
+                return Results.BadRequest(new { errors = new[] { validationError } });
+            var now = DateTime.UtcNow;
+            var query = new SavedQuery { Id = Ids.NewShortId(12), Name = name, Sql = sql, CreatedAt = now, UpdatedAt = now };
+            db.SavedQueries.Add(query);
+            await db.SaveChangesAsync();
+            return Results.Ok(new { query.Id, query.Name, query.CreatedAt, query.UpdatedAt, query.LastExecutedAt });
+        });
+
+        app.MapPatch("/api/_admin/queries/{pid}", async (AppDbContext db, string pid, JsonObject body) =>
+        {
+            var query = await db.SavedQueries.FirstOrDefaultAsync(q => q.Id == pid);
+            if (query == null) return Results.NotFound();
+            if (body["name"] is JsonValue nv && nv.TryGetValue<string>(out var n) && !string.IsNullOrWhiteSpace(n.Trim()))
+                query.Name = n.Trim();
+            if (body["sql"] is JsonValue sv && sv.TryGetValue<string>(out var s))
+            {
+                var validationError = SqlEngine.Validate(s.Trim());
+                if (validationError != null)
+                    return Results.BadRequest(new { errors = new[] { validationError } });
+                query.Sql = s.Trim();
+            }
+            query.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { query.Id, query.Name, query.UpdatedAt, query.LastExecutedAt });
+        });
+
+        app.MapDelete("/api/_admin/queries/{pid}", async (AppDbContext db, string pid) =>
+        {
+            var query = await db.SavedQueries.FirstOrDefaultAsync(q => q.Id == pid);
+            if (query == null) return Results.NotFound();
+            db.SavedQueries.Remove(query);
+            await db.SaveChangesAsync();
+            return Results.Ok(new { ok = true });
+        });
+
+        // Execute a saved query and record when it last ran.
+        app.MapPost("/api/_admin/queries/{pid}/execute", async (AppDbContext db, string pid) =>
+        {
+            var query = await db.SavedQueries.FirstOrDefaultAsync(q => q.Id == pid);
+            if (query == null) return Results.NotFound();
+            var validationError = SqlEngine.Validate(query.Sql);
+            if (validationError != null)
+                return Results.BadRequest(new { errors = new[] { validationError } });
+            var run = await SqlEngine.ReadAsync(db, query.Sql);
+            if (run.Error is not null) return Results.BadRequest(new { errors = new[] { run.Error } });
+
+            query.LastExecutedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { columns = run.Columns, rows = run.Rows, truncated = run.Truncated, rowCount = run.Rows.Count });
+        });
+
+    }
+
+    // AccountValidation.Validate returns flat messages; the ones it writes always name the field they're about
+    private static List<string> InvalidAccountFields(List<string> errors)
+    {
+        var invalid = new List<string>();
+        if (errors.Any(e => e.StartsWith("Username", StringComparison.Ordinal))) invalid.Add("username");
+        if (errors.Any(e => e.StartsWith("Email", StringComparison.Ordinal))) invalid.Add("email");
+        return invalid;
+    }
+
+    // Nobody reaches the console once the last admin who can sign in is gone, and there is no way back in.
+    public static async Task<bool> IsLastEnabledAdmin(AppDbContext db, UserAccount account) =>
+        account.Role == AccountRoles.Admin && !account.IsDisabled &&
+        await db.UserAccounts.CountAsync(a => a.Role == AccountRoles.Admin && !a.IsDisabled && a.Id != account.Id) == 0;
+}

@@ -1,0 +1,22 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Authors>Melosso</Authors>
+    <Company>Melosso</Company>
+    <Product>Baseport</Product>
+    <Copyright>Copyright © Melosso $([System.DateTime]::Now.Year)</Copyright>
+    <RepositoryUrl>https://github.com/melosso/baseport</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://melosso.com</PackageProjectUrl>
+    <PackageLicenseExpression>EUPL-1.2</PackageLicenseExpression>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,182 @@
+            <div id='tablesArea'>
+                <div id='tablesOverview'>
+                    <div class='page-header'>
+                        <div>
+                            <h1 id='greeting'>Good morning</h1>
+                            <p class='page-sub'>Define your data model: tables, fields and validation.</p>
+                        </div>
+                        <div class='page-actions'>
+                            <button class='btn btn-outline' onclick='loadTables().then(() => render())'>Refresh</button>
+                        </div>
+                    </div>
+
+                    <div class='table-wrap'>
+                        <table class='table'>
+                            <thead><tr id='tablesHead'>
+                                <th data-sort='name'>Table</th>
+                                <th data-sort='fields'>Fields</th>
+                                <th data-sort='forms'>Forms</th>
+                                <th data-sort='records'>Records</th>
+                                <th data-sort='api'>API</th>
+                                <th data-sort='datasize'>Data</th>
+                                <th data-sort='indexsize'>Indexes</th>
+                                <th></th>
+                            </tr></thead>
+                            <tbody id='tablesRows'></tbody>
+                        </table>
+                    </div>
+                    <p id='tablesEmpty' class='muted empty-hint hidden'>No tables yet. Create one in the sidebar.</p>
+                </div>
+
+                <div id='tableDetail' class='hidden'>
+                    <div class='page-header'>
+                        <div>
+                            <h1 id='detailTableName'>Table</h1>
+                            <p class='page-sub' id='page-sub'></p>
+                        </div>
+                        <div class='page-actions'>
+                            <div class='segmented' id='viewToggle'>
+                                <button class='seg-btn active' data-view='builder' onclick='setView("builder")'>Builder</button>
+                                <button class='seg-btn' data-view='records' onclick='setView("records")'>Records</button>
+                            </div>
+                            <button class='btn btn-outline' onclick='refreshAll()'>Refresh</button>
+                            <button class='btn btn-outline btn-danger' onclick='deleteCurrentTable()'>Delete</button>
+                        </div>
+                    </div>
+
+            <div id='workspace'>
+                <div id='builderView'>
+                    <div class='card'>
+                        <div class='card-header'>
+                            <div>
+                                <h2>Fields</h2>
+                                <p class='muted'>Drag a row to reorder. Make sure to save your changes.</p>
+                            </div>
+                        </div>
+                        <div class='grid-form'>
+                            <input type='text' id='fieldName' class='input' placeholder='Field name'>
+                            <div id='fieldTypeRow'></div>
+                            <div class='input-group'>
+                                <input type='text' id='fieldExpr' class='input' placeholder='JS expression e.g. data.Price * 1.2'>
+                                <button type='button' class='btn btn-outline' id='fieldExprTestBtn' onclick='testFieldExpr()'>Test</button>
+                            </div>
+                            <button class='btn' onclick='addField()'>Add field</button>
+                        </div>
+                        <p class='muted field-hint' id='fieldTypeHint'></p>
+                        <div class='table-wrap'>
+                            <table class='table'>
+                                <thead>
+                                    <tr><th class='drag-col'><span class='sr-only'>Reorder</span></th><th>Name</th><th>Type</th><th>Config</th><th>Actions</th></tr>
+                                </thead>
+                                <tbody id='fieldsList'></tbody>
+                            </table>
+                        </div>
+                        <p id='fieldsEmpty' class='muted empty-hint'>No fields yet. Add one above.</p>
+                        <div class='card-footer'>
+                            <span class='muted' id='fieldsDirtyHint'></span>
+                            <button class='btn' id='saveFieldsBtn' onclick='commitFields()' disabled>Save</button>
+                        </div>
+                    </div>
+
+                    <div class='card'>
+                        <div class='card-header'>
+                            <div>
+                                <h2>Table settings</h2>
+                                <p class='muted'>Description and API exposure for <strong id='settingsTableName'></strong>.</p>
+                            </div>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label for='tableDescription'>Description</label>
+                                <p class='muted'>A summary describing the contents of this object.</p>
+                            </div>
+                            <input type='text' id='tableDescription' class='input' placeholder='What this table holds' oninput='markTableDirty()'>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label for='tableApiEnabled'>Expose</label>
+                                <p class='muted'>Makes this table's records readable and writable at <code>/api/v1</code>.</p>
+                            </div>
+                            <label class='switch'>
+                                <input type='checkbox' id='tableApiEnabled' onchange='markTableDirty()'>
+                                <span class='track'></span>
+                                <span class='thumb'></span>
+                            </label>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label>API configuration</label>
+                                <p class='muted'>Endpoint name, OpenAPI visibility, documentation and allowed methods.</p>
+                            </div>
+                            <button class='btn btn-ghost btn-sm' type='button' onclick='openEndpointSheet()'>Configure</button>
+                        </div>
+                        <div id='proxySettings' class='hidden'>
+                            <div class='setting-row'>
+                                <div class='setting-label'>
+                                    <label for='proxyUrl'>Write endpoint</label>
+                                    <p class='muted'>Where a submit form forwards to. Validated here first, stored nowhere.</p>
+                                </div>
+                                <div class='input-group'>
+                                    <select id='proxyMethod' class='input' onchange='markTableDirty()'>
+                                        <option value='POST'>POST</option>
+                                        <option value='PUT'>PUT</option>
+                                        <option value='PATCH'>PATCH</option>
+                                    </select>
+                                    <input type='url' id='proxyUrl' class='input' placeholder='https://host/api/...' oninput='markTableDirty()'>
+                                </div>
+                            </div>
+                            <div class='setting-row'>
+                                <div class='setting-label'>
+                                    <label for='proxyReadUrl'>Read endpoint</label>
+                                    <p class='muted'>The GET that lookup and list forms read from. Leave empty to disable both.</p>
+                                </div>
+                                <input type='url' id='proxyReadUrl' class='input' placeholder='https://host/api/...' oninput='markTableDirty()'>
+                            </div>
+                            <div class='setting-row'>
+                                <div class='setting-label'>
+                                    <label for='proxyToken'>Bearer token</label>
+                                    <p class='muted' id='proxyTokenState'></p>
+                                </div>
+                                <div class='input-group'>
+                                    <input type='password' id='proxyToken' class='input' placeholder='Leave empty to keep the current token' oninput='markTableDirty()' autocomplete='off'>
+                                    <button class='btn btn-outline btn-sm' type='button' onclick='clearProxyToken()'>Clear</button>
+                                </div>
+                            </div>
+                        </div>
+                        <p class='muted' id='tableFormsHint'></p>
+                        <div class='card-footer'>
+                            <span class='muted' id='tableDirtyHint'></span>
+                            <button class='btn' id='saveTableBtn' onclick='saveTableSettings(this)' disabled>Save</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id='recordsView' class='hidden'>
+                    <div class='card'>
+                        <div class='card-header'>
+                            <div>
+                                <h2>Records</h2>
+                                <p class='muted'>Submissions stored for <strong id='recordsTableName'></strong>.</p>
+                            </div>
+                            <div class='page-actions'>
+                                <input type='search' id='recordSearch' class='input' placeholder='Search all values…' oninput='debouncedRecordSearch()'>
+                                <button class='btn btn-outline' onclick='loadRecords()'>Refresh</button>
+                                <button class='btn' onclick='openNewRecordModal()'>New record</button>
+                            </div>
+                        </div>
+                        <div id='recordsProxyNote' class='muted empty-hint hidden'></div>
+                        <div class='table-wrap'>
+                            <table class='table'>
+                                <thead><tr id='recordsHead'></tr></thead>
+                                <tbody id='recordsBody'></tbody>
+                            </table>
+                        </div>
+                        <p id='recordsEmpty' class='muted empty-hint'>No records yet.</p>
+                        <div class='pager' id='recordsPager'></div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+
+            <!-- ============ FORMS (rail item 2) ============ -->

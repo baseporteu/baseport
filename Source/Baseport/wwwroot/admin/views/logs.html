@@ -1,0 +1,32 @@
+            <div id='logsView' class='view'>
+                <div class='page-header'>
+                    <div>
+                        <h1>Activity Log</h1>
+                        <p class='page-sub'>Recent mutating API requests.</p>
+                    </div>
+                    <div class='page-actions'>
+                        <button class='btn btn-outline' onclick='loadLogs()'>Refresh</button>
+                    </div>
+                </div>
+                <div class='logs-toolbar'>
+                    <div class='search-box'>
+                        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg>
+                        <input type='text' class='input input-sm' id='logsFilter' placeholder='Search method, path, table…' oninput='loadLogs(1)'>
+                    </div>
+                    <div class='table-pager' id='logsPager'></div>
+                </div>
+                <div class='table-wrap'>
+                    <table class='table logs-table'>
+                        <thead><tr>
+                            <th class='th-sort' data-sort='createdAt' onclick='sortLogs("createdAt")'>When</th>
+                            <th class='th-sort' data-sort='method' onclick='sortLogs("method")'>Method</th>
+                            <th class='th-sort' data-sort='path' onclick='sortLogs("path")'>Path</th>
+                            <th class='th-sort' data-sort='status' onclick='sortLogs("status")'>Status</th>
+                            <th class='th-sort' data-sort='tableName' onclick='sortLogs("tableName")'>Table</th>
+                            <th class='th-sort' data-sort='message' onclick='sortLogs("message")'>Message</th>
+                        </tr></thead>
+                        <tbody id='logsList'></tbody>
+                    </table>
+                </div>
+                <p id='logsEmpty' class='muted empty-hint'>No activity yet.</p>
+            </div>

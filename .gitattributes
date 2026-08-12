@@ -1,0 +1,13 @@
+# .gitattributes
+# Exclude vendored/asset paths from GitHub language statistics.
+*.html linguist-vendored=true
+*.htm linguist-vendored=true
+*.css linguist-vendored=true
+*.js linguist-vendored=true
+*.conf linguist-vendored=true
+*.yml linguist-vendored=true
+*.sh linguist-vendored=true
+*.sql linguist-vendored=true
+*.ps1 linguist-vendored=true
+*.bat linguist-vendored=true
+*.cmd linguist-vendored=true

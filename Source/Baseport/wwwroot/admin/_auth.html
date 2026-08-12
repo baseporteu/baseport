@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <meta name='color-scheme' content='light dark'>
+    <meta name='robots' content='noindex, nofollow'>
+    <script>
+        (function () {
+            var stored = null;
+            try { stored = localStorage.getItem('baseport.theme'); } catch (e) {}
+            var dark = stored ? stored === 'dark'
+                : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        })();
+
+        function switchAuthMode(mode) {
+            const tabPassword = document.getElementById('tabPassword');
+            const tabOtp = document.getElementById('tabOtp');
+            const passwordContainer = document.getElementById('passwordContainer');
+            const otpContainer = document.getElementById('otpContainer');
+            const passwordInput = document.getElementById('loginPass');
+            const otpInput = document.getElementById('otpCode');
+            const loginBtn = document.getElementById('loginBtn');
+
+            if (mode === 'password') {
+                tabPassword.classList.add('active');
+                tabOtp.classList.remove('active');
+                passwordContainer.removeAttribute('hidden');
+                otpContainer.setAttribute('hidden', '');
+                passwordInput.setAttribute('required', '');
+                otpInput.removeAttribute('required');
+                loginBtn.textContent = 'Sign in';
+                if (typeof resetOtpFlow === 'function') resetOtpFlow();
+
+            } else if (mode === 'otp') {
+                tabOtp.classList.add('active');
+                tabPassword.classList.remove('active');
+                otpContainer.removeAttribute('hidden');
+                passwordContainer.setAttribute('hidden', '');
+                otpInput.setAttribute('required', '');
+                passwordInput.removeAttribute('required');
+                loginBtn.textContent = 'Request code';
+                if (typeof resetOtpFlow === 'function') resetOtpFlow();
+            }
+        }
+    </script>
+    <style>
+        * {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        .auth-tabs {
+            display: flex;
+            background-color: var(--bg-muted, #f3f4f6);
+            padding: 0.25rem;
+            border-radius: 0.5rem;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 0.5rem;
+            text-align: center;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted, #6b7280);
+            background: transparent;
+            border: none;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        #passwordContainer > label:nth-child(1){
+            margin-top: 0 !important;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-color, #111827);
+        }
+
+        .tab-btn.active {
+            background-color: #ffffff;
+            color: var(--text-color, #111827);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+        }
+
+        [data-theme='dark'] .auth-tabs {
+            background-color: var(--bg-surface, #1f2937);
+        }
+
+        [data-theme='dark'] .tab-btn.active {
+            background-color: var(--bg-elevated, #374151);
+            color: #ffffff;
+        }
+
+        .login-license {
+            margin-top: 2rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted, #6b7280);
+        }
+    </style>
+    <title>Sign in · Baseport</title>
+    <link rel='icon' type='image/svg+xml' href='/favicon.svg'>
+    <link rel='stylesheet' href='/ui.css'>
+    <link rel='stylesheet' href='/app.css'>
+</head>
+<body>
+    <div class='login-screen' id='loginScreen'>
+        <form class='login-card' id='loginForm' onsubmit='return signIn(event)'>
+            <div class='login-brand'><span class='rail-logo-mark'>
+                    <svg viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg' class='rail-logo-tile' aria-hidden='true'>
+                        <g clip-path='url(#bp-login-clip)'>
+                            <rect width='20' height='20' fill='#000' rx='5.5'/>
+                            <rect width='20' height='20' fill='url(#bp-login-gradient)' fill-opacity='0.2' rx='5.5'/>
+                            <g filter='url(#bp-login-blur-1)' opacity='0.3'><circle cx='16' cy='17' r='6' fill='#FF64B4' fill-opacity='0.671'/></g>
+                            <g filter='url(#bp-login-blur-2)' opacity='0.1'><circle cx='16' cy='16' r='6' fill='#FF64B4' fill-opacity='0.671'/></g>
+                            <g filter='url(#bp-login-blur-3)' opacity='0.4'><circle cx='17' cy='19' r='6' fill='#FF64B4' fill-opacity='0.671'/></g>
+                            <rect width='20' height='20' fill='#FF64B4' fill-opacity='0.15' rx='5.5'/>
+                            <g style='mix-blend-mode:hard-light'><rect width='20' height='20' fill='#6A62FF' fill-opacity='0.1' rx='5.5'/></g>
+                        </g>
+                        <rect width='19' height='19' x='0.5' y='0.5' stroke='#FDFDFD' stroke-opacity='0.1' rx='5'/>
+                        <defs>
+                            <filter id='bp-login-blur-1' width='32' height='32' x='0' y='1' color-interpolation-filters='sRGB' filterUnits='userSpaceOnUse'>
+                                <feFlood flood-opacity='0' result='BackgroundImageFix'/><feBlend in='SourceGraphic' in2='BackgroundImageFix' result='shape'/><feGaussianBlur result='effect1_foregroundBlur' stdDeviation='5'/>
+                            </filter>
+                            <filter id='bp-login-blur-2' width='22' height='22' x='5' y='5' color-interpolation-filters='sRGB' filterUnits='userSpaceOnUse'>
+                                <feFlood flood-opacity='0' result='BackgroundImageFix'/><feBlend in='SourceGraphic' in2='BackgroundImageFix' result='shape'/><feGaussianBlur result='effect1_foregroundBlur' stdDeviation='5'/>
+                            </filter>
+                            <filter id='bp-login-blur-3' width='28' height='28' x='3' y='5' color-interpolation-filters='sRGB' filterUnits='userSpaceOnUse'>
+                                <feFlood flood-opacity='0' result='BackgroundImageFix'/><feBlend in='SourceGraphic' in2='BackgroundImageFix' result='shape'/><feGaussianBlur result='effect1_foregroundBlur' stdDeviation='5'/>
+                            </filter>
+                            <linearGradient id='bp-login-gradient' x1='10' y1='0' x2='10' y2='20' gradientUnits='userSpaceOnUse'>
+                                <stop stop-color='#FF64B4'/><stop offset='1' stop-color='#6A62FF' stop-opacity='0'/>
+                            </linearGradient>
+                            <clipPath id='bp-login-clip'><rect width='20' height='20' rx='5.5'/></clipPath>
+                        </defs>
+                    </svg>
+                    <svg class='rail-logo-icon' width='12' height='12' viewBox='0 0 20 20' fill='none' stroke='#FDFDFD' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>
+                        <path d='M5 4v12'/><path d='M7 4h4.5a3 3 0 0 1 0 6H7'/><path d='M7 10h5a3 3 0 0 1 0 6H7'/>
+                    </svg>
+                </span><strong>Baseport</strong></div>
+            <h1>Sign in</h1>
+            <p class='muted'>The backend is private. Please sign in to continue.</p>
+
+            <div class='auth-tabs'>
+                <button type='button' class='tab-btn active' id='tabPassword' onclick='switchAuthMode("password")'>Password</button>
+                <button type='button' class='tab-btn' id='tabOtp' onclick='switchAuthMode("otp")'>One-Time Code</button>
+            </div>
+
+            <label class='field-label' for='loginUser'>Username
+                <input type='text' id='loginUser' class='input' autocomplete='username' placeholder='example@domain.com' required autofocus>
+            </label>
+
+            <div id='passwordContainer' style='margin-bottom: 0;'>
+                <label class='field-label' for='loginPass'>Password
+                    <input type='password' id='loginPass' class='input' autocomplete='current-password' placeholder='*******' required>
+                </label>
+            </div>
+
+            <div id='otpContainer' style='margin-bottom: 0;' hidden>
+                <div id='otpCodeRow' hidden>
+                    <label class='field-label' for='otpCode'>Code
+                        <input type='text' id='otpCode' class='input' autocomplete='one-time-code' spellcheck='false' autocapitalize='off' placeholder='Enter the code' required>
+                    </label>
+                </div>
+            </div>
+
+            <button class='btn btn-block' type='submit' id='loginBtn'>Sign in</button>
+
+            <div class='login-forgot'>
+                <a href='/forgot-password' onclick='showForgot();return false' class='forgot-link'>Forgot your password?</a>
+            </div>
+
+            <p class='login-license'>Licensed under EUPL 1.2</p>
+        </form>
+
+        <div class='login-card' id='forgotCard' hidden>
+            <h1>Forgot your password?</h1>
+            <p class='muted'>You can change your password by changing the configuration.</p>
+            <button type='button' class='btn btn-block' onclick='backToLogin()'>Back to login</button>
+        </div>
+
+        <form class='login-card' id='changeCard' onsubmit='return changePassword(event)' hidden>
+            <h1>
+                Set new password
+            </h1>
+            <p id="password-help" class="form-text text-secondary">
+                Enter a new password to secure your account and continue.
+            </p>
+            <label class='field-label' for='curPass'>Current password
+                <input type='password' id='curPass' class='input' autocomplete='current-password' maxlength='128' required>
+            </label>
+            <label class='field-label' for='newPass'>New password
+                <input type='password' id='newPass' class='input' autocomplete='new-password' minlength='10' maxlength='128' required>
+            </label>
+            <label class='field-label' for='newPass2'>Confirm new password
+                <input type='password' id='newPass2' class='input' autocomplete='new-password' minlength='10' maxlength='128' required>
+            </label>
+            <p class='field-hint invalid hidden' id='changeHint'></p>
+            <button class='btn btn-block' type='submit'>Set password</button>
+            <button class='btn btn-ghost btn-block' type='button' onclick='signOut()'>Cancel</button>
+        </form>
+    </div>
+
+    <script>
+        // The tabs default to password; sync the required attributes so a hidden
+        // field is never validated. A required but hidden control makes the
+        // browser refuse the submit: it cannot focus an invalid invisible field.
+        switchAuthMode('password');
+    </script>
+
+    <!--__BOOTSTRAP__-->
+    <script src='/ui.js'></script>
+    <script src='/js/auth.js'></script>
+</body>
+</html>

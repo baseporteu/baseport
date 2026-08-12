@@ -1,0 +1,24 @@
+            <div id='sqlView' class='view'>
+                <div class='page-header'>
+                    <div>
+                        <h1>SQL Console</h1>
+                        <p class='page-sub'>Save, rename, and re-run read-only queries against your SQLite store.</p>
+                    </div>
+                </div>
+                <div class='sql-layout'>
+                    <div class='card sql-main'>
+                        <div class='sql-bar'>
+                            <span class='sql-name' id='sqlQueryName'>New Query</span>
+                            <div class='sql-actions'>
+                                <button class='btn btn-outline btn-sm' onclick='newQuery()' title='New query'>New query</button>
+                                <button class='btn btn-outline btn-sm' onclick='saveQuery()' title='Save (Ctrl+S)'>Save</button>
+                                <button class='btn btn-sm' onclick='runSql()' title='Execute (Ctrl+Enter)'>Execute</button>
+                            </div>
+                        </div>
+                        <textarea id='sqlInput' class='input textarea sql-editor' spellcheck='false' placeholder='SELECT Name, COUNT(f.Id) AS FieldCount FROM _tables t LEFT JOIN _fields f ON f.TableId = t.Id GROUP BY t.Id ORDER BY t.Name;'></textarea>
+                        <div id='sqlResult' class='sql-result hidden'></div>
+                        <div id='sqlNoData' class='sql-nodata hidden'>No data</div>
+                        <div id='sqlStatus' class='field-hint'></div>
+                    </div>
+                </div>
+            </div>

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang='en'>
+<head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <title>API reference</title>
+    <style>
+        body { margin: 0; font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+    </style>
+</head>
+<body>
+    <script id='api-reference' data-url='/api/openapi.json'></script>
+    <script>
+        document.getElementById('api-reference').dataset.configuration = JSON.stringify({
+            theme: 'default',
+            layout: 'modern',
+            hideModels: true,
+            // Nothing on this page may call out. Scalar's defaults fetch fonts
+            // from fonts.scalar.com and route "try it" through
+            // proxy.scalar.com, which would put a third party in the request
+            // path of a page we publish, and hand it whatever token a reader
+            // pastes into the auth panel. The API is same-origin, so no proxy
+            // is needed for it to work.
+            withDefaultFonts: false,
+            proxyUrl: '',
+            // Bearer only: the console session is a cookie and has no business
+            // being offered on a page anyone can open.
+            authentication: { preferredSecurityScheme: 'bearerAuth' }
+        });
+    </script>
+    <script src='/js/vendor/scalar-api-reference.js'></script>
+</body>
+</html>
