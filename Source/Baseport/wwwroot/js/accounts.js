@@ -154,8 +154,8 @@ function apiTokenPanel(a) {
         value: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
         help: 'Defaults to 90 days from today. Maximum ten years.',
     });
-    expiry.control.min = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-    expiry.control.max = new Date(Date.now() + 3650 * 86400000).toISOString().slice(0, 10);
+    expiry.ctrl.min = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    expiry.ctrl.max = new Date(Date.now() + 3650 * 86400000).toISOString().slice(0, 10);
     wrap.append(expiry);
 
     const row = ui.el('div', 'row');
@@ -164,7 +164,7 @@ function apiTokenPanel(a) {
             const created = await ui.send(`/api/_admin/accounts/${a.id}/token`, {
                 method: 'POST',
                 body: {
-                    expiresAt: expiry.control.value
+                    expiresAt: expiry.ctrl.value
                 },
                 failure: 'Could not generate a token.',
             });

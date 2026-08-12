@@ -65,7 +65,6 @@ async function boot() {
     applyRailState();
     // guarded: a stale cached tables.js without this function shouldn't throw here
     if (typeof initFieldTypeCombobox === 'function') initFieldTypeCombobox();
-    wireFieldExprValidation();
     // The router paints from the URL, so a deep link survives a reload.
     await render();
 }

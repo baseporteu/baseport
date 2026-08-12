@@ -304,12 +304,12 @@ function exportSchemaWebp() {
 
         ctx.textBaseline = 'middle';
         ctx.fillStyle = fg;
-        ctx.font = "600 13px 'Geist', system-ui, sans-serif";
+        ctx.font = "600 13px -apple-system, Ubuntu, Roboto, Arial, 'Liberation Sans', sans-serif";
         ctx.fillText(el.querySelector('.schema-node-name').textContent, n.x + 12, n.y + (hr.top - nr.top) / z + (hr.height / 2) / z);
 
         anchors.forEach((a) => {
             const codeEl = a.el.querySelector('code');
-            ctx.font = "12px 'Geist Mono', monospace";
+            ctx.font = "12px ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace";
             const tw = ctx.measureText(codeEl.textContent).width;
             ctx.fillStyle = muted;
             round(a.x, a.y - 8, tw + 12, 16, 3);
@@ -319,7 +319,7 @@ function exportSchemaWebp() {
             const typeEl = a.el.querySelector('.type-badge');
             if (typeEl) {
                 ctx.fillStyle = mutedFg;
-                ctx.font = "11px 'Geist', system-ui, sans-serif";
+                ctx.font = "11px -apple-system, Ubuntu, Roboto, Arial, 'Liberation Sans', sans-serif";
                 ctx.fillText(typeEl.textContent, a.x + tw + 18, a.y);
             }
         });

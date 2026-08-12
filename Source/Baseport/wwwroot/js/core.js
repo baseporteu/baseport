@@ -16,6 +16,18 @@ let fieldOriginal = {};
 let fieldSeq = 0;
 let fieldsDirty = false;
 
+// Comma-separated option/value lists: a comma inside one entry survives as \, (a literal backslash is \\).
+function splitOptions(str) {
+    return (str || '')
+        .split(/(?<!\\),/)
+        .map((s) => s.trim().replace(/\\(.)/g, '$1'))
+        .filter(Boolean);
+}
+
+function joinOptions(list) {
+    return (list || []).map((s) => String(s).replace(/([\\,])/g, '\\$1')).join(', ');
+}
+
 /* Sortable list headers: click a <th data-sort="key"> to sort, remembered per list across visits. */
 
 function sortState(listKey, defaultKey) {
@@ -208,6 +220,8 @@ const SECTION_ROUTES = {
         document.getElementById('tableDetail').classList.toggle('hidden', overview);
         if (overview) {
             currentTablePublicId = null;
+            // runs here too since a full page load fills currentTables without calling loadTables()
+            updateSummary(currentTables);
             renderTablesOverview();
             return;
         }
@@ -286,6 +300,22 @@ async function loadTables() {
     const tables = await res.json();
     currentTables = tables;
     renderSidebar(currentSection);
+    updateSummary(currentTables);
+}
+
+// Four counts on the tables overview: what data-model work exists so far, at a glance.
+function updateSummary(tables) {
+    const el = document.getElementById('tablesSummary');
+    if (!el) return;
+    const records = tables.reduce((n, t) => n + (t.recordCount || 0), 0);
+    const forms = tables.reduce((n, t) => n + (t.formCount || 0), 0);
+    const apiEnabled = tables.filter((t) => t.apiEnabled).length;
+    el.innerHTML = [
+        ['Tables', tables.length],
+        ['Records', records],
+        ['Forms', forms],
+        ['API enabled', apiEnabled],
+    ].map(([label, value]) => `<div class="summary-card"><div class="summary-value">${value.toLocaleString()}</div><div class="summary-label">${label}</div></div>`).join('');
 }
 
 async function createTable() {

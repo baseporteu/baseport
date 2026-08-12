@@ -248,9 +248,9 @@ function openNewRecordModal() {
                 placeholder: `${f.min ?? 1}-${f.max ?? 5}`,
                 help: f.helpText
             });
-            row.control.min = f.min ?? 1;
-            row.control.max = f.max ?? 5;
-            row.control.step = 1;
+            row.ctrl.min = f.min ?? 1;
+            row.ctrl.max = f.max ?? 5;
+            row.ctrl.step = 1;
         } else if (type === 'slug') {
             row = ui.field(label, {
                 id,
@@ -285,15 +285,15 @@ function openNewRecordModal() {
                 help: f.helpText
             });
         }
-        // a combobox's .control is the hidden value input, not what the visitor sees; markInvalid needs the visible search box, or the red never shows
-        (row.querySelector('.combobox-box input[type="text"]') || row.control).dataset.field = f.name.toLowerCase();
+        // a combobox's .ctrl is the hidden value input, not what the visitor sees; markInvalid needs the visible search box, or the red never shows
+        (row.querySelector('.combobox-box input[type="text"]') || row.ctrl).dataset.field = f.name.toLowerCase();
         if (f.isIdentifier) {
             const labelText = row.querySelector('.field-label-text');
             if (labelText) labelText.insertAdjacentHTML('beforeend', ' ' + IDENTIFIER_ICON);
         }
         inputs[f.name] = {
             type,
-            control: row.control
+            ctrl: row.ctrl
         };
         body.appendChild(row);
     });
@@ -325,16 +325,16 @@ async function submitNewRecord(inputs) {
         for (const name in inputs) {
             const {
                 type,
-                control
+                ctrl
             } = inputs[name];
             if (type === 'file') {
-                if (control.files[0]) fd.append(name, control.files[0]);
+                if (ctrl.files[0]) fd.append(name, ctrl.files[0]);
             } else if (type === 'boolean') {
-                if (control.checked) fd.append(name, 'true');
+                if (ctrl.checked) fd.append(name, 'true');
             } else if (type === 'multiselect') {
-                control.value.split(',').map((s) => s.trim()).filter(Boolean).forEach((v) => fd.append(name, v));
-            } else if (control.value !== '') {
-                fd.append(name, control.value);
+                splitOptions(ctrl.value).forEach((v) => fd.append(name, v));
+            } else if (ctrl.value !== '') {
+                fd.append(name, ctrl.value);
             }
         }
         res = await fetch(url, {
@@ -346,16 +346,16 @@ async function submitNewRecord(inputs) {
         for (const name in inputs) {
             const {
                 type,
-                control
+                ctrl
             } = inputs[name];
             if (type === 'boolean') {
-                payload[name] = control.checked;
+                payload[name] = ctrl.checked;
                 continue;
             }
-            const raw = control.value;
+            const raw = ctrl.value;
             if (raw === '' || raw === null || raw === undefined) continue;
             if (type === 'number' || type === 'currency' || type === 'rating') payload[name] = Number(raw);
-            else if (type === 'multiselect') payload[name] = raw.split(',').map((s) => s.trim()).filter(Boolean);
+            else if (type === 'multiselect') payload[name] = splitOptions(raw);
             else if (type === 'json' || type === 'array') {
                 try {
                     payload[name] = JSON.parse(raw);

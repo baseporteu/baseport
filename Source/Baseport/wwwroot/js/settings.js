@@ -226,7 +226,7 @@ function apiSwitch(id, checked, onChange) {
     return sw;
 }
 
-// just the two live/docs toggles; endpoint name, docs and methods are configured on the table itself now
+// just the two live/docs toggles plus a way into the endpoint sheet; name, docs and methods live there
 async function loadApiTables() {
     const tables = await fetch('/api/_admin/tables').then((r) => r.json());
     const list = document.getElementById('apiTableList');
@@ -252,7 +252,12 @@ async function loadApiTables() {
         const docsToggle = apiSwitch(`apiDocs-${t.id}`, t.apiDocsEnabled !== false, (checked) => toggleTableApiDocs(t.id, checked));
         docsGroup.append(docsToggle);
 
-        li.append(name, apiGroup, docsGroup);
+        const configureBtn = ui.button('Configure', () => openEndpointSheet(t.id), {
+            size: 'btn-sm',
+            variant: 'btn-outline'
+        });
+
+        li.append(name, apiGroup, docsGroup, configureBtn);
         list.appendChild(li);
     });
 }
@@ -355,7 +360,7 @@ async function loadJobs() {
         tr.appendChild(enabledTd);
 
         const actionTd = document.createElement('td');
-        actionTd.className = 'cell-actions';
+        actionTd.className = 'cell-actions end';
         const save = ui.button('Save', () => saveJob(job.key, {
             schedule: schedule.value
         }, save), {
@@ -434,7 +439,7 @@ async function loadBackups() {
         size.className = 'muted';
         size.textContent = fmtSize(b.size);
         const actions = document.createElement('td');
-        actions.className = 'cell-actions';
+        actions.className = 'cell-actions end';
         actions.append(
             ui.button('Download', () => downloadBackup(b.name), {
                 size: 'btn-sm',
@@ -450,14 +455,14 @@ async function loadBackups() {
     });
 }
 
-async function triggerBackup(btn) {
+async function triggerBackup() {
     const ok = await ui.confirm({
         title: 'Trigger backup',
         message: 'Create a new database snapshot now?',
         confirmLabel: 'Trigger backup',
     });
     if (!ok) return;
-    await ui.busy(btn, async () => {
+    await ui.busy(document.getElementById('triggerBackupBtn'), async () => {
         const res = await ui.send('/api/_admin/backups', {
             method: 'POST',
             failure: 'The backup could not be created.',

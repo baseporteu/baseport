@@ -10,6 +10,8 @@
                         </div>
                     </div>
 
+                    <div class='summary-cards' id='tablesSummary'></div>
+
                     <div class='table-wrap'>
                         <table class='table'>
                             <thead><tr id='tablesHead'>
@@ -56,13 +58,9 @@
                         <div class='grid-form'>
                             <input type='text' id='fieldName' class='input' placeholder='Field name'>
                             <div id='fieldTypeRow'></div>
-                            <div class='input-group'>
-                                <input type='text' id='fieldExpr' class='input' placeholder='JS expression e.g. data.Qty * 2'>
-                                <button type='button' class='btn btn-outline' id='fieldExprTestBtn' onclick='testFieldExpr()'>Test</button>
-                            </div>
                             <button class='btn' onclick='addField()'>Add field</button>
                         </div>
-                        <p class='muted field-hint' id='fieldTypeHint'></p>
+                        <p class='muted field-hint'>Set validation, options, a default and more after adding, in Edit.</p>
                         <div class='table-wrap'>
                             <table class='table'>
                                 <thead>

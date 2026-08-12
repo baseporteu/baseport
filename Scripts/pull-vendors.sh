@@ -21,3 +21,14 @@ echo "   version: $VERSION"
 curl -fsSL "https://cdn.jsdelivr.net/npm/@scalar/api-reference@${VERSION}" \
     -o "$VENDOR_DIR/scalar-api-reference.js"
 echo "   saved:   wwwroot/js/vendor/scalar-api-reference.js"
+
+echo "[Onest font]"
+FONTS_DIR="$ROOT/Source/Baseport/wwwroot/fonts"
+mkdir -p "$FONTS_DIR"
+CSS="$(curl -fsSL -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' \
+    'https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&display=swap')"
+LATIN_URL="$(printf '%s\n' "$CSS" | grep -B1 'U+0000-00FF' | grep -o 'https://fonts.gstatic.com/[^)]*woff2' | head -1)"
+LATIN_EXT_URL="$(printf '%s\n' "$CSS" | grep -B1 'U+0100-02BA' | grep -o 'https://fonts.gstatic.com/[^)]*woff2' | head -1)"
+curl -fsSL "$LATIN_URL" -o "$FONTS_DIR/onest-latin.woff2"
+curl -fsSL "$LATIN_EXT_URL" -o "$FONTS_DIR/onest-latin-ext.woff2"
+echo "   saved:   wwwroot/fonts/onest-latin.woff2, onest-latin-ext.woff2"

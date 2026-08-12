@@ -24,9 +24,7 @@ function selectTable(table) {
         `${table.formCount} form(s) associated with this table.`;
     document.getElementById('saveTableBtn').disabled = true;
     document.getElementById('fieldName').value = '';
-    document.getElementById('fieldExpr').value = '';
     setTypeComboboxValue('fieldType', 'text');
-    updateFieldTypeHint();
     renderFields(fieldDraft);
 }
 
@@ -57,6 +55,11 @@ function clearProxyToken() {
 
 // Mirrors FieldValidation.ApiNamePattern; the server decides, this stops a doomed save.
 const API_NAME_PATTERN = /^[a-z][a-z0-9-]{1,62}$/;
+
+// A name is only required while the table's API is published; an unpublished table may have none at all.
+function apiNameIsValid(name, required) {
+    return !required || API_NAME_PATTERN.test(name);
+}
 
 // Typed input is shaped, not policed: an author need not know the rule.
 function normalizeApiName(input) {
@@ -109,12 +112,12 @@ function switchField(label, help, checked) {
     if (help) wrap.append(ui.el('span', 'field-help', {
         textContent: help
     }));
-    wrap.control = box;
+    wrap.ctrl = box;
     return wrap;
 }
 
-function openEndpointSheet() {
-    const table = currentTables.find((t) => t.id === currentTablePublicId);
+function openEndpointSheet(id) {
+    const table = currentTables.find((t) => t.id === (id || currentTablePublicId));
     if (!table) return;
 
     const body = ui.el('div', 'sheet-form');
@@ -125,7 +128,24 @@ function openEndpointSheet() {
         placeholder: 'e.g. sales-orders',
         help: 'The route this table answers at: /api/v1/{name}.',
     });
-    apiName.control.addEventListener('input', () => normalizeApiName(apiName.control));
+    const apiNameHelp = apiName.querySelector('.field-help');
+    const apiNameHelpDefault = apiNameHelp.textContent;
+    // A published table doing without a name would 400 on save; an unpublished one needs no name at all.
+    function refreshEndpointSaveState() {
+        const name = apiName.ctrl.value.trim();
+        const valid = apiNameIsValid(name, table.apiEnabled);
+        saveBtn.disabled = !valid;
+        apiNameHelp.textContent = valid ?
+            apiNameHelpDefault :
+            name ?
+            'Lowercase letters, digits and hyphens only, starting with a letter.' :
+            "Required while this table's API is enabled.";
+        apiNameHelp.style.color = valid ? '' : '#d63d3d';
+    }
+    apiName.ctrl.addEventListener('input', () => {
+        normalizeApiName(apiName.ctrl);
+        refreshEndpointSaveState();
+    });
 
     const docsEnabled = switchField('Show in API docs', "Off keeps the endpoint live but out of the OpenAPI document -- for an integration you don't want advertised.", table.apiDocsEnabled !== false);
 
@@ -180,11 +200,11 @@ function openEndpointSheet() {
             const saved = await ui.send(`/api/_admin/tables/${table.id}`, {
                 method: 'PATCH',
                 body: {
-                    apiName: apiName.control.value.trim().toLowerCase(),
-                    apiDocsEnabled: docsEnabled.control.checked,
-                    apiDisplayName: displayName.control.value,
-                    apiNamespace: namespace.control.value,
-                    apiDocumentation: documentation.control.value,
+                    apiName: apiName.ctrl.value.trim().toLowerCase(),
+                    apiDocsEnabled: docsEnabled.ctrl.checked,
+                    apiDisplayName: displayName.ctrl.value,
+                    apiNamespace: namespace.ctrl.value,
+                    apiDocumentation: documentation.ctrl.value,
                     apiMethods: Object.keys(boxes).filter((m) => boxes[m].checked),
                 },
                 success: 'Endpoint updated.',
@@ -197,6 +217,7 @@ function openEndpointSheet() {
     actions.append(ui.button('Cancel', ui.closeSheet, {
         variant: 'btn-outline'
     }), saveBtn);
+    refreshEndpointSaveState();
 
     ui.sheet(`${table.name} endpoint`, body, actions);
 }
@@ -291,7 +312,6 @@ function initFieldTypeCombobox() {
         browseAll: true,
         fetchOptions: (q) => fieldTypeOptions(q),
     });
-    row.control.addEventListener('change', updateFieldTypeHint);
     mount.replaceWith(row);
     row.id = 'fieldTypeRow';
 }
@@ -471,209 +491,26 @@ async function moveFieldTo(from, to) {
     });
 }
 
-// types whose row config this input actually feeds into addField(); everything else has nowhere for it to go
-const EXPR_CONFIG_TYPES = new Set(['calculated', 'derived', 'select', 'multiselect', 'reference', 'slug']);
-
-function updateFieldTypeHint() {
-    const typeEl = document.getElementById('fieldType');
-    const input = document.getElementById('fieldExpr');
-    const hint = document.getElementById('fieldTypeHint');
-    if (!typeEl || !input || !hint) return;
-    const t = typeEl.value;
-    const map = {
-        calculated: 'JS expression e.g. data.Qty * 2',
-        derived: 'JS expression e.g. data.Name ? "complete" : "incomplete"',
-        select: 'Options, comma separated e.g. red, blue, green',
-        multiselect: 'Options, comma separated e.g. red, blue, green',
-        reference: 'Target table name',
-        systemid: 'Auto-generated short ID',
-        slug: 'Source field name to auto-generate from (optional)',
-    };
-    input.placeholder = map[t] || 'No configuration for this type';
-    // disabled, not just unused: a value typed here for e.g. array/json/number has nowhere to go and would be silently dropped
-    input.disabled = !EXPR_CONFIG_TYPES.has(t);
-    if (input.disabled) input.value = '';
-    hint.innerText = '';
-    hint.style.color = '';
-}
-
-/* Live server-side validation of the expression/options input in the add-field row */
-function wireFieldExprValidation() {
-    const input = document.getElementById('fieldExpr');
-    const hint = document.getElementById('fieldTypeHint');
-    let timer = null;
-    let requestId = 0;
-    input.addEventListener('input', () => {
-        clearTimeout(timer);
-        timer = setTimeout(validateFieldExpr, 400);
-    });
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            testFieldExpr();
-        }
-    });
-    // leaving the field must judge what it holds now, not wait out a debounce that tabbing away skips
-    input.addEventListener('blur', () => {
-        clearTimeout(timer);
-        validateFieldExpr();
-    });
-    async function validateFieldExpr() {
-        const typeEl = document.getElementById('fieldType');
-        if (!typeEl) return; // the type combobox hasn't mounted (stale page load); nothing to validate against yet
-        const type = typeEl.value;
-        const expr = input.value.trim();
-        const id = ++requestId;
-        if (!currentTablePublicId || !expr || (type !== 'calculated' && type !== 'derived')) {
-            hint.innerText = '';
-            hint.style.color = '';
-            return;
-        }
-        const table = currentTables.find((t) => t.id === currentTablePublicId);
-        const fieldNames = (table ? table.fields : []).map((f) => f.name);
-        const r = await fetch('/api/_admin/validate-expression', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                expression: expr,
-                fieldNames,
-                tableId: currentTablePublicId
-            }),
-        }).then((res) => res.json());
-        if (id !== requestId) return; // a newer request already landed; this reply is stale
-        if (r.valid) {
-            const refs = (r.referencedFields || []).join(', ') || 'no field references';
-            hint.innerText = '✓ Valid, ' + refs + (r.sampleOutput ? ` · example result: ${r.sampleOutput}` : '');
-            hint.style.color = '#2d9d5f';
-        } else {
-            hint.innerText = '✕ ' + (r.errors || []).join('; ');
-            hint.style.color = '#d63d3d';
-        }
-    }
-}
-
-async function testFieldExpr() {
-    const typeEl = document.getElementById('fieldType');
-    const hint = document.getElementById('fieldTypeHint');
-    if (!typeEl || !hint) return; // the type combobox hasn't mounted (stale page load)
-    const type = typeEl.value;
-    const val = document.getElementById('fieldExpr').value.trim();
-    const btn = document.getElementById('fieldExprTestBtn');
-    if (!currentTablePublicId) {
-        hint.innerText = 'Select a table first.';
-        hint.style.color = '#d63d3d';
-        return;
-    }
-    if (!val) {
-        hint.innerText = 'Enter a value to test.';
-        hint.style.color = '#d63d3d';
-        return;
-    }
-    const original = btn.innerText;
-    btn.disabled = true;
-    btn.innerText = '…';
-    try {
-        if (type === 'calculated' || type === 'derived') {
-            const table = currentTables.find((t) => t.id === currentTablePublicId);
-            const fieldNames = (table ? table.fields : []).map((f) => f.name);
-            const r = await fetch('/api/_admin/validate-expression', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    expression: val,
-                    fieldNames,
-                    tableId: currentTablePublicId
-                }),
-            }).then((res) => res.json());
-            if (r.valid) {
-                const refs = (r.referencedFields || []).join(', ') || 'no field references';
-                hint.innerText = '✓ Valid, ' + refs + (r.sampleOutput ? ` · example result: ${r.sampleOutput}` : '');
-                hint.style.color = '#2d9d5f';
-            } else {
-                hint.innerText = '✕ ' + (r.errors || []).join('; ');
-                hint.style.color = '#d63d3d';
-            }
-        } else if (type === 'select' || type === 'multiselect') {
-            const opts = val
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean);
-            if (opts.length) {
-                hint.innerText = `✓ ${opts.length} option(s) will be saved.`;
-                hint.style.color = '#2d9d5f';
-            } else {
-                hint.innerText = '✕ No options provided.';
-                hint.style.color = '#d63d3d';
-            }
-        } else if (type === 'reference') {
-            const target = currentTables.find((t) => t.name === val.trim());
-            if (target) {
-                hint.innerText = `✓ References table "${target.name}".`;
-                hint.style.color = '#2d9d5f';
-            } else {
-                hint.innerText = '✕ No table with that name.';
-                hint.style.color = '#d63d3d';
-            }
-        } else if (type === 'systemid') {
-            hint.innerText = 'Auto-generated on submit.';
-            hint.style.color = '';
-        } else if (type === 'slug') {
-            hint.innerText = val ? `✓ Will auto-generate from field "${val}" when left blank.` : 'No source field set, slug must be entered manually.';
-            hint.style.color = val ? '#2d9d5f' : '';
-        } else {
-            hint.innerText = 'No configuration needed for this type.';
-            hint.style.color = '';
-        }
-    } finally {
-        btn.disabled = false;
-        btn.innerText = original;
-    }
-}
-
+// Name and type only; everything else needs server checks and belongs in the field editor instead.
 async function addField() {
     const typeEl = document.getElementById('fieldType');
-    const hint = document.getElementById('fieldTypeHint');
-    if (!typeEl || !hint) { ui.toast('The page is out of date. Reload and try again.', 'error'); return; }
+    if (!typeEl) { ui.toast('The page is out of date. Reload and try again.', 'error'); return; }
     const name = document.getElementById('fieldName').value.trim();
     const dataType = typeEl.value;
-    const opt = document.getElementById('fieldExpr').value.trim();
-    hint.innerText = '';
-    hint.style.color = '';
     if (!currentTablePublicId) return;
     if (!name) {
-        hint.innerText = 'Enter a field name first.';
-        hint.style.color = '#d63d3d';
+        ui.toast('Enter a field name first.', 'error');
+        document.getElementById('fieldName').focus();
+        return;
+    }
+    if (fieldDraft.some((x) => x.name === name)) {
+        ui.toast(`Field name '${name}' already exists.`, 'error');
         document.getElementById('fieldName').focus();
         return;
     }
 
-    // Rejected pre-staging: prevents silent invalid expression acceptance from failing silently at commit time.
-    if (dataType === 'calculated' || dataType === 'derived') {
-        const table = currentTables.find((t) => t.id === currentTablePublicId);
-        const fieldNames = (table ? table.fields : []).map((f) => f.name);
-        const r = await fetch('/api/_admin/validate-expression', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                expression: opt,
-                fieldNames,
-                tableId: currentTablePublicId
-            }),
-        }).then((res) => res.json());
-        if (!r.valid) {
-            hint.innerText = '✕ ' + (r.errors || ['The expression is not valid.']).join('; ');
-            hint.style.color = '#d63d3d';
-            return;
-        }
-    }
-
-    const body = {
+    // staged locally; committed via "Save field changes"
+    fieldDraft.push(cloneField({
         id: null,
         key: 'tmp-' + ++fieldSeq,
         name,
@@ -683,31 +520,8 @@ async function addField() {
         isRequired: false,
         pattern: '',
         isHidden: false,
-    };
-    if (dataType === 'calculated' || dataType === 'derived') body.expression = opt;
-    else if (dataType === 'select' || dataType === 'multiselect')
-        body.optionsJson = JSON.stringify(
-            opt
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean),
-        );
-    else if (dataType === 'reference') {
-        const target = currentTables.find((t) => t.name === opt.trim());
-        if (target) body.optionsJson = JSON.stringify({
-            tableId: target.id
-        });
-    } else if (dataType === 'slug' && opt) {
-        body.optionsJson = JSON.stringify({
-            sourceField: opt
-        });
-    }
-
-    // staged locally; committed via "Save field changes"
-    fieldDraft.push(cloneField(body));
+    }));
     document.getElementById('fieldName').value = '';
-    document.getElementById('fieldExpr').value = '';
-    updateFieldTypeHint();
     renderFields(fieldDraft);
     markFieldsDirty();
 }
@@ -793,7 +607,6 @@ function openFieldEditor(fieldId) {
     wrap.appendChild(fieldInputRow('Field name', 'feName', f.name, 'e.g. UnitPrice'));
     wrap.appendChild(fieldInputRow('Label (shown to visitors)', 'feLabel', f.label, 'Unit price'));
     wrap.appendChild(fieldInputRow('Help text', 'feHelp', f.helpText, 'Excluding VAT'));
-    wrap.appendChild(fieldInputRow('Expression / config', 'feConfig', '', ''));
 
     const typeRow = ui.combobox('Data type', {
         id: 'feType',
@@ -803,7 +616,7 @@ function openFieldEditor(fieldId) {
         browseAll: true,
         fetchOptions: (q) => fieldTypeOptions(q),
     });
-    const typeSel = typeRow.control; // hidden input, .value works like the old <select>
+    const typeSel = typeRow.ctrl; // hidden input, .value works like the old <select>
     const owningTable = currentTables.find((t) => t.id === currentTablePublicId);
     const hasData = !!f.id && (owningTable?.recordCount || 0) > 0;
     if (f.dataType === 'systemid' || hasData) {
@@ -918,8 +731,7 @@ function openFieldEditor(fieldId) {
     typeSel.addEventListener('change', syncBoundsHint);
     return;
 
-    // Default value must respect the type's actual allowed values instead of being a blank free-text box:
-    // a fixed choice for booleans, the configured options for select/multiselect, free text otherwise.
+    // Respects the type's actual allowed values instead of being a blank free-text box.
     function syncFeDefault() {
         const t = typeSel.value;
         const row = document.getElementById('feDefaultRow');
@@ -954,7 +766,7 @@ function openFieldEditor(fieldId) {
     function currentOptionDraft() {
         const cfg = document.getElementById('feConfig');
         if (cfg && cfg.tagName === 'INPUT' && (typeSel.value === 'select' || typeSel.value === 'multiselect'))
-            return cfg.value.split(',').map((s) => s.trim()).filter(Boolean);
+            return splitOptions(cfg.value);
         try {
             const o = JSON.parse(f.optionsJson || '[]');
             return Array.isArray(o) ? o : [];
@@ -1012,10 +824,8 @@ function openFieldEditor(fieldId) {
 
     function syncFeConfig() {
         const t = typeSel.value;
-        const cfg = document.getElementById('feConfig');
         const row = document.getElementById('feCfgRow');
         row.innerHTML = '';
-        cfg.value = '';
         if (t === 'calculated' || t === 'derived') {
             row.appendChild(
                 fieldInputRow(
@@ -1041,12 +851,12 @@ function openFieldEditor(fieldId) {
         } else if (t === 'select' || t === 'multiselect') {
             row.appendChild(
                 fieldInputRow(
-                    'Options (comma separated)',
+                    'Options (comma separated; use \\, for a literal comma)',
                     'feConfig',
                     (() => {
                         try {
                             const o = JSON.parse(f.optionsJson || '[]');
-                            return Array.isArray(o) ? o.join(', ') : '';
+                            return Array.isArray(o) ? joinOptions(o) : '';
                         } catch (e) {
                             return '';
                         }
@@ -1105,8 +915,7 @@ function openFieldEditor(fieldId) {
         } else {
             const hint = document.createElement('p');
             hint.className = 'sheet-note';
-            // array/json/rating/richtext/slug/password have no expression or options, but Min/Max below still cap them --
-            // "no configuration" would be false for those, so point at where their one real setting lives.
+            // array/json have no expression or options, but Min/Max below still caps them
             hint.innerText =
                 t === 'array' ? 'No expression needed; use Maximum below to cap the number of items.' :
                 t === 'json' ? 'No expression needed; use Maximum below to cap the serialized size.' :
@@ -1167,12 +976,7 @@ function openFieldEditor(fieldId) {
         const val = cfg ? cfg.value.trim() : '';
         let optionsJson = '[]';
         if (type === 'select' || type === 'multiselect')
-            optionsJson = JSON.stringify(
-                val
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean),
-            );
+            optionsJson = JSON.stringify(splitOptions(val));
         else if (type === 'reference') {
             const target = currentTables.find((t) => t.name === val);
             optionsJson = target ? JSON.stringify({
@@ -1260,6 +1064,14 @@ async function saveFieldChanges() {
         }
     }
 
+    if (newType === 'select' || newType === 'multiselect') {
+        const opts = cfg ? splitOptions(cfg.value) : [];
+        if (!opts.length) {
+            ui.toast('At least one option is required for this field type.', 'error');
+            return;
+        }
+    }
+
     const newPattern = document.getElementById('fePattern').value.trim();
     if (newPattern) {
         try {
@@ -1295,8 +1107,7 @@ async function saveFieldChanges() {
     const newIdentifier = document.getElementById('feIdentifier').checked;
     const newHidden = document.getElementById('feHidden').checked;
 
-    // The type picker is locked in the sheet whenever the field already has data; this only catches a stale
-    // recordCount from before the sheet opened -- it's a hard block, not a "change anyway" prompt.
+    // Defensive: the picker is already locked in the sheet whenever the field has data.
     if (draft.id && draft.dataType !== newType) {
         const table = currentTables.find((t) => t.id === currentTablePublicId);
         if ((table?.recordCount || 0) > 0) {
@@ -1320,12 +1131,7 @@ async function saveFieldChanges() {
     draft.pattern = newPattern;
     if (cfg && (newType === 'calculated' || newType === 'derived')) draft.expression = cfg.value.trim();
     else if (cfg && (newType === 'select' || newType === 'multiselect'))
-        draft.optionsJson = JSON.stringify(
-            cfg.value
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean),
-        );
+        draft.optionsJson = JSON.stringify(splitOptions(cfg.value));
     else if (cfg && newType === 'reference') {
         const target = currentTables.find((t) => t.name === cfg.value);
         draft.optionsJson = target ? JSON.stringify({
@@ -1378,8 +1184,29 @@ async function commitFields() {
             }
         });
         (fieldOriginal && Object.values(fieldOriginal)).forEach((o) => {
-            if (!fieldDraft.some((f) => fieldKey(f) === fieldKey(o))) del.push(o.id);
+            if (!fieldDraft.some((f) => fieldKey(f) === fieldKey(o))) del.push(o);
         });
+
+        // Mirrors FieldValidation.cs, named by field, instead of an unattributed 400 from the server.
+        const nameCounts = new Map();
+        fieldDraft.forEach((f) => nameCounts.set(f.name, (nameCounts.get(f.name) || 0) + 1));
+        for (const [name, count] of nameCounts) {
+            if (count > 1) {
+                ui.toast(`Field name '${name}' is used by more than one field.`, 'error');
+                return;
+            }
+        }
+        for (const f of [...add, ...patch]) {
+            if (f.dataType !== 'select' && f.dataType !== 'multiselect') continue;
+            let opts = [];
+            try {
+                opts = JSON.parse(f.optionsJson || '[]');
+            } catch (e) { /* falls through to the empty-options message below */ }
+            if (!Array.isArray(opts) || !opts.length) {
+                ui.toast(`"${f.name}": at least one option is required for this field type.`, 'error');
+                return;
+            }
+        }
 
         for (const f of add) {
             const res = await fetch(`/api/_admin/tables/${currentTablePublicId}/fields`, {
@@ -1393,7 +1220,7 @@ async function commitFields() {
                 const data = await res.json().catch(() => ({}));
                 openModal({
                     title: 'Could not save fields',
-                    message: (data.errors || ['Failed to add a field.']).join('\n'),
+                    message: `"${f.name}": ` + (data.errors || ['Failed to add a field.']).join('\n'),
                     confirmLabel: 'OK',
                 });
                 return;
@@ -1411,21 +1238,21 @@ async function commitFields() {
                 const data = await res.json().catch(() => ({}));
                 openModal({
                     title: 'Could not save fields',
-                    message: (data.errors || ['Failed to update a field.']).join('\n'),
+                    message: `"${f.name}": ` + (data.errors || ['Failed to update a field.']).join('\n'),
                     confirmLabel: 'OK',
                 });
                 return;
             }
         }
-        for (const id of del) {
-            const res = await fetch(`/api/_admin/tables/${currentTablePublicId}/fields/${id}`, {
+        for (const o of del) {
+            const res = await fetch(`/api/_admin/tables/${currentTablePublicId}/fields/${o.id}`, {
                 method: 'DELETE'
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
                 openModal({
                     title: 'Could not delete field',
-                    message: (data.errors || ['Field could not be deleted.']).join('\n'),
+                    message: `"${o.name}": ` + (data.errors || ['Field could not be deleted.']).join('\n'),
                     confirmLabel: 'OK',
                 });
                 return;

@@ -249,7 +249,7 @@ test('every id the scripts read exists in the markup or is created at runtime', 
     const html = readHtml();
     const js = readAll();
     const runtime = new Set(['toasts', 'sheetOverlay', 'tableName', 'createMenu', 'pwCurrent', 'pwNew', 'fieldEditError',
-        'bootstrap'
+        'bootstrap', 'createTableBtn', 'fieldType'
     ]);
     const present = new Set([...html.matchAll(/id='([\w-]+)'/g)].map(m => m[1]));
     const missing = [...new Set([...js.matchAll(/getElementById\('([\w-]+)'\)/g)].map(m => m[1]))]
@@ -344,6 +344,12 @@ function loadRouter(pathname) {
         replaceState: (s, t, u) => written.push(u)
     };
     global.render = () => {};
+    // navigate() gates on hasUnsavedChanges(), which needs these two and a document stub
+    global.tableDirty = false;
+    global.fieldsDirty = false;
+    global.document = {
+        getElementById: () => null
+    };
     eval(slice + '\n;module.parseRoute = parseRoute; module.navigate = navigate;');
     return {
         module,
@@ -373,85 +379,67 @@ test('the console is mounted under /_/admin and routes are still written from th
 });
 
 /* the API name guard */
+// Now lives in openEndpointSheet's own Save button, not the removed main-panel tableApiName field.
 
 function loadApiNameGuard() {
-    const dom = install(['tableApiName', 'tableApiEnabled', 'tableApiNameHint', 'saveTableBtn', 'saveFieldsBtn']);
-    // Only the API-name half of tables.js and the save-button pass from core.js:
-    // the rest of both files reaches for a page this test does not build.
     const tables = read('js/tables.js');
     const slice = tables.slice(tables.indexOf('const API_NAME_PATTERN'),
         tables.indexOf('function tableSettingsPayload'));
-    const core = read('js/core.js');
-    const buttons = core.slice(core.indexOf('function updateSaveButtons'),
-        core.indexOf('function greet'));
     const module = {};
-    global.fieldsDirty = false;
-    global.tableDirty = true;
     global.markTableDirty = () => {};
-    eval(slice + buttons +
-        '\n;module.refreshApiNameState = refreshApiNameState;' +
-        'module.updateSaveButtons = updateSaveButtons;' +
-        'module.normalizeApiName = normalizeApiName;');
-    return {
-        dom,
-        module
-    };
+    eval(slice + '\n;module.apiNameIsValid = apiNameIsValid; module.normalizeApiName = normalizeApiName;');
+    return module;
 }
 
-test('the save button is blocked while the API name would be rejected', () => {
-    // The bug: clearing the API name of a published table sent a save the API
-    // rejected, and the console kept showing the cleared field while the stored
-    // table still had its name.
-    const {
-        dom,
-        module
-    } = loadApiNameGuard();
-    dom.byId.tableApiEnabled.checked = true;
-    dom.byId.tableApiName.value = '';
-
-    module.updateSaveButtons();
-
-    assert.strictEqual(dom.byId.saveTableBtn.disabled, true, 'a published table with no API name offered a save');
-    assert.ok(dom.byId.tableApiNameHint.innerText.length > 0, 'the author was told nothing');
+test('a name is required while the table\'s API is published', () => {
+    // The bug: clearing the API name of a published table sent a save the API rejected.
+    const module = loadApiNameGuard();
+    assert.strictEqual(module.apiNameIsValid('', true), false, 'a published table with no API name was accepted');
 });
 
-test('the save button is free once the API name is valid', () => {
-    const {
-        dom,
-        module
-    } = loadApiNameGuard();
-    dom.byId.tableApiEnabled.checked = true;
-    dom.byId.tableApiName.value = 'sales-orders';
-
-    module.updateSaveButtons();
-
-    assert.strictEqual(dom.byId.saveTableBtn.disabled, false, 'a valid API name was still refused');
+test('the API name is free once it is valid', () => {
+    const module = loadApiNameGuard();
+    assert.strictEqual(module.apiNameIsValid('sales-orders', true), true, 'a valid API name was still refused');
 });
 
 test('an unpublished table may have no API name at all', () => {
-    const {
-        dom,
-        module
-    } = loadApiNameGuard();
-    dom.byId.tableApiEnabled.checked = false;
-    dom.byId.tableApiName.value = '';
+    const module = loadApiNameGuard();
+    assert.strictEqual(module.apiNameIsValid('', false), true, 'clearing the name of an unpublished table was blocked');
+});
 
-    module.updateSaveButtons();
-
-    assert.strictEqual(dom.byId.saveTableBtn.disabled, false, 'clearing the name of an unpublished table was blocked');
+test('the endpoint sheet wires the guard into its own Save button', () => {
+    // The guard lives with the field it guards: the sheet that owns sheetApiName also owns disabling its own Save.
+    const tables = read('js/tables.js');
+    const fn = tables.slice(tables.indexOf('function openEndpointSheet'), tables.indexOf('const OPTIONS_SHOWN'));
+    assert.ok(/apiNameIsValid\(name, table\.apiEnabled\)/.test(fn), 'openEndpointSheet no longer checks apiNameIsValid');
+    assert.ok(/saveBtn\.disabled = !valid/.test(fn), 'openEndpointSheet no longer disables Save on an invalid name');
 });
 
 test('typed input is shaped into a valid API name', () => {
     // The author should not have to know the rule to satisfy it.
-    const {
-        dom,
-        module
-    } = loadApiNameGuard();
-    const input = dom.byId.tableApiName;
-    input.value = 'Sales Orders_2024!';
+    const module = loadApiNameGuard();
+    const input = {
+        value: 'Sales Orders_2024!',
+        selectionStart: 0,
+        setSelectionRange() {}
+    };
     module.normalizeApiName(input);
 
     assert.strictEqual(input.value, 'sales-orders-2024');
+});
+
+test('an option list survives a comma inside one option', () => {
+    // A backslash escapes a comma that belongs to the option itself; splitOptions/joinOptions round-trip it.
+    const core = read('js/core.js');
+    const slice = core.slice(core.indexOf('function splitOptions'), core.indexOf('/* Sortable list headers'));
+    const module = {};
+    eval(slice + '\n;module.splitOptions = splitOptions; module.joinOptions = joinOptions;');
+
+    assert.deepStrictEqual(module.splitOptions('red, blue, green'), ['red', 'blue', 'green']);
+    assert.deepStrictEqual(module.splitOptions('Rotterdam\\, Zuid-Holland, Utrecht'), ['Rotterdam, Zuid-Holland', 'Utrecht']);
+    assert.deepStrictEqual(module.splitOptions(''), []);
+    const withCommas = ['Rotterdam, Zuid-Holland', 'a\\b', 'plain'];
+    assert.deepStrictEqual(module.splitOptions(module.joinOptions(withCommas)), withCommas);
 });
 
 test('the client mirrors the API name pattern the server enforces', () => {
@@ -855,15 +843,12 @@ test('every handler a server-rendered row calls is defined', () => {
 
     const missing = [...called].filter(fn => !defined.has(fn) && fn !== 'this');
     assert.deepStrictEqual(missing, [], `server-rendered rows call functions that do not exist: ${missing.join(', ')}`);
-    assert.ok(called.has('openEndpointSheet'), 'the tables row no longer opens the endpoint sheet');
 });
 
-test('both places that list published tables open the same endpoint sheet', () => {
+test('both places that reach a table\'s endpoint config open the same sheet', () => {
     // One sheet decides how an endpoint documents itself; two would drift.
-    const fragments = fs.readFileSync(
-        path.join(__dirname, '..', 'Source', 'Baseport', 'Api', 'FragmentEndpoints.cs'), 'utf8');
-    assert.ok(fragments.includes('openEndpointSheet('), 'the tables overview row has no endpoint button');
-    assert.ok(read('js/settings.js').includes('openEndpointSheet(t.id)'), 'Settings > Auth has no endpoint button');
+    assert.ok(read('admin/views/tables.html').includes("onclick='openEndpointSheet()'"), "a table's own settings page has no endpoint button");
+    assert.ok(read('js/settings.js').includes('openEndpointSheet(t.id)'), 'Settings > API has no endpoint button');
     const definitions = [...readAll().matchAll(/function\s+openEndpointSheet\b/g)];
     assert.strictEqual(definitions.length, 1, 'openEndpointSheet is defined more than once');
 });
@@ -981,8 +966,15 @@ test('list row actions read the raw row data, not the HTML-escaped renderer copy
 });
 
 test('the field-type quick-add includes derived, matching the full editor', () => {
-    const html = read('admin/views/tables.html');
-    assert.ok(html.includes("<option value='derived'>"), 'the quick-add dropdown is still missing derived');
+    // Both pickers are now the same searchable combobox, sourced from one fetcher over TYPE_LABELS,
+    // so "matching the full editor" is structural rather than something either markup can drift out of.
+    const js = read('js/tables.js');
+    assert.ok(/\['derived',/.test(js), 'TYPE_LABELS is missing derived');
+    assert.strictEqual(
+        [...js.matchAll(/fetchOptions:\s*\(q\)\s*=>\s*fieldTypeOptions\(q\)/g)].length,
+        2,
+        'quick-add and the field editor no longer share one type list',
+    );
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

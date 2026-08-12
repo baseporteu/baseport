@@ -354,11 +354,11 @@ const ui = (() => {
         if (help) wrap.append(el('span', 'field-help', {
             textContent: help
         }));
-        wrap.control = input;
+        wrap.ctrl = input;
         return wrap;
     }
 
-    // searchable select; .control is a hidden input so callers reading row.control.value need no special-casing
+    // searchable select; .ctrl is a hidden input so callers reading row.ctrl.value need no special-casing
     // browseAll: show every option on focus/click, not just after typing
     function combobox(label, {
         id,
@@ -406,7 +406,7 @@ const ui = (() => {
         if (help) wrap.append(el('span', 'field-help', {
             textContent: help
         }));
-        wrap.control = hidden;
+        wrap.ctrl = hidden;
 
         let controller = null;
         let debounceTimer = null;
@@ -534,8 +534,7 @@ const ui = (() => {
                 e.preventDefault();
                 active = (active - 1 + options.length) % options.length;
             } else if (e.key === 'Enter') {
-                // no arrow-key highlight yet: take the top match, but only when the user actually typed a filter --
-                // an untouched browseAll list (opened by focus alone) must not hijack Enter and swap the committed value
+                // no highlight yet: take the top match, but only if a filter was actually typed
                 const idx = active >= 0 ? active : (search.value.trim() ? 0 : -1);
                 if (idx >= 0 && options[idx]) {
                     e.preventDefault();
@@ -758,18 +757,18 @@ const ui = (() => {
                 button('Cancel', () => done(null), {
                     variant: 'btn-outline'
                 }),
-                button(confirmLabel, () => done(input.control.value.trim() || null)),
+                button(confirmLabel, () => done(input.ctrl.value.trim() || null)),
             );
-            input.control.addEventListener('keydown', (ev) => {
+            input.ctrl.addEventListener('keydown', (ev) => {
                 if (ev.key === 'Enter') {
                     ev.preventDefault();
-                    done(input.control.value.trim() || null);
+                    done(input.ctrl.value.trim() || null);
                 }
             });
 
             sheet(title, body, actions);
-            input.control.focus();
-            input.control.select();
+            input.ctrl.focus();
+            input.ctrl.select();
         });
     }
 
