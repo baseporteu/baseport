@@ -471,6 +471,9 @@ async function moveFieldTo(from, to) {
     });
 }
 
+// types whose row config this input actually feeds into addField(); everything else has nowhere for it to go
+const EXPR_CONFIG_TYPES = new Set(['calculated', 'derived', 'select', 'multiselect', 'reference', 'slug']);
+
 function updateFieldTypeHint() {
     const typeEl = document.getElementById('fieldType');
     const input = document.getElementById('fieldExpr');
@@ -486,8 +489,10 @@ function updateFieldTypeHint() {
         systemid: 'Auto-generated short ID',
         slug: 'Source field name to auto-generate from (optional)',
     };
-    input.placeholder = map[t] || 'Optional';
-    input.disabled = t === 'systemid';
+    input.placeholder = map[t] || 'No configuration for this type';
+    // disabled, not just unused: a value typed here for e.g. array/json/number has nowhere to go and would be silently dropped
+    input.disabled = !EXPR_CONFIG_TYPES.has(t);
+    if (input.disabled) input.value = '';
     hint.innerText = '';
     hint.style.color = '';
 }
@@ -992,12 +997,17 @@ function openFieldEditor(fieldId) {
             `Three-letter ISO code. Leave empty to use the instance default (${settingsData && settingsData.currency ? settingsData.currency : 'EUR'}).`;
         const hint = document.getElementById('feBoundsHint');
         if (!hint) return;
+        // matches the Min/Max cases FieldValidation.cs actually checks -- everything else silently ignores them
         hint.innerText =
-            t === 'number' || t === 'currency' ?
+            t === 'number' || t === 'currency' || t === 'rating' ?
             'Smallest and largest accepted value. Leave blank for no bound.' :
-            t === 'text' || t === 'longtext' ?
+            t === 'text' || t === 'longtext' || t === 'richtext' ?
             'Shortest and longest accepted length in characters. Leave blank for no bound.' :
-            'Bounds only apply to number, currency and text fields.';
+            t === 'slug' || t === 'password' || t === 'json' ?
+            'Longest accepted length in characters (Minimum is ignored). Leave blank for no bound.' :
+            t === 'array' ?
+            'Most items accepted (Minimum is ignored). Leave blank for no bound.' :
+            'Bounds do not apply to this type.';
     }
 
     function syncFeConfig() {
@@ -1095,7 +1105,12 @@ function openFieldEditor(fieldId) {
         } else {
             const hint = document.createElement('p');
             hint.className = 'sheet-note';
-            hint.innerText = 'No additional configuration needed for this type.';
+            // array/json/rating/richtext/slug/password have no expression or options, but Min/Max below still cap them --
+            // "no configuration" would be false for those, so point at where their one real setting lives.
+            hint.innerText =
+                t === 'array' ? 'No expression needed; use Maximum below to cap the number of items.' :
+                t === 'json' ? 'No expression needed; use Maximum below to cap the serialized size.' :
+                'No additional configuration needed for this type.';
             row.appendChild(hint);
         }
     }
