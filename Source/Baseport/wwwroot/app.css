@@ -1114,6 +1114,10 @@ li.CodeMirror-hint-active {
   grid-template-columns: 1fr 1fr 2fr auto;
   gap: .5rem;
   margin-bottom: 1rem;
+  align-items: center;
+}
+.grid-form .field {
+  margin-bottom: 0;
 }
 .grid-form.two {
   grid-template-columns: 1fr auto;

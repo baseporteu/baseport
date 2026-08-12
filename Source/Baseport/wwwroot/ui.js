@@ -358,7 +358,7 @@ const ui = (() => {
         list.append(el('li', 'combobox-empty', { textContent: 'No matches.' }));
       } else {
         rows.forEach((r) => {
-          const li = el('li', 'combobox-option', { textContent: r.label });
+          const li = el('li', 'combobox-option' + (String(r.id) === String(hidden.value) && hidden.value !== '' ? ' selected' : ''), { textContent: r.label });
           // mousedown, not click: it fires before the search input's blur, so the list is still open to read from.
           li.addEventListener('mousedown', (e) => {
             e.preventDefault();
@@ -431,8 +431,9 @@ const ui = (() => {
 
     if (browseAll) {
       search.addEventListener('focus', () => runSearch(''));
+      // covers reopening after Escape without a blur in between; skipped on the focusing click itself, or this double-fires with the listener above
       search.addEventListener('mousedown', () => {
-        if (list.classList.contains('hidden')) runSearch('');
+        if (document.activeElement === search && list.classList.contains('hidden')) runSearch('');
       });
     }
 

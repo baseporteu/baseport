@@ -175,6 +175,14 @@ body:has(.sheet.open) .toasts {
 .combobox-option.active {
   background: hsl(var(--accent));
 }
+.combobox-option.selected {
+  font-weight: 600;
+}
+.combobox-option.selected::after {
+  content: '✓';
+  float: right;
+  color: hsl(var(--muted-foreground));
+}
 .combobox-empty {
   padding: .375rem .5rem;
   font-size: .8125rem;
