@@ -47,6 +47,7 @@ appsettings.*.json
 !appsettings.Production.example.json
 .env
 .env.*
+!.env.example
 *.local
 
 # directory rules

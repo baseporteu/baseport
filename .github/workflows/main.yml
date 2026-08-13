@@ -1,0 +1,129 @@
+name: Build and Push As Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name (e.g. v0.1.2)'
+        required: true
+        type: string
+
+env:
+  DOTNET_VERSION: '11.0.x'
+  SOLUTION_PATH: 'Source/Baseport.slnx'
+  PROJECT_PATH: 'Source/Baseport/Baseport.csproj'
+
+jobs:
+  tag:
+    name: Bump version and tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump version and create tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          VERSION="${{ github.event.inputs.tag_name }}"
+          BARE="${VERSION#v}"
+          sed -i "s|<Version>.*</Version>|<Version>${BARE}</Version>|" Source/Directory.Build.props
+          git add Source/Directory.Build.props
+          git commit -m "chore: bump version to ${BARE}" || echo "Version already set to ${BARE}, nothing to commit"
+          git push
+          git tag -a "${VERSION}" -m "Release ${VERSION}"
+          git push origin "${VERSION}"
+
+  build:
+    name: Build ${{ matrix.rid }}
+    needs: tag
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - rid: linux-x64
+            archive: tar.gz
+          - rid: win-x64
+            archive: zip
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag_name }}
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-quality: 'preview'
+
+      - name: Restore and build
+        run: |
+          dotnet restore ${{ env.SOLUTION_PATH }}
+          dotnet build ${{ env.SOLUTION_PATH }} -c Release --no-restore
+
+      - name: Test
+        run: dotnet test ${{ env.SOLUTION_PATH }} -c Release --no-build
+
+      - name: Publish application
+        run: |
+          dotnet publish ${{ env.PROJECT_PATH }} \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            -p:DebugType=None \
+            -p:DebugSymbols=false \
+            -o build-output
+
+      - name: Create deployment structure
+        run: |
+          cd build-output
+          rm -f *.pdb *.xml *.deps.json *.runtimeconfig.json web.config *.Development.json \
+                *.staticwebassets.endpoints.json
+          mkdir -p license
+          cp ../LICENSE license/LICENSE.txt 2>/dev/null || true
+          echo "https://github.com/${{ github.repository }}" > license/source.txt
+
+      - name: Create version file
+        run: |
+          echo "${{ github.event.inputs.tag_name }}" > build-output/.version.txt
+          echo "Built: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> build-output/.version.txt
+          echo "Commit: ${{ github.sha }}" >> build-output/.version.txt
+
+      - name: Create deployment archive
+        run: |
+          NAME="Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}"
+          cd build-output
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            zip -r "../${NAME}.zip" .
+          else
+            tar -czf "../${NAME}.tar.gz" .
+          fi
+          cd ..
+          sha256sum "${NAME}.${{ matrix.archive }}" > "${NAME}.${{ matrix.archive }}.sha256"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name }}
+          name: ${{ github.event.inputs.tag_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}
+            Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}
+          path: Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}
+          retention-days: 90

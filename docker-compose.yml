@@ -1,0 +1,17 @@
+name: baseport
+
+services:
+  baseport:
+    image: ghcr.io/hawkinslabdev/baseport:${BASEPORT_TAG:-latest}
+    container_name: baseport
+    restart: unless-stopped
+    environment:
+      Baseport__ConnectionString: "Data Source=/data/baseport.db"
+      Baseport__TrustForwardedHeaders: "${BASEPORT_TRUST_FORWARDED_HEADERS:-false}"
+    ports:
+      - "${BASEPORT_PORT:-5263}:5263"
+    volumes:
+      - baseport-data:/data
+
+volumes:
+  baseport-data:

@@ -22,26 +22,54 @@ Built on the modern .NET stack, Baseport runs as one process over one SQLite fil
 
 ## Installation
 
-Pick whichever path fits your environment. The published binary is the fastest way to get running.
+Pick whichever path fits your environment. Docker is the fastest way to get running; the published binary is the fastest way to deploy.
 
-### Option A: Single executable
-
-Publishing produces one self-contained file. `wwwroot`, `appsettings.json` and the .NET runtime all travel inside it.
+### Option A: Docker
 
 ```bash
-cd Source
-dotnet publish Baseport/Baseport.csproj -c Release -o out
+docker compose up -d
+docker compose logs baseport | grep "one-time admin password"
 ```
 
-Copy `out/Baseport` anywhere and run it:
+Browse to `http://localhost:5263/_/admin` and sign in as `admin` with the password from the log. If necessary, set your environment variables from a `.env` file:
+
+<details>
+
+```ini
+BASEPORT_TAG=latest
+BASEPORT_PORT=5263
+BASEPORT_TRUST_FORWARDED_HEADERS=false
+```
+
+Behind a reverse proxy set `BASEPORT_TRUST_FORWARDED_HEADERS` to `true`, or rate limiting puts every visitor in one bucket.
+
+Anything else in `appsettings.json` is reachable the same way: any `Baseport:*` setting becomes an environment variable by replacing the colon with a double underscore. To keep the console off the public port entirely, add `Baseport__AdminAddress: "0.0.0.0:5264"` to the service's `environment` and publish that port to loopback only.
+
+</details>
+
+### Option B: Single executable
+
+Every release ships one self-contained file per platform. `wwwroot`, `appsettings.json` and the .NET runtime all travel inside it, so there is nothing to install alongside it. Grab a tag from [Releases](https://github.com/hawkinslabdev/baseport/releases):
 
 ```bash
+VERSION=v0.1.0
+BASE=https://github.com/hawkinslabdev/baseport/releases/download/$VERSION
+
+curl -LO $BASE/Baseport-$VERSION-linux-x64.tar.gz
+curl -LO $BASE/Baseport-$VERSION-linux-x64.tar.gz.sha256
+sha256sum -c Baseport-$VERSION-linux-x64.tar.gz.sha256
+
+tar -xzf Baseport-$VERSION-linux-x64.tar.gz
 ./Baseport --urls http://localhost:5263
 ```
 
-Browse to `http://localhost:5263/_/admin` and sign-in with the credentials shown in the log for the `admin` account.
+On Windows the asset is `Baseport-$VERSION-win-x64.zip`; unzip it and run `Baseport.exe` the same way.
 
-### Option B: From source
+Browse to `http://localhost:5263/_/admin` and sign in with the credentials shown in the log for the `admin` account.
+
+The binary writes `baseport.db`, `log/` and `uploads/` next to wherever you run it, so put it in its own directory. That directory is the backup.
+
+### Option C: From source
 
 Working on Baseport itself? Skip the publish step:
 
@@ -58,7 +86,13 @@ dotnet build Baseport.slnx     # must be warning-free
 node ../Scripts/test-frontend.js
 ```
 
-### Option C: Demo data
+To build the same single file the release workflow publishes:
+
+```bash
+dotnet publish Baseport/Baseport.csproj -c Release -r linux-x64 -o out
+```
+
+### Option D: Demo data
 
 An empty console is hard to judge. Seed a workspace of products, customers, orders and order lines, with real references between them:
 
