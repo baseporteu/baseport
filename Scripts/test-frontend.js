@@ -1359,5 +1359,23 @@ test('the shell commands carry a hover copy button', () => {
     assert.ok(!read('app.css').includes('.copy-btn'), 'app.css redefines the copy button');
 });
 
+// The switch was defined twice in app.css and had no disabled state. It is a primitive now, so it lives in ui.css and nowhere else.
+test('the switch is a single primitive, not a feature-stylesheet duplicate', () => {
+    const uiCss = read('ui.css');
+    const appCss = read('app.css');
+    const count = (css) => (css.match(/^\.switch[^{]*\{/gm) || []).length;
+    assert.strictEqual(count(appCss), 0, 'app.css still styles .switch');
+    assert.ok(count(uiCss) > 0, 'ui.css does not style .switch');
+    assert.strictEqual((uiCss.match(/^\.switch \{/gm) || []).length, 1, '.switch is declared more than once');
+    assert.ok(uiCss.includes('input:disabled'), 'a disabled switch still looks operable');
+});
+
+test('the accounts sheet uses the switch primitive, not hand-written checkbox markup', () => {
+    const js = read('js/accounts.js');
+    assert.ok(js.includes("ui.switchRow('Disabled'"), 'the disabled toggle is not the primitive');
+    assert.ok(!/type="checkbox" id="accDisabled"/.test(js), 'hand-written checkbox markup is still there');
+    assert.ok(read('ui.js').includes('function switchRow('), 'ui.js has no switchRow primitive');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

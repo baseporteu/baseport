@@ -448,3 +448,75 @@ body:has(.sheet.open) .toasts {
         opacity: 1;
     }
 }
+
+/* switch: a checkbox rendered as a track and thumb (ui.switch) */
+.switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 2rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.switch .track {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: hsl(var(--input));
+    cursor: pointer;
+    transition: background .15s;
+}
+
+.switch .thumb {
+    position: absolute;
+    top: .125rem;
+    left: .125rem;
+    width: .875rem;
+    height: .875rem;
+    border-radius: 999px;
+    background: #fff;
+    transition: transform .15s;
+    box-shadow: 0 1px 2px rgb(0 0 0 / .2);
+}
+
+.switch input:checked+.track {
+    background: hsl(var(--primary));
+}
+
+.switch input:checked+.track+.thumb {
+    transform: translateX(.875rem);
+}
+
+.switch input:focus-visible+.track {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+}
+
+/* A switch the API would refuse must not look operable. */
+.switch input:disabled+.track,
+.switch input:disabled+.track+.thumb {
+    cursor: not-allowed;
+    opacity: .5;
+}
+
+.switch:has(input:disabled) {
+    cursor: not-allowed;
+}
+
+/* switch with its own label, for a sheet rather than a settings row */
+.switch-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .875rem;
+    margin: .25rem 0 .75rem;
+}

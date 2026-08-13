@@ -894,55 +894,6 @@ li.CodeMirror-hint-active {
     font-family: inherit;
 }
 
-.switch {
-    position: relative;
-    display: inline-flex;
-    width: 2rem;
-    height: 1.125rem;
-    flex-shrink: 0;
-}
-
-.switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-    position: absolute;
-}
-
-.switch .track {
-    position: absolute;
-    inset: 0;
-    border-radius: 999px;
-    background: hsl(var(--input));
-    cursor: pointer;
-    transition: background .15s;
-}
-
-.switch .thumb {
-    position: absolute;
-    top: .125rem;
-    left: .125rem;
-    width: .875rem;
-    height: .875rem;
-    border-radius: 999px;
-    background: #fff;
-    transition: transform .15s;
-    box-shadow: 0 1px 2px rgb(0 0 0 / .2);
-}
-
-.switch input:checked+.track {
-    background: hsl(var(--primary));
-}
-
-.switch input:checked+.track+.thumb {
-    transform: translateX(.875rem);
-}
-
-.switch input:focus-visible+.track {
-    outline: 2px solid hsl(var(--primary));
-    outline-offset: 2px;
-}
-
 .logs-toolbar {
     display: flex;
     gap: .5rem;
@@ -2063,19 +2014,6 @@ li.CodeMirror-hint-active {
     gap: .5rem;
     justify-content: flex-end;
     padding-top: .75rem;
-}
-
-.switch {
-    display: inline-flex;
-    align-items: center;
-    cursor: pointer;
-}
-
-.switch input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
 }
 
 @media (max-width: 900px) {

@@ -124,11 +124,11 @@ function openAccountForm(pid) {
             }),
         );
 
-        const disabledLab = document.createElement('label');
-        disabledLab.className = 'field-label';
-        disabledLab.style.cssText = 'display:flex;align-items:center;gap:.5rem';
-        disabledLab.innerHTML = `<input type="checkbox" id="accDisabled"${a.isDisabled ? ' checked' : ''}> Disabled`;
-        body.appendChild(disabledLab);
+        body.appendChild(ui.switchRow('Disabled', {
+            id: 'accDisabled',
+            checked: a.isDisabled,
+            disabled: locked,
+        }));
         // Reachable for an admin too: the token routes have no admin guard, so hiding this would take away something the API still allows.
         body.appendChild(apiTokenPanel(a));
     }
