@@ -47,6 +47,12 @@ public class TableDefinition
     // Comma-separated list of allowed HTTP methods.
     public string ApiMethods { get; set; } = "GET,POST,PATCH,PUT,DELETE";
 
+    // Per-record access rules: a SQLite boolean expression over _USER_, _ROW_ and _REQ_, empty meaning the table is open to every caller the table-level switches already let through. See RecordAccess.
+    public string CreateRule { get; set; } = "";
+    public string ReadRule { get; set; } = "";
+    public string UpdateRule { get; set; } = "";
+    public string DeleteRule { get; set; } = "";
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public List<FieldDefinition> Fields { get; set; } = new();
@@ -138,8 +144,9 @@ public static class AccountRoles
 {
     public const string Admin = "admin"; // Full console access.
     public const string Consumer = "consumer"; // API token access only.
+    public const string User = "user"; // Public /auth account. No console, no static token.
 
-    public static readonly string[] All = { Admin, Consumer };
+    public static readonly string[] All = { Admin, Consumer, User };
 
     // Normalizes role string; returns null for unknown input.
     public static string? Normalize(string? stored)
@@ -195,6 +202,15 @@ public class UserAccount
     public DateTime? LastLoginAt { get; set; }
 }
 
+public class UserSession
+{
+    public string Id { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string RefreshTokenHash { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
+}
+
 public class SavedQuery
 {
     public string Id { get; set; } = "";
@@ -217,6 +233,21 @@ public class AppSettings
 
     // Preview link signing secret (generated on first boot).
     public string PreviewSecret { get; set; } = "";
+
+    // Public end-user auth at /auth and /api/auth/v1. Off by default: it is a second account surface.
+    public bool PublicAuthEnabled { get; set; } = false;
+
+    // Self sign-up at /auth/register. Off until an operator opens it; an admin can still create user accounts from the console.
+    public bool PublicRegistrationEnabled { get; set; } = false;
+
+    // ES256 signing key for end-user JWTs, PKCS#8 base64 (generated on first boot).
+    public string AuthSigningKey { get; set; } = "";
+
+    // iss and aud on issued JWTs. Changing it invalidates every token already handed out.
+    public string AuthIssuer { get; set; } = "baseport";
+
+    public int AuthTokenLifetimeSec { get; set; } = 3600;
+    public int AuthRefreshLifetimeDays { get; set; } = 30;
 
     // Allowed embedding origins (one per line; empty permits all).
     public string AllowedOrigins { get; set; } = "";

@@ -60,7 +60,7 @@ ORDERS_DOC = """Order headers taken through the portal.
 
 ## Identifiers
 
-Every order carries an `OrderNo` that is unique across the table and safe to
+Every order has an `OrderNo` that is unique across the table and safe to
 show a customer. The `id` in a response is the record's own identifier: it is
 unguessable and stable, and it is what the single-record routes take.
 
@@ -459,7 +459,7 @@ def order_forms(orders):
                      "renderers": {"Status": "'<strong>' + data.Status.toUpperCase() + '</strong>'"},
                      # Target is the /order-lines page bootstrap-sites.py serves on wms.site.com,
                      # which embeds "OrderLines - Overview" and answers a ?q= deep link on load.
-                     # LineNo is stamped "{OrderNo}-{n}" at seed time (see below), so a plain
+                     # LineNo is stamped "{OrderNo}-{n}" at seed time (see below), so a
                      # substring search on OrderNo already narrows the list to this order's lines.
                      "actions": [{"label": "View lines",
                                   "hrefExpr": "'http://127.0.0.1:8082/order-lines?q=' + encodeURIComponent(data.OrderNo)"}],

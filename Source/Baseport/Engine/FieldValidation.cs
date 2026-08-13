@@ -151,7 +151,7 @@ public static class FieldValidation
         // without this, Str()/TryNum() collapse a JsonObject/JsonArray to "" or 0 and every check below passes
         if (t is not ("json" or "array" or "multiselect") && v is not JsonValue)
         {
-            errs.Add($"{f.Name} must be a plain value, not a nested object or array.");
+            errs.Add($"{f.Name} must be a value, not a nested object or array.");
             return errs;
         }
 

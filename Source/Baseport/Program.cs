@@ -19,6 +19,10 @@ if (!File.Exists(bundledSettings) && !File.Exists(localSettings))
 if (args.Length > 0 && args[0] == "providers")
     return await ProvidersCli.RunAsync(args, bundledSettings, localSettings);
 
+// The operations the console refuses on an admin account live here instead, where they need shell access.
+if (args.Length > 0 && args[0] == "accounts")
+    return await AccountsCli.RunAsync(args, bundledSettings, localSettings);
+
 // Logging is not up yet, so a failure here can only report itself.
 var logDirectory = Path.Combine(Directory.GetCurrentDirectory(), "log");
 try
@@ -82,6 +86,13 @@ try
     var previewSecret = config["PreviewSecret"];
     var trustForwardedHeaders = config.GetValue("TrustForwardedHeaders", false);
     FileStore.Initialize(connectionString);
+
+    // A second listener for the console, so it can be bound to a private interface while the public API stays reachable.
+    if (AdminSurface.Configure(config["AdminAddress"]) is { } adminUrl)
+    {
+        var configured = builder.Configuration["urls"] ?? "http://localhost:5000";
+        builder.WebHost.UseUrls([.. configured.Split(';', StringSplitOptions.RemoveEmptyEntries), adminUrl]);
+    }
 
     // Pooled: a DbContext is a request-lifetime allocation with a change tracker behind it, and this one is created for every request including the ones that only read.
     builder.Services.AddDbContextPool<AppDbContext>(options =>
@@ -159,6 +170,7 @@ try
         RequestPath = "/uploads",
         ServeUnknownFileTypes = false
     });
+    app.UseAdminSurface();
     app.UseAuditLog();
     app.UseAdminAuth();
 
@@ -174,6 +186,8 @@ try
     }
 
     app.MapAuthEndpoints();
+    app.MapUserAuthEndpoints();
+    app.MapStorageEndpoints();
     app.MapTableEndpoints();
     app.MapFormEndpoints();
     app.MapAdminEndpoints();

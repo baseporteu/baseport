@@ -3,6 +3,7 @@ using System;
 using Baseport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Baseport.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260813145946_AddPublicUserAuth")]
+    partial class AddPublicUserAuth
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
@@ -381,15 +384,7 @@ namespace Baseport.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("CreateRule")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DeleteRule")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Description")
@@ -420,14 +415,6 @@ namespace Baseport.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ProxyUrl")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ReadRule")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdateRule")
                         .IsRequired()
                         .HasColumnType("TEXT");
 

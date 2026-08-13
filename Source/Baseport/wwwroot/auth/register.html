@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <meta name='color-scheme' content='light dark'>
+    <script>
+        (function () {
+            var stored = null;
+            try { stored = localStorage.getItem('baseport.theme'); } catch (e) {}
+            var dark = stored ? stored === 'dark'
+                : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        })();
+    </script>
+    <title>Create an account</title>
+    <link rel='icon' type='image/svg+xml' href='/favicon.svg'>
+    <link rel='stylesheet' href='/ui.css'>
+    <link rel='stylesheet' href='/app.css'>
+</head>
+<body>
+    <div class='login-screen'>
+        <form class='login-card' onsubmit='return bpRegister(event)'>
+            <h1>Create an account</h1>
+            <p class='muted'>Pick a password of at least 10 characters.</p>
+
+            <label class='field-label' for='authEmail'>Email
+                <input type='email' id='authEmail' class='input' autocomplete='email' required autofocus>
+            </label>
+
+            <label class='field-label' for='authUsername'>Username
+                <input type='text' id='authUsername' class='input' autocomplete='username' placeholder='Optional'>
+            </label>
+
+            <label class='field-label' for='authPassword'>Password
+                <input type='password' id='authPassword' class='input' autocomplete='new-password' minlength='10' required>
+            </label>
+
+            <button type='submit' class='btn btn-block'>Create account</button>
+            <p class='muted'>Already registered? <a href='/auth/login'>Sign in</a>.</p>
+        </form>
+    </div>
+    <script src='/ui.js'></script>
+    <script src='/js/userauth.js'></script>
+    <script>bpGuestOnly();</script>
+</body>
+</html>

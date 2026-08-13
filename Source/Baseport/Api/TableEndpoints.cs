@@ -27,8 +27,19 @@ public static class TableEndpoints
             if (errs.Count > 0) return Results.BadRequest(new { errors = errs });
             table.Id = Ids.NewShortId(12);
             table.CreatedAt = table.UpdatedAt = DateTime.UtcNow;
+
+            // A field posted inline arrives without an id, and RecordIndexes names its generated column after that id.
+            var position = 0;
+            foreach (var field in table.Fields)
+            {
+                field.Id = Ids.NewShortId(12);
+                field.TableId = table.Id;
+                field.Position = position++;
+            }
+
             db.Tables.Add(table);
             await db.SaveChangesAsync();
+            await RecordIndexes.SyncAsync(db, table);
             return Results.Ok(ApiDtos.TableDto(table));
         });
 
@@ -50,6 +61,18 @@ public static class TableEndpoints
             if (patch["apiDocumentation"] is JsonValue docv && docv.TryGetValue<string>(out var documentation)) table.ApiDocumentation = documentation;
             if (patch["apiMethods"] is JsonArray methods)
                 table.ApiMethods = ApiMethods.Serialize(methods.Select(m => m?.GetValue<string>() ?? ""));
+
+            // Per-record access rules. Rejected here rather than at request time, where a bad rule is a 500 on every call to the table.
+            foreach (var (key, permission) in RecordAccess.RuleKeys)
+            {
+                if (patch[key] is not JsonValue rv || !rv.TryGetValue<string>(out var rule)) continue;
+                rule = rule.Trim();
+                if (RecordAccess.Problem(rule, table.Fields.ToList()) is { } ruleProblem)
+                    return Results.BadRequest(new { errors = new[] { ruleProblem } });
+                if (await RecordAccess.SqlProblemAsync(db, table, table.Fields.ToList(), rule) is { } sqlProblem)
+                    return Results.BadRequest(new { errors = new[] { sqlProblem } });
+                RecordAccess.Assign(table, permission, rule);
+            }
 
             // A proxy target is not write-once.
             if (table.IsProxy)

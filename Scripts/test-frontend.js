@@ -86,8 +86,6 @@ function loadFormsModule() {
 }
 
 test('a lookup-only form shows the lookup panel, not the submit panel', () => {
-    // The bug: applyFormShape received kind 'form' and matched no panel, so the
-    // editor rendered completely blank for every form.
     const {
         dom,
         module
@@ -109,11 +107,6 @@ test('a submit-only form shows the submit panel', () => {
 });
 
 test('an enumerated list filter collects its value select, not a missing input', () => {
-    // The bug: syncToField swaps the value input for a select on enum fields,
-    // so collectListFilters read .value on null and threw, killing save and
-    // the dirty-check snapshot on any list form filtered on a select field.
-    // The dom-stub has no real querySelectorAll, so the row is built by hand
-    // and the collection logic is what is under test.
     const {
         module
     } = loadFormsModule();
@@ -136,8 +129,6 @@ test('an enumerated list filter collects its value select, not a missing input',
 });
 
 test('the list filter value input carries the filter-value class', () => {
-    // The companion guard: the text-value input must wear the same class
-    // collectListFilters now queries, or the enum fix orphans the plain path.
     const {
         module
     } = loadFormsModule();
@@ -169,8 +160,6 @@ test('a list shows only the list panel and hides the action picker', () => {
 });
 
 test('enabling a second action repopulates its panel instead of leaving it blank', () => {
-    // The bug: toggling an action showed the panel but never rendered its
-    // pickers, so the revealed half could not be edited.
     const {
         dom,
         module
@@ -194,8 +183,7 @@ test('a form is never left with no action', () => {
 
 /* embed.js: which renderer a schema selects */
 
-// Mirrors the dispatch in embed.js. Kept in step by the assertion below, which
-// fails if the source stops branching this way.
+// Mirrors the dispatch in embed.js. Kept in step by the assertion below, which fails if the source stops branching this way.
 function chooseRenderer(form) {
     if (form.kind === 'list') return 'list';
     const actions = form.actions || ['submit'];
@@ -204,8 +192,6 @@ function chooseRenderer(form) {
 }
 
 test('the embed dispatches on kind then actions', () => {
-    // The bug: it branched on kind === 'lookup', which after the kind/mode split
-    // is never true, so every lookup rendered as an empty submit form.
     assert.strictEqual(chooseRenderer({
         kind: 'list'
     }), 'list');
@@ -290,7 +276,7 @@ test('every id the scripts read exists in the markup or is created at runtime', 
     const runtime = new Set(['toasts', 'sheetOverlay', 'tableName', 'pwCurrent', 'pwNew', 'fieldEditError',
         'bootstrap', 'fieldType'
     ]);
-    const present = new Set([...html.matchAll(/id='([\w-]+)'/g)].map(m => m[1]));
+    const present = new Set([...html.matchAll(/id=['"]([\w-]+)['"]/g)].map(m => m[1]));
     const missing = [...new Set([...js.matchAll(/getElementById\('([\w-]+)'\)/g)].map(m => m[1]))]
         .filter(id => !present.has(id) && !runtime.has(id) && !/^(fe|px|acc)/.test(id));
     assert.deepStrictEqual(missing, [], `ids read but never rendered: ${missing.join(', ')}`);
@@ -299,7 +285,7 @@ test('every id the scripts read exists in the markup or is created at runtime', 
 test('every inline handler in the markup is a defined function', () => {
     const html = readHtml();
     const js = readAll();
-    // Inline <script> blocks in the parts define handlers too, so they count.
+
     const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).join('\n');
     const defined = new Set([...(js + inline).matchAll(/function\s+([A-Za-z_$][\w$]*)/g)].map(m => m[1]));
     defined.add('toggleTheme');
@@ -309,8 +295,6 @@ test('every inline handler in the markup is a defined function', () => {
 });
 
 test('every script the markup loads exists', () => {
-    // The console is split across files that share one global scope, so a
-    // missing or misordered tag breaks the whole page rather than one feature.
     const html = readHtml();
     const missing = [...html.matchAll(/<script src='([^']+)'/g)]
         .map(m => m[1].replace(/^\//, ''))
@@ -319,9 +303,6 @@ test('every script the markup loads exists', () => {
 });
 
 test('the split scripts load in an order that satisfies their dependencies', () => {
-    // boot() runs at the end of auth.js and renders the current route, which may
-    // be the Forms page, so forms.js has to be parsed before it. The login page
-    // loads only ui.js + auth.js, so this scans the console parts alone.
     const consoleHtml = HTML_PARTS.map(read).join('\n');
     const order = [...consoleHtml.matchAll(/<script src='\/([^']+)'/g)].map(m => m[1]);
     assert.ok(order.indexOf('ui.js') === 0, 'ui.js must load first: every other file calls it');
@@ -331,28 +312,18 @@ test('the split scripts load in an order that satisfies their dependencies', () 
 });
 
 test('the scripts read the ids the API actually returns', () => {
-    // The bug: the model dropped PublicId in favour of Id, the C# was swept but
-    // the JS was not, so every `f.publicId` read undefined and the console
-    // fetched /api/forms/undefined.
     const js = readAll() + read('embed.js');
     const stale = [...js.matchAll(/\.(publicId|PublicId)\b/g)].map(m => m[0]);
     assert.deepStrictEqual(stale, [], `scripts still read a property the API no longer returns: ${stale.join(', ')}`);
 });
 
 test('an embed component class outranks the generic element rule', () => {
-    // The bug: `.baserow-embed button` (0,1,1) beat `.baserow-btn` (0,1,0), so
-    // the generic `border: 1px solid transparent` won and the pager buttons
-    // rendered borderless next to a bordered table.
     const css = read('embed.js');
     const componentClasses = [...new Set([...read('embed.js').matchAll(/className = '(baserow-[\w-]+)'/g)].map(m => m[1]))];
 
-    // Any element-level rule inside the embed raises the bar every component
-    // class has to clear.
     const hasElementRule = /\.baserow-embed (button|input|table)\s*\{/.test(css);
     if (!hasElementRule) return;
 
-    // Scoping under .baserow-embed is what clears the element rule; a rule
-    // scoped anywhere else does not help a button rendered inside the embed.
     const unscoped = componentClasses.filter(c =>
         (c === 'baserow-btn' || c === 'baserow-search') &&
         !new RegExp(`\\.baserow-embed \\.${c}(?![\\w-])`).test(css));
@@ -360,8 +331,6 @@ test('an embed component class outranks the generic element rule', () => {
 });
 
 test('a feature stylesheet never redefines a ui primitive', () => {
-    // The bug: app.css redefined .sheet with translateX(100%), loaded after
-    // ui.css, and pushed every sheet off screen.
     const primitives = [...read('ui.css').matchAll(/^\.([\w-]+)\s*\{/gm)].map(m => m[1]);
     const appRules = new Set([...read('app.css').matchAll(/^\s*\.([\w-]+)\s*\{/gm)].map(m => m[1]));
     const clashes = primitives.filter(p => appRules.has(p));
@@ -431,7 +400,7 @@ function loadApiNameGuard() {
 }
 
 test('a name is required while the table\'s API is published', () => {
-    // The bug: clearing the API name of a published table sent a save the API rejected.
+    // bug prevent: clearing the API name of a published table sent a save the API rejected.
     const module = loadApiNameGuard();
     assert.strictEqual(module.apiNameIsValid('', true), false, 'a published table with no API name was accepted');
 });
@@ -1174,15 +1143,12 @@ test('switching a button to link or cancel reveals its own extra field', () => {
     const btn = forms.slice(forms.indexOf("row.t === 'button'"), forms.indexOf("row.t === 'group'"));
     assert.ok(/row\.action === 'cancel'[\s\S]*?'href'/.test(btn), 'cancel never gets an href field');
     assert.ok(/row\.action === 'link'[\s\S]*?'hrefExpr'/.test(btn), 'link never gets an hrefExpr field');
-    // The bug this catches: dropdown() only ever writes row[prop] and never
-    // re-renders, so a plain dropdown() call here would leave the extra field stuck.
+    // The bug this catches: dropdown() only ever writes row[prop] and never re-renders, so a dropdown() call here would leave the extra field stuck.
     assert.ok(/actionSel\.onchange = \(\) => \{[\s\S]*?renderCanvas\(\)/.test(forms),
         'the action select does not re-render, so switching to link/cancel would not reveal its field');
 });
 
 test('a column-width select writes col.w, not stuck at the dead default', () => {
-    // The bug: emptyCol() always wrote w:12 and nothing ever edited col.w again,
-    // so the public renderer's flexGrow support was unreachable from the editor.
     const forms = read('forms.js');
     assert.ok(/widthSel\.onchange = \(\) => \{\s*col\.w = Number\(widthSel\.value\)/.test(forms),
         'the width picker no longer writes col.w');
@@ -1246,6 +1212,169 @@ test('the field-type quick-add includes derived, matching the full editor', () =
         2,
         'quick-add and the field editor no longer share one type list',
     );
+});
+
+/* the public auth pages: /auth redirects to the login card unconditionally */
+
+function loadUserAuth(stored, statusAuthenticated) {
+    const store = stored ? {
+        'baseport.user.tokens': JSON.stringify(stored)
+    } : {};
+    global.localStorage = {
+        getItem: k => (k in store ? store[k] : null),
+        setItem: (k, v) => {
+            store[k] = String(v);
+        },
+        removeItem: k => {
+            delete store[k];
+        }
+    };
+    const replaced = [];
+    global.location = {
+        replace: u => replaced.push(u),
+        href: '/auth/login'
+    };
+    // The cookie is HttpOnly, so the page cannot read it; the server is what answers.
+    global.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+            authenticated: !!statusAuthenticated
+        })
+    });
+    const module = {};
+    eval(read('js/userauth.js') + '\n;module.bpGuestOnly = bpGuestOnly;');
+    return {
+        module,
+        replaced
+    };
+}
+
+test('a visitor holding tokens is not asked to sign in again on /auth', async () => {
+    const {
+        module,
+        replaced
+    } = loadUserAuth({
+        auth_token: 't',
+        refresh_token: 'r',
+        expires_at: 9999999999
+    }, false);
+    await module.bpGuestOnly();
+    assert.deepStrictEqual(replaced, ['/auth/profile'], '/auth/login keeps a signed-in user on the login card');
+});
+
+// The console sign-in leaves a cookie and nothing in localStorage, so a page that only reads localStorage shows an operator a login form they do not need.
+test('a cookie session is recognised on /auth even with nothing stored locally', async () => {
+    const {
+        module,
+        replaced
+    } = loadUserAuth(null, true);
+    await module.bpGuestOnly();
+    assert.deepStrictEqual(replaced, ['/auth/profile'], 'a cookie session still gets the login card');
+});
+
+test('a guest stays on the login card', async () => {
+    const {
+        module,
+        replaced
+    } = loadUserAuth(null, false);
+    await module.bpGuestOnly();
+    assert.deepStrictEqual(replaced, [], 'a visitor with no session is bounced to a profile they cannot load');
+});
+
+// A cookie session has no stored refresh token, so a sign-out that only fires when tokens exist leaves the cookie alive.
+test('signing out always reaches the server', () => {
+    const js = read('js/userauth.js');
+    const block = js.slice(js.indexOf('async function bpSignOut'), js.indexOf('async function bpDeleteAccount'));
+    assert.ok(!/if \(current\) \{/.test(block), 'sign-out is still conditional on stored tokens');
+    assert.ok(block.includes("fetch('/api/auth/v1/logout'"), 'sign-out never calls logout');
+});
+
+test('both guest pages call the guard, so neither drifts out of it', () => {
+    ['auth/login.html', 'auth/register.html'].forEach(page => {
+        assert.ok(read(page).includes('bpGuestOnly()'), `${page} never calls bpGuestOnly`);
+    });
+});
+
+/* the console mirrors the guards the accounts API enforces */
+
+// TrailBase opens the same sheet for everyone and lets the server refuse. Baseport greys the refused fields instead, but must not hide the ones the API still accepts: the token routes carry no admin guard, so an early return took away token management that still worked.
+test('an admin sheet greys the refused fields and keeps the token panel', () => {
+    const js = read('js/accounts.js');
+    const open = js.slice(js.indexOf('function openAccountForm'), js.indexOf('function adminNotice'));
+    assert.ok(/const locked = !!a && a\.role === 'admin'/.test(open), 'an admin is no longer detected');
+    assert.ok(!/if \(a && a\.role === 'admin'\) return/.test(open), 'the sheet returns early and hides the token panel');
+    assert.ok(open.includes('apiTokenPanel(a)'), 'the token panel is gone');
+    assert.ok(/input\.disabled = true/.test(open), 'the refused fields are not greyed out');
+    assert.ok(open.includes('adminNotice(a)'), 'nothing points an operator at the CLI');
+});
+
+// Offering Admin when editing would build a promotion the API refuses, which is the "greyed out, never cleared" rule in AGENTS.md.
+test('the role select offers admin only when creating', () => {
+    const js = read('js/accounts.js');
+    const roleField = js.slice(js.indexOf("id: 'accRole'"), js.indexOf("if (a) {"));
+    const adminOption = roleField.indexOf("['admin',");
+    const branch = roleField.indexOf('options: a');
+    assert.ok(branch >= 0 && adminOption > branch, 'admin is offered unconditionally on the role select');
+});
+
+test('a blank password field is not sent, so saving never clears a password', () => {
+    const js = read('js/accounts.js');
+    const submit = js.slice(js.indexOf('async function submitAccount'), js.indexOf('async function deleteAccount'));
+    assert.ok(/if \(password && password\.value\) body\.password/.test(submit), 'an empty password field is submitted');
+});
+
+// The generated password is pasted straight into the command, so anything under PasswordMin would be refused by the command it appears in.
+test('the generated admin password clears the server minimum', () => {
+    const js = read('js/accounts.js');
+    const fn = js.slice(js.indexOf('function randomPassword'), js.indexOf('function adminNotice'));
+    const module = {};
+    // Varies per call, so the length branch is actually exercised rather than pinned to one value.
+    let seed = 0;
+    global.crypto = {
+        getRandomValues: (a) => {
+            for (let i = 0; i < a.length; i++) a[i] = (seed * 53 + i * 37 + 11) % 256;
+            seed++;
+            return a;
+        }
+    };
+    eval(fn + '\n;module.randomPassword = randomPassword;');
+    const lengths = new Set();
+    for (let i = 0; i < 60; i++) {
+        const pw = module.randomPassword();
+        assert.ok(pw.length >= 10 && pw.length <= 12, `generated ${pw.length} characters: ${pw}`);
+        assert.ok(/^[A-Za-z0-9]+$/.test(pw), `generated something unquotable: ${pw}`);
+        lengths.add(pw.length);
+    }
+    assert.ok(lengths.size > 1, 'the length never varies, so the range is decorative');
+});
+
+test('the shell commands carry a hover copy button', () => {
+    const accounts = read('js/accounts.js');
+    assert.ok(/ui\.copyable\(commands/.test(accounts), 'the command block has no copy affordance');
+    const ui_ = read('ui.js');
+    assert.ok(ui_.includes('function copyable('), 'ui.js has no copyable primitive');
+    assert.ok(/copyable,/.test(ui_.slice(ui_.lastIndexOf('return {'))), 'copyable is not exported');
+    // Feature stylesheets must not redefine a primitive, so the styling belongs in ui.css.
+    assert.ok(read('ui.css').includes('.copy-btn'), 'the copy button has no primitive styling');
+    assert.ok(!read('app.css').includes('.copy-btn'), 'app.css redefines the copy button');
+});
+
+// The switch was defined twice in app.css and had no disabled state. It is a primitive now, so it lives in ui.css and nowhere else.
+test('the switch is a single primitive, not a feature-stylesheet duplicate', () => {
+    const uiCss = read('ui.css');
+    const appCss = read('app.css');
+    const count = (css) => (css.match(/^\.switch[^{]*\{/gm) || []).length;
+    assert.strictEqual(count(appCss), 0, 'app.css still styles .switch');
+    assert.ok(count(uiCss) > 0, 'ui.css does not style .switch');
+    assert.strictEqual((uiCss.match(/^\.switch \{/gm) || []).length, 1, '.switch is declared more than once');
+    assert.ok(uiCss.includes('input:disabled'), 'a disabled switch still looks operable');
+});
+
+test('the accounts sheet uses the switch primitive, not hand-written checkbox markup', () => {
+    const js = read('js/accounts.js');
+    assert.ok(js.includes("ui.switchRow('Disabled'"), 'the disabled toggle is not the primitive');
+    assert.ok(!/type="checkbox" id="accDisabled"/.test(js), 'hand-written checkbox markup is still there');
+    assert.ok(read('ui.js').includes('function switchRow('), 'ui.js has no switchRow primitive');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

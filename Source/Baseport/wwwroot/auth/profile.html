@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <meta name='color-scheme' content='light dark'>
+    <script>
+        (function () {
+            var stored = null;
+            try { stored = localStorage.getItem('baseport.theme'); } catch (e) {}
+            var dark = stored ? stored === 'dark'
+                : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        })();
+    </script>
+    <title>Your account</title>
+    <link rel='icon' type='image/svg+xml' href='/favicon.svg'>
+    <link rel='stylesheet' href='/ui.css'>
+    <link rel='stylesheet' href='/app.css'>
+</head>
+<body>
+    <div class='login-screen'>
+        <div class='login-card'>
+            <h1 id='profileUsername'></h1>
+            <p class='muted' id='profileEmail'></p>
+            <p class='muted'>User ID <code id='profileId'></code></p>
+
+            <form onsubmit='return bpChangePassword(event)'>
+                <label class='field-label' for='currentPassword'>Current password
+                    <input type='password' id='currentPassword' class='input' autocomplete='current-password' required>
+                </label>
+
+                <label class='field-label' for='newPassword'>New password
+                    <input type='password' id='newPassword' class='input' autocomplete='new-password' minlength='10' required>
+                </label>
+
+                <button type='submit' class='btn btn-block'>Change password</button>
+            </form>
+
+            <button type='button' class='btn btn-outline btn-block' onclick='bpSignOut()'>Sign out</button>
+            <button type='button' class='btn btn-ghost btn-block' onclick='bpDeleteAccount()'>Delete account</button>
+        </div>
+    </div>
+    <script src='/ui.js'></script>
+    <script src='/js/userauth.js'></script>
+    <script>bpLoadProfile();</script>
+</body>
+</html>

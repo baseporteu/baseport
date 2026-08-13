@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<FormConfig> FormConfigs => Set<FormConfig>();
     public DbSet<Record> Records => Set<Record>();
     public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SavedQuery> SavedQueries => Set<SavedQuery>();
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
@@ -28,6 +29,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Record>().ToTable("_records");
         modelBuilder.Entity<FormConfig>().ToTable("_forms");
         modelBuilder.Entity<UserAccount>().ToTable("_users");
+        modelBuilder.Entity<UserSession>().ToTable("_user_sessions");
         modelBuilder.Entity<AuditLog>().ToTable("_audit_log");
         modelBuilder.Entity<SavedQuery>().ToTable("_queries");
         modelBuilder.Entity<AppSettings>().ToTable("_settings");
@@ -63,6 +65,7 @@ public class AppDbContext : DbContext
                      modelBuilder.Entity<FormConfig>().Metadata,
                      modelBuilder.Entity<Record>().Metadata,
                      modelBuilder.Entity<UserAccount>().Metadata,
+                     modelBuilder.Entity<UserSession>().Metadata,
                      modelBuilder.Entity<SavedQuery>().Metadata,
                      modelBuilder.Entity<AuditLog>().Metadata
                  })
@@ -81,5 +84,14 @@ public class AppDbContext : DbContext
             .HasIndex(u => u.ApiTokenHash)
             .IsUnique()
             .HasFilter("\"ApiTokenHash\" <> ''");
+
+        modelBuilder.Entity<UserSession>().HasIndex(s => s.RefreshTokenHash).IsUnique();
+        modelBuilder.Entity<UserSession>().HasIndex(s => s.UserId);
+
+        modelBuilder.Entity<UserSession>()
+            .HasOne<UserAccount>()
+            .WithMany()
+            .HasForeignKey(s => s.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

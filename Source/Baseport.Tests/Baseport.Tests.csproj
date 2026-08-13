@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Baseport\Baseport.csproj" />
+    <ProjectReference Include="..\Baseport.Client\Baseport.Client.csproj" />
   </ItemGroup>
 
 </Project>

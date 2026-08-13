@@ -103,6 +103,42 @@ const ui = (() => {
         return true;
     }
 
+    // A checkbox rendered as a switch, with its label. Same markup the settings rows use, so both inherit one stylesheet.
+    function switchRow(label, {
+        id,
+        checked = false,
+        disabled = false
+    } = {}) {
+        const row = el('label', 'switch-row');
+        const track = el('span', 'switch');
+        const input = el('input', '', {
+            type: 'checkbox'
+        });
+        if (id) input.id = id;
+        input.checked = !!checked;
+        input.disabled = !!disabled;
+        track.append(input, el('span', 'track'), el('span', 'thumb'));
+        row.append(track, el('span', null, {
+            textContent: label
+        }));
+        row.ctrl = input;
+        return row;
+    }
+
+    // Wraps a block in a hover-revealed copy button. `text` may be a function, so a caller can copy something generated at click time.
+    function copyable(block, text) {
+        const wrap = el('div', 'copy-wrap');
+        const btn = el('button', 'copy-btn', {
+            type: 'button',
+            title: 'Copy'
+        });
+        btn.setAttribute('aria-label', 'Copy');
+        btn.innerHTML = ICONS.copy;
+        btn.onclick = () => copyValue(typeof text === 'function' ? text() : text);
+        wrap.append(block, btn);
+        return wrap;
+    }
+
     document.addEventListener('dblclick', (ev) => {
         const cell = ev.target.closest && ev.target.closest('.table td');
         if (!cell || cell.querySelector('button, input, select, textarea, a')) return;
@@ -816,6 +852,8 @@ const ui = (() => {
         toast,
         dismiss,
         copyValue,
+        copyable,
+        switchRow,
         handle,
         markInvalid,
         send,

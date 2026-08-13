@@ -135,7 +135,6 @@ public class JobsTests : IDisposable
     [Fact]
     public async Task The_session_cleanup_job_reports_how_many_sessions_it_dropped()
     {
-        AdminAuth.ResetSessions();
         var result = await Jobs.Find("session-cleanup")!.Run(_db, Log, TestContext.Current.CancellationToken);
         Assert.Equal("Removed 0 session(s).", result);
     }

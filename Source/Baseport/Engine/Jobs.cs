@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Cronos;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -28,11 +29,8 @@ public static class Jobs
             "Prune audit entries older than the log retention setting.",
             LogsCleanupAsync),
         new("session-cleanup", "Session cleanup", "0 0 * * * *", true,
-            "Drop expired admin console sessions.",
-            (_, _, _) =>
-            {
-                return Task.FromResult($"Removed {AdminAuth.PruneExpired()} session(s).");
-            }),
+            "Drop expired sign-in sessions.",
+            async (db, _, _) => $"Removed {await UserTokens.PruneExpiredAsync(db, DateTime.UtcNow)} session(s)."),
         new("query-optimizer", "Query optimizer", "0 0 5 * * 0", true,
             "Run PRAGMA optimize against the SQLite store.",
             QueryOptimizeAsync),
@@ -86,21 +84,77 @@ public static class Jobs
         return $"Removed {removed} audit entry(ies).";
     }
 
-    // records store the full /uploads/{name} URL, so a JsonData substring check is exact enough without parsing JSON
+    // A bucket upload has no record to be referenced by: the storage API hands its id to the caller, who owns its life-cycle.
     private static async Task<string> FileDeletionsAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)
     {
-        var stored = FileStore.AllStoredNames().ToList();
+        var stored = FileStore.AllStoredNames()
+            .Where(name => string.IsNullOrEmpty(Path.GetDirectoryName(name)))
+            .ToList();
         if (stored.Count == 0) return "No uploads on disk.";
+
+        var referenced = await ReferencedUploadsAsync(db, ct);
 
         var deleted = 0;
         foreach (var name in stored)
         {
             ct.ThrowIfCancellationRequested();
-            if (await db.Records.AnyAsync(r => r.JsonData.Contains(name), ct)) continue;
+            if (referenced.Contains(name)) continue;
             FileStore.Delete(name);
             deleted++;
         }
         return deleted == 0 ? $"Checked {stored.Count} upload(s); none orphaned." : $"Deleted {deleted} orphaned upload(s) of {stored.Count}.";
+    }
+
+    internal static HashSet<string> ReferencedUploads(IEnumerable<string> documents)
+    {
+        var referenced = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var json in documents)
+        {
+            if (string.IsNullOrWhiteSpace(json)) continue;
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                CollectUploads(document.RootElement, referenced);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+        }
+        return referenced;
+    }
+
+    private static async Task<HashSet<string>> ReferencedUploadsAsync(AppDbContext db, CancellationToken ct) =>
+        ReferencedUploads(await db.Records.AsNoTracking().Select(r => r.JsonData).ToListAsync(ct));
+
+    private static void CollectUploads(JsonElement element, HashSet<string> referenced)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject()) CollectUploads(property.Value, referenced);
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray()) CollectUploads(item, referenced);
+                break;
+            case JsonValueKind.String:
+                if (UploadName(element.GetString()) is { } name) referenced.Add(name);
+                break;
+        }
+    }
+
+    private static string? UploadName(string? value)
+    {
+        const string marker = "/uploads/";
+        if (string.IsNullOrEmpty(value)) return null;
+
+        var start = value.LastIndexOf(marker, StringComparison.Ordinal);
+        if (start < 0) return null;
+
+        var name = value[(start + marker.Length)..];
+        var end = name.IndexOfAny(['?', '#']);
+        if (end >= 0) name = name[..end];
+        return name.Length == 0 ? null : name;
     }
 
     private static async Task<string> QueryOptimizeAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)

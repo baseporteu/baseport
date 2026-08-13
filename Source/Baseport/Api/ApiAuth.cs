@@ -19,7 +19,19 @@ public static class ApiAuth
 
         var presented = header["Bearer ".Length..].Trim();
         if (presented.Length == 0) return null;
-        return await ResolveByTokenAsync(db, presented);
+        return await ResolveByTokenAsync(db, presented) ?? await ResolveJwtAsync(db, presented);
+    }
+
+    public static async Task<UserAccount?> ResolveJwtAsync(AppDbContext db, string token)
+    {
+        var settings = await db.SettingsAsync();
+        if (settings is null || !settings.PublicAuthEnabled) return null;
+
+        var claims = UserTokens.Verify(token, DateTime.UtcNow);
+        if (claims is null) return null;
+
+        var account = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == claims.Sub);
+        return account is null || account.IsDisabled ? null : account;
     }
 
     // same resolution, for callers with no HttpContext to pull a bearer header from (the postgres/tds wire listeners authenticate off the password field instead)

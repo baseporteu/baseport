@@ -38,7 +38,7 @@ public static class RecordEvents
 // The one choke point every record write passes through, whichever endpoint made it.
 public sealed class RecordChangeInterceptor : SaveChangesInterceptor
 {
-    // Keyed by context: the interceptor is a singleton shared by the whole DbContext pool, so a plain field would let two concurrent saves overwrite each other's pending list.
+    // Keyed by context: the interceptor is a singleton shared by the whole DbContext pool, so a field would let two concurrent saves overwrite each other's pending list.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<DbContext, List<RecordEvent>> _pending = new();
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
