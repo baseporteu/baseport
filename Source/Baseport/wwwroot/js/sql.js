@@ -13,11 +13,28 @@ function setSqlValue(sql) {
     else document.getElementById('sqlInput').value = sql;
 }
 
-// Built the first time the view is actually on screen: CodeMirror measures its container, and .view is display:none until then.
-function initSqlEditor() {
+// only fetch when needed.
+let codeMirrorLoad = null;
+
+function loadCodeMirror() {
+    if (typeof CodeMirror !== 'undefined') return Promise.resolve();
+    codeMirrorLoad ||= new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = '/vendor/codemirror-bundle.js';
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.append(s);
+    });
+    return codeMirrorLoad;
+}
+
+async function initSqlEditor() {
     if (sqlEditor) return;
     const ta = document.getElementById('sqlInput');
-    if (!ta || typeof CodeMirror === 'undefined') return;
+    if (!ta) return;
+    // A failed fetch leaves the plain textarea, which still runs queries.
+    await loadCodeMirror().catch(() => {});
+    if (sqlEditor || typeof CodeMirror === 'undefined') return;
     sqlEditor = CodeMirror.fromTextArea(ta, {
         mode: 'text/x-sql',
         lineNumbers: true,
@@ -78,7 +95,6 @@ function showSqlError(msg) {
     status.innerText = msg;
 }
 
-// A saved query opens on a placeholder grid, so /sql/{id} reads as a query waiting to run.
 function showQueryPlaceholder(name) {
     const result = document.getElementById('sqlResult');
     if (!result) return;
@@ -95,7 +111,6 @@ async function loadSavedQueries() {
     refreshSidebar('sql');
 }
 
-// selectQuery navigates; applyQuery paints. That is what lets a deep link land in click state.
 function selectQuery(q) {
     navigate(`/sql/${q.id}`);
 }

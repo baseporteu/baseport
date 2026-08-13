@@ -249,7 +249,7 @@ const SECTION_ROUTES = {
         await editForm(id);
     },
     sql: async (id) => {
-        initSqlEditor();
+        await initSqlEditor();
         await loadSavedQueries();
         const query = savedQueries.find((q) => q.id === id);
         if (query) applyQuery(query);
