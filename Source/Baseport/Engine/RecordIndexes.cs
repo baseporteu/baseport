@@ -16,7 +16,9 @@ public static class RecordIndexes
 
     // Named after the field id, which never changes, so a rename rewrites the expression rather than orphaning a column.
     public static string? ColumnFor(FieldDefinition field) =>
-        Indexable.Contains(FieldValidation.NormalizeType(field.DataType) ?? "") ? $"g_{field.Id}" : null;
+        field.Id.Length > 0 && Indexable.Contains(FieldValidation.NormalizeType(field.DataType) ?? "")
+            ? $"g_{field.Id}"
+            : null;
 
     // rough estimate, not a measurement: dbstat isn't compiled into this build, so there's no real per-index page count to read
     private const double BytesPerIndexEntry = 24.0 / 0.75;

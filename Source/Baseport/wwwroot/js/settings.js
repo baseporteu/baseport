@@ -87,6 +87,12 @@ async function loadSettings() {
     document.getElementById('settingsOpenApiEnabled').checked = settingsData.openApiEnabled !== false;
     document.getElementById('settingsApiTitle').value = settingsData.apiTitle || '';
     document.getElementById('settingsApiDescription').value = settingsData.apiDescription || '';
+    document.getElementById('settingsPublicAuthEnabled').checked = settingsData.publicAuthEnabled === true;
+    document.getElementById('settingsPublicRegistrationEnabled').checked = settingsData.publicRegistrationEnabled === true;
+    document.getElementById('settingsAuthIssuer').value = settingsData.authIssuer || 'baseport';
+    document.getElementById('settingsAuthTokenLifetime').value = settingsData.authTokenLifetimeSec ?? 3600;
+    document.getElementById('settingsAuthRefreshLifetime').value = settingsData.authRefreshLifetimeDays ?? 30;
+    document.getElementById('settingsAuthJwks').textContent = settingsData.authJwksPath || '/api/auth/v1/jwks.json';
     document.getElementById('settingsPostgresEnabled').checked = settingsData.postgresEnabled === true;
     document.getElementById('settingsPostgresPort').value = settingsData.postgresPort ?? 5432;
     document.getElementById('settingsPostgresBindAddress').value = settingsData.postgresBindAddress || '127.0.0.1';
@@ -186,6 +192,46 @@ async function submitApiInfo(btn) {
         };
         document.getElementById('settingsApiTitle').value = saved.apiTitle || '';
         document.getElementById('settingsApiDescription').value = saved.apiDescription || '';
+    });
+}
+
+async function submitAuthSettings(btn) {
+    await ui.busy(btn, async () => {
+        const saved = await ui.send('/api/_admin/settings', {
+            method: 'PUT',
+            body: {
+                publicAuthEnabled: document.getElementById('settingsPublicAuthEnabled').checked,
+                publicRegistrationEnabled: document.getElementById('settingsPublicRegistrationEnabled').checked,
+                authIssuer: document.getElementById('settingsAuthIssuer').value.trim() || 'baseport',
+                authTokenLifetimeSec: Number(document.getElementById('settingsAuthTokenLifetime').value) || 3600,
+                authRefreshLifetimeDays: Number(document.getElementById('settingsAuthRefreshLifetime').value) || 30,
+            },
+            success: 'End-user authentication has been updated.',
+        });
+        if (!saved) return;
+        settingsData = {
+            ...settingsData,
+            ...saved
+        };
+        document.getElementById('settingsAuthIssuer').value = saved.authIssuer || 'baseport';
+        document.getElementById('settingsAuthTokenLifetime').value = saved.authTokenLifetimeSec ?? 3600;
+        document.getElementById('settingsAuthRefreshLifetime').value = saved.authRefreshLifetimeDays ?? 30;
+    });
+}
+
+async function rotateAuthKey(btn) {
+    const ok = await ui.confirm({
+        title: 'Rotate the signing key?',
+        message: 'Every access and refresh token issued so far stops working, and every signed-in user has to sign in again.',
+        confirmLabel: 'Rotate',
+        danger: true,
+    });
+    if (!ok) return;
+    await ui.busy(btn, async () => {
+        await ui.send('/api/_admin/settings/auth-key', {
+            method: 'POST',
+            success: 'A new signing key is in use.',
+        });
     });
 }
 

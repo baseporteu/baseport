@@ -35,6 +35,13 @@ public class RecordIndexesTests : IDisposable
     }
 
     [Fact]
+    public void AFieldWithoutAnIdIsNeverGivenAColumn()
+    {
+        var orphan = new FieldDefinition { Id = "", Name = "title", DataType = "text" };
+        Assert.Null(RecordIndexes.ColumnFor(orphan));
+    }
+
+    [Fact]
     public void OnlyIndexableTypesGetAColumn()
     {
         Assert.Equal($"g_{_reference.Id}", RecordIndexes.ColumnFor(_reference));

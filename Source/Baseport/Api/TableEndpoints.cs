@@ -27,8 +27,19 @@ public static class TableEndpoints
             if (errs.Count > 0) return Results.BadRequest(new { errors = errs });
             table.Id = Ids.NewShortId(12);
             table.CreatedAt = table.UpdatedAt = DateTime.UtcNow;
+
+            // A field posted inline arrives without an id, and RecordIndexes names its generated column after that id.
+            var position = 0;
+            foreach (var field in table.Fields)
+            {
+                field.Id = Ids.NewShortId(12);
+                field.TableId = table.Id;
+                field.Position = position++;
+            }
+
             db.Tables.Add(table);
             await db.SaveChangesAsync();
+            await RecordIndexes.SyncAsync(db, table);
             return Results.Ok(ApiDtos.TableDto(table));
         });
 

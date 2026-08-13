@@ -174,6 +174,8 @@ try
     }
 
     app.MapAuthEndpoints();
+    app.MapUserAuthEndpoints();
+    app.MapStorageEndpoints();
     app.MapTableEndpoints();
     app.MapFormEndpoints();
     app.MapAdminEndpoints();

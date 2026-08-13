@@ -2168,6 +2168,17 @@ li.CodeMirror-hint-active {
     text-align: center;
 }
 
+.login-card a {
+    color: hsl(var(--foreground));
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.login-card a:hover {
+    opacity: .75;
+}
+
 .login-card .forgot-link {
     font-size: .8rem;
     font-weight: 400;

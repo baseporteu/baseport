@@ -78,6 +78,68 @@
                                 <ul class='api-table-list' id='apiTableList'></ul>
                                 <p id='apiTablesEmpty' class='muted empty-hint'>No tables.</p>
                             </div>
+                            <div class='card'>
+                                <div class='card-header'>
+                                    <div>
+                                        <h2>End-user authentication</h2>
+                                        <p class='muted'>Authentication endpoints for your application at <code>/auth</code> and <code>/api/auth/v1</code>, distinct from administrative console accounts.</p>
+                                    </div>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsPublicAuthEnabled'>Enabled</label>
+                                        <p class='muted'>Enables public authentication pages and API endpoints. Disabling this returns 404 responses for both.</p>
+                                    </div>
+                                    <label class='switch'>
+                                        <input type='checkbox' id='settingsPublicAuthEnabled'>
+                                        <span class='track'></span>
+                                        <span class='thumb'></span>
+                                    </label>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsPublicRegistrationEnabled'>Sign-up</label>
+                                        <p class='muted'>Allows new visitors to register accounts via <code>/auth/register</code>.</p>
+                                    </div>
+                                    <label class='switch'>
+                                        <input type='checkbox' id='settingsPublicRegistrationEnabled'>
+                                        <span class='track'></span>
+                                        <span class='thumb'></span>
+                                    </label>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class="setting-label">
+                                        <label for="settingsAuthIssuer">Token issuer</label>
+                                        <p class="muted">The issuer identifier for the JWT. Beware, changing this value invalidates all active tokens.</p>
+                                    </div>
+                                    <input type='text' id='settingsAuthIssuer' class='input' maxlength='128' placeholder='baseport'>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsAuthTokenLifetime'>Token lifetime (seconds)</label>
+                                        <p class='muted'>Duration an access token remains valid. Accepts values between 60 and 86400 seconds.</p>
+                                    </div>
+                                    <input type='number' id='settingsAuthTokenLifetime' class='input' min='60' max='86400'>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsAuthRefreshLifetime'>Refresh lifetime (days)</label>
+                                        <p class='muted'>Duration a refresh token can be exchanged for new access tokens. Accepts values between 1 and 365 days.</p>
+                                    </div>
+                                    <input type='number' id='settingsAuthRefreshLifetime' class='input' min='1' max='365'>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class="setting-label">
+                                        <label>Signing key</label>
+                                        <p class="muted">Uses ES256. Expose <code id="settingsAuthJwks">/api/auth/v1/jwks.json</code> for JWT middleware verification. Rotating this key logs out all users.</p>
+                                    </div>
+                                    <button class='btn btn-outline' onclick='rotateAuthKey(this)'>Rotate</button>
+                                </div>
+                                <div class='card-footer'>
+                                    <span class='muted'></span>
+                                    <button class='btn' onclick='submitAuthSettings(this)'>Save</button>
+                                </div>
+                            </div>
                         </div>
                         <div class='settings-pane hidden' data-pane='providers'>
                             <div class='card'>

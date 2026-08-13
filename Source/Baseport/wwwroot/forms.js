@@ -774,7 +774,7 @@ function parseLayout(layoutJson) {
     try {
         const p = JSON.parse(layoutJson || '[]');
         if (p && Array.isArray(p.rows)) return p;
-        // Legacy layouts were a plain array of rows of field names.
+        // Legacy layouts were an array of rows of field names.
         if (Array.isArray(p))
             return {
                 rows: p.map((r) => ({

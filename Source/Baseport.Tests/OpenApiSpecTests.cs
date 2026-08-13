@@ -200,7 +200,6 @@ public class OpenApiSpecTests
     [Fact]
     public void The_documented_record_shape_matches_what_the_api_returns()
     {
-        // The bug: the document said publicId long after the model renamed it to id, so a generated client read a field the API never sends.
         var record = new Record { Id = Ids.NewShortId(12), TableId = "t", JsonData = "{}", CreatedAt = DateTime.UtcNow };
         var returned = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(
             ApiDtos.RecordDto(record, new List<FieldDefinition>()),

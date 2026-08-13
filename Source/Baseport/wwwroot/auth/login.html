@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <meta name='color-scheme' content='light dark'>
+    <script>
+        (function () {
+            var stored = null;
+            try { stored = localStorage.getItem('baseport.theme'); } catch (e) {}
+            var dark = stored ? stored === 'dark'
+                : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        })();
+    </script>
+    <title>Sign in</title>
+    <link rel='icon' type='image/svg+xml' href='/favicon.svg'>
+    <link rel='stylesheet' href='/ui.css'>
+    <link rel='stylesheet' href='/app.css'>
+</head>
+<body>
+    <div class='login-screen'>
+        <form class='login-card' onsubmit='return bpSignIn(event)'>
+            <h1>Sign in</h1>
+            <p class='muted'>Use the account you registered with.</p>
+
+            <label class='field-label' for='authHandle'>Email or username
+                <input type='text' id='authHandle' class='input' autocomplete='username' required autofocus>
+            </label>
+
+            <label class='field-label' for='authPassword'>Password
+                <input type='password' id='authPassword' class='input' autocomplete='current-password' required>
+            </label>
+
+            <button type='submit' class='btn btn-block'>Sign in</button>
+            <!--__SIGNUP__--><p class='muted'>No account yet? <a href='/auth/register'>Create one</a>.</p><!--__/SIGNUP__-->
+        </form>
+    </div>
+    <script src='/ui.js'></script>
+    <script src='/js/userauth.js'></script>
+</body>
+</html>

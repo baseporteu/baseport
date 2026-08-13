@@ -17,6 +17,12 @@ public class AuthTests
     // Sign-in surface and the separately authenticated public API.
     [InlineData("/api/auth/login", true)]
     [InlineData("/api/auth/me", true)]
+    // Public end-user auth. Gated by the PublicAuthEnabled setting, not by a console session.
+    [InlineData("/api/auth/v1/login", true)]
+    [InlineData("/api/auth/v1/register", true)]
+    [InlineData("/api/auth/v1/jwks.json", true)]
+    // Storage carries the same bearer token the record routes do.
+    [InlineData("/api/v1/files/avatars", true)]
     [InlineData("/api/v1/tables/abc/records", true)]
     [InlineData("/api/openapi.json", true)]
     // Everything else is console surface, and all of it lives under /api/_admin.

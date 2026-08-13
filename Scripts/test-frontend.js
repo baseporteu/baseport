@@ -86,8 +86,6 @@ function loadFormsModule() {
 }
 
 test('a lookup-only form shows the lookup panel, not the submit panel', () => {
-    // The bug: applyFormShape received kind 'form' and matched no panel, so the
-    // editor rendered completely blank for every form.
     const {
         dom,
         module
@@ -109,11 +107,6 @@ test('a submit-only form shows the submit panel', () => {
 });
 
 test('an enumerated list filter collects its value select, not a missing input', () => {
-    // The bug: syncToField swaps the value input for a select on enum fields,
-    // so collectListFilters read .value on null and threw, killing save and
-    // the dirty-check snapshot on any list form filtered on a select field.
-    // The dom-stub has no real querySelectorAll, so the row is built by hand
-    // and the collection logic is what is under test.
     const {
         module
     } = loadFormsModule();
@@ -136,8 +129,6 @@ test('an enumerated list filter collects its value select, not a missing input',
 });
 
 test('the list filter value input carries the filter-value class', () => {
-    // The companion guard: the text-value input must wear the same class
-    // collectListFilters now queries, or the enum fix orphans the plain path.
     const {
         module
     } = loadFormsModule();
@@ -169,8 +160,6 @@ test('a list shows only the list panel and hides the action picker', () => {
 });
 
 test('enabling a second action repopulates its panel instead of leaving it blank', () => {
-    // The bug: toggling an action showed the panel but never rendered its
-    // pickers, so the revealed half could not be edited.
     const {
         dom,
         module
@@ -194,8 +183,7 @@ test('a form is never left with no action', () => {
 
 /* embed.js: which renderer a schema selects */
 
-// Mirrors the dispatch in embed.js. Kept in step by the assertion below, which
-// fails if the source stops branching this way.
+// Mirrors the dispatch in embed.js. Kept in step by the assertion below, which fails if the source stops branching this way.
 function chooseRenderer(form) {
     if (form.kind === 'list') return 'list';
     const actions = form.actions || ['submit'];
@@ -204,8 +192,6 @@ function chooseRenderer(form) {
 }
 
 test('the embed dispatches on kind then actions', () => {
-    // The bug: it branched on kind === 'lookup', which after the kind/mode split
-    // is never true, so every lookup rendered as an empty submit form.
     assert.strictEqual(chooseRenderer({
         kind: 'list'
     }), 'list');
@@ -290,7 +276,7 @@ test('every id the scripts read exists in the markup or is created at runtime', 
     const runtime = new Set(['toasts', 'sheetOverlay', 'tableName', 'pwCurrent', 'pwNew', 'fieldEditError',
         'bootstrap', 'fieldType'
     ]);
-    const present = new Set([...html.matchAll(/id='([\w-]+)'/g)].map(m => m[1]));
+    const present = new Set([...html.matchAll(/id=['"]([\w-]+)['"]/g)].map(m => m[1]));
     const missing = [...new Set([...js.matchAll(/getElementById\('([\w-]+)'\)/g)].map(m => m[1]))]
         .filter(id => !present.has(id) && !runtime.has(id) && !/^(fe|px|acc)/.test(id));
     assert.deepStrictEqual(missing, [], `ids read but never rendered: ${missing.join(', ')}`);
@@ -299,7 +285,7 @@ test('every id the scripts read exists in the markup or is created at runtime', 
 test('every inline handler in the markup is a defined function', () => {
     const html = readHtml();
     const js = readAll();
-    // Inline <script> blocks in the parts define handlers too, so they count.
+
     const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).join('\n');
     const defined = new Set([...(js + inline).matchAll(/function\s+([A-Za-z_$][\w$]*)/g)].map(m => m[1]));
     defined.add('toggleTheme');
@@ -309,8 +295,6 @@ test('every inline handler in the markup is a defined function', () => {
 });
 
 test('every script the markup loads exists', () => {
-    // The console is split across files that share one global scope, so a
-    // missing or misordered tag breaks the whole page rather than one feature.
     const html = readHtml();
     const missing = [...html.matchAll(/<script src='([^']+)'/g)]
         .map(m => m[1].replace(/^\//, ''))
@@ -319,9 +303,6 @@ test('every script the markup loads exists', () => {
 });
 
 test('the split scripts load in an order that satisfies their dependencies', () => {
-    // boot() runs at the end of auth.js and renders the current route, which may
-    // be the Forms page, so forms.js has to be parsed before it. The login page
-    // loads only ui.js + auth.js, so this scans the console parts alone.
     const consoleHtml = HTML_PARTS.map(read).join('\n');
     const order = [...consoleHtml.matchAll(/<script src='\/([^']+)'/g)].map(m => m[1]);
     assert.ok(order.indexOf('ui.js') === 0, 'ui.js must load first: every other file calls it');
@@ -331,28 +312,18 @@ test('the split scripts load in an order that satisfies their dependencies', () 
 });
 
 test('the scripts read the ids the API actually returns', () => {
-    // The bug: the model dropped PublicId in favour of Id, the C# was swept but
-    // the JS was not, so every `f.publicId` read undefined and the console
-    // fetched /api/forms/undefined.
     const js = readAll() + read('embed.js');
     const stale = [...js.matchAll(/\.(publicId|PublicId)\b/g)].map(m => m[0]);
     assert.deepStrictEqual(stale, [], `scripts still read a property the API no longer returns: ${stale.join(', ')}`);
 });
 
 test('an embed component class outranks the generic element rule', () => {
-    // The bug: `.baserow-embed button` (0,1,1) beat `.baserow-btn` (0,1,0), so
-    // the generic `border: 1px solid transparent` won and the pager buttons
-    // rendered borderless next to a bordered table.
     const css = read('embed.js');
     const componentClasses = [...new Set([...read('embed.js').matchAll(/className = '(baserow-[\w-]+)'/g)].map(m => m[1]))];
 
-    // Any element-level rule inside the embed raises the bar every component
-    // class has to clear.
     const hasElementRule = /\.baserow-embed (button|input|table)\s*\{/.test(css);
     if (!hasElementRule) return;
 
-    // Scoping under .baserow-embed is what clears the element rule; a rule
-    // scoped anywhere else does not help a button rendered inside the embed.
     const unscoped = componentClasses.filter(c =>
         (c === 'baserow-btn' || c === 'baserow-search') &&
         !new RegExp(`\\.baserow-embed \\.${c}(?![\\w-])`).test(css));
@@ -360,8 +331,6 @@ test('an embed component class outranks the generic element rule', () => {
 });
 
 test('a feature stylesheet never redefines a ui primitive', () => {
-    // The bug: app.css redefined .sheet with translateX(100%), loaded after
-    // ui.css, and pushed every sheet off screen.
     const primitives = [...read('ui.css').matchAll(/^\.([\w-]+)\s*\{/gm)].map(m => m[1]);
     const appRules = new Set([...read('app.css').matchAll(/^\s*\.([\w-]+)\s*\{/gm)].map(m => m[1]));
     const clashes = primitives.filter(p => appRules.has(p));
@@ -431,7 +400,7 @@ function loadApiNameGuard() {
 }
 
 test('a name is required while the table\'s API is published', () => {
-    // The bug: clearing the API name of a published table sent a save the API rejected.
+    // bug prevent: clearing the API name of a published table sent a save the API rejected.
     const module = loadApiNameGuard();
     assert.strictEqual(module.apiNameIsValid('', true), false, 'a published table with no API name was accepted');
 });
@@ -1174,15 +1143,12 @@ test('switching a button to link or cancel reveals its own extra field', () => {
     const btn = forms.slice(forms.indexOf("row.t === 'button'"), forms.indexOf("row.t === 'group'"));
     assert.ok(/row\.action === 'cancel'[\s\S]*?'href'/.test(btn), 'cancel never gets an href field');
     assert.ok(/row\.action === 'link'[\s\S]*?'hrefExpr'/.test(btn), 'link never gets an hrefExpr field');
-    // The bug this catches: dropdown() only ever writes row[prop] and never
-    // re-renders, so a plain dropdown() call here would leave the extra field stuck.
+    // The bug this catches: dropdown() only ever writes row[prop] and never re-renders, so a dropdown() call here would leave the extra field stuck.
     assert.ok(/actionSel\.onchange = \(\) => \{[\s\S]*?renderCanvas\(\)/.test(forms),
         'the action select does not re-render, so switching to link/cancel would not reveal its field');
 });
 
 test('a column-width select writes col.w, not stuck at the dead default', () => {
-    // The bug: emptyCol() always wrote w:12 and nothing ever edited col.w again,
-    // so the public renderer's flexGrow support was unreachable from the editor.
     const forms = read('forms.js');
     assert.ok(/widthSel\.onchange = \(\) => \{\s*col\.w = Number\(widthSel\.value\)/.test(forms),
         'the width picker no longer writes col.w');

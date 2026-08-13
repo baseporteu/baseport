@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <PackageId>Baseport.Client</PackageId>
+    <AssemblyTitle>Baseport.Client</AssemblyTitle>
+    <AssemblyDescription>Typed .NET client for the Baseport REST, auth, storage and realtime APIs.</AssemblyDescription>
+    <RootNamespace>Baseport.Client</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+</Project>

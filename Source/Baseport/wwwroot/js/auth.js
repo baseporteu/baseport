@@ -54,7 +54,6 @@ async function boot() {
     const accountName = document.getElementById('sidebarAccountName');
     if (accountName) accountName.textContent = username;
 
-    // Tables and settings came down with the page, so the router paints straight away.
     if (me.tables) currentTables = me.tables;
     if (me.settings) settingsData = {
         ...(settingsData || {}),
@@ -63,21 +62,17 @@ async function boot() {
 
     greet(username);
     applySidebarState();
-    // guarded: a stale cached tables.js without this function shouldn't throw here
     if (typeof initFieldTypeCombobox === 'function') initFieldTypeCombobox();
-    // The router paints from the URL, so a deep link survives a reload.
     await render();
 }
 
 function showLogin() {
-    // On the login page only: the shell no longer carries the card.
     const login = document.getElementById('loginScreen');
     if (login) login.hidden = false;
     const user = document.getElementById('loginUser');
     if (user) user.focus();
 }
 
-// Shown in place of the login card for a session still on the seeded password.
 function showChangePassword() {
     document.getElementById('loginForm').hidden = true;
     document.getElementById('forgotCard').hidden = true;

@@ -357,6 +357,13 @@ public static class AdminEndpoints
                 s.ApiDescription,
                 s.AllowedOrigins,
                 s.OpenApiEnabled,
+                s.PublicAuthEnabled,
+                s.PublicRegistrationEnabled,
+                s.AuthIssuer,
+                s.AuthTokenLifetimeSec,
+                s.AuthRefreshLifetimeDays,
+                authJwksPath = "/api/auth/v1/jwks.json",
+                authUiPath = "/auth/login",
                 s.PostgresEnabled,
                 s.PostgresPort,
                 s.PostgresBindAddress,
@@ -427,15 +434,52 @@ public static class AdminEndpoints
             if (body["openApiEnabled"] is JsonValue oav && oav.TryGetValue<bool>(out var openApiEnabled))
                 s.OpenApiEnabled = openApiEnabled;
 
+            if (body["publicAuthEnabled"] is JsonValue pav && pav.TryGetValue<bool>(out var publicAuthEnabled))
+                s.PublicAuthEnabled = publicAuthEnabled;
+            if (body["publicRegistrationEnabled"] is JsonValue prv && prv.TryGetValue<bool>(out var registrationEnabled))
+                s.PublicRegistrationEnabled = registrationEnabled;
+            if (body["authIssuer"] is JsonValue aiv && aiv.TryGetValue<string>(out var issuer))
+            {
+                var trimmed = (issuer ?? "").Trim();
+                if (UserTokens.IssuerProblem(trimmed) is { Length: > 0 } issuerProblem)
+                    return Results.BadRequest(new { errors = new[] { issuerProblem } });
+                s.AuthIssuer = trimmed;
+            }
+            if (body["authTokenLifetimeSec"] is JsonValue atv && atv.TryGetValue<int>(out var tokenLifetime))
+            {
+                if (tokenLifetime < UserTokens.MinTokenLifetimeSec || tokenLifetime > UserTokens.MaxTokenLifetimeSec)
+                    return Results.BadRequest(new { errors = new[] { $"The token lifetime must be between {UserTokens.MinTokenLifetimeSec} and {UserTokens.MaxTokenLifetimeSec} seconds." } });
+                s.AuthTokenLifetimeSec = tokenLifetime;
+            }
+            if (body["authRefreshLifetimeDays"] is JsonValue arv && arv.TryGetValue<int>(out var refreshLifetime))
+            {
+                if (refreshLifetime < UserTokens.MinRefreshLifetimeDays || refreshLifetime > UserTokens.MaxRefreshLifetimeDays)
+                    return Results.BadRequest(new { errors = new[] { $"The refresh lifetime must be between {UserTokens.MinRefreshLifetimeDays} and {UserTokens.MaxRefreshLifetimeDays} days." } });
+                s.AuthRefreshLifetimeDays = refreshLifetime;
+            }
+
             var providerError = ApplyProviderSettings(body, s);
             if (providerError is not null) return Results.BadRequest(new { errors = new[] { providerError } });
 
             await db.SaveChangesAsync();
+            UserTokens.Configure(s);
             return Results.Ok(new
             {
                 s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.BackupRetention, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled,
+                s.PublicAuthEnabled, s.PublicRegistrationEnabled, s.AuthIssuer, s.AuthTokenLifetimeSec, s.AuthRefreshLifetimeDays,
                 s.PostgresEnabled, s.PostgresPort, s.PostgresBindAddress, s.TdsEnabled, s.TdsPort, s.TdsBindAddress
             });
+        });
+
+        app.MapPost("/api/_admin/settings/auth-key", async (AppDbContext db) =>
+        {
+            var s = await db.SettingsAsync();
+            if (s == null) { s = new AppSettings(); db.AppSettings.Add(s); }
+
+            s.AuthSigningKey = UserTokens.Rotate();
+            await db.UserSessions.ExecuteDeleteAsync();
+            await db.SaveChangesAsync();
+            return Results.Ok(new { rotated = true });
         });
 
         // Read-only SQL console against the SQLite store.

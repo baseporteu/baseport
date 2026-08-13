@@ -33,6 +33,8 @@ public static class SchemaBootstrap
         }
         if (string.IsNullOrEmpty(settings.PreviewSecret))
             settings.PreviewSecret = Ids.NewShortId(48);
+        settings.AuthSigningKey = UserTokens.Initialize(settings.AuthSigningKey);
+        UserTokens.Configure(settings);
         await db.SaveChangesAsync();
 
         EmbedOrigins.Set(settings.AllowedOrigins);

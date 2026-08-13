@@ -18,7 +18,7 @@ public static class OpenApiSpec
             return (JsonNode)tag;
         }).ToArray());
 
-    // The author's markdown, or a plain sentence when they wrote none.
+    // The author's markdown, or a sentence when they wrote none.
     private static string Documentation(TableDefinition t)
     {
         if (!string.IsNullOrWhiteSpace(t.ApiDocumentation)) return t.ApiDocumentation;
