@@ -47,6 +47,20 @@ function renderQueryBreadcrumb() {
     el.innerHTML = currentQueryId ?
         `Editor <span class="muted">›</span> <strong>${escapeHtml(currentQueryName)}</strong>` :
         `<strong>${escapeHtml(currentQueryName || 'New Query')}</strong>`;
+    syncQueryActions();
+}
+
+function syncQueryActions() {
+    const el = document.getElementById('sqlQueryActions');
+    if (el) el.classList.toggle('hidden', !currentQueryId);
+}
+
+function renameCurrentQuery() {
+    if (currentQueryId) renameQuery({ id: currentQueryId, name: currentQueryName });
+}
+
+function deleteCurrentQuery() {
+    if (currentQueryId) deleteQuery({ id: currentQueryId, name: currentQueryName });
 }
 
 function clearSqlOutput() {

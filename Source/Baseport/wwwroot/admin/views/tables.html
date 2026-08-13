@@ -6,7 +6,9 @@
                             <p class='page-sub'>Define your data model: tables, fields and validation.</p>
                         </div>
                         <div class='page-actions'>
+                            <button class='btn btn-outline' onclick='openProxySheet()'>Proxy import</button>
                             <button class='btn btn-outline' onclick='loadTables().then(() => render())'>Refresh</button>
+                            <button class='btn' onclick='newTable()'>New table</button>
                         </div>
                     </div>
 
@@ -27,7 +29,7 @@
                             <tbody id='tablesRows'></tbody>
                         </table>
                     </div>
-                    <p id='tablesEmpty' class='muted empty-hint hidden'>No tables yet. Create one in the sidebar.</p>
+                    <p id='tablesEmpty' class='muted empty-hint hidden'>No tables yet.</p>
                 </div>
 
                 <div id='tableDetail' class='hidden'>
@@ -106,7 +108,7 @@
                                 <label>API configuration</label>
                                 <p class='muted'>Endpoint name, OpenAPI visibility, documentation and allowed methods.</p>
                             </div>
-                            <button class='btn btn-ghost btn-sm' type='button' onclick='openEndpointSheet()'>Configure</button>
+                            <button class='btn btn-outline btn-sm' type='button' onclick='openEndpointSheet()'>Configure</button>
                         </div>
                         <div id='proxySettings' class='hidden'>
                             <div class='setting-row'>

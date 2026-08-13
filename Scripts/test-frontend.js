@@ -78,7 +78,7 @@ function loadFormsModule() {
         applyFormShape: null,
         normalizeActions: null
     };
-    eval(src + '\n;module.applyFormShape = applyFormShape; module.normalizeActions = normalizeActions; module.applyKindConfig = applyKindConfig;');
+    eval(src + '\n;module.applyFormShape = applyFormShape; module.normalizeActions = normalizeActions; module.applyKindConfig = applyKindConfig; module.filterRow = filterRow; module.collectListFilters = collectListFilters; module.setTableFields = (f) => { formTableFields = f; };');
     return {
         dom,
         module
@@ -106,6 +106,45 @@ test('a submit-only form shows the submit panel', () => {
     module.applyFormShape('form', ['submit']);
     assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'));
     assert.ok(dom.byId.kindLookup.classList.contains('hidden'));
+});
+
+test('an enumerated list filter collects its value select, not a missing input', () => {
+    // The bug: syncToField swaps the value input for a select on enum fields,
+    // so collectListFilters read .value on null and threw, killing save and
+    // the dirty-check snapshot on any list form filtered on a select field.
+    // The dom-stub has no real querySelectorAll, so the row is built by hand
+    // and the collection logic is what is under test.
+    const {
+        module
+    } = loadFormsModule();
+    const row = global.document.createElement('div');
+    row.className = 'filter-row';
+    const field = global.document.createElement('select');
+    field.value = 'status';
+    const op = global.document.createElement('select');
+    op.value = 'eq';
+    const val = global.document.createElement('select');
+    val.className = 'filter-value';
+    val.value = 'open';
+    row.append(field, op, val);
+    row.querySelector = (sel) => (sel === '.filter-value' ? val : null);
+    row.querySelectorAll = () => [field, op];
+    global.document.querySelectorAll = (sel) => (sel === '#listFilters .filter-row' ? [row] : []);
+    assert.deepStrictEqual(module.collectListFilters(),
+        [{ field: 'status', op: 'eq', value: 'open' }],
+        'an enum filter value select was not collected');
+});
+
+test('the list filter value input carries the filter-value class', () => {
+    // The companion guard: the text-value input must wear the same class
+    // collectListFilters now queries, or the enum fix orphans the plain path.
+    const {
+        module
+    } = loadFormsModule();
+    module.setTableFields([{ name: 'note', dataType: 'text' }]);
+    const row = module.filterRow({ field: 'note', op: 'contains', value: '' }, 0);
+    assert.ok(row.children.some((c) => (c.className || '').split(/\s+/).includes('filter-value')),
+        'the text value input lacks the filter-value class');
 });
 
 test('a form with both actions shows both panels', () => {
@@ -248,8 +287,8 @@ test('an explicit theme choice survives a reload and outranks the system', () =>
 test('every id the scripts read exists in the markup or is created at runtime', () => {
     const html = readHtml();
     const js = readAll();
-    const runtime = new Set(['toasts', 'sheetOverlay', 'tableName', 'createMenu', 'pwCurrent', 'pwNew', 'fieldEditError',
-        'bootstrap', 'createTableBtn', 'fieldType'
+    const runtime = new Set(['toasts', 'sheetOverlay', 'tableName', 'pwCurrent', 'pwNew', 'fieldEditError',
+        'bootstrap', 'fieldType'
     ]);
     const present = new Set([...html.matchAll(/id='([\w-]+)'/g)].map(m => m[1]));
     const missing = [...new Set([...js.matchAll(/getElementById\('([\w-]+)'\)/g)].map(m => m[1]))]
@@ -764,14 +803,246 @@ test('an account carries a role, and the console names it the way the API does',
     assert.ok(!/isAdmin/.test(accounts), 'the isAdmin flag came back');
 });
 
-test('create controls live in the page or its toolbar, not the sidebar', () => {
+test('create controls live in the page header, not the sidebar', () => {
     const sidebar = read('js/sidebar.js');
     assert.ok(!/action: \(\) => ui\.button\('New'/.test(sidebar), 'a New button crept back into the sidebar');
     const sql = read('admin/views/sql.html');
-    assert.ok(!sql.includes('<div class=\'page-actions\'>'), 'the sql header carries no actions');
-    assert.ok(/onclick='newQuery\(\)'[^>]*>New query/.test(sql), 'the sql toolbar lost its new-query button');
-    assert.ok(/onclick='saveQuery\(\)'[\s\S]*>Save/.test(sql), 'the sql toolbar lost its save button');
-    assert.ok(/onclick='runSql\(\)'[\s\S]*>Execute/.test(sql), 'the sql toolbar lost its execute button');
+    assert.ok(/<div class='page-actions'>/.test(sql), 'the sql header carries no actions');
+    assert.ok(/onclick='newQuery\(\)'[^>]*>New query/.test(sql), 'the sql header lost its new-query button');
+    assert.ok(/onclick='saveQuery\(\)'[\s\S]*>Save/.test(sql), 'the sql header lost its save button');
+    assert.ok(/onclick='runSql\(\)'[\s\S]*>Execute/.test(sql), 'the sql header lost its execute button');
+    assert.ok(!/class='sql-actions'/.test(sql), 'the sql actions still live in the card bar');
+    assert.ok(/onclick='renameCurrentQuery\(\)'[\s\S]*>Rename/.test(sql),
+        'Rename is not in the sql header actions');
+    assert.ok(/title='Delete query'[^>]*onclick='deleteCurrentQuery\(\)'/.test(sql),
+        'Delete is not an icon-only action in the sql header');
+    assert.ok(!/deleteCurrentQuery\(\)'[\s\S]*>Delete\b/.test(sql),
+        'Delete still carries its text label');
+    assert.ok(!/actions: \[/.test(sidebar), 'the subbar still carries per-item action buttons');
+});
+
+test('the console chrome is one sidebar and a topbar, not a rail and a panel', () => {
+    // The bug it guards: a second rail-and-panel structure surviving next to the
+    // merged sidebar, so the console boots two fixed columns and the workspace
+    // is squeezed off the right edge.
+    const shell = read('admin/_shell.html');
+    const footer = read('admin/_footer.html');
+    const sidebar = read('js/sidebar.js');
+    assert.ok(/id='appShell'[\s\S]*class='sidebar'/.test(shell), 'the shell lost the merged sidebar');
+    assert.ok(shell.includes("class='topbar'"), 'the shell has no topbar');
+    assert.ok(!shell.includes("class='rail'"), 'the icon rail survived the merge');
+    assert.ok(!shell.includes('sidebarAdd'), 'the sidebar quick-add survived the merge');
+    assert.ok(!shell.includes('sidebar-context'), 'the per-section list is still glued to the sidebar');
+    assert.ok(/<main class='main'>[\s\S]*id='subbar'[\s\S]*class='main-content'/.test(shell),
+        'the per-section list is not a left subbar inside main, ahead of the content');
+    assert.ok(/<\/div>\s*<\/main>\s*<\/div>\s*<\/div>/s.test(footer),
+        'the footer no longer closes the main-content wrapper, the workspace and the shell');
+    assert.ok(!/createTable|toggleCreateMenu|closeCreateMenu/.test(readAll()), 'a create-menu handler survived in a script');
+});
+
+test('a new table is started from the overview, not the sidebar', () => {
+    const tables = read('admin/views/tables.html');
+    const core = read('js/core.js');
+    assert.ok(/onclick='newTable\(\)'[^>]*>New table/.test(tables), 'the tables overview lost its New table button');
+    assert.ok(/function\s+newTable/.test(core), 'newTable is gone');
+    assert.ok(!/createMenu/.test(read('js/sidebar.js')), 'the sidebar still builds a create menu');
+});
+
+test('the sql query actions show only while a saved query is open', () => {
+    // The bug it guards: Rename and Delete lived as icon buttons in the subbar,
+    // so the destructive action never reached the page header and a mid-size
+    // screen hid it entirely. The header now carries them, gated on an open
+    // query so a blank editor never offers Delete.
+    const { install } = require('./dom-stub');
+    install(['sqlQueryName', 'sqlQueryActions', 'sqlInput', 'sqlStatus', 'sqlResult', 'sqlNoData']);
+    global.escapeHtml = (s) => String(s == null ? '' : s);
+    const src = read('js/sql.js');
+    eval(src + '\n;global.__sql = { applyQuery, clearQuery };');
+    const actions = global.document.getElementById('sqlQueryActions');
+    assert.ok(/id='sqlQueryActions'[\s\S]*class='hidden'/.test(read('admin/views/sql.html')),
+        'query actions do not start hidden in the markup');
+    actions.classList.add('hidden');
+    global.__sql.applyQuery({ id: 'q1', name: 'Counts', sql: 'select 1' });
+    assert.ok(!actions.classList.contains('hidden'), 'query actions hidden while a query is open');
+    global.__sql.clearQuery();
+    assert.ok(actions.classList.contains('hidden'), 'query actions visible again after clearing');
+});
+
+test('the form editor header carries Delete, hidden for a new form', () => {
+    // The bug it guards: the form editor had Preview/Cancel/Publish but no
+    // Delete, so the destructive action only lived in the index row actions and
+    // an open editor could not remove the form it was editing. It hides on the
+    // create flow, where there is nothing to delete yet.
+    const forms = read('admin/views/forms.html');
+    assert.ok(/class='[^']*hidden[^']*' id='formDeleteBtn' onclick='deleteCurrentForm\(\)'[\s\S]*>Delete/.test(forms),
+        'the form editor header lost its Delete button');
+    const formsJs = read('forms.js');
+    assert.ok(/function\s+deleteCurrentForm/.test(formsJs), 'deleteCurrentForm is gone');
+    assert.ok(/getElementById\('formDeleteBtn'\)\.classList\.remove\('hidden'\)/.test(formsJs),
+        'Delete is not revealed when editing');
+    assert.ok(/getElementById\('formDeleteBtn'\)\.classList\.add\('hidden'\)/.test(formsJs),
+        'Delete is not hidden for a new form');
+    const tables = read('admin/views/tables.html');
+    assert.ok(!/btn-ghost/.test(tables), 'the endpoint Configure button still uses the ghost variant');
+});
+
+test('the forms overview row carries one Open button, like the tables list', () => {
+    // The bug it guards: the forms rows shipped Preview, Edit and Delete while
+    // the tables rows carried a single Open, so the two indexes read as two
+    // different lists. Edit is Open now, and Delete/Preview live in the editor
+    // header. The fragment is C#, read outside wwwroot.
+    const fragments = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'Api', 'FragmentEndpoints.cs'), 'utf8');
+    const formsRow = fragments.slice(fragments.indexOf("fragments/forms"), fragments.indexOf("fragments/accounts"));
+    assert.ok(/class=\\"row-link\\" onclick=\\"navigate\('\/forms\//.test(formsRow),
+        'the forms row is not a row-link that navigates to the editor');
+    assert.ok(/btn-ghost btn-sm[^>]*>Open<\/button>/.test(formsRow),
+        'the forms row no longer carries the single Open button');
+    assert.ok(!/Html\.Button/.test(formsRow),
+        'Preview, Edit and Delete still sit in the forms row actions');
+    const tablesRow = fragments.slice(fragments.indexOf("fragments/tables"), fragments.indexOf("fragments/records"));
+    assert.ok(/btn-ghost btn-sm[^>]*>Open<\/button>/.test(tablesRow),
+        'the tables row Open button is not the same pattern');
+    assert.ok(!/function\s+selectForm/.test(read('forms.js')),
+        'selectForm survived as a dead navigation alias');
+});
+
+test('page-header actions order secondaries left and the primary rightmost', () => {
+    // The bug it guards: the tables overview led with the primary and trailed
+    // with Refresh while auth and logs lead with Refresh, so two pages read
+    // left-to-right as opposites. Every header now puts the primary action
+    // rightmost, with outlines (Refresh etc.) to its left.
+    const tables = read('admin/views/tables.html');
+    const sql = read('admin/views/sql.html');
+    const actions = (src) => src.slice(src.indexOf("class='page-actions'"));
+    const after = (src, a, b) => src.indexOf(a) > src.indexOf(b);
+    assert.ok(after(actions(tables), 'Refresh', 'Proxy import'), 'tables: Proxy import must sit left of Refresh');
+    assert.ok(after(actions(tables), 'New table', 'Refresh'), 'tables: Refresh must sit left of the primary New table');
+    assert.ok(after(actions(sql), 'Save', 'New query'), 'sql: New query must sit left of Save');
+    assert.ok(after(actions(sql), 'Execute', 'Save'), 'sql: Save must sit left of the primary Execute');
+    const saved = actions(sql).slice(actions(sql).indexOf("id='sqlQueryActions'"));
+    assert.ok(after(saved, 'Rename', 'Delete query'), 'sql: the delete icon must sit left of Rename');
+    assert.ok(after(saved, 'Save', 'Rename'), 'sql: Rename must sit left of Save');
+});
+
+test('the forms subbar lists every form flat under All forms', () => {
+    // The bug it guards: the Forms subbar pinning a table-name header between
+    // groups, so the rail read as a tree and the empty group label rendered as
+    // a stray blank line. It is a flat list sorted by title, like the tables
+    // subbar sorts by name.
+    const { install } = require('./dom-stub');
+    install([]);
+    global.ui = {
+        el: (tag, c) => {
+            const e = global.document.createElement(tag);
+            if (c) e.className = c;
+            return e;
+        }
+    };
+    global.navigate = () => {};
+    global.routePath = () => '/forms';
+    global.formEditingId = 'form-search';
+    global.formsAll = [
+        { id: 'form-search', title: 'Customers - Search', kind: 'form', tableName: 'Customers' },
+        { id: 'form-overview', title: 'Orders - Overview status open', kind: 'list', tableName: 'Orders' },
+        { id: 'form-create', title: 'Customers - Create new', kind: 'form', tableName: 'Customers' },
+        { id: 'form-worklist', title: 'Orders - Worklist', kind: 'list', tableName: 'Orders' },
+    ];
+    const src = read('js/sidebar.js');
+    eval(src + '\n;global.__sidebar = { SIDEBARS, sidebarItem, OBJECT_ICONS };');
+    const items = global.__sidebar.SIDEBARS.forms.items();
+    const structure = items.map((i) => i.label);
+    assert.deepStrictEqual(structure, [
+        'All forms', 'Customers - Create new', 'Customers - Search',
+        'Orders - Overview status open', 'Orders - Worklist',
+    ], 'forms are not a flat, title-sorted list');
+    assert.ok(!items.some((i) => i.header), 'a group header came back');
+    assert.ok(!src.includes('subbar-group'), 'sidebarItem still builds group headers');
+    assert.strictEqual(items[0].icon, global.__sidebar.OBJECT_ICONS.folder,
+        'All forms does not carry the folder icon');
+    assert.strictEqual(items.find((i) => i.label === 'Orders - Overview status open').icon,
+        global.__sidebar.OBJECT_ICONS.list, 'a list form does not carry the list icon');
+    assert.strictEqual(items.find((i) => i.label === 'Customers - Search').icon,
+        global.__sidebar.OBJECT_ICONS.form, 'a submit form does not carry the form icon');
+});
+
+test('a subbar pill carries the original full name as its tooltip', () => {
+    // The bug it guards: the subbar pill ellipsizes long names and a hover had
+    // nothing, so a stored title and its truncated shell looked identical. The
+    // tooltip is the browser's, via the title attribute: no toast spam on every
+    // hover, the full name appears when you rest on the pill.
+    const { install } = require('./dom-stub');
+    install([]);
+    global.ui = {
+        el: (tag, cls, attrs) => {
+            const n = { tagName: tag, className: cls, ...attrs, children: [], append(c) { this.children.push(c); } };
+            return n;
+        },
+    };
+    const src = read('js/sidebar.js');
+    eval(src + '\n;global.__sidebar = { SIDEBARS, sidebarItem, OBJECT_ICONS };');
+    const pill = global.__sidebar.sidebarItem({ label: 'Orders - Overview status open', badge: 'List', onSelect: () => {} });
+    assert.strictEqual(pill.title, 'Orders - Overview status open',
+        'the pill does not carry the original name as its tooltip');
+    assert.ok(!pill.onmouseenter, 'a hover handler still toasts the name');
+});
+
+test('the tables subbar marks proxy tables and leads with the table icon', () => {
+    // The bug it guards: the Tables subbar rendering plain text names, so a
+    // stored table and a forwarded proxy table were indistinguishable in the
+    // rail. Each object carries the table icon; proxies are badged.
+    const { install } = require('./dom-stub');
+    install([]);
+    global.ui = {
+        el: (tag, c) => {
+            const e = global.document.createElement(tag);
+            if (c) e.className = c;
+            return e;
+        }
+    };
+    global.navigate = () => {};
+    global.currentTablePublicId = 't-customers';
+    global.currentTables = [
+        { id: 't-orders', name: 'Orders', isProxy: false },
+        { id: 't-customers', name: 'Customers', isProxy: false },
+        { id: 't-portway', name: 'Portway', isProxy: true },
+    ];
+    const src = read('js/sidebar.js');
+    eval(src + '\n;global.__sidebar = { SIDEBARS, OBJECT_ICONS };');
+    const items = global.__sidebar.SIDEBARS.tables.items();
+    assert.deepStrictEqual(items.map((i) => i.label),
+        ['All tables', 'Customers', 'Orders', 'Portway'], 'tables are not name-sorted');
+    assert.strictEqual(items[0].active, false, 'All tables is not inactive while a table is open');
+    assert.strictEqual(items.find((i) => i.label === 'Customers').active, true,
+        'the open table is not marked active');
+    assert.strictEqual(items.find((i) => i.label === 'Portway').badge, 'proxy',
+        'the proxy table is not badged');
+    assert.strictEqual(items[0].icon, global.__sidebar.OBJECT_ICONS.folder,
+        'All tables does not carry the folder icon');
+    assert.ok(items.slice(1).every((i) => i.icon === global.__sidebar.OBJECT_ICONS.table),
+        'a table item lacks the table icon');
+});
+
+test('the topbar holds the API reference and the account popout stays open', () => {
+    // The bug it guards: the account trigger calling toggleAccountMenu() without
+    // the event, so stopPropagation never ran and the document click listener
+    // closed the popout in the same tick it opened — the menu could never show.
+    const shell = read('admin/_shell.html');
+    assert.ok(/class='topbar-actions'[\s\S]*window\.open\('\/docs'/.test(shell),
+        'the topbar no longer links the API reference');
+    assert.ok(/onclick='toggleAccountMenu\(event\)'/.test(shell),
+        'the account trigger drops the click event, so the popout closes instantly');
+    assert.ok(/id='accountMenu'[\s\S]*onclick='signOut\(\)'/.test(shell),
+        'the account popout lost its Sign out action');
+});
+
+test('the sidebar collapse persists and the breadcrumb names the open record', () => {
+    const sidebar = read('js/sidebar.js');
+    const core = read('js/core.js');
+    assert.ok(/localStorage\.setItem\('baseport\.sidebar'/.test(sidebar), 'the collapse state is not persisted');
+    assert.ok(/function\s+toggleSidebar/.test(sidebar), 'toggleSidebar is gone');
+    assert.ok(/function\s+applySidebarState/.test(sidebar), 'applySidebarState is gone');
+    assert.ok(/function\s+renderBreadcrumb/.test(sidebar), 'renderBreadcrumb is gone');
+    assert.ok(core.includes('renderBreadcrumb(route)'), 'the router never paints the breadcrumb');
 });
 
 test('the sql editor is a CodeMirror editor and every value goes through it', () => {

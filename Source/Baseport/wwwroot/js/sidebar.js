@@ -1,25 +1,38 @@
-/* one sidebar shell, contents per section; add new nav items here rather than growing their own inner nav */
+/* one shell: the section rail in the sidebar and the per-section subbar above the content share it. Section buttons come from SECTIONS, subbar contents from SIDEBARS. */
+
+const SECTION_ICONS = {
+    tables: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M3 9h18M9 21V9'/></svg>",
+    forms: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><rect x='4' y='3' width='16' height='18' rx='2'/><path d='M8 8h8M8 12h8M8 16h4'/></svg>",
+    sql: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><path d='M17 3a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6M3 21l9-9M12.2 6.3 11 5l-3.5 3.5 1.2 1.2z'/><path d='M5 3l1.5 1.5M5 3 3.5 4.5M12.8 17.3 14 18.6l3.5-3.5-1.2-1.2zM14.5 12.5h2M17 21l-1.5-1.5M17 21l1.5-1.5'/></svg>",
+    schema: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><circle cx='12' cy='5' r='2'/><circle cx='5' cy='19' r='2'/><circle cx='19' cy='19' r='2'/><path d='M12 7v6M5 17l2.5-4M19 17l-2.5-4M12 13l-4.5 4M12 13l4.5 4'/></svg>",
+    auth: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><path d='M5 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.85'/></svg>",
+    logs: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><path d='m4 16 6-7 5 5 5-6'/><path d='M15 14a1 1 0 1 0 2 0 1 1 0 1 0-2 0M9 9a1 1 0 1 0 2 0 1 1 0 1 0-2 0M3 16a1 1 0 1 0 2 0 1 1 0 1 0-2 0M19 8a1 1 0 1 0 2 0 1 1 0 1 0-2 0'/></svg>",
+    settings: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>",
+};
+
+const OBJECT_ICONS = {
+    folder: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 3.9A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z'/></svg>",
+    table: SECTION_ICONS.tables,
+    form: SECTION_ICONS.forms,
+    list: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M8 9h8M8 13h8M8 17h4'/></svg>",
+    query: SECTION_ICONS.sql,
+};
+
+const SECTIONS = [
+    ['tables', 'Tables'],
+    ['forms', 'Forms'],
+    ['sql', 'Query'],
+    ['schema', 'Schema'],
+    ['auth', 'Users'],
+    ['logs', 'Logs'],
+    ['settings', 'Settings'],
+];
 
 const SIDEBARS = {
     tables: {
-        title: 'Tables',
-        empty: 'No tables yet.',
-        add: () => {
-            const wrap = ui.el('div', 'nav-add');
-            wrap.innerHTML = `<input type='text' id='tableName' class='input' placeholder='New table name'>
-                        <div class='nav-add-btn'>
-                            <button class='btn btn-outline btn-sm' id='createTableBtn' onclick='createTable()' title='Create table'>+</button>
-                            <button class='btn btn-outline btn-sm' onclick='toggleCreateMenu(event)' title='More create options'>&#9662;</button>
-                            <div id='createMenu' class='create-menu hidden'>
-                                <button type='button' onclick='createTable()'>Create empty table</button>
-                                <button type='button' onclick='openProxySheet()'>Proxy from OpenAPI…</button>
-                            </div>
-                        </div>`;
-            return wrap;
-        },
         items: () => [{
             label: 'All tables',
-            pinned: true,
+            icon: OBJECT_ICONS.folder,
             active: !currentTablePublicId,
             onSelect: () => navigate('/tables'),
         }, ].concat(
@@ -27,6 +40,7 @@ const SIDEBARS = {
             .sort((a, b) => a.name.localeCompare(b.name))
             .map((t) => ({
                 label: t.name,
+                icon: OBJECT_ICONS.table,
                 badge: t.isProxy ? 'proxy' : null,
                 active: t.id === currentTablePublicId,
                 onSelect: () => navigate(`/tables/${t.id}`),
@@ -35,56 +49,41 @@ const SIDEBARS = {
     },
 
     forms: {
-        title: 'Forms',
-        empty: 'No forms yet.',
-        items: () => [{
-            label: 'All forms',
-            pinned: true,
-            active: !formEditingId && routePath() === '/forms',
-            onSelect: () => navigate('/forms'),
-        }, ].concat(
-            (typeof formsAll === 'undefined' ? [] : formsAll)
-            .slice()
-            .sort((a, b) => (a.title || '').localeCompare(b.title || ''))
-            .map((f) => ({
+        items: () => {
+            const forms = (typeof formsAll === 'undefined' ? [] : formsAll).slice()
+                .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+            return [{
+                label: 'All forms',
+                icon: OBJECT_ICONS.folder,
+                active: !formEditingId && routePath() === '/forms',
+                onSelect: () => navigate('/forms'),
+            }].concat(forms.map((f) => ({
                 label: f.title || 'Untitled form',
+                icon: f.kind === 'list' ? OBJECT_ICONS.list : OBJECT_ICONS.form,
                 badge: f.kind === 'list' ? 'List' : 'Form',
                 active: f.id === formEditingId,
                 onSelect: () => navigate(`/forms/${f.id}`),
-            })),
-        ),
+            })));
+        },
     },
 
     sql: {
-        title: 'Queries',
-        empty: 'No saved queries yet.',
         items: () => [{
             label: 'All queries',
-            pinned: true,
+            icon: OBJECT_ICONS.folder,
             active: !currentQueryId,
             onSelect: () => navigate('/sql'),
         }, ].concat(
             savedQueries.map((q) => ({
                 label: q.name,
-                sub: q.lastExecutedAt ? `Executed ${new Date(q.lastExecutedAt).toLocaleDateString()}` : null,
+                icon: OBJECT_ICONS.query,
                 active: q.id === currentQueryId,
                 onSelect: () => navigate(`/sql/${q.id}`),
-                actions: [{
-                    icon: pencilIcon,
-                    title: 'Rename',
-                    run: () => renameQuery(q)
-                }, {
-                    icon: trashIcon,
-                    title: 'Delete',
-                    danger: true,
-                    run: () => deleteQuery(q)
-                }, ],
             })),
         ),
     },
 
     settings: {
-        title: 'Settings',
         items: () => [
             ['host', 'Host'],
             ['auth', 'Authentication'],
@@ -98,73 +97,63 @@ const SIDEBARS = {
             onSelect: () => navigate(`/settings/${page}`),
         })),
     },
+
+    schema: { items: () => [] },
+    auth: { items: () => [] },
+    logs: { items: () => [] },
 };
 
+// Section buttons render once; the rail and the topbar toggle both need them.
+function renderSectionNav() {
+    const nav = document.getElementById('sectionNav');
+    if (!nav || nav.dataset.rendered) return;
+    nav.dataset.rendered = '1';
+    SECTIONS.forEach(([section, label]) => {
+        const b = ui.el('button', 'side-nav-btn', {
+            type: 'button',
+            title: label
+        });
+        b.dataset.section = section;
+        b.innerHTML = SECTION_ICONS[section] + `<span class='side-nav-label'>${label}</span>`;
+        b.onclick = () => goSection(section);
+        nav.append(b);
+    });
+}
+
 function renderSidebar(section) {
-    const spec = SIDEBARS[section];
-    const sidebar = document.getElementById('sidebar');
-    sidebar.hidden = !spec;
-    if (!spec) return;
-
-    document.getElementById('sidebarTitle').innerText = spec.title;
-
-    const action = document.getElementById('sidebarAction');
-    action.innerHTML = '';
-    if (spec.action) action.append(spec.action());
-
-    const add = document.getElementById('sidebarAdd');
-    add.innerHTML = '';
-    if (spec.add) add.append(spec.add());
+    const spec = SIDEBARS[section] || SIDEBARS.tables;
 
     const items = spec.items ? spec.items() : [];
-    const list = document.getElementById('sidebarList');
-    list.innerHTML = '';
-    items.forEach((item) => list.append(sidebarItem(item)));
-
-    const empty = document.getElementById('sidebarEmpty');
-    empty.classList.toggle('hidden', items.length > 0 || !spec.empty);
-    empty.innerText = spec.empty || '';
+    const bar = document.getElementById('subbar');
+    bar.innerHTML = '';
+    items.forEach((item) => bar.append(sidebarItem(item)));
+    bar.hidden = items.length === 0;
 }
 
 function sidebarItem({
     label,
-    sub,
+    icon,
     badge,
     active,
-    onSelect,
-    actions,
-    pinned
+    onSelect
 }) {
-    const li = ui.el('li', 'nav-item' + (pinned ? ' nav-item-pinned' : ''));
-
-    const button = ui.el('button', 'nav-link' + (active ? ' active' : ''), {
+    const pill = ui.el('button', 'subbar-pill' + (active ? ' active' : ''), {
         type: 'button'
     });
-    button.append(ui.el('span', 'nav-link-text', {
-        textContent: label
+    if (icon) pill.append(ui.el('span', 'subbar-icon', {
+        innerHTML: icon
     }));
-    if (badge) button.append(ui.el('span', 'tag', {
+    const text = ui.el('span', 'subbar-pill-text', {
+        textContent: label
+    });
+    pill.append(text);
+    if (badge) pill.append(ui.el('span', 'tag', {
         textContent: badge
     }));
-    if (sub) button.append(ui.el('small', 'nav-link-sub', {
-        textContent: sub
-    }));
-    if (onSelect) button.onclick = onSelect;
-    li.append(button);
-
-    (actions || []).forEach((a) => {
-        const b = ui.el('button', 'icon-btn' + (a.danger ? ' danger' : ''), {
-            type: 'button',
-            title: a.title
-        });
-        b.innerHTML = a.icon;
-        b.onclick = (ev) => {
-            ev.stopPropagation();
-            a.run();
-        };
-        li.append(b);
-    });
-    return li;
+    if (onSelect) pill.onclick = onSelect;
+    // The pill ellipsizes; the title tooltip reveals the original full name.
+    pill.title = label;
+    return pill;
 }
 
 // Repaints the sidebar when the section it is showing owns the changed data.
@@ -172,20 +161,65 @@ function refreshSidebar(section) {
     if (currentSection === section) renderSidebar(section);
 }
 
-function toggleRail() {
-    const rail = document.getElementById('rail');
-    rail.classList.toggle('expanded');
-    try {
-        localStorage.setItem('baserowRailExpanded', rail.classList.contains('expanded') ? '1' : '0');
-    } catch (e) {}
+function sectionLabel(section) {
+    const s = SECTIONS.find(([s]) => s === section);
+    return s ? s[1] : section;
 }
 
-function applyRailState() {
-    const rail = document.getElementById('rail');
-    if (!rail) return;
-    let expanded = false;
-    try {
-        expanded = localStorage.getItem('baserowRailExpanded') === '1';
-    } catch (e) {}
-    rail.classList.toggle('expanded', expanded);
+// The top header names where you are: section, then the record or pane you have open.
+function renderBreadcrumb(route) {
+    const el = document.getElementById('breadcrumb');
+    if (!el) return;
+    const crumbs = [sectionLabel(route.section)];
+    if (route.section === 'tables' && route.id) {
+        const t = currentTables.find((t) => t.id === route.id);
+        crumbs.push(t ? t.name : 'Table');
+    } else if (route.section === 'forms' && route.id === 'new') {
+        crumbs.push('New form');
+    } else if (route.section === 'forms' && route.id) {
+        const f = (typeof formsAll === 'undefined' ? [] : formsAll).find((f) => f.id === route.id);
+        crumbs.push(f ? (f.title || 'Untitled form') : 'Form');
+    } else if (route.section === 'sql' && route.id) {
+        const q = savedQueries.find((q) => q.id === route.id);
+        crumbs.push(q ? q.name : 'Query');
+    } else if (route.section === 'settings') {
+        const page = SIDEBARS.settings.items().find((p) => p.active);
+        crumbs.push(page ? page.label : 'Host');
+    }
+    el.innerHTML = crumbs.map((c) => `<span class='crumb'>${ui.escape(c)}</span>`).join('');
 }
+
+function toggleSidebar() {
+    const shell = document.getElementById('appShell');
+    const collapsed = shell.classList.toggle('sidebar-collapsed');
+    try {
+        localStorage.setItem('baseport.sidebar', collapsed ? '1' : '0');
+    } catch (e) {}
+    document.querySelectorAll('[aria-expanded]').forEach((el) =>
+        el.setAttribute('aria-expanded', String(!collapsed)),
+    );
+}
+
+function applySidebarState() {
+    const shell = document.getElementById('appShell');
+    if (!shell) return;
+    let collapsed = false;
+    try {
+        collapsed = localStorage.getItem('baseport.sidebar') === '1';
+    } catch (e) {}
+    shell.classList.toggle('sidebar-collapsed', collapsed);
+    document.querySelectorAll('[aria-expanded]').forEach((el) =>
+        el.setAttribute('aria-expanded', String(!collapsed)),
+    );
+}
+
+function toggleAccountMenu(e) {
+    if (e) e.stopPropagation();
+    document.getElementById('accountMenu')?.classList.toggle('hidden');
+}
+
+function closeAccountMenu() {
+    document.getElementById('accountMenu')?.classList.add('hidden');
+}
+
+document.addEventListener('click', () => closeAccountMenu());

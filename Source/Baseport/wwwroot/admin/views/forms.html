@@ -3,7 +3,7 @@
                     <div class='page-header'>
                         <div>
                             <h1>Forms</h1>
-                            <p class='page-sub'>Submit, lookup and list builders. A form is bound to a table but lives on its own, publish it anywhere with one script tag.</p>
+                            <p class='page-sub'>Embed your data through forms or lists anywhere.</p>
                         </div>
                         <div class='page-actions'>
                             <select id='formsFilterKind' class='input' onchange='renderFormsList()'>
@@ -38,6 +38,7 @@
                             <p class='page-sub' id='formEditorHint'>Pick a table and a kind, then configure what the form does.</p>
                         </div>
                         <div class='page-actions'>
+                            <button class='btn btn-outline btn-danger hidden' id='formDeleteBtn' onclick='deleteCurrentForm()'>Delete</button>
                             <button class='btn btn-outline hidden' id='formPreviewBtn' onclick='previewCurrentForm()'>Preview ↗</button>
                             <button class='btn btn-outline' onclick='cancelFormEditor()'>Cancel</button>
                             <button class='btn' id='saveFormBtn' onclick='saveForm(this)'>Publish form</button>

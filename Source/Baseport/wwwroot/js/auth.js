@@ -45,13 +45,13 @@ async function boot() {
     }
     document.getElementById('appShell').hidden = false;
 
-    const avatar = document.getElementById('railAvatar');
+    const avatar = document.getElementById('sidebarAvatar');
     // The bootstrap payload nests the account under `user`; the /api/auth/me reply is flat and capitalised. Read both shapes.
     const username = me.username || me.user?.username || me.Username || '';
     avatar.innerText = (username || 'A').slice(0, 1).toUpperCase();
     avatar.title = `Signed in as ${username}`;
 
-    const accountName = document.getElementById('railAccountName');
+    const accountName = document.getElementById('sidebarAccountName');
     if (accountName) accountName.textContent = username;
 
     // Tables and settings came down with the page, so the router paints straight away.
@@ -61,8 +61,8 @@ async function boot() {
         ...me.settings
     };
 
-    greet();
-    applyRailState();
+    greet(username);
+    applySidebarState();
     // guarded: a stale cached tables.js without this function shouldn't throw here
     if (typeof initFieldTypeCombobox === 'function') initFieldTypeCombobox();
     // The router paints from the URL, so a deep link survives a reload.

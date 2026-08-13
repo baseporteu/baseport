@@ -74,11 +74,16 @@ function deleteForm(id) {
     });
 }
 
+function deleteCurrentForm() {
+    if (formEditingId) deleteForm(formEditingId);
+}
+
 /* editor shell */
 
 function newForm() {
     formEditingId = null;
     document.getElementById('formPreviewBtn').classList.add('hidden');
+    document.getElementById('formDeleteBtn').classList.add('hidden');
     layout = {
         rows: []
     };
@@ -100,11 +105,6 @@ function newForm() {
     formOriginalSnapshot = JSON.stringify(formSnapshot());
 }
 
-// selectForm navigates, editForm paints; skipping navigate() draws the editor under the table instead of over it
-function selectForm(id) {
-    navigate(`/forms/${id}`);
-}
-
 async function editForm(id) {
     const f = await fetch(`/api/_admin/forms/${id}`)
         .then((r) => r.json())
@@ -115,6 +115,7 @@ async function editForm(id) {
 
     formEditingId = f.id;
     document.getElementById('formPreviewBtn').classList.remove('hidden');
+    document.getElementById('formDeleteBtn').classList.remove('hidden');
     refreshSidebar('forms');
     document.getElementById('formEditorTitle').innerText = 'Edit form';
     document.getElementById('formTitle').value = f.title || '';
@@ -541,7 +542,7 @@ function filterRow(f, index) {
     op.className = 'input';
 
     const value = document.createElement('input');
-    value.className = 'input';
+    value.className = 'input filter-value';
 
     // The control follows the field: "greater than" on a select, or free text on an enum, invites filters that can never match.
     function syncToField() {
@@ -564,12 +565,11 @@ function filterRow(f, index) {
             const options = parseFieldOptions(chosen);
             const current = value.value;
             const select = document.createElement('select');
-            select.className = 'input';
+            select.className = 'input filter-value';
             select.innerHTML = options
                 .map((o) => `<option value="${escapeHtml(o)}" ${o === current ? 'selected' : ''}>${escapeHtml(o)}</option>`)
                 .join('');
             value.replaceWith(select);
-            row.querySelector('select:nth-of-type(3)');
             return;
         }
         value.type = numeric ? 'number' : 'text';
@@ -643,7 +643,7 @@ function addListFilter() {
 function collectListFilters() {
     return Array.from(document.querySelectorAll('#listFilters .filter-row')).map((row) => {
         const [field, op] = row.querySelectorAll('select');
-        const value = row.querySelector('input');
+        const value = row.querySelector('.filter-value');
         return {
             field: field.value,
             op: op.value,

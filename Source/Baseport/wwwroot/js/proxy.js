@@ -1,7 +1,6 @@
 /* importing a table from a remote OpenAPI document */
 
 function openProxySheet() {
-    closeCreateMenu();
     const wrap = document.createElement('div');
     const status = document.createElement('p');
     status.id = 'pxStatus';

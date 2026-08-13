@@ -97,23 +97,29 @@ function tableSettingsPayload() {
 
 /* the published endpoint: a sheet, opened from the table's own settings, not a separate list row */
 
-function switchField(label, help, checked) {
-    const wrap = ui.el('label', 'field');
-    wrap.append(ui.el('span', 'field-label-text', {
-        textContent: label
-    }));
+// Stacked settings-style row (label + one-line description + a slider), matching the table settings panel.
+function settingSwitch(id, checked, label, desc) {
+    const row = ui.el('div', 'setting-row');
+    const info = ui.el('div', 'setting-label');
+    info.append(
+        ui.el('label', null, {
+            htmlFor: id,
+            textContent: label
+        }),
+        ui.el('p', 'muted', {
+            textContent: desc
+        }),
+    );
     const sw = ui.el('label', 'switch');
     const box = ui.el('input', null, {
         type: 'checkbox',
-        checked
+        id,
+        checked: !!checked
     });
     sw.append(box, ui.el('span', 'track'), ui.el('span', 'thumb'));
-    wrap.append(sw);
-    if (help) wrap.append(ui.el('span', 'field-help', {
-        textContent: help
-    }));
-    wrap.ctrl = box;
-    return wrap;
+    row.append(info, sw);
+    row.ctrl = box;
+    return row;
 }
 
 function openEndpointSheet(id) {
@@ -147,7 +153,7 @@ function openEndpointSheet(id) {
         refreshEndpointSaveState();
     });
 
-    const docsEnabled = switchField('Show in API docs', "Off keeps the endpoint live but out of the OpenAPI document -- for an integration you don't want advertised.", table.apiDocsEnabled !== false);
+    const docsEnabled = settingSwitch('sheetApiDocsEnabled', table.apiDocsEnabled !== false, 'Show in API docs', "Off keeps the endpoint live but out of the OpenAPI document -- for an integration you don't want advertised.");
 
     const displayName = ui.field('Name', {
         value: table.apiDisplayName || '',
@@ -189,7 +195,7 @@ function openEndpointSheet(id) {
     });
     methods.append(list);
     methods.append(ui.el('span', 'field-help', {
-        textContent: 'A method that is off is absent from the reference and refused by the API.'
+        textContent: 'When a method is turned off, it is removed from the documentation and rejected by the API.'
     }));
 
     body.append(apiName, docsEnabled, displayName, namespace, documentation, methods);
@@ -632,31 +638,6 @@ function openFieldEditor(fieldId) {
     cfgRow.id = 'feCfgRow';
     wrap.appendChild(cfgRow);
 
-    // Stacked settings-style rows (label + one-line description + a slider), matching the table settings panel.
-    const settingSwitch = (id, checked, label, desc) => {
-        const row = document.createElement('div');
-        row.className = 'setting-row';
-        const info = document.createElement('div');
-        info.className = 'setting-label';
-        const lab = document.createElement('label');
-        lab.setAttribute('for', id);
-        lab.innerText = label;
-        const p = document.createElement('p');
-        p.className = 'muted';
-        p.innerText = desc;
-        info.append(lab, p);
-        const sw = document.createElement('label');
-        sw.className = 'switch';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.id = id;
-        cb.checked = !!checked;
-        sw.append(cb, document.createElement('span'), document.createElement('span'));
-        sw.children[1].className = 'track';
-        sw.children[2].className = 'thumb';
-        row.append(info, sw);
-        return row;
-    };
     wrap.appendChild(settingSwitch('feRequired', f.isRequired, 'Required', 'Submissions without a value are rejected.'));
 
     const defaultRow = document.createElement('div');

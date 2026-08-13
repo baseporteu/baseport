@@ -126,18 +126,14 @@ public static class FragmentEndpoints
                 var embed = $"<script src=\"{origin}/embed.js?id={f.Id}\"></script>";
                 var actions = string.Join(" ", FormActions.Parse(f.Actions).Select(Html.Tag));
 
-                html.Append("<tr>")
+                html.Append($"<tr class=\"row-link\" onclick=\"navigate('/forms/{Html.Text(Html.JsString(f.Id))}')\">")
                     .Append(Html.RawCell($"<strong>{Html.Text(f.Title.Length > 0 ? f.Title : "Untitled form")}</strong>" +
                                          (f.Description.Length > 0 ? $"<div class=\"muted\">{Html.Text(f.Description)}</div>" : "")))
                     .Append(Html.RawCell(Html.Badge(f.Kind == FormKinds.List ? "List" : "Form") + " " + (f.Kind == FormKinds.List ? "" : actions)))
                     .Append(Html.Cell(tables.GetValueOrDefault(f.TableId)?.Name ?? "-"))
                     .Append(Html.RawCell(f.IsPublished ? Html.Badge("published") : Html.Badge("draft", "badge-required")))
                     .Append(Html.RawCell($"<input class=\"input embed-input\" type=\"text\" readonly value=\"{Html.Text(embed)}\" onclick=\"this.select()\">"))
-                    .Append(Html.RawCell("<div class=\"field-row-actions\">" +
-                                         Html.Button("Preview ↗", "openPreview", f.Id) +
-                                         Html.Button("Edit", "selectForm", f.Id) +
-                                         Html.Button("Delete", "deleteForm", f.Id) +
-                                         "</div>"))
+                    .Append(Html.RawCell($"<div class=\"field-row-actions\"><button class=\"btn btn-ghost btn-sm\" onclick=\"event.stopPropagation(); navigate('/forms/{Html.Text(Html.JsString(f.Id))}')\">Open</button></div>"))
                     .Append("</tr>");
             }
             return Results.Text(html.ToString(), Fragment);

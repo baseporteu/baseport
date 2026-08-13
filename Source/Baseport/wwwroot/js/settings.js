@@ -70,7 +70,6 @@ function applySettingsPage(page) {
         jobs: 'Background maintenance tasks.',
         backups: 'Stored snapshots of the database.',
     };
-    document.getElementById('settingsCrumb').innerText = titles[page];
     document.getElementById('settingsTitle').innerText = titles[page];
     document.getElementById('settingsSub').innerText = subs[page];
 }

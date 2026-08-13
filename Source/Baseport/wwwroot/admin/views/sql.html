@@ -2,20 +2,30 @@
                 <div class='page-header'>
                     <div>
                         <h1>SQL Console</h1>
-                        <p class='page-sub'>Save, rename, and re-run read-only queries against your SQLite store.</p>
+                        <p class='page-sub'>Run your read-only queries against your data store.</p>
+                    </div>
+                    <div class='page-actions'>
+                        <button class='btn btn-outline' onclick='newQuery()' title='New query'>New query</button>
+                        <span id='sqlQueryActions' class='hidden'>
+                            <button class='icon-btn danger' title='Delete query' onclick='deleteCurrentQuery()'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h18'/><path d='M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6'/><path d='M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2'/></svg></button>
+                            <button class='btn btn-outline' onclick='renameCurrentQuery()' title='Rename query'>Rename</button>
+                        </span>
+                        <button class='btn btn-outline' onclick='saveQuery()' title='Save (Ctrl+S)'>Save</button>
+                        <button class='btn' onclick='runSql()' title='Execute (Ctrl+Enter)'>Execute</button>
                     </div>
                 </div>
                 <div class='sql-layout'>
                     <div class='card sql-main'>
                         <div class='sql-bar'>
                             <span class='sql-name' id='sqlQueryName'>New Query</span>
-                            <div class='sql-actions'>
-                                <button class='btn btn-outline btn-sm' onclick='newQuery()' title='New query'>New query</button>
-                                <button class='btn btn-outline btn-sm' onclick='saveQuery()' title='Save (Ctrl+S)'>Save</button>
-                                <button class='btn btn-sm' onclick='runSql()' title='Execute (Ctrl+Enter)'>Execute</button>
-                            </div>
                         </div>
-                        <textarea id='sqlInput' class='input textarea sql-editor' spellcheck='false' placeholder='SELECT Name, COUNT(f.Id) AS FieldCount FROM _tables t LEFT JOIN _fields f ON f.TableId = t.Id GROUP BY t.Id ORDER BY t.Name;'></textarea>
+                        <textarea 
+                            id='sqlInput' 
+                            class='input textarea sql-editor' 
+                            spellcheck='false' 
+                            rows="5"
+                            placeholder='SELECT Name, COUNT(f.Id) AS FieldCount FROM _tables t LEFT JOIN _fields f ON f.TableId = t.Id GROUP BY t.Id ORDER BY t.Name;'>
+                        </textarea>
                         <div id='sqlResult' class='sql-result hidden'></div>
                         <div id='sqlNoData' class='sql-nodata hidden'>No data</div>
                         <div id='sqlStatus' class='field-hint'></div>

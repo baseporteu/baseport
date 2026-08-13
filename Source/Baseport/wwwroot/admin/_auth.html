@@ -52,57 +52,6 @@
             -ms-user-select: none;
             user-select: none;
         }
-
-        .auth-tabs {
-            display: flex;
-            background-color: var(--bg-muted, #f3f4f6);
-            padding: 0.25rem;
-            border-radius: 0.5rem;
-        }
-
-        .tab-btn {
-            flex: 1;
-            padding: 0.5rem;
-            text-align: center;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--text-muted, #6b7280);
-            background: transparent;
-            border: none;
-            border-radius: 0.375rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        #passwordContainer > label:nth-child(1){
-            margin-top: 0 !important;
-        }
-
-        .tab-btn:hover {
-            color: var(--text-color, #111827);
-        }
-
-        .tab-btn.active {
-            background-color: #ffffff;
-            color: var(--text-color, #111827);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-        }
-
-        [data-theme='dark'] .auth-tabs {
-            background-color: var(--bg-surface, #1f2937);
-        }
-
-        [data-theme='dark'] .tab-btn.active {
-            background-color: var(--bg-elevated, #374151);
-            color: #ffffff;
-        }
-
-        .login-license {
-            margin-top: 2rem;
-            text-align: center;
-            font-size: 0.8rem;
-            color: var(--text-muted, #6b7280);
-        }
     </style>
     <title>Sign in · Baseport</title>
     <link rel='icon' type='image/svg+xml' href='/favicon.svg'>
@@ -112,8 +61,8 @@
 <body>
     <div class='login-screen' id='loginScreen'>
         <form class='login-card' id='loginForm' onsubmit='return signIn(event)'>
-            <div class='login-brand'><span class='rail-logo-mark'>
-                    <svg viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg' class='rail-logo-tile' aria-hidden='true'>
+            <div class='login-brand'><span class='brand-mark'>
+                    <svg viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg' class='brand-tile' aria-hidden='true'>
                         <g clip-path='url(#bp-login-clip)'>
                             <rect width='20' height='20' fill='#000' rx='5.5'/>
                             <rect width='20' height='20' fill='url(#bp-login-gradient)' fill-opacity='0.2' rx='5.5'/>
@@ -140,16 +89,16 @@
                             <clipPath id='bp-login-clip'><rect width='20' height='20' rx='5.5'/></clipPath>
                         </defs>
                     </svg>
-                    <svg class='rail-logo-icon' width='12' height='12' viewBox='0 0 20 20' fill='none' stroke='#FDFDFD' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>
+                    <svg class='brand-glyph' width='12' height='12' viewBox='0 0 20 20' fill='none' stroke='#FDFDFD' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>
                         <path d='M5 4v12'/><path d='M7 4h4.5a3 3 0 0 1 0 6H7'/><path d='M7 10h5a3 3 0 0 1 0 6H7'/>
                     </svg>
                 </span><strong>Baseport</strong></div>
             <h1>Sign in</h1>
             <p class='muted'>The backend is private. Please sign in to continue.</p>
 
-            <div class='auth-tabs'>
-                <button type='button' class='tab-btn active' id='tabPassword' onclick='switchAuthMode("password")'>Password</button>
-                <button type='button' class='tab-btn' id='tabOtp' onclick='switchAuthMode("otp")'>One-Time Code</button>
+            <div class='segmented'>
+                <button type='button' class='seg-btn active' id='tabPassword' onclick='switchAuthMode("password")'>Password</button>
+                <button type='button' class='seg-btn' id='tabOtp' onclick='switchAuthMode("otp")'>One-Time Code</button>
             </div>
 
             <label class='field-label' for='loginUser'>Username
@@ -189,9 +138,7 @@
             <h1>
                 Set new password
             </h1>
-            <p id="password-help" class="form-text text-secondary">
-                Enter a new password to secure your account and continue.
-            </p>
+            <p class='muted'>Enter a new password to secure your account and continue.</p>
             <label class='field-label' for='curPass'>Current password
                 <input type='password' id='curPass' class='input' autocomplete='current-password' maxlength='128' required>
             </label>

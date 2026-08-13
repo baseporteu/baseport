@@ -112,10 +112,10 @@ function updateSaveButtons() {
     if (tb) tb.disabled = !tableDirty;
 }
 
-function greet() {
+function greet(username) {
     const h = new Date().getHours();
     const g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-    document.getElementById('greeting').innerText = g + ', builder';
+    document.getElementById('greeting').innerText = `${g}, ${username || 'builder'}`;
 }
 
 // Views are a route, not a toggle: the URL decides which one shows.
@@ -270,18 +270,21 @@ async function render() {
     const route = parseRoute();
     currentSection = route.section;
 
+    renderSectionNav();
     const isTables = route.section === 'tables';
     document.getElementById('tablesArea').classList.toggle('hidden', !isTables);
     document
-        .querySelectorAll('.rail-btn')
+        .querySelectorAll('.side-nav-btn')
         .forEach((b) => b.classList.toggle('active', b.dataset.section === route.section));
     ['forms', 'sql', 'schema', 'auth', 'logs', 'settings'].forEach((v) =>
         document.getElementById(v + 'View').classList.toggle('active', v === route.section),
     );
 
     renderSidebar(route.section);
+    renderBreadcrumb(route);
     await SECTION_ROUTES[route.section](route.id);
     renderSidebar(route.section); // the loader may have changed what is listed or active
+    renderBreadcrumb(route);
     lastRenderedUrl = location.href;
 }
 
@@ -318,41 +321,28 @@ function updateSummary(tables) {
     ].map(([label, value]) => `<div class="summary-card"><div class="summary-value">${value.toLocaleString()}</div><div class="summary-label">${label}</div></div>`).join('');
 }
 
-async function createTable() {
-    const name = document.getElementById('tableName').value.trim();
-    if (!name) return;
-    closeCreateMenu();
-
-    await ui.busy(document.getElementById('createTableBtn'), async () => {
-        const res = await fetch('/api/_admin/tables', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                name
-            }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            ui.toast(data.errors || ['Failed to create table.'], 'error');
-            return;
-        }
-        document.getElementById('tableName').value = '';
-        await loadTables();
-        navigate(`/tables/${data.id}`);
+async function newTable() {
+    const name = await ui.ask({
+        title: 'New table',
+        label: 'Table name',
+        placeholder: 'e.g. Customers',
+        confirmLabel: 'Create',
     });
+    if (!name) return;
+    const res = await fetch('/api/_admin/tables', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            name
+        }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        ui.toast(data.errors || ['Failed to create table.'], 'error');
+        return;
+    }
+    await loadTables();
+    navigate(`/tables/${data.id}`);
 }
-
-function toggleCreateMenu(e) {
-    if (e) e.stopPropagation();
-    const menu = document.getElementById('createMenu');
-    menu.classList.toggle('hidden');
-}
-
-function closeCreateMenu() {
-    // The menu exists only while the tables sidebar is mounted; this runs from a document-wide click handler.
-    document.getElementById('createMenu')?.classList.add('hidden');
-}
-
-document.addEventListener('click', () => closeCreateMenu());
