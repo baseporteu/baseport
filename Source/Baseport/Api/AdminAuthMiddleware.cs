@@ -14,22 +14,25 @@ public static class AdminAuthMiddleware
                 return;
             }
 
-            if (AdminAuth.UserIdFor(context) is null)
+            var db = context.RequestServices.GetRequiredService<AppDbContext>();
+            var user = await AdminAuth.ResolveAsync(db, context);
+
+            if (user is null)
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 await context.Response.WriteAsJsonAsync(new { errors = new[] { "Sign in to continue." } });
                 return;
             }
 
-            // A session is not enough: /api/auth/otp will hand one to any account that is not disabled, including one that exists only to carry an API token.
-            if (!AdminAuth.IsAdmin(context))
+            // A session is not enough: /api/auth/otp will hand one to any account that is not disabled, including one that exists only to carry an API token, and the public surface mints the same token for an end user.
+            if (user.Role != AccountRoles.Admin)
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 await context.Response.WriteAsJsonAsync(new { errors = new[] { "This account does not have console access." } });
                 return;
             }
 
-            if (AdminAuth.MustChangePassword(context))
+            if (user.MustChangePassword)
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 await context.Response.WriteAsJsonAsync(new { errors = new[] { "Change the one-time password before using the console." } });

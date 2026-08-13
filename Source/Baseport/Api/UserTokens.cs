@@ -174,23 +174,23 @@ public static class UserTokens
         return new UserTokenPair(Mint(user, now), refresh, now.Add(AuthTokenLifetime));
     }
 
-    public static async Task<UserTokenPair?> RefreshAsync(AppDbContext db, string refreshToken, DateTime now)
+    // A refresh token is not spent by the refresh it pays for: two console tabs whose auth cookies expire together would otherwise race, and the loser would be signed out.
+    public static async Task<(UserAccount User, UserTokenPair Tokens)?> ReauthAsync(AppDbContext db, string? refreshToken, DateTime now)
     {
         if (string.IsNullOrEmpty(refreshToken)) return null;
 
         var hash = HashRefreshToken(refreshToken);
-        var session = await db.UserSessions.FirstOrDefaultAsync(s => s.RefreshTokenHash == hash);
+        var session = await db.UserSessions.FirstOrDefaultAsync(s => s.RefreshTokenHash == hash && s.ExpiresAt > now);
         if (session is null) return null;
 
-        db.UserSessions.Remove(session);
-        await db.SaveChangesAsync();
-        if (session.ExpiresAt <= now) return null;
-
         var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == session.UserId);
-        if (user is null || user.IsDisabled || user.Role != AccountRoles.User) return null;
+        if (user is null || user.IsDisabled) return null;
 
-        return await IssueAsync(db, user, now);
+        return (user, new UserTokenPair(Mint(user, now), refreshToken, now.Add(AuthTokenLifetime)));
     }
+
+    public static Task<int> PruneExpiredAsync(AppDbContext db, DateTime now) =>
+        db.UserSessions.Where(s => s.ExpiresAt < now).ExecuteDeleteAsync();
 
     public static async Task RevokeAsync(AppDbContext db, string refreshToken)
     {

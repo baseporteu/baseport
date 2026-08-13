@@ -69,13 +69,19 @@ public static class QueryEngine
         string? query,
         int page,
         int pageSize,
-        IReadOnlyList<Filter>? filters = null)
+        IReadOnlyList<Filter>? filters = null,
+        IReadOnlyList<FieldDefinition>? accessFields = null,
+        string? accessUserId = null)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize <= 0 ? 25 : pageSize, 1, MaxPageSize);
 
         var args = new List<object> { table.Id };
         var where = "r.\"TableId\" = {0}";
+
+        // Applied before anything the caller controls, so a filter or a search term can only narrow what the rule already allows.
+        if (accessFields is not null && RecordAccess.ListClause(table, accessFields, "r", accessUserId, args) is { } clause)
+            where += $" AND ({clause})";
 
         // Author-defined filters are baked into the form and are not something a visitor can change, so they are applied before the search box narrows anything further.
         foreach (var f in filters ?? Array.Empty<Filter>())
@@ -147,8 +153,11 @@ public static class QueryEngine
             ? $"r.\"{column}\""
             : JsonPath(field.Name);
 
-    private static string JsonPath(string fieldName) =>
-        $"json_extract(r.\"JsonData\", '$.\"{fieldName.Replace("'", "''").Replace("\"", "\"\"")}\"')";
+    // Access rules read the JSON directly rather than the generated column: that column only exists once RecordIndexes has synced the field, and a rule that 500s on an unsynced table is worse than one that scans.
+    internal static string JsonPathFor(string fieldName, string alias) => JsonPath(fieldName, alias);
+
+    private static string JsonPath(string fieldName, string alias = "r") =>
+        $"json_extract({alias}.\"JsonData\", '$.\"{fieldName.Replace("'", "''").Replace("\"", "\"\"")}\"')";
 
     private static string EscapeLike(string term) =>
         term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");

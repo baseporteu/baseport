@@ -411,3 +411,40 @@ body:has(.sheet.open) .toasts {
         animation: none;
     }
 }
+/* hover-revealed copy button over a block (ui.copyable) */
+.copy-wrap {
+    position: relative;
+}
+
+.copy-btn {
+    position: absolute;
+    top: .5rem;
+    right: .5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: .3rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) - 4px);
+    background: hsl(var(--background));
+    color: hsl(var(--muted-foreground));
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .12s ease, color .12s ease;
+}
+
+/* Keyboard users never hover, so focus reveals it too. */
+.copy-wrap:hover .copy-btn,
+.copy-btn:focus-visible {
+    opacity: 1;
+}
+
+.copy-btn:hover {
+    color: hsl(var(--foreground));
+}
+
+@media (hover: none) {
+    .copy-btn {
+        opacity: 1;
+    }
+}

@@ -47,6 +47,12 @@ public class TableDefinition
     // Comma-separated list of allowed HTTP methods.
     public string ApiMethods { get; set; } = "GET,POST,PATCH,PUT,DELETE";
 
+    // Per-record access rules: a SQLite boolean expression over _USER_, _ROW_ and _REQ_, empty meaning the table is open to every caller the table-level switches already let through. See RecordAccess.
+    public string CreateRule { get; set; } = "";
+    public string ReadRule { get; set; } = "";
+    public string UpdateRule { get; set; } = "";
+    public string DeleteRule { get; set; } = "";
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public List<FieldDefinition> Fields { get; set; } = new();

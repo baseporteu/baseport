@@ -1214,5 +1214,150 @@ test('the field-type quick-add includes derived, matching the full editor', () =
     );
 });
 
+/* the public auth pages: /auth redirects to the login card unconditionally */
+
+function loadUserAuth(stored, statusAuthenticated) {
+    const store = stored ? {
+        'baseport.user.tokens': JSON.stringify(stored)
+    } : {};
+    global.localStorage = {
+        getItem: k => (k in store ? store[k] : null),
+        setItem: (k, v) => {
+            store[k] = String(v);
+        },
+        removeItem: k => {
+            delete store[k];
+        }
+    };
+    const replaced = [];
+    global.location = {
+        replace: u => replaced.push(u),
+        href: '/auth/login'
+    };
+    // The cookie is HttpOnly, so the page cannot read it; the server is what answers.
+    global.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+            authenticated: !!statusAuthenticated
+        })
+    });
+    const module = {};
+    eval(read('js/userauth.js') + '\n;module.bpGuestOnly = bpGuestOnly;');
+    return {
+        module,
+        replaced
+    };
+}
+
+test('a visitor holding tokens is not asked to sign in again on /auth', async () => {
+    const {
+        module,
+        replaced
+    } = loadUserAuth({
+        auth_token: 't',
+        refresh_token: 'r',
+        expires_at: 9999999999
+    }, false);
+    await module.bpGuestOnly();
+    assert.deepStrictEqual(replaced, ['/auth/profile'], '/auth/login keeps a signed-in user on the login card');
+});
+
+// The console sign-in leaves a cookie and nothing in localStorage, so a page that only reads localStorage shows an operator a login form they do not need.
+test('a cookie session is recognised on /auth even with nothing stored locally', async () => {
+    const {
+        module,
+        replaced
+    } = loadUserAuth(null, true);
+    await module.bpGuestOnly();
+    assert.deepStrictEqual(replaced, ['/auth/profile'], 'a cookie session still gets the login card');
+});
+
+test('a guest stays on the login card', async () => {
+    const {
+        module,
+        replaced
+    } = loadUserAuth(null, false);
+    await module.bpGuestOnly();
+    assert.deepStrictEqual(replaced, [], 'a visitor with no session is bounced to a profile they cannot load');
+});
+
+// A cookie session has no stored refresh token, so a sign-out that only fires when tokens exist leaves the cookie alive.
+test('signing out always reaches the server', () => {
+    const js = read('js/userauth.js');
+    const block = js.slice(js.indexOf('async function bpSignOut'), js.indexOf('async function bpDeleteAccount'));
+    assert.ok(!/if \(current\) \{/.test(block), 'sign-out is still conditional on stored tokens');
+    assert.ok(block.includes("fetch('/api/auth/v1/logout'"), 'sign-out never calls logout');
+});
+
+test('both guest pages call the guard, so neither drifts out of it', () => {
+    ['auth/login.html', 'auth/register.html'].forEach(page => {
+        assert.ok(read(page).includes('bpGuestOnly()'), `${page} never calls bpGuestOnly`);
+    });
+});
+
+/* the console mirrors the guards the accounts API enforces */
+
+// TrailBase opens the same sheet for everyone and lets the server refuse. Baseport greys the refused fields instead, but must not hide the ones the API still accepts: the token routes carry no admin guard, so an early return took away token management that still worked.
+test('an admin sheet greys the refused fields and keeps the token panel', () => {
+    const js = read('js/accounts.js');
+    const open = js.slice(js.indexOf('function openAccountForm'), js.indexOf('function adminNotice'));
+    assert.ok(/const locked = !!a && a\.role === 'admin'/.test(open), 'an admin is no longer detected');
+    assert.ok(!/if \(a && a\.role === 'admin'\) return/.test(open), 'the sheet returns early and hides the token panel');
+    assert.ok(open.includes('apiTokenPanel(a)'), 'the token panel is gone');
+    assert.ok(/input\.disabled = true/.test(open), 'the refused fields are not greyed out');
+    assert.ok(open.includes('adminNotice(a)'), 'nothing points an operator at the CLI');
+});
+
+// Offering Admin when editing would build a promotion the API refuses, which is the "greyed out, never cleared" rule in AGENTS.md.
+test('the role select offers admin only when creating', () => {
+    const js = read('js/accounts.js');
+    const roleField = js.slice(js.indexOf("id: 'accRole'"), js.indexOf("if (a) {"));
+    const adminOption = roleField.indexOf("['admin',");
+    const branch = roleField.indexOf('options: a');
+    assert.ok(branch >= 0 && adminOption > branch, 'admin is offered unconditionally on the role select');
+});
+
+test('a blank password field is not sent, so saving never clears a password', () => {
+    const js = read('js/accounts.js');
+    const submit = js.slice(js.indexOf('async function submitAccount'), js.indexOf('async function deleteAccount'));
+    assert.ok(/if \(password && password\.value\) body\.password/.test(submit), 'an empty password field is submitted');
+});
+
+// The generated password is pasted straight into the command, so anything under PasswordMin would be refused by the command it appears in.
+test('the generated admin password clears the server minimum', () => {
+    const js = read('js/accounts.js');
+    const fn = js.slice(js.indexOf('function randomPassword'), js.indexOf('function adminNotice'));
+    const module = {};
+    // Varies per call, so the length branch is actually exercised rather than pinned to one value.
+    let seed = 0;
+    global.crypto = {
+        getRandomValues: (a) => {
+            for (let i = 0; i < a.length; i++) a[i] = (seed * 53 + i * 37 + 11) % 256;
+            seed++;
+            return a;
+        }
+    };
+    eval(fn + '\n;module.randomPassword = randomPassword;');
+    const lengths = new Set();
+    for (let i = 0; i < 60; i++) {
+        const pw = module.randomPassword();
+        assert.ok(pw.length >= 10 && pw.length <= 12, `generated ${pw.length} characters: ${pw}`);
+        assert.ok(/^[A-Za-z0-9]+$/.test(pw), `generated something unquotable: ${pw}`);
+        lengths.add(pw.length);
+    }
+    assert.ok(lengths.size > 1, 'the length never varies, so the range is decorative');
+});
+
+test('the shell commands carry a hover copy button', () => {
+    const accounts = read('js/accounts.js');
+    assert.ok(/ui\.copyable\(commands/.test(accounts), 'the command block has no copy affordance');
+    const ui_ = read('ui.js');
+    assert.ok(ui_.includes('function copyable('), 'ui.js has no copyable primitive');
+    assert.ok(/copyable,/.test(ui_.slice(ui_.lastIndexOf('return {'))), 'copyable is not exported');
+    // Feature stylesheets must not redefine a primitive, so the styling belongs in ui.css.
+    assert.ok(read('ui.css').includes('.copy-btn'), 'the copy button has no primitive styling');
+    assert.ok(!read('app.css').includes('.copy-btn'), 'app.css redefines the copy button');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

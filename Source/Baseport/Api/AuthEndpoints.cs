@@ -46,10 +46,11 @@ public static class AuthEndpoints
             }
 
             LoginGuard.Succeeded(username);
-            user!.LastLoginAt = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            user!.LastLoginAt = now;
             await db.SaveChangesAsync();
 
-            AdminAuth.IssueCookie(ctx, AdminAuth.CreateSession(user));
+            AdminAuth.IssueCookies(ctx, await UserTokens.IssueAsync(db, user, now));
             return Results.Ok(new { user.Username, user.Role, user.MustChangePassword });
         }).RequireRateLimiting(RateLimit.Auth);
 
@@ -88,20 +89,17 @@ public static class AuthEndpoints
             return Results.Ok(new { message = sent, expiresInSeconds = (int)OneTimeCodes.CodeLifetime.TotalSeconds });
         }).RequireRateLimiting(RateLimit.Auth);
 
-        app.MapPost("/api/auth/logout", (HttpContext ctx) =>
+        app.MapPost("/api/auth/logout", async (AppDbContext db, HttpContext ctx) =>
         {
-            AdminAuth.EndSession(ctx.Request.Cookies[AdminAuth.CookieName]);
-            AdminAuth.ClearCookie(ctx);
+            await UserTokens.RevokeAsync(db, ctx.Request.Cookies[AdminAuth.RefreshCookie] ?? "");
+            AdminAuth.ClearCookies(ctx);
             return Results.Ok(new { signedOut = true });
         });
 
         // The UI calls this on load to decide between the console and the login screen, so it must stay reachable while signed out.
         app.MapGet("/api/auth/me", async (AppDbContext db, HttpContext ctx) =>
         {
-            var userId = AdminAuth.UserIdFor(ctx);
-            if (userId is null) return Results.Ok(new { authenticated = false });
-
-            var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId);
+            var user = await AdminAuth.ResolveAsync(db, ctx);
             if (user is null) return Results.Ok(new { authenticated = false });
 
             return Results.Ok(new { authenticated = true, user.Username, user.Email, user.Role, user.MustChangePassword });
@@ -109,10 +107,7 @@ public static class AuthEndpoints
 
         app.MapPost("/api/auth/password", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
         {
-            var userId = AdminAuth.UserIdFor(ctx);
-            if (userId is null) return Results.Unauthorized();
-
-            var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId);
+            var user = await AdminAuth.ResolveAsync(db, ctx);
             if (user is null) return Results.Unauthorized();
 
             var current = body["currentPassword"]?.GetValue<string>() ?? "";
@@ -141,14 +136,15 @@ public static class AuthEndpoints
 
             LoginGuard.Succeeded(user.Id);
 
+            var now = DateTime.UtcNow;
             user.PasswordHash = AdminAuth.HashPassword(next);
             user.MustChangePassword = false;
-            user.UpdatedAt = DateTime.UtcNow;
+            user.UpdatedAt = now;
             await db.SaveChangesAsync();
 
             // Every other session was established under the old password.
-            AdminAuth.EndSessionsFor(user.Id);
-            AdminAuth.IssueCookie(ctx, AdminAuth.CreateSession(user));
+            await UserTokens.RevokeAllAsync(db, user.Id);
+            AdminAuth.IssueCookies(ctx, await UserTokens.IssueAsync(db, user, now));
             return Results.Ok(new { changed = true });
         }).RequireRateLimiting(RateLimit.Auth);
     }

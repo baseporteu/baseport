@@ -70,8 +70,9 @@ public static class UserAuthEndpoints
                 return Error(429, "Too many sign-in attempts. Wait a few minutes and try again.");
             }
 
+            // Every role signs in here, the way TrailBase does it: what a caller may then do is decided per request by re-reading the account, never by which door they came through.
             var user = await db.UserAccounts.FirstOrDefaultAsync(u =>
-                u.Role == AccountRoles.User && (u.Username == handle || (u.Email == handle && handle != "")));
+                u.Username == handle || (u.Email == handle && handle != ""));
 
             var usable = user is not null && !user.IsDisabled && user.PasswordHash.Length > 0;
             var ok = usable
@@ -96,17 +97,20 @@ public static class UserAuthEndpoints
         {
             if (!await EnabledAsync(db)) return Results.NotFound();
 
-            var tokens = await UserTokens.RefreshAsync(db, Text(body, "refresh_token"), DateTime.UtcNow);
-            return tokens is null
+            var reauth = await UserTokens.ReauthAsync(db, Text(body, "refresh_token"), DateTime.UtcNow);
+            return reauth is null
                 ? Error(401, "That refresh token is not valid or has expired.")
-                : Results.Ok(TokenPayload(tokens));
+                : Results.Ok(TokenPayload(reauth.Value.Tokens));
         }).RequireRateLimiting(RateLimit.Auth);
 
-        app.MapPost($"{ApiBase}/logout", async (AppDbContext db, JsonObject body) =>
+        app.MapPost($"{ApiBase}/logout", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
         {
             if (!await EnabledAsync(db)) return Results.NotFound();
 
             await UserTokens.RevokeAsync(db, Text(body, "refresh_token"));
+            // A cookie session signed in here too, so signing out has to reach it.
+            await UserTokens.RevokeAsync(db, ctx.Request.Cookies[AdminAuth.RefreshCookie] ?? "");
+            AdminAuth.ClearCookies(ctx);
             return Results.Ok(new { signed_out = true });
         });
 
@@ -168,8 +172,15 @@ public static class UserAuthEndpoints
             var user = await CurrentAsync(db, ctx);
             if (user is null) return Error(401, "Sign in to continue.");
 
+            // Every role signs in here now, so this route reaches accounts the console refuses to delete. The same two guards apply, or an operator locks everybody out from the public surface.
+            if (await db.UserAccounts.CountAsync(a => a.Id != user.Id && !a.IsDisabled) == 0)
+                return Error(409, "This is the last enabled account and cannot be deleted.");
+            if (await AdminEndpoints.IsLastEnabledAdmin(db, user))
+                return Error(409, "This is the last enabled admin and cannot be deleted.");
+
             await UserTokens.RevokeAllAsync(db, user.Id);
             db.UserAccounts.Remove(user);
+            AdminAuth.ClearCookies(ctx);
             await db.SaveChangesAsync();
             return Results.Ok(new { deleted = true });
         }).RequireRateLimiting(RateLimit.Auth);
@@ -213,13 +224,17 @@ public static class UserAuthEndpoints
     public static async Task<UserAccount?> CurrentAsync(AppDbContext db, HttpContext ctx)
     {
         var header = ctx.Request.Headers.Authorization.ToString();
-        if (!header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return null;
+        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            var claims = UserTokens.Verify(header["Bearer ".Length..].Trim(), DateTime.UtcNow);
+            if (claims is null) return null;
 
-        var claims = UserTokens.Verify(header["Bearer ".Length..].Trim(), DateTime.UtcNow);
-        if (claims is null) return null;
+            var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == claims.Sub);
+            return user is null || user.IsDisabled ? null : user;
+        }
 
-        var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == claims.Sub);
-        return user is null || user.IsDisabled || user.Role != AccountRoles.User ? null : user;
+        // Headers take priority, cookies are the fallback: one sign-in on this origin is a sign-in on both surfaces. Same precedence as TrailBase's extract_tokens_from_request_parts, and the same reason a cookie can be reminted here where a header cannot.
+        return await AdminAuth.ResolveAsync(db, ctx);
     }
 
     internal static string DeriveUsername(string email)

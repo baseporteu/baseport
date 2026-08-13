@@ -100,11 +100,19 @@ async function bpRegister(event) {
     return false;
 }
 
-async function bpLoadProfile() {
-    if (!bpAuth.signedIn()) {
-        location.href = '/auth/login';
+// /auth redirects here unconditionally, so a signed-in visitor would otherwise be asked to sign in again. The session may be a cookie rather than stored tokens, which is what a console sign-in leaves behind, so the server is asked when there is nothing local.
+async function bpGuestOnly() {
+    if (bpAuth.signedIn()) {
+        location.replace('/auth/profile');
         return;
     }
+    const res = await fetch('/api/auth/v1/status').catch(() => null);
+    const data = res && res.ok ? await res.json().catch(() => ({})) : {};
+    if (data.authenticated) location.replace('/auth/profile');
+}
+
+async function bpLoadProfile() {
+    // No stored tokens is not signed out: the cookie the sign-in set is sent with this request anyway.
     const res = await bpAuth.authFetch('/status');
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.authenticated) {
@@ -113,7 +121,7 @@ async function bpLoadProfile() {
         return;
     }
     document.getElementById('profileUsername').textContent = data.username || '';
-    document.getElementById('profileEmail').textContent = data.email || 'No email on file';
+    document.getElementById('profileEmail').textContent = data.email || 'No email address';
     document.getElementById('profileId').textContent = data.sub || '';
 }
 
@@ -140,17 +148,16 @@ async function bpChangePassword(event) {
 
 async function bpSignOut() {
     const current = bpAuth.tokens();
-    if (current) {
-        await fetch('/api/auth/v1/logout', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                refresh_token: current.refresh_token
-            }),
-        }).catch(() => {});
-    }
+    // Called unconditionally: a cookie session has nothing stored locally, and the server is what clears it.
+    await fetch('/api/auth/v1/logout', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            refresh_token: current ? current.refresh_token : ''
+        }),
+    }).catch(() => {});
     bpAuth.store(null);
     location.href = '/auth/login';
 }

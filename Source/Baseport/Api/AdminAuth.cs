@@ -3,20 +3,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// admin sessions for the builder UI
+// console sessions for the builder UI, over the same tokens and the same _user_sessions rows as the public surface
 public static class AdminAuth
 {
-    public const string CookieName = "baseport_session";
+    public const string AuthCookie = "baseport_auth";
+    public const string RefreshCookie = "baseport_refresh";
     public const string DefaultUsername = "admin";
 
     private const int Iterations = 210_000; // OWASP guidance for PBKDF2-SHA256
     private const int SaltBytes = 16;
     private const int HashBytes = 32;
-
-    private static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(12);
-
-    // In process, so a restart signs everyone out. See "Single node, on purpose" in AGENTS.md.
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string UserId, DateTime Expires, bool MustChangePassword, bool IsAdmin)> Sessions = new();
 
     public static string HashPassword(string password)
     {
@@ -45,79 +41,59 @@ public static class AdminAuth
         return CryptographicOperations.FixedTimeEquals(actual, expected);
     }
 
-    public static string CreateSession(UserAccount user)
-    {
-        var token = Ids.NewShortId(48);
-        Sessions[token] = (user.Id, DateTime.UtcNow.Add(SessionLifetime), user.MustChangePassword, user.Role == AccountRoles.Admin);
-        return token;
-    }
-
-    public static void EndSession(string? token)
-    {
-        if (!string.IsNullOrEmpty(token)) Sessions.TryRemove(token, out _);
-    }
-
-    // ends every session belonging to a user. Used when their password changes.
-    public static void EndSessionsFor(string userId)
-    {
-        foreach (var (token, entry) in Sessions)
-            if (entry.UserId == userId) Sessions.TryRemove(token, out _);
-    }
-
-    // drops sessions that have expired. Returns how many were removed.
-    public static int PruneExpired()
+    // The one answer to "who is calling the console". The role is never read from the token: a leaked end-user JWT must not open the console, and an operator demoted a minute ago is still holding a claim that says admin.
+    public static async Task<UserAccount?> ResolveAsync(AppDbContext db, HttpContext ctx)
     {
         var now = DateTime.UtcNow;
-        var removed = 0;
-        foreach (var (token, entry) in Sessions)
-            if (entry.Expires < now && Sessions.TryRemove(token, out _)) removed++;
-        return removed;
-    }
 
-    public static string? UserIdFor(HttpContext ctx)
-    {
-        var token = ctx.Request.Cookies[CookieName];
-        if (string.IsNullOrEmpty(token)) return null;
-        if (!Sessions.TryGetValue(token, out var entry)) return null;
-        if (entry.Expires < DateTime.UtcNow)
+        if (UserTokens.Verify(ctx.Request.Cookies[AuthCookie], now) is { } claims)
         {
-            Sessions.TryRemove(token, out _);
-            return null;
+            var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == claims.Sub);
+            return user is null || user.IsDisabled ? null : Remember(ctx, user);
         }
-        return entry.UserId;
+
+        // A cookie has a back-channel a bearer header does not, so a stale auth cookie is reminted here rather than answering 401.
+        var reauth = await UserTokens.ReauthAsync(db, ctx.Request.Cookies[RefreshCookie], now);
+        if (reauth is null) return null;
+
+        AppendCookie(ctx, AuthCookie, reauth.Value.Tokens.AuthToken, UserTokens.AuthTokenLifetime);
+        return Remember(ctx, reauth.Value.User);
     }
 
-    // the seeded password is a working credential until it is replaced, and it was written to the log, so a session carrying it reaches the sign-in surface and nothing else.
-    public static bool MustChangePassword(HttpContext ctx)
+    // Identity only, for the audit log, and never an authorization decision. Read from what the request resolved to, because a reminted auth cookie is on the response and the stale one is still on the request.
+    public static string? UserIdFor(HttpContext ctx) =>
+        ctx.Items[ResolvedKey] as string ?? UserTokens.Verify(ctx.Request.Cookies[AuthCookie], DateTime.UtcNow)?.Sub;
+
+    private const string ResolvedKey = "baseport.uid";
+
+    private static UserAccount Remember(HttpContext ctx, UserAccount user)
     {
-        var token = ctx.Request.Cookies[CookieName];
-        return token is not null
-               && Sessions.TryGetValue(token, out var entry)
-               && entry.MustChangePassword;
+        ctx.Items[ResolvedKey] = user.Id;
+        return user;
     }
 
-    // the console is admin surface.
-    public static bool IsAdmin(HttpContext ctx)
+    public static void IssueCookies(HttpContext ctx, UserTokenPair tokens)
     {
-        var token = ctx.Request.Cookies[CookieName];
-        return token is not null
-               && Sessions.TryGetValue(token, out var entry)
-               && entry.IsAdmin;
+        AppendCookie(ctx, AuthCookie, tokens.AuthToken, UserTokens.AuthTokenLifetime);
+        AppendCookie(ctx, RefreshCookie, tokens.RefreshToken, UserTokens.RefreshTokenLifetime);
     }
 
-    public static void IssueCookie(HttpContext ctx, string token) =>
-        ctx.Response.Cookies.Append(CookieName, token, new CookieOptions
+    public static void ClearCookies(HttpContext ctx)
+    {
+        ctx.Response.Cookies.Delete(AuthCookie, new CookieOptions { Path = "/" });
+        ctx.Response.Cookies.Delete(RefreshCookie, new CookieOptions { Path = "/" });
+    }
+
+    private static void AppendCookie(HttpContext ctx, string name, string value, TimeSpan lifetime) =>
+        ctx.Response.Cookies.Append(name, value, new CookieOptions
         {
             HttpOnly = true,
             SameSite = SameSiteMode.Strict,
             // Set only over HTTPS in production; a Secure cookie on plain http would never be sent back and would lock the console out locally.
             Secure = ctx.Request.IsHttps,
-            MaxAge = SessionLifetime,
+            MaxAge = lifetime,
             Path = "/"
         });
-
-    public static void ClearCookie(HttpContext ctx) =>
-        ctx.Response.Cookies.Delete(CookieName, new CookieOptions { Path = "/" });
 
     // seeds the default admin, or gives an existing account a password. Random, logged once.
     public static async Task EnsureAdminPasswordAsync(AppDbContext db)
@@ -136,8 +112,6 @@ public static class AdminAuth
         Serilog.Log.Warning("Seeded a one-time admin password for {Username}: {Password}. Sign in and change it before exposing this instance.",
             admin.Username, password);
     }
-
-    internal static void ResetSessions() => Sessions.Clear();
 }
 
 // a per-account brute-force lockout; trippable by a third party, so a DoS here only delays a sign-in.

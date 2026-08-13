@@ -60,9 +60,8 @@ public static class ConsoleEndpoints
     private static async Task RenderAsync(AppDbContext db, HttpContext ctx, string webRoot, bool authPage)
     {
         // Anonymous visitors never load the console, signed-in visitors are never asked to sign in again, and a session still on the one-time password is forced back to the change screen.
-        var userId = AdminAuth.UserIdFor(ctx);
-        var user = userId is null ? null : await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId);
-        var signedIn = user is not null && !user.IsDisabled;
+        var user = await AdminAuth.ResolveAsync(db, ctx);
+        var signedIn = user is not null;
         var mustChange = signedIn && user!.MustChangePassword;
         if (signedIn && !mustChange)
         {
@@ -105,10 +104,9 @@ public static class ConsoleEndpoints
     {
         object payload;
 
-        var userId = AdminAuth.UserIdFor(ctx);
-        var user = userId is null ? null : await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId);
+        var user = await AdminAuth.ResolveAsync(db, ctx);
 
-        if (user is null || user.IsDisabled)
+        if (user is null)
         {
             payload = new { authenticated = false };
         }

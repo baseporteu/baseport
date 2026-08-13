@@ -91,8 +91,9 @@ public class UserAuthTests : IDisposable
         UserTokens.Configure(new AppSettings());
     }
 
+    // Not rotated, deliberately, the way TrailBase does it: two clients refreshing the same session at once would otherwise leave one of them holding a token that has already been spent.
     [Fact]
-    public async Task A_refresh_token_is_spent_by_the_refresh_it_pays_for()
+    public async Task A_refresh_token_survives_the_refresh_it_pays_for()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var user = Jane();
@@ -100,11 +101,26 @@ public class UserAuthTests : IDisposable
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var issued = await UserTokens.IssueAsync(_db, user, DateTime.UtcNow);
-        var rotated = await UserTokens.RefreshAsync(_db, issued.RefreshToken, DateTime.UtcNow);
+        var again = await UserTokens.ReauthAsync(_db, issued.RefreshToken, DateTime.UtcNow);
 
-        Assert.NotNull(rotated);
-        Assert.NotEqual(issued.RefreshToken, rotated!.RefreshToken);
-        Assert.Null(await UserTokens.RefreshAsync(_db, issued.RefreshToken, DateTime.UtcNow));
+        Assert.NotNull(again);
+        Assert.Equal(issued.RefreshToken, again!.Value.Tokens.RefreshToken);
+        Assert.NotNull(await UserTokens.ReauthAsync(_db, issued.RefreshToken, DateTime.UtcNow));
+    }
+
+    [Fact]
+    public async Task An_expired_session_row_cannot_reauth_and_is_pruned()
+    {
+        await SchemaBootstrap.ApplyAsync(_db);
+        var user = Jane();
+        _db.UserAccounts.Add(user);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var past = DateTime.UtcNow.AddDays(-UserTokens.MaxRefreshLifetimeDays - 1);
+        var issued = await UserTokens.IssueAsync(_db, user, past);
+
+        Assert.Null(await UserTokens.ReauthAsync(_db, issued.RefreshToken, DateTime.UtcNow));
+        Assert.Equal(1, await UserTokens.PruneExpiredAsync(_db, DateTime.UtcNow));
     }
 
     [Fact]
@@ -119,7 +135,7 @@ public class UserAuthTests : IDisposable
         user.IsDisabled = true;
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        Assert.Null(await UserTokens.RefreshAsync(_db, issued.RefreshToken, DateTime.UtcNow));
+        Assert.Null(await UserTokens.ReauthAsync(_db, issued.RefreshToken, DateTime.UtcNow));
     }
 
     [Fact]
@@ -134,18 +150,22 @@ public class UserAuthTests : IDisposable
         var second = await UserTokens.IssueAsync(_db, user, DateTime.UtcNow);
         await UserTokens.RevokeAllAsync(_db, user.Id);
 
-        Assert.Null(await UserTokens.RefreshAsync(_db, first.RefreshToken, DateTime.UtcNow));
-        Assert.Null(await UserTokens.RefreshAsync(_db, second.RefreshToken, DateTime.UtcNow));
+        Assert.Null(await UserTokens.ReauthAsync(_db, first.RefreshToken, DateTime.UtcNow));
+        Assert.Null(await UserTokens.ReauthAsync(_db, second.RefreshToken, DateTime.UtcNow));
     }
 
+    // One session store for every role: revoking an operator's sessions has to reach the console, which it only can if the console session is a row in the same table.
     [Fact]
-    public async Task An_admin_account_is_not_a_public_auth_account()
+    public async Task An_operators_session_lives_in_the_same_store_as_an_end_users()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var admin = await _db.UserAccounts.FirstAsync(u => u.Role == AccountRoles.Admin, TestContext.Current.CancellationToken);
 
         var issued = await UserTokens.IssueAsync(_db, admin, DateTime.UtcNow);
-        Assert.Null(await UserTokens.RefreshAsync(_db, issued.RefreshToken, DateTime.UtcNow));
+        Assert.NotNull(await UserTokens.ReauthAsync(_db, issued.RefreshToken, DateTime.UtcNow));
+
+        await UserTokens.RevokeAllAsync(_db, admin.Id);
+        Assert.Null(await UserTokens.ReauthAsync(_db, issued.RefreshToken, DateTime.UtcNow));
     }
 
     [Theory]

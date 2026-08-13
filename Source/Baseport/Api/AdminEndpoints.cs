@@ -44,7 +44,7 @@ public static class AdminEndpoints
             if (!string.IsNullOrWhiteSpace(email) && await db.UserAccounts.AnyAsync(a => a.Email == email))
                 return Results.BadRequest(new { errors = new[] { "That email is already on another account." }, invalid = new[] { "email" } });
             var role = body["role"] is JsonValue av && av.TryGetValue<string>(out var r) ? AccountRoles.Normalize(r) : AccountRoles.Consumer;
-            if (role is null) return Results.BadRequest(new { errors = new[] { "Role must be admin or consumer." } });
+            if (role is null) return Results.BadRequest(new { errors = new[] { "Role must be admin, consumer or user." } });
             var now = DateTime.UtcNow;
             var account = new UserAccount
             {
@@ -72,6 +72,9 @@ public static class AdminEndpoints
         {
             var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Id == pid);
             if (account == null) return Results.NotFound();
+            // An admin is out of reach of the console entirely, so console access alone can never take another operator's account over.
+            if (account.Role == AccountRoles.Admin)
+                return Results.BadRequest(new { errors = new[] { AdminOnlyByCli } });
             // Validate the resulting account, not just the supplied keys: a PATCH that sets only an e-mail must still be checked against the rules.
             var nextUsername = body["username"] is JsonValue uv && uv.TryGetValue<string>(out var uname) ? uname.Trim() : account.Username;
             var nextEmail = body["email"] is JsonValue ev && ev.TryGetValue<string>(out var mail) ? mail.Trim() : account.Email;
@@ -89,11 +92,22 @@ public static class AdminEndpoints
             if (body["role"] is JsonValue av && av.TryGetValue<string>(out var rawRole))
             {
                 var role = AccountRoles.Normalize(rawRole);
-                if (role is null) return Results.BadRequest(new { errors = new[] { "Role must be admin or consumer." } });
-                // Demotion locks the console just as surely as deletion does, so it is refused the same way.
-                if (role != AccountRoles.Admin && await IsLastEnabledAdmin(db, account))
-                    return Results.BadRequest(new { errors = new[] { "This is the last enabled admin and cannot be demoted." } });
+                if (role is null) return Results.BadRequest(new { errors = new[] { "Role must be admin, consumer or user." } });
+                // Promotion is the console taking on a privilege it cannot be trusted to grant itself; demotion is how one operator removes another. Both belong to whoever has the shell.
+                if (role == AccountRoles.Admin)
+                    return Results.BadRequest(new { errors = new[] { AdminOnlyByCli } });
                 account.Role = role;
+            }
+
+            // A password an operator sets for somebody else is a one-time credential: the owner replaces it on first use, and every session opened under the old one is gone.
+            if (body["password"] is JsonValue pv && pv.TryGetValue<string>(out var newPassword) && !string.IsNullOrEmpty(newPassword))
+            {
+                if (AccountValidation.PasswordProblem(newPassword) is { } passwordProblem)
+                    return Results.BadRequest(new { errors = new[] { passwordProblem }, invalid = new[] { "password" } });
+
+                account.PasswordHash = AdminAuth.HashPassword(newPassword);
+                account.MustChangePassword = true;
+                await UserTokens.RevokeAllAsync(db, account.Id);
             }
 
             if (body["isDisabled"] is JsonValue dv2 && dv2.TryGetValue<bool>(out var disabled))
@@ -101,12 +115,10 @@ public static class AdminEndpoints
                 // Disabling the last account that can sign in locks the console.
                 if (disabled && !account.IsDisabled && await db.UserAccounts.CountAsync(a => !a.IsDisabled && a.Id != account.Id) == 0)
                     return Results.BadRequest(new { errors = new[] { "This is the last enabled account and cannot be disabled." } });
-                if (disabled && await IsLastEnabledAdmin(db, account))
-                    return Results.BadRequest(new { errors = new[] { "This is the last enabled admin and cannot be disabled." } });
 
                 account.IsDisabled = disabled;
-                // A disabled account must not keep a live console session.
-                if (disabled) AdminAuth.EndSessionsFor(account.Id);
+                // A disabled account must not keep a live session on either surface.
+                if (disabled) await UserTokens.RevokeAllAsync(db, account.Id);
             }
 
             if (body["apiEnabled"] is JsonValue ae && ae.TryGetValue<bool>(out var apiEnabled))
@@ -156,15 +168,15 @@ public static class AdminEndpoints
         {
             var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Id == pid);
             if (account == null) return Results.NotFound();
+            if (account.Role == AccountRoles.Admin)
+                return Results.BadRequest(new { errors = new[] { AdminOnlyByCli } });
 
             // Deleting the last account that can still sign in locks everyone out of the console permanently, with no way back in.
             var otherEnabled = await db.UserAccounts.CountAsync(a => a.Id != account.Id && !a.IsDisabled);
             if (otherEnabled == 0)
                 return Results.BadRequest(new { errors = new[] { "This is the last enabled account. Enable another before deleting it." } });
-            if (await IsLastEnabledAdmin(db, account))
-                return Results.BadRequest(new { errors = new[] { "This is the last enabled admin. Promote another before deleting it." } });
 
-            AdminAuth.EndSessionsFor(account.Id);
+            await UserTokens.RevokeAllAsync(db, account.Id);
             db.UserAccounts.Remove(account);
             await db.SaveChangesAsync();
             return Results.Ok(new { deleted = account.Id });
@@ -603,6 +615,9 @@ public static class AdminEndpoints
         if (errors.Any(e => e.StartsWith("Email", StringComparison.Ordinal))) invalid.Add("email");
         return invalid;
     }
+
+    // An admin account is changed, deleted and demoted only with shell access, so console access alone cannot take another operator over. TrailBase draws the same line (crates/core/src/admin/user/update_user.rs:38).
+    public const string AdminOnlyByCli = "Admin accounts can only be changed with the CLI: baseport accounts --help.";
 
     // Nobody reaches the console once the last admin who can sign in is gone, and there is no way back in.
     public static async Task<bool> IsLastEnabledAdmin(AppDbContext db, UserAccount account) =>

@@ -49,7 +49,7 @@ public static class PublicApiEndpoints
         // Read: list records.
         app.MapGet("/api/v1/{apiName}/records", async (AppDbContext db, HttpContext ctx, string apiName, string? q, string? sort, string? order, int? page, int? pageSize) =>
         {
-            if (!await ApiAuth.AuthorizeAsync(db, ctx)) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
             if (table == null) return ApiError(404, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
@@ -58,7 +58,8 @@ public static class PublicApiEndpoints
             var sortField = fields.FirstOrDefault(f => f.Name == sort);
             var descending = !string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase);
 
-            var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50);
+            var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50,
+                accessFields: fields, accessUserId: caller.Id);
             return Results.Ok(new
             {
                 rows = result.Records.Select(r => ApiDtos.RecordDto(r, fields)),
@@ -74,31 +75,33 @@ public static class PublicApiEndpoints
         // Live changes for one table, as Server-Sent Events.
         app.MapGet("/api/v1/{apiName}/subscribe", async (AppDbContext db, HttpContext ctx, string apiName) =>
         {
-            if (!await ApiAuth.AuthorizeAsync(db, ctx)) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
             var table = await db.Tables.FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
             if (table == null) return ApiError(404, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
             if (table.IsProxy) return ApiError(400, "Proxy tables store nothing locally and emit no changes.");
 
-            return TypedResults.ServerSentEvents(Stream(table.Id, ctx.RequestAborted), "record");
+            return TypedResults.ServerSentEvents(Stream(db, table, caller.Id, ctx.RequestAborted), "record");
         });
 
         // Read: single record
         app.MapGet("/api/v1/{apiName}/records/{rid}", async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
         {
-            if (!await ApiAuth.AuthorizeAsync(db, ctx)) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
             if (table == null) return ApiError(404, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
             var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == rid);
             if (record == null) return ApiError(404, "Record not found.");
+            if (!await RecordAccess.AllowsAsync(db, table, table.Fields.ToList(), Permission.Read, caller.Id, rid))
+                return ApiError(403, "This record is not yours to read.");
             return Results.Ok(ApiDtos.RecordDto(record, table.Fields));
         });
 
         // Create: same validation/computation as the embedded form. JSON or multipart/form-data (for file fields).
         app.MapPost("/api/v1/{apiName}/records", async (AppDbContext db, HttpContext ctx, string apiName) =>
         {
-            if (!await ApiAuth.AuthorizeAsync(db, ctx)) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
             if (table == null) return ApiError(404, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
@@ -110,6 +113,8 @@ public static class PublicApiEndpoints
                 return Results.BadRequest(new { errors = outcome.Errors, invalid = outcome.InvalidFields });
             if (table.IsProxy)
                 return Results.BadRequest(new { errors = new[] { "Proxy tables forward to a remote API and cannot be written via the REST API." } });
+            if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, caller.Id, request: obj))
+                return ApiError(403, "This record is not yours to create.");
             var record = new Record
             {
                 TableId = table.Id,
@@ -126,7 +131,7 @@ public static class PublicApiEndpoints
         app.MapMethods("/api/v1/{apiName}/records/{rid}", new[] { "PATCH", "PUT" },
             async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
         {
-            if (!await ApiAuth.AuthorizeAsync(db, ctx)) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
             if (table == null) return ApiError(404, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
@@ -140,6 +145,9 @@ public static class PublicApiEndpoints
             if (formErrors.Count > 0) return Results.BadRequest(new { errors = formErrors });
             var replace = HttpMethods.IsPut(ctx.Request.Method);
 
+            if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Update, caller.Id, rid, request: obj))
+                return ApiError(403, "This record is not yours to change.");
+
             var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, obj, replace);
             if (outcome.HasErrors)
                 return Results.BadRequest(new { errors = outcome.Errors, invalid = outcome.InvalidFields });
@@ -152,12 +160,14 @@ public static class PublicApiEndpoints
         // Delete: single record
         app.MapDelete("/api/v1/{apiName}/records/{rid}", async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
         {
-            if (!await ApiAuth.AuthorizeAsync(db, ctx)) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
             var table = await db.Tables.FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
             if (table == null) return ApiError(404, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
             var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == rid);
             if (record == null) return ApiError(404, "Record not found.");
+            if (!await RecordAccess.AllowsAsync(db, table, await db.Fields.Where(f => f.TableId == table.Id).ToListAsync(), Permission.Delete, caller.Id, rid))
+                return ApiError(403, "This record is not yours to delete.");
             db.Records.Remove(record);
             await db.SaveChangesAsync();
             return Results.Ok(new { deleted = rid });
@@ -168,14 +178,21 @@ public static class PublicApiEndpoints
 
     // Every error the public API returns speaks one shape, {"errors": [...]}, so a client parses failures the same way across every status code.
     private static async IAsyncEnumerable<object> Stream(
-        string tableId, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
+        AppDbContext db, TableDefinition table, string userId,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
     {
         var channel = RecordEvents.Subscribe();
+        var fields = RecordAccess.HasRule(table, Permission.Read)
+            ? await db.Fields.Where(f => f.TableId == table.Id).ToListAsync(token)
+            : [];
         try
         {
             await foreach (var e in channel.Reader.ReadAllAsync(token))
             {
-                if (e.TableId != tableId) continue;
+                if (e.TableId != table.Id) continue;
+                // A stream must not leak what a read would have refused, and the row may already be gone, so the rule is evaluated against the event payload.
+                if (fields.Count > 0 && !await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, userId,
+                        row: e.Json is null ? null : JsonNode.Parse(e.Json) as JsonObject)) continue;
                 yield return new
                 {
                     action = e.Action,

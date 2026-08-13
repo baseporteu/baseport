@@ -29,11 +29,8 @@ public static class Jobs
             "Prune audit entries older than the log retention setting.",
             LogsCleanupAsync),
         new("session-cleanup", "Session cleanup", "0 0 * * * *", true,
-            "Drop expired admin console sessions.",
-            (_, _, _) =>
-            {
-                return Task.FromResult($"Removed {AdminAuth.PruneExpired()} session(s).");
-            }),
+            "Drop expired sign-in sessions.",
+            async (db, _, _) => $"Removed {await UserTokens.PruneExpiredAsync(db, DateTime.UtcNow)} session(s)."),
         new("query-optimizer", "Query optimizer", "0 0 5 * * 0", true,
             "Run PRAGMA optimize against the SQLite store.",
             QueryOptimizeAsync),

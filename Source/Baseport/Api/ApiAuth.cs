@@ -31,7 +31,7 @@ public static class ApiAuth
         if (claims is null) return null;
 
         var account = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == claims.Sub);
-        return account is null || account.IsDisabled || account.Role != AccountRoles.User ? null : account;
+        return account is null || account.IsDisabled ? null : account;
     }
 
     // same resolution, for callers with no HttpContext to pull a bearer header from (the postgres/tds wire listeners authenticate off the password field instead)

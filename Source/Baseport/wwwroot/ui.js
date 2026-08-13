@@ -103,6 +103,20 @@ const ui = (() => {
         return true;
     }
 
+    // Wraps a block in a hover-revealed copy button. `text` may be a function, so a caller can copy something generated at click time.
+    function copyable(block, text) {
+        const wrap = el('div', 'copy-wrap');
+        const btn = el('button', 'copy-btn', {
+            type: 'button',
+            title: 'Copy'
+        });
+        btn.setAttribute('aria-label', 'Copy');
+        btn.innerHTML = ICONS.copy;
+        btn.onclick = () => copyValue(typeof text === 'function' ? text() : text);
+        wrap.append(block, btn);
+        return wrap;
+    }
+
     document.addEventListener('dblclick', (ev) => {
         const cell = ev.target.closest && ev.target.closest('.table td');
         if (!cell || cell.querySelector('button, input, select, textarea, a')) return;
@@ -816,6 +830,7 @@ const ui = (() => {
         toast,
         dismiss,
         copyValue,
+        copyable,
         handle,
         markInvalid,
         send,

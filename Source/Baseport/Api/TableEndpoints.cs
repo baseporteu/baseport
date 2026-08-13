@@ -62,6 +62,18 @@ public static class TableEndpoints
             if (patch["apiMethods"] is JsonArray methods)
                 table.ApiMethods = ApiMethods.Serialize(methods.Select(m => m?.GetValue<string>() ?? ""));
 
+            // Per-record access rules. Rejected here rather than at request time, where a bad rule is a 500 on every call to the table.
+            foreach (var (key, permission) in RecordAccess.RuleKeys)
+            {
+                if (patch[key] is not JsonValue rv || !rv.TryGetValue<string>(out var rule)) continue;
+                rule = rule.Trim();
+                if (RecordAccess.Problem(rule, table.Fields.ToList()) is { } ruleProblem)
+                    return Results.BadRequest(new { errors = new[] { ruleProblem } });
+                if (await RecordAccess.SqlProblemAsync(db, table, table.Fields.ToList(), rule) is { } sqlProblem)
+                    return Results.BadRequest(new { errors = new[] { sqlProblem } });
+                RecordAccess.Assign(table, permission, rule);
+            }
+
             // A proxy target is not write-once.
             if (table.IsProxy)
             {
