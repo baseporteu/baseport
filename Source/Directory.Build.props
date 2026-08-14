@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>0.1.0</Version>
+    <Version>0.0.1-alpha.1</Version>
     <Authors>Melosso</Authors>
     <Company>Melosso</Company>
     <Product>Baseport</Product>
