@@ -393,7 +393,8 @@ public static class AdminEndpoints
                 fields = await db.Fields.CountAsync(),
                 forms = await db.FormConfigs.CountAsync(),
                 records = await db.Records.CountAsync(),
-                apiEnabledTables = await db.Tables.CountAsync(t => t.ApiEnabled)
+                apiEnabledTables = await db.Tables.CountAsync(t => t.ApiEnabled),
+                usersEnabled = await db.UserAccounts.CountAsync(u => !u.IsDisabled)
             });
         });
 

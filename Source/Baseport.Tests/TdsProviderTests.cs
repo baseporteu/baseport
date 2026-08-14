@@ -147,6 +147,19 @@ public class TdsProviderTests : IAsyncLifetime
         Assert.Equal(expected, Assert.Single(Assert.Single(rows)));
     }
 
+    // t-sql caps the row count at the front of the statement, sqlite at the end
+    [Theory]
+    [InlineData("SELECT TOP 10 Name FROM _tables")]
+    [InlineData("SELECT TOP (10) Name FROM _tables")]
+    [InlineData("select top 10 Name from _tables;")]
+    public async Task A_top_clause_caps_the_result_instead_of_erroring(string sql)
+    {
+        using var client = await ConnectAsync(Token);
+        var (columns, rows) = await RunBatchAsync(client, sql);
+        Assert.Equal(["Name"], columns);
+        Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
+    }
+
     // an object the catalog does not emulate must answer empty; it used to hand the client raw "SQLite Error 1: no such table" text
     [Fact]
     public async Task An_unemulated_catalog_object_answers_empty_instead_of_leaking_sqlite()

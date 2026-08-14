@@ -298,27 +298,29 @@ function clearTableSelection() {
     currentTableProxyUrl = '';
 }
 
+let summaryStats = {};
+
 async function loadTables() {
     const res = await fetch('/api/_admin/tables');
     const tables = await res.json();
     currentTables = tables;
     renderSidebar(currentSection);
+    summaryStats = await fetch('/api/_admin/settings').then((r) => r.json()).catch(() => ({}));
     updateSummary(currentTables);
 }
 
-// Four counts on the tables overview: what data-model work exists so far, at a glance.
+// Four numbers on the tables overview: how much data is here and what it costs, at a glance.
 function updateSummary(tables) {
     const el = document.getElementById('tablesSummary');
     if (!el) return;
     const records = tables.reduce((n, t) => n + (t.recordCount || 0), 0);
-    const forms = tables.reduce((n, t) => n + (t.formCount || 0), 0);
-    const apiEnabled = tables.filter((t) => t.apiEnabled).length;
+    const size = (bytes) => (bytes != null ? fmtSize(bytes) : 'n/a');
     el.innerHTML = [
-        ['Tables', tables.length],
-        ['Records', records],
-        ['Forms', forms],
-        ['API enabled', apiEnabled],
-    ].map(([label, value]) => `<div class="summary-card"><div class="summary-value">${value.toLocaleString()}</div><div class="summary-label">${label}</div></div>`).join('');
+        ['Records', records.toLocaleString()],
+        ['Database size', size(summaryStats.dbSizeBytes)],
+        ['Index size', size(summaryStats.estimatedIndexBytes)],
+        ['Users enabled', (summaryStats.usersEnabled ?? 0).toLocaleString()],
+    ].map(([label, value]) => `<div class="summary-card"><div class="summary-value">${value}</div><div class="summary-label">${label}</div></div>`).join('');
 }
 
 async function newTable() {

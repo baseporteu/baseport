@@ -78,6 +78,8 @@ public static class TdsConnection
 
     private static readonly Regex ServerVariable = new(@"@@(?<name>\w+)", RegexOptions.IgnoreCase);
 
+    private static readonly Regex TopClause = new(@"^\s*SELECT\s+TOP\s*\(?\s*(?<n>\d+)\s*\)?\s+", RegexOptions.IgnoreCase);
+
     private static readonly Dictionary<string, string> ServerVariables = new(StringComparer.OrdinalIgnoreCase)
     {
         ["version"] = "'Microsoft SQL Server 2019 - 15.0.0 (Baseport)'",
@@ -99,6 +101,12 @@ public static class TdsConnection
     private static string RewriteServerVariables(string sql) =>
         sql.Contains("@@", StringComparison.Ordinal)
             ? ServerVariable.Replace(sql, m => ServerVariables.GetValueOrDefault(m.Groups["name"].Value, "NULL"))
+            : sql;
+
+    // t-sql caps a result set at the front of the statement and sqlite at the end; without this every browser's "select the first n rows" is a syntax error
+    private static string RewriteTop(string sql) =>
+        TopClause.Match(sql) is { Success: true } m
+            ? $"SELECT {sql[m.Length..].TrimEnd().TrimEnd(';')} LIMIT {m.Groups["n"].Value}"
             : sql;
 
     // ssms and sqlclient read these to identify the server and pick the database to browse; sqlite has none of them
@@ -152,7 +160,7 @@ public static class TdsConnection
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        sql = RewriteServerVariables(sql);
+        sql = RewriteTop(RewriteServerVariables(sql));
         var invalid = SqlEngine.Validate(sql);
         var result = invalid is null
             ? await SqlEngine.ReadAsync(db, sql, conn =>

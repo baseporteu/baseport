@@ -753,6 +753,15 @@ test('the summary cards update on a full load, not only after a re-fetch', () =>
     assert.ok(/function updateSummary\(tables\)/.test(core), 'updateSummary is gone');
 });
 
+test('the summary cards report weight, not just how many tables exist', () => {
+    const core = read('js/core.js');
+    assert.ok(/\['Records',/.test(core), 'records no longer leads the summary');
+    assert.ok(/\['Database size',/.test(core), 'the database size card is gone');
+    assert.ok(/\['Index size',/.test(core), 'the index size card is gone');
+    assert.ok(/\['Users enabled',/.test(core), 'the enabled-users card is gone');
+    assert.ok(/summaryStats\.dbSizeBytes/.test(core), 'the sizes are not read from the settings payload');
+});
+
 test('the users page inherits the logs layout: actions in the header, pager in the toolbar', () => {
     const auth = read('admin/views/auth.html');
     assert.ok(/<div class='page-actions'>/.test(auth), 'the users header has no actions');
