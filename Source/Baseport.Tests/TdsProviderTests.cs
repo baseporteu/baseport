@@ -121,6 +121,41 @@ public class TdsProviderTests : IAsyncLifetime
         Assert.Single(rows);
     }
 
+    // the author's tables are rows in _tables, not sqlite tables, so a browser only finds them if the catalog reports them
+    [Theory]
+    [InlineData("SELECT name FROM sys.tables")]
+    [InlineData("SELECT name FROM sys.objects WHERE type = 'U '")]
+    [InlineData("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES")]
+    public async Task A_catalog_probe_finds_the_authors_table(string sql)
+    {
+        using var client = await ConnectAsync(Token);
+        var (_, rows) = await RunBatchAsync(client, sql);
+        Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
+    }
+
+    // sqlite's tokenizer rejects @, so these are substituted before the statement is parsed rather than registered as functions
+    [Theory]
+    [InlineData("SELECT @@version", "Microsoft SQL Server 2019 - 15.0.0 (Baseport)")]
+    [InlineData("SELECT @@SERVERNAME", "baseport")]
+    [InlineData("SELECT DB_NAME()", "baseport")]
+    [InlineData("SELECT SCHEMA_NAME()", "dbo")]
+    [InlineData("SELECT SERVERPROPERTY('ProductVersion')", "15.0.0")]
+    public async Task A_server_identity_probe_answers_like_sql_server(string sql, string expected)
+    {
+        using var client = await ConnectAsync(Token);
+        var (_, rows) = await RunBatchAsync(client, sql);
+        Assert.Equal(expected, Assert.Single(Assert.Single(rows)));
+    }
+
+    // an object the catalog does not emulate must answer empty; it used to hand the client raw "SQLite Error 1: no such table" text
+    [Fact]
+    public async Task An_unemulated_catalog_object_answers_empty_instead_of_leaking_sqlite()
+    {
+        using var client = await ConnectAsync(Token);
+        var (_, rows) = await RunBatchAsync(client, "SELECT * FROM sys.dm_os_wait_stats");
+        Assert.Empty(rows);
+    }
+
     private int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
 
     private async Task<TcpClient> ConnectAsync(string token)

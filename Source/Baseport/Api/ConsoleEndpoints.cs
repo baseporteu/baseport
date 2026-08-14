@@ -82,6 +82,10 @@ public static class ConsoleEndpoints
         ctx.Response.Headers.CacheControl = "no-store";
 
         var token = ctx.RequestAborted;
+
+        // Resolving the caller can remint an expired auth cookie, and a cookie is a header: it has to happen before the first byte of the body goes out, not halfway through the stream.
+        var bootstrap = await BootstrapAsync(db, ctx, authPage);
+
         var parts = authPage ? AuthParts : Parts;
         foreach (var part in parts)
         {
@@ -90,11 +94,11 @@ public static class ConsoleEndpoints
             if (!authPage && part == "admin/_shell.html")
             {
                 await ctx.Response.WriteAsync(html, token);
-                await ctx.Response.WriteAsync(await BootstrapAsync(db, ctx, authPage), token);
+                await ctx.Response.WriteAsync(bootstrap, token);
                 continue;
             }
             if (authPage && part == "admin/_auth.html")
-                html = html.Replace("<!--__BOOTSTRAP__-->", await BootstrapAsync(db, ctx, authPage), StringComparison.Ordinal);
+                html = html.Replace("<!--__BOOTSTRAP__-->", bootstrap, StringComparison.Ordinal);
             await ctx.Response.WriteAsync(html, token);
         }
     }

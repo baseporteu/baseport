@@ -74,6 +74,71 @@ public static class TdsConnection
     // real clients (pytds, sqlcmd, ssms) send these on connect or per statement: use [db] to pick a database, set ... to configure session options; there is only one database and no session state to configure, so both are accepted as no-ops instead of tripping the read-only allowlist
     private static readonly Regex NoOpStatement = new(@"^\s*(USE\b|SET\s+\w)", RegexOptions.IgnoreCase);
 
+    private static readonly Regex CatalogQuery = new(@"\b(FROM|JOIN)\s+(sys\.|INFORMATION_SCHEMA\.)", RegexOptions.IgnoreCase);
+
+    private static readonly Regex ServerVariable = new(@"@@(?<name>\w+)", RegexOptions.IgnoreCase);
+
+    private static readonly Dictionary<string, string> ServerVariables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["version"] = "'Microsoft SQL Server 2019 - 15.0.0 (Baseport)'",
+        ["servername"] = "'baseport'",
+        ["servicename"] = "'MSSQLSERVER'",
+        ["spid"] = "0",
+        ["language"] = "'us_english'",
+        ["max_precision"] = "38",
+        ["microsoftversion"] = "251658240",
+        ["rowcount"] = "0",
+        ["error"] = "0",
+        ["trancount"] = "0",
+        ["nestlevel"] = "0",
+        ["fetch_status"] = "0",
+        ["identity"] = "NULL",
+    };
+
+    // sqlite's tokenizer rejects @ outright, so @@version cannot be a registered function the way DB_NAME() can; the reference is substituted before the statement is parsed
+    private static string RewriteServerVariables(string sql) =>
+        sql.Contains("@@", StringComparison.Ordinal)
+            ? ServerVariable.Replace(sql, m => ServerVariables.GetValueOrDefault(m.Groups["name"].Value, "NULL"))
+            : sql;
+
+    // ssms and sqlclient read these to identify the server and pick the database to browse; sqlite has none of them
+    private static void RegisterCompatibilityFunctions(Microsoft.Data.Sqlite.SqliteConnection conn)
+    {
+        conn.CreateFunction("db_name", () => "baseport");
+        conn.CreateFunction("db_name", (long _) => "baseport");
+        conn.CreateFunction("db_id", () => 5L);
+        conn.CreateFunction("schema_name", () => "dbo");
+        conn.CreateFunction("schema_name", (long _) => "dbo");
+        conn.CreateFunction("schema_id", () => 1L);
+        conn.CreateFunction("suser_sname", () => "baseport");
+        conn.CreateFunction("suser_name", () => "baseport");
+        conn.CreateFunction("user_name", () => "dbo");
+        conn.CreateFunction("original_login", () => "baseport");
+        conn.CreateFunction("host_name", () => "baseport");
+        conn.CreateFunction("app_name", () => "Baseport");
+        conn.CreateFunction("getdate", () => DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"));
+        conn.CreateFunction("getutcdate", () => DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"));
+        conn.CreateFunction("isnull", (object? value, object? fallback) => value ?? fallback);
+        conn.CreateFunction("object_id", (string? _) => (object?)null);
+        conn.CreateFunction("object_name", (long _) => (object?)null);
+        conn.CreateFunction("serverproperty", (string? property) => ServerProperty(property));
+        conn.CreateFunction("databasepropertyex", (string? _, string? _) => (object?)null);
+    }
+
+    private static string? ServerProperty(string? property) => (property ?? "").ToLowerInvariant() switch
+    {
+        "productversion" => "15.0.0",
+        "productlevel" => "RTM",
+        "productmajorversion" => "15",
+        "edition" => "Developer Edition (64-bit)",
+        "engineedition" => "3",
+        "servername" or "machinename" => "baseport",
+        "instancename" => null,
+        "collation" => "SQL_Latin1_General_CP1_CI_AS",
+        "isclustered" or "ishadrenabled" or "isintegratedsecurityonly" => "0",
+        _ => null,
+    };
+
     private static async Task RunQueryAsync(NetworkStream stream, IServiceScopeFactory scopes, string sql, CancellationToken ct)
     {
         if (NoOpStatement.IsMatch(sql))
@@ -87,10 +152,19 @@ public static class TdsConnection
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+        sql = RewriteServerVariables(sql);
         var invalid = SqlEngine.Validate(sql);
         var result = invalid is null
-            ? await SqlEngine.ReadAsync(db, sql)
+            ? await SqlEngine.ReadAsync(db, sql, conn =>
+            {
+                RegisterCompatibilityFunctions(conn);
+                WireCatalog.Apply(conn, WireDialect.Tds);
+            })
             : new SqlEngine.Result([], [], false, invalid);
+
+        // WireCatalog answers the catalog objects a browser reads; an unemulated sys.* object answers empty here rather than returning raw sqlite error text to the client
+        if (result.Error is not null && CatalogQuery.IsMatch(sql))
+            result = new SqlEngine.Result([""], [], false, null);
 
         using var ms = new MemoryStream();
         if (result.Error is not null)

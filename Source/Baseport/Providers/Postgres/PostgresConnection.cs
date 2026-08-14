@@ -7,7 +7,7 @@ using Baseport.Providers;
 namespace Baseport.Providers.Postgres;
 
 // one postgres wire-protocol (v3) session: startup, cleartext-password auth against an api token, then simple-query and extended-query (parse/bind/describe/execute/sync) messages answered from SqlEngine.ReadAsync
-// ponytail: no ssl, no catalog emulation (pg_catalog/information_schema), extended query only for statements with zero bound parameters (covers driver-issued begin/commit/rollback and plain ad-hoc selects; real $1-style parameter binding is not implemented), results always sent in text format even if a client asks for binary
+// ponytail: no ssl, catalog emulated from WireCatalog rather than real (an object it does not cover answers empty), bound parameters inlined as literals and only in text format, results always sent in text format even if a client asks for binary
 public static class PostgresConnection
 {
     public static async Task HandleAsync(Socket socket, IServiceScopeFactory scopes, CancellationToken ct)
@@ -39,7 +39,7 @@ public static class PostgresConnection
         await WriteBackendKeyDataAsync(stream, ct);
         await WriteReadyForQueryAsync(stream, ct);
 
-        var statements = new Dictionary<string, string>();
+        var statements = new Dictionary<string, PreparedStatement>();
         var portals = new Dictionary<string, Portal>();
         var hadError = false;
 
@@ -119,19 +119,81 @@ public static class PostgresConnection
 
     private static string? NoOpTag(string sql) => NoOpStatements.FirstOrDefault(x => x.Pattern.IsMatch(sql)).Tag;
 
-    // dbeaver/jdbc probe pg_catalog on connect; sqlite has none of it and can't even parse some of the syntax, so this is caught before sqlite ever sees it
-    // ponytail: answers "nothing here" instead of erroring — schema browser trees stay empty, no real catalog behind this
+    // WireCatalog answers the catalog objects a browser actually reads; this is the net under it, so an unemulated pg_* object still answers empty instead of aborting the client with a sqlite error
     private static readonly Regex CatalogQuery = new(@"\b(FROM|JOIN)\s+(pg_catalog\.|information_schema\.|pg_\w+\b)", RegexOptions.IgnoreCase);
+
+    // pgjdbc asks for these during connection setup, before a client ever browses anything; SHOW is neither a no-op nor on SqlEngine's allowlist, so it used to come back as an error and abort dbeaver's connect
+    private static readonly Regex ShowStatement = new(@"^\s*SHOW\s+(?<name>[A-Za-z_][A-Za-z0-9_\s]*?)\s*;?\s*$", RegexOptions.IgnoreCase);
+
+    private static readonly Dictionary<string, (string Column, string Value)> Settings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["search_path"] = ("search_path", "public"),
+        ["transaction isolation level"] = ("transaction_isolation", "read committed"),
+        ["transaction_isolation"] = ("transaction_isolation", "read committed"),
+        ["server_version"] = ("server_version", "15.0"),
+        ["client_encoding"] = ("client_encoding", "UTF8"),
+        ["standard_conforming_strings"] = ("standard_conforming_strings", "on"),
+        ["datestyle"] = ("DateStyle", "ISO, MDY"),
+        ["timezone"] = ("TimeZone", "UTC"),
+        ["integer_datetimes"] = ("integer_datetimes", "on"),
+    };
+
+    private static SqlEngine.Result? ShowResult(string sql)
+    {
+        var match = ShowStatement.Match(sql);
+        if (!match.Success) return null;
+
+        var name = Regex.Replace(match.Groups["name"].Value.Trim(), @"\s+", " ");
+        // an unknown setting answers empty rather than erroring: a client probing one it can live without must not lose the connection over it
+        return Settings.TryGetValue(name, out var setting)
+            ? new SqlEngine.Result([setting.Column], [[setting.Value]], false, null)
+            : new SqlEngine.Result([name], [[""]], false, null);
+    }
+
+    // sqlite has no version()/current_schema()/current_database(); dbeaver reads all three to identify the server and pick the schema to hang its tree under, and a client with no current database has nothing to browse
+    private static void RegisterCompatibilityFunctions(Microsoft.Data.Sqlite.SqliteConnection conn)
+    {
+        conn.CreateFunction("version", () => "PostgreSQL 15.0 (Baseport)");
+        conn.CreateFunction("current_schema", () => "public");
+        conn.CreateFunction("current_database", () => "baseport");
+        conn.CreateFunction("current_user", () => "baseport");
+        conn.CreateFunction("session_user", () => "baseport");
+        conn.CreateFunction("pg_backend_pid", () => 0);
+    }
+
+    // sqlite names a result column after the expression that produced it, so version() comes back as "version()"; postgres calls it "version", and a client reading that column by name finds nothing otherwise
+    private static readonly Regex ZeroArgumentCall = new(@"^(?<name>[A-Za-z_][A-Za-z0-9_]*)\(\)$");
+
+    private static SqlEngine.Result NameColumnsLikePostgres(SqlEngine.Result result) =>
+        result.Columns.Any(ZeroArgumentCall.IsMatch)
+            ? result with
+            {
+                Columns = result.Columns
+                    .Select(c => ZeroArgumentCall.Match(c) is { Success: true } m ? m.Groups["name"].Value : c)
+                    .ToList()
+            }
+            : result;
 
     private static async Task<SqlEngine.Result> ExecuteAsync(IServiceScopeFactory scopes, string sql)
     {
-        // zero columns reads as "not a result set" to real clients (pg8000: "no result set", dbeaver: SQLSTATE 02000); one placeholder column is what an empty SELECT actually looks like on the wire
-        if (CatalogQuery.IsMatch(sql)) return new SqlEngine.Result(["?column?"], [], false, null);
+        if (ShowResult(sql) is { } show) return show;
+        sql = StripCasts(sql);
 
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var invalid = SqlEngine.Validate(sql);
-        return invalid is null ? await SqlEngine.ReadAsync(db, sql) : new SqlEngine.Result([], [], false, invalid);
+        if (invalid is not null) return new SqlEngine.Result([], [], false, invalid);
+
+        var result = await SqlEngine.ReadAsync(db, sql, conn =>
+        {
+            RegisterCompatibilityFunctions(conn);
+            WireCatalog.Apply(conn, WireDialect.Postgres);
+        });
+
+        // the catalog covers what a browser reads; anything else under pg_catalog still answers empty rather than handing back a sqlite error
+        return result.Error is not null && CatalogQuery.IsMatch(sql)
+            ? new SqlEngine.Result(["?column?"], [], false, null)
+            : NameColumnsLikePostgres(result);
     }
 
     private static async Task RunQueryAsync(NetworkStream stream, IServiceScopeFactory scopes, string sql, CancellationToken ct)
@@ -161,27 +223,177 @@ public static class PostgresConnection
         public SqlEngine.Result? Result;
     }
 
-    private static void HandleParse(byte[] payload, Dictionary<string, string> statements)
+    // the parameter type oids arrive here, not on bind, and a binary value cannot be decoded without them
+    private sealed record PreparedStatement(string Sql, int[] ParameterTypes);
+
+    private static void HandleParse(byte[] payload, Dictionary<string, PreparedStatement> statements)
     {
         var i = 0;
         var name = ReadCString(payload, ref i);
         var sql = ReadCString(payload, ref i);
-        statements[name] = sql;
+
+        var typeCount = i + 2 <= payload.Length ? ReadI16(payload, ref i) : (short)0;
+        var types = new int[typeCount];
+        for (var t = 0; t < typeCount && i + 4 <= payload.Length; t++)
+        {
+            types[t] = BinaryPrimitives.ReadInt32BigEndian(payload.AsSpan(i, 4));
+            i += 4;
+        }
+
+        statements[name] = new PreparedStatement(sql, types);
     }
 
-    private static string? HandleBind(byte[] payload, Dictionary<string, string> statements, Dictionary<string, Portal> portals)
+    private static string? HandleBind(byte[] payload, Dictionary<string, PreparedStatement> statements, Dictionary<string, Portal> portals)
     {
         var i = 0;
         var portalName = ReadCString(payload, ref i);
         var stmtName = ReadCString(payload, ref i);
+
+        if (!statements.TryGetValue(stmtName, out var statement)) return $"unknown statement \"{stmtName}\"";
+
         var formatCodeCount = ReadI16(payload, ref i);
-        i += formatCodeCount * 2;
+        var formatCodes = new short[formatCodeCount];
+        for (var f = 0; f < formatCodeCount; f++) formatCodes[f] = ReadI16(payload, ref i);
+
         var paramCount = ReadI16(payload, ref i);
-        if (paramCount > 0) return "parameterized queries are not supported";
-        if (!statements.TryGetValue(stmtName, out var sql)) return $"unknown statement \"{stmtName}\"";
-        portals[portalName] = new Portal { Sql = sql };
+        var values = new List<string?>(paramCount);
+        for (var p = 0; p < paramCount; p++)
+        {
+            var length = BinaryPrimitives.ReadInt32BigEndian(payload.AsSpan(i, 4));
+            i += 4;
+            if (length < 0) { values.Add(null); continue; }
+
+            // one format code applies to every parameter, none at all means text
+            var format = formatCodeCount == 0 ? 0 : formatCodes[formatCodeCount == 1 ? 0 : p];
+            var typeOid = p < statement.ParameterTypes.Length ? statement.ParameterTypes[p] : 0;
+
+            var decoded = format == 0
+                ? Encoding.UTF8.GetString(payload, i, length)
+                : DecodeBinary(payload.AsSpan(i, length), typeOid);
+            if (decoded is null) return $"parameter type {typeOid} cannot be read in binary format";
+
+            values.Add(decoded);
+            i += length;
+        }
+
+        portals[portalName] = new Portal { Sql = Inline(statement.Sql, values) };
         return null;
     }
+
+    // pgjdbc binds ints in binary, which is what dbeaver's table and column queries pass their namespace and relation oids as
+    private static string? DecodeBinary(ReadOnlySpan<byte> value, int typeOid) => typeOid switch
+    {
+        21 when value.Length == 2 => BinaryPrimitives.ReadInt16BigEndian(value).ToString(),
+        23 or 26 when value.Length == 4 => BinaryPrimitives.ReadInt32BigEndian(value).ToString(),
+        20 when value.Length == 8 => BinaryPrimitives.ReadInt64BigEndian(value).ToString(),
+        700 when value.Length == 4 => BinaryPrimitives.ReadSingleBigEndian(value).ToString(System.Globalization.CultureInfo.InvariantCulture),
+        701 when value.Length == 8 => BinaryPrimitives.ReadDoubleBigEndian(value).ToString(System.Globalization.CultureInfo.InvariantCulture),
+        16 when value.Length == 1 => value[0] == 0 ? "0" : "1",
+        25 or 1043 or 19 or 18 or 705 or 0 => Encoding.UTF8.GetString(value),
+        _ => null,
+    };
+
+    // The engine takes one finished statement, so a bound value becomes a literal in it. Everything here is read-only and already allowlisted, and the value is escaped on the way in.
+    internal static string Inline(string sql, List<string?> values)
+    {
+        if (values.Count == 0) return sql;
+
+        return Rewrite(sql, token =>
+        {
+            if (token[0] != '$') return null;
+            var index = int.Parse(token[1..]) - 1;
+            if (index < 0 || index >= values.Count) return null;
+
+            var value = values[index];
+            if (value is null) return "NULL";
+            // sqlite compares a number to a text column as unequal, and the catalog's oids are numbers, so a numeric parameter must not arrive quoted
+            return long.TryParse(value, out _) || double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)
+                ? value
+                : $"'{value.Replace("'", "''")}'";
+        });
+    }
+
+    // dbeaver casts all over its metadata queries ('pg_namespace'::regclass, nspname::text); sqlite has no :: operator, and the cast is noise once the value is already the right shape
+    internal static string StripCasts(string sql) => Rewrite(sql, token => token.StartsWith("::", StringComparison.Ordinal) ? "" : null);
+
+    // Walks the statement outside string literals, quoted identifiers and comments, so a value that happens to contain :: or $1 is left alone.
+    private static string Rewrite(string sql, Func<string, string?> replace)
+    {
+        var output = new StringBuilder(sql.Length);
+        var i = 0;
+
+        while (i < sql.Length)
+        {
+            var c = sql[i];
+
+            if (c is '\'' or '"')
+            {
+                var quote = c;
+                var start = i++;
+                while (i < sql.Length)
+                {
+                    if (sql[i] == quote && i + 1 < sql.Length && sql[i + 1] == quote) { i += 2; continue; }
+                    if (sql[i] == quote) { i++; break; }
+                    i++;
+                }
+                output.Append(sql, start, i - start);
+                continue;
+            }
+
+            if (c == '-' && i + 1 < sql.Length && sql[i + 1] == '-')
+            {
+                var start = i;
+                while (i < sql.Length && sql[i] != '\n') i++;
+                output.Append(sql, start, i - start);
+                continue;
+            }
+
+            if (c == ':' && i + 1 < sql.Length && sql[i + 1] == ':')
+            {
+                var start = i;
+                i += 2;
+                while (i < sql.Length && char.IsWhiteSpace(sql[i])) i++;
+                if (i < sql.Length && sql[i] == '"')
+                {
+                    i++;
+                    while (i < sql.Length && sql[i] != '"') i++;
+                    if (i < sql.Length) i++;
+                }
+                else while (i < sql.Length && (char.IsAsciiLetterOrDigit(sql[i]) || sql[i] == '_')) i++;
+                // a type name can be two words (character varying, double precision) and can carry an array suffix
+                var trailing = i;
+                while (i < sql.Length && char.IsWhiteSpace(sql[i])) i++;
+                var word = i;
+                while (i < sql.Length && char.IsAsciiLetter(sql[i])) i++;
+                if (i > word && TwoWordTypes.Contains(sql[word..i])) trailing = i;
+                i = trailing;
+                while (i < sql.Length && (sql[i] == '[' || sql[i] == ']' || char.IsWhiteSpace(sql[i])) && sql[i] != '\n')
+                {
+                    if (sql[i] == '[' || sql[i] == ']') i++;
+                    else if (i + 1 < sql.Length && sql[i + 1] == '[') i++;
+                    else break;
+                }
+
+                output.Append(replace(sql[start..i]) ?? sql[start..i]);
+                continue;
+            }
+
+            if (c == '$' && i + 1 < sql.Length && char.IsAsciiDigit(sql[i + 1]))
+            {
+                var start = i++;
+                while (i < sql.Length && char.IsAsciiDigit(sql[i])) i++;
+                output.Append(replace(sql[start..i]) ?? sql[start..i]);
+                continue;
+            }
+
+            output.Append(c);
+            i++;
+        }
+
+        return output.ToString();
+    }
+
+    private static readonly HashSet<string> TwoWordTypes = new(StringComparer.OrdinalIgnoreCase) { "varying", "precision" };
 
     private static async Task HandleDescribeAsync(NetworkStream stream, byte[] payload, IServiceScopeFactory scopes, Dictionary<string, Portal> portals, CancellationToken ct)
     {
@@ -238,7 +450,7 @@ public static class PostgresConnection
         return false;
     }
 
-    private static void HandleClose(byte[] payload, Dictionary<string, string> statements, Dictionary<string, Portal> portals)
+    private static void HandleClose(byte[] payload, Dictionary<string, PreparedStatement> statements, Dictionary<string, Portal> portals)
     {
         var i = 0;
         var target = (char)payload[i++];

@@ -142,17 +142,64 @@ public class PostgresProviderTests : IAsyncLifetime
         Assert.Equal('Z', (await ReadMessageAsync(stream))!.Value.Type);
     }
 
-    // dbeaver/jdbc probes pg_catalog on connect; sqlite has no such table, so this used to abort the connection with a raw "SQLite Error 1: no such table"
+    // the author's tables are rows in _tables, not sqlite tables, so a browser only finds them if the catalog reports them
     [Theory]
-    [InlineData("SELECT oid, typname FROM pg_catalog.pg_type WHERE typname = 'point'")]
-    [InlineData("SELECT * FROM pg_type")]
     [InlineData("SELECT table_name FROM information_schema.tables")]
-    public async Task A_catalog_probe_returns_empty_instead_of_a_sqlite_error(string sql)
+    [InlineData("SELECT relname FROM pg_catalog.pg_class WHERE relkind = 'r'")]
+    [InlineData("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'")]
+    public async Task A_catalog_probe_finds_the_authors_table(string sql)
+    {
+        using var client = await ConnectAsync();
+        var (_, rows) = await RunQueryAsync(client, sql);
+        Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
+    }
+
+    // every record is a json blob in one shared table, so these are the columns a client is told about and the ones it can then select
+    [Fact]
+    public async Task A_column_probe_reports_the_tables_fields()
+    {
+        using var client = await ConnectAsync();
+        var (_, rows) = await RunQueryAsync(client,
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'Orders' ORDER BY ordinal_position");
+        Assert.Equal(new[] { "id", "created_at" }, rows.Select(r => r[0]));
+    }
+
+    // dbeaver/jdbc probe objects the catalog does not emulate; those must still answer empty rather than aborting the connection with a raw "SQLite Error 1: no such table"
+    [Theory]
+    [InlineData("SELECT * FROM pg_stat_activity")]
+    [InlineData("SELECT * FROM pg_catalog.pg_largeobject")]
+    public async Task An_unemulated_catalog_object_still_answers_empty(string sql)
     {
         using var client = await ConnectAsync();
         var (columns, rows) = await RunQueryAsync(client, sql);
         Assert.Single(columns);
         Assert.Empty(rows);
+    }
+
+    // dbeaver reads these three to identify the server and pick the schema to browse; sqlite has none of them, and a client with no current database has no node to hang a tree under
+    [Theory]
+    [InlineData("SELECT version()", "version", "PostgreSQL 15.0 (Baseport)")]
+    [InlineData("SELECT current_schema()", "current_schema", "public")]
+    [InlineData("SELECT current_database()", "current_database", "baseport")]
+    public async Task A_server_identity_function_answers_like_postgres(string sql, string column, string value)
+    {
+        using var client = await ConnectAsync();
+        var (columns, rows) = await RunQueryAsync(client, sql);
+        Assert.Equal(column, Assert.Single(columns));
+        Assert.Equal(value, Assert.Single(Assert.Single(rows)));
+    }
+
+    // pgjdbc sends these during connection setup: SHOW is neither a no-op nor on SqlEngine's allowlist, so it used to abort the connect with an error
+    [Theory]
+    [InlineData("SHOW search_path", "search_path", "public")]
+    [InlineData("SHOW TRANSACTION ISOLATION LEVEL", "transaction_isolation", "read committed")]
+    [InlineData("SHOW nonsense_setting", "nonsense_setting", "")]
+    public async Task A_show_statement_answers_instead_of_erroring(string sql, string column, string value)
+    {
+        using var client = await ConnectAsync();
+        var (columns, rows) = await RunQueryAsync(client, sql);
+        Assert.Equal(column, Assert.Single(columns));
+        Assert.Equal(value, Assert.Single(Assert.Single(rows)));
     }
 
     private int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;

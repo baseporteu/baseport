@@ -25,8 +25,15 @@ public static class SqlEngine
 
     public sealed record Result(List<string> Columns, List<List<string?>> Rows, bool Truncated, string? Error);
 
-    // Runs a validated query and hands back the grid.
-    public static async Task<Result> ReadAsync(AppDbContext db, string sql)
+    private static void Pragma(System.Data.Common.DbConnection conn, string pragma)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"PRAGMA {pragma}";
+        cmd.ExecuteNonQuery();
+    }
+
+    // Runs a validated query and hands back the grid. configure runs against the connection before the query, for dialect compatibility functions a wire provider needs.
+    public static async Task<Result> ReadAsync(AppDbContext db, string sql, Action<SqliteConnection>? configure = null)
     {
         var owned = db.Database.GetDbConnection();
         var source = new SqliteConnectionStringBuilder(owned.ConnectionString);
@@ -38,7 +45,8 @@ public static class SqlEngine
             : new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = source.DataSource,
-                Mode = SqliteOpenMode.ReadOnly
+                // configure builds temp views and attached catalog schemas, and sqlite opens attached databases with the main database's flags, so a read-only handle cannot write even to :memory:. The statement itself is locked down with query_only below, which covers main, temp and attached alike.
+                Mode = configure is null ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWrite
             }.ToString());
 
         // Closing a connection the caller opened destroys an in-memory SQLite database.
@@ -46,6 +54,14 @@ public static class SqlEngine
         try
         {
             if (!wasOpen) await conn.OpenAsync();
+            if (configure is not null && conn is SqliteConnection sqlite)
+            {
+                // sqlite connections are pooled, and query_only rides along on a pooled handle, so the lockdown from the last statement has to be lifted before this one can build its catalog
+                if (!inMemory) Pragma(conn, "query_only = 0");
+                configure(sqlite);
+                // the owned connection belongs to the app and must stay writable; the ones opened here are ours to lock down before the caller's statement runs
+                if (!inMemory) Pragma(conn, "query_only = 1");
+            }
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql.TrimEnd().TrimEnd(';');
             using var reader = await cmd.ExecuteReaderAsync();
