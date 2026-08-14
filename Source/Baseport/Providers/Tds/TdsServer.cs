@@ -50,7 +50,12 @@ public sealed class TdsServer(IServiceScopeFactory scopes) : BackgroundService
         if (desired == _running) return;
 
         StopListener();
-        if (!desired.Enabled) return;
+        if (!desired.Enabled)
+        {
+            // StopListener resets _running to default, which never equals a disabled-but-configured setting, so record it or every tick stops an already-stopped listener.
+            _running = desired;
+            return;
+        }
 
         try
         {

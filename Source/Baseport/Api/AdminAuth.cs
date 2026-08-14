@@ -120,7 +120,7 @@ public static class LoginGuard
     private const int MaxFailures = 5;
     private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(5);
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (int Failures, DateTime LockedUntil)> State =
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (int Failures, DateTime LockedUntil, DateTime TouchedAt)> State =
         new(System.StringComparer.OrdinalIgnoreCase);
 
     public static bool Allowed(string key)
@@ -138,12 +138,24 @@ public static class LoginGuard
     {
         var now = DateTime.UtcNow;
         State.AddOrUpdate(key,
-            (Failures: 1, LockedUntil: DateTime.MinValue),
+            (Failures: 1, LockedUntil: DateTime.MinValue, TouchedAt: now),
             (_, entry) => entry.LockedUntil > now
                 ? entry
                 : entry.Failures + 1 >= MaxFailures
-                    ? (Failures: 0, LockedUntil: now.Add(LockoutDuration))
-                    : (Failures: entry.Failures + 1, LockedUntil: entry.LockedUntil));
+                    ? (Failures: 0, LockedUntil: now.Add(LockoutDuration), TouchedAt: now)
+                    : (Failures: entry.Failures + 1, LockedUntil: entry.LockedUntil, TouchedAt: now));
+    }
+
+    // The key is whatever handle the caller submitted, so without this an unauthenticated flood grows the table forever. Dropping a quiet entry also decays its failure count, which is the behaviour a lockout window implies anyway.
+    public static int PruneExpired(DateTime now)
+    {
+        var removed = 0;
+        foreach (var (key, entry) in State)
+        {
+            if (entry.LockedUntil > now || entry.TouchedAt > now - LockoutDuration) continue;
+            if (State.TryRemove(new KeyValuePair<string, (int, DateTime, DateTime)>(key, entry))) removed++;
+        }
+        return removed;
     }
 
     public static void Succeeded(string key) => State.TryRemove(key, out _);

@@ -54,6 +54,30 @@ public class AuditLogWriterTests : IDisposable
     }
 
     [Fact]
+    public async Task ShutdownFlushesMoreThanOneBatch()
+    {
+        var writer = new AuditLogWriter(_services.GetRequiredService<IServiceScopeFactory>());
+
+        // Never started, so nothing drains the queue before StopAsync does, and 300 is past the 128 one drain pass takes.
+        for (var i = 0; i < 300; i++)
+            writer.Enqueue(new AuditLog
+            {
+                Id = Ids.NewShortId(12),
+                CreatedAt = DateTime.UtcNow,
+                Method = "POST",
+                Path = "/api/_admin/tables",
+                Status = 200,
+                UserId = "user-1"
+            });
+
+        await writer.StopAsync(TestContext.Current.CancellationToken);
+
+        using var scope = _services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal(300, await db.AuditLogs.CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task AFloodIsDroppedRatherThanGrowingWithoutBound()
     {
         var writer = new AuditLogWriter(_services.GetRequiredService<IServiceScopeFactory>());

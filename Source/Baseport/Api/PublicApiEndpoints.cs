@@ -73,15 +73,19 @@ public static class PublicApiEndpoints
         });
 
         // Live changes for one table, as Server-Sent Events.
-        app.MapGet("/api/v1/{apiName}/subscribe", async (AppDbContext db, HttpContext ctx, string apiName) =>
+        app.MapGet("/api/v1/{apiName}/subscribe", async (IServiceScopeFactory scopes, HttpContext ctx, string apiName) =>
         {
+            // A stream outlives any one scope, so this one covers the handshake only and the stream opens its own per event.
+            using var scope = scopes.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
             if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
             var table = await db.Tables.FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
             if (table == null) return ApiError(404, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
             if (table.IsProxy) return ApiError(400, "Proxy tables store nothing locally and emit no changes.");
 
-            return TypedResults.ServerSentEvents(Stream(db, table, caller.Id, ctx.RequestAborted), "record");
+            return TypedResults.ServerSentEvents(Stream(scopes, table.Id, caller.Id, ctx.RequestAborted), "record");
         });
 
         // Read: single record
@@ -178,21 +182,16 @@ public static class PublicApiEndpoints
 
     // Every error the public API returns speaks one shape, {"errors": [...]}, so a client parses failures the same way across every status code.
     private static async IAsyncEnumerable<object> Stream(
-        AppDbContext db, TableDefinition table, string userId,
+        IServiceScopeFactory scopes, string tableId, string userId,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
     {
         var channel = RecordEvents.Subscribe();
-        var fields = RecordAccess.HasRule(table, Permission.Read)
-            ? await db.Fields.Where(f => f.TableId == table.Id).ToListAsync(token)
-            : [];
         try
         {
             await foreach (var e in channel.Reader.ReadAllAsync(token))
             {
-                if (e.TableId != table.Id) continue;
-                // A stream must not leak what a read would have refused, and the row may already be gone, so the rule is evaluated against the event payload.
-                if (fields.Count > 0 && !await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, userId,
-                        row: e.Json is null ? null : JsonNode.Parse(e.Json) as JsonObject)) continue;
+                if (e.TableId != tableId) continue;
+                if (!await AllowsEventAsync(scopes, tableId, userId, e, token)) continue;
                 yield return new
                 {
                     action = e.Action,
@@ -205,6 +204,23 @@ public static class PublicApiEndpoints
         {
             RecordEvents.Unsubscribe(channel);
         }
+    }
+
+    // Table and rule are re-read per event, not snapshotted at subscribe time: a stream can stay open for days, and a rule the author tightened has to bind the connections already running under the old one.
+    private static async Task<bool> AllowsEventAsync(
+        IServiceScopeFactory scopes, string tableId, string userId, RecordEvent e, CancellationToken token)
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var table = await db.Tables.FirstOrDefaultAsync(t => t.Id == tableId && t.ApiEnabled, token);
+        if (table is null) return false;
+        if (!RecordAccess.HasRule(table, Permission.Read)) return true;
+
+        // A stream must not leak what a read would have refused, and the row may already be gone, so the rule is evaluated against the event payload.
+        var fields = await db.Fields.Where(f => f.TableId == tableId).ToListAsync(token);
+        return await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, userId,
+            row: e.Json is null ? null : JsonNode.Parse(e.Json) as JsonObject);
     }
 
     private static IResult ApiError(int status, string message) =>

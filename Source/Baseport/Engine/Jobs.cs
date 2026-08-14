@@ -29,8 +29,8 @@ public static class Jobs
             "Prune audit entries older than the log retention setting.",
             LogsCleanupAsync),
         new("session-cleanup", "Session cleanup", "0 0 * * * *", true,
-            "Drop expired sign-in sessions.",
-            async (db, _, _) => $"Removed {await UserTokens.PruneExpiredAsync(db, DateTime.UtcNow)} session(s)."),
+            "Drop expired sign-in sessions, sign-in codes and lockouts.",
+            SessionCleanupAsync),
         new("query-optimizer", "Query optimizer", "0 0 5 * * 0", true,
             "Run PRAGMA optimize against the SQLite store.",
             QueryOptimizeAsync),
@@ -73,6 +73,13 @@ public static class Jobs
         var settings = await db.AppSettings.FirstOrDefaultAsync(ct) ?? new AppSettings();
         var created = await BackupStore.CreateAsync(BackupStore.Dir(db), db, settings.BackupRetention, ct);
         return $"Created {created}.";
+    }
+
+    private static async Task<string> SessionCleanupAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var sessions = await UserTokens.PruneExpiredAsync(db, now);
+        return $"Removed {sessions} session(s), {OneTimeCodes.PruneExpired(now)} code(s), {LoginGuard.PruneExpired(now)} lockout entry(ies).";
     }
 
     private static async Task<string> LogsCleanupAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)

@@ -12,13 +12,11 @@ public static class OpenApiProxy
     public record FieldProp(string Name, string Type, string Format, List<string> EnumValues, bool Required);
 
     // Resolve the target server base URL: prefer the first "servers" entry, otherwise fall back to the scheme+authority of the spec URL itself.
-    public static string BaseUrl(string specUrl)
+    private static string BaseUrl(string specUrl, string? specJson)
     {
         try
         {
-            string? cached;
-            fetch_spec_cache.TryGetValue(specUrl, out cached);
-            using var doc = JsonDocument.Parse(cached ?? "{}");
+            using var doc = JsonDocument.Parse(specJson ?? "{}");
             if (doc.RootElement.TryGetProperty("servers", out var servers) && servers.ValueKind == JsonValueKind.Array)
                 foreach (var s in servers.EnumerateArray())
                     if (s.ValueKind == JsonValueKind.Object && s.TryGetProperty("url", out var u) && u.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(u.GetString()))
@@ -29,30 +27,24 @@ public static class OpenApiProxy
         return "";
     }
 
-    private static readonly Dictionary<string, string> fetch_spec_cache = new();
-
-    public static async Task<(List<OpInfo>, string?)> FetchOperationsAsync(HttpClient http, string specUrl)
+    public static async Task<(List<OpInfo> Ops, string BaseUrl, string? Error)> FetchOperationsAsync(HttpClient http, string specUrl)
     {
         string? json;
         try
         {
-            if (!fetch_spec_cache.TryGetValue(specUrl, out json))
-            {
-                using var req = new HttpRequestMessage(HttpMethod.Get, specUrl);
-                req.Headers.Accept.ParseAdd("application/json");
-                using var resp = await http.SendAsync(req);
-                if (!resp.IsSuccessStatusCode) return (new(), $"Could not fetch spec ({resp.StatusCode}).");
-                json = await resp.Content.ReadAsStringAsync();
-                fetch_spec_cache[specUrl] = json;
-            }
+            using var req = new HttpRequestMessage(HttpMethod.Get, specUrl);
+            req.Headers.Accept.ParseAdd("application/json");
+            using var resp = await http.SendAsync(req);
+            if (!resp.IsSuccessStatusCode) return (new(), "", $"Could not fetch spec ({resp.StatusCode}).");
+            json = await resp.Content.ReadAsStringAsync();
         }
-        catch (Exception ex) { return (new(), $"Could not fetch spec: {ex.Message}"); }
+        catch (Exception ex) { return (new(), "", $"Could not fetch spec: {ex.Message}"); }
 
         JsonNode? root;
         try { root = JsonNode.Parse(json!); }
-        catch (Exception ex) { return (new(), $"Spec is not valid JSON: {ex.Message}"); }
+        catch (Exception ex) { return (new(), "", $"Spec is not valid JSON: {ex.Message}"); }
         if (root is not JsonObject rootObj || (rootObj["openapi"] is null && rootObj["swagger"] is null))
-            return (new(), "Not an OpenAPI/Swagger document.");
+            return (new(), "", "Not an OpenAPI/Swagger document.");
 
         var ops = new List<OpInfo>();
         if (rootObj["paths"] is JsonObject paths)
@@ -104,7 +96,7 @@ public static class OpenApiProxy
                 }
             }
         }
-        return (ops, null);
+        return (ops, BaseUrl(specUrl, json), null);
     }
 
     static List<FieldProp> CollectProps(JsonObject schema, JsonObject root)

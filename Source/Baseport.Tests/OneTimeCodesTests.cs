@@ -98,4 +98,19 @@ public class OneTimeCodesTests
         var (code, _) = OneTimeCodes.IssueAt("admin", now + OneTimeCodes.CodeLifetime + TimeSpan.FromSeconds(1));
         Assert.NotNull(code);
     }
+
+    [Fact]
+    public void Pruning_drops_expired_codes_and_keeps_live_ones()
+    {
+        var now = DateTime.UtcNow;
+        OneTimeCodes.IssueAt("spent", now);
+        OneTimeCodes.IssueAt("live", now);
+
+        Assert.Equal(0, OneTimeCodes.PruneExpired(now));
+
+        var expiry = now + OneTimeCodes.CodeLifetime + TimeSpan.FromSeconds(1);
+        OneTimeCodes.IssueAt("live", expiry);
+        Assert.Equal(1, OneTimeCodes.PruneExpired(expiry));
+        Assert.Equal(0, OneTimeCodes.PruneExpired(expiry));
+    }
 }

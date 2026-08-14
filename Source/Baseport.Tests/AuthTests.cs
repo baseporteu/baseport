@@ -349,6 +349,23 @@ public class AuthTests
     }
 
     [Fact]
+    public void A_quiet_entry_is_pruned_and_a_live_lockout_is_not()
+    {
+        LoginGuard.Reset();
+        var now = DateTime.UtcNow;
+
+        LoginGuard.Failed("quiet");
+        for (var i = 0; i < 5; i++) LoginGuard.Failed("locked");
+
+        Assert.Equal(0, LoginGuard.PruneExpired(now));
+        Assert.False(LoginGuard.Allowed("locked"));
+
+        Assert.Equal(2, LoginGuard.PruneExpired(now.AddMinutes(10)));
+        Assert.True(LoginGuard.Allowed("locked"));
+        Assert.Equal(0, LoginGuard.PruneExpired(now.AddMinutes(10)));
+    }
+
+    [Fact]
     public void A_success_clears_the_failure_count_before_it_locks()
     {
         LoginGuard.Reset();

@@ -240,9 +240,9 @@ public static class TableEndpoints
         {
             var specUrl = body["specUrl"] is JsonValue sv && sv.TryGetValue<string>(out var s) ? s.Trim() : "";
             if (!Uri.TryCreate(specUrl, UriKind.Absolute, out var _)) return Results.BadRequest(new { errors = new[] { "A valid spec URL is required." } });
-            var (ops, err) = await OpenApiProxy.FetchOperationsAsync(http, specUrl);
+            var (ops, serverUrl, err) = await OpenApiProxy.FetchOperationsAsync(http, specUrl);
             if (err != null) return Results.BadRequest(new { errors = new[] { err } });
-            return Results.Ok(new { serverUrl = OpenApiProxy.BaseUrl(specUrl), operations = ops });
+            return Results.Ok(new { serverUrl, operations = ops });
         });
 
         // Import a proxy table: inherit the field schema from the OpenAPI operation, keep server-side validation on our end, but store no data, submissions are forwarded to the remote API with the configured Bearer token.
@@ -258,12 +258,10 @@ public static class TableEndpoints
             if (string.IsNullOrWhiteSpace(name)) return Results.BadRequest(new { errors = new[] { "Table name is required." } });
             if (!Uri.TryCreate(specUrl, UriKind.Absolute, out var _)) return Results.BadRequest(new { errors = new[] { "A valid spec URL is required." } });
 
-            var (ops, err) = await OpenApiProxy.FetchOperationsAsync(http, specUrl);
+            var (ops, baseUrl, err) = await OpenApiProxy.FetchOperationsAsync(http, specUrl);
             if (err != null) return Results.BadRequest(new { errors = new[] { err } });
             var op = ops.FirstOrDefault(o => o.Path == path && o.Method == method);
             if (op == null) return Results.BadRequest(new { errors = new[] { "Selected operation was not found in the spec." } });
-
-            var baseUrl = OpenApiProxy.BaseUrl(specUrl);
             var fullUrl = baseUrl + OpenApiProxy.SubstitutePath(op, pathParams);
 
             // The GET on the same path is what proxied lookup and list forms read from, and what field sampling probes.

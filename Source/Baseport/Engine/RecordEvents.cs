@@ -29,7 +29,7 @@ public static class RecordEvents
 
     public static void Publish(RecordEvent e)
     {
-        foreach (var subscriber in Subscribers.Keys) subscriber.Writer.TryWrite(e);
+        foreach (var subscriber in Subscribers) subscriber.Key.Writer.TryWrite(e);
     }
 
     internal static int SubscriberCount => Subscribers.Count;

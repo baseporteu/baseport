@@ -70,6 +70,18 @@ public static class OneTimeCodes
 
     public static TimeSpan CodeLifetime => Lifetime;
 
+    // A code is issued before the account is known to exist, so an unauthenticated caller decides how many keys land here.
+    public static int PruneExpired(DateTime now)
+    {
+        var removed = 0;
+        foreach (var (username, issued) in Codes)
+        {
+            if (issued.ExpiresAt > now) continue;
+            if (Codes.TryRemove(new KeyValuePair<string, Issued>(username, issued))) removed++;
+        }
+        return removed;
+    }
+
     private static byte[] Sign(string value)
     {
         using var hmac = new HMACSHA256(HmacKey);
