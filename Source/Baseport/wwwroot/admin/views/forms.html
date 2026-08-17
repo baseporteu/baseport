@@ -125,9 +125,9 @@
                     <div id='kindLookup' class='hidden'>
                         <div class='lookup-onboard-nav hidden' id='lookupOnboardNav'>
                             <div class='segmented'>
-                                <button type='button' class='seg-btn' data-step='0'>1. Match on</button>
-                                <button type='button' class='seg-btn' data-step='1'>2. Show</button>
-                                <button type='button' class='seg-btn' data-step='2'>3. Not-found message</button>
+                                <button type='button' class='seg-btn' data-step='0' onclick='goToLookupStep(0)'>1. Match on</button>
+                                <button type='button' class='seg-btn' data-step='1' onclick='goToLookupStep(1)'>2. Show</button>
+                                <button type='button' class='seg-btn' data-step='2' onclick='goToLookupStep(2)'>3. Not-found message</button>
                             </div>
                             <div class='row'>
                                 <button type='button' class='btn btn-outline btn-sm hidden' id='lookupOnboardBack' onclick='lookupOnboardBack()'>Back</button>
@@ -152,8 +152,16 @@
                                     <h4>Fields</h4>
                                     <ul id='lookupResultPalette' class='palette-list'></ul>
                                 </div>
-                                <div class='builder-canvas' id='lookupResultCanvas'>
-                                    <div class='canvas-empty'>Drag fields here to show them when a record is found.</div>
+                                <div class='builder-main'>
+                                    <div class='builder-toolbar'>
+                                        <div class='segmented'>
+                                            <button type='button' class='seg-btn' id='lookupResultUndo' onclick='undoLookupResult()' title='Undo' disabled>↶ Undo</button>
+                                            <button type='button' class='seg-btn' id='lookupResultRedo' onclick='redoLookupResult()' title='Redo' disabled>↷ Redo</button>
+                                        </div>
+                                    </div>
+                                    <div class='builder-canvas' id='lookupResultCanvas'>
+                                        <div class='canvas-empty'>Drag fields here to show them when a record is found.</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -173,8 +181,16 @@
                                 <h4>Fields</h4>
                                 <ul id='listPalette' class='palette-list'></ul>
                             </div>
-                            <div class='builder-canvas' id='listCanvas'>
-                                <div class='canvas-empty' id='listCanvasEmpty'>Drag fields here to make them columns.</div>
+                            <div class='builder-main'>
+                                <div class='builder-toolbar'>
+                                    <div class='segmented'>
+                                        <button type='button' class='seg-btn' id='listUndo' onclick='undoListColumns()' title='Undo' disabled>↶ Undo</button>
+                                        <button type='button' class='seg-btn' id='listRedo' onclick='redoListColumns()' title='Redo' disabled>↷ Redo</button>
+                                    </div>
+                                </div>
+                                <div class='builder-canvas' id='listCanvas'>
+                                    <div class='canvas-empty' id='listCanvasEmpty'>Drag fields here to make them columns.</div>
+                                </div>
                             </div>
                         </div>
                         <p class='muted field-hint'>Drag fields in to add or reorder columns. Each column can use a render expression.</p>

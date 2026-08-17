@@ -318,6 +318,8 @@ function renderKindFieldPickers(config) {
 
 function applyKindConfig(cfg) {
     formConfigDraft = cfg || {};
+    resetListColumnsHistory();
+    resetLookupResultHistory();
     const renderers = cfg.renderers || {};
     listColumns = (cfg.columns || []).map((name) => ({
         name,
@@ -376,6 +378,14 @@ function lookupOnboardNext() {
 
 function lookupOnboardBack() {
     if (lookupOnboardStep > 0) lookupOnboardStep--;
+    renderLookupOnboardNav();
+}
+
+// The step indicator is a real control, not decoration: free lateral jump, same as Back already allows.
+// Only completing the wizard (Next on the last step) stays gated on the current step having something in it.
+function goToLookupStep(step) {
+    if (lookupOnboardStep < 0) return; // no wizard active (already-configured lookup); nothing to jump between
+    lookupOnboardStep = step;
     renderLookupOnboardNav();
 }
 
@@ -462,6 +472,7 @@ function renderLookupResultBuilder() {
     renderLookupResultPalette();
     renderLookupResultCanvas();
     syncLookupOnboardNav();
+    lookupResultHistory.push();
 }
 
 function wireLookupResultDrag(row) {
@@ -596,6 +607,7 @@ function renderListCanvas() {
 function renderListBuilder() {
     renderListPalette();
     renderListCanvas();
+    listColumnsHistory.push();
 }
 
 // data.Id isn't a real field, so the placeholder names an actual field instead of implying it'd resolve
@@ -1326,7 +1338,7 @@ function renderCanvas() {
 
     layout.rows.forEach((row, ri) => canvas.appendChild(buildRowElement(row, ri, layout.rows, [ri])));
     document.getElementById('formLayout').value = JSON.stringify(layout);
-    pushLayoutHistory();
+    layoutHistory.push();
 }
 
 // Builds one block. `path` locates the row for column drag/move: [ri] at top level, [ri, nestedRi] for a row
@@ -1454,57 +1466,106 @@ function setBuilderViewport(size, btn) {
     if (size !== 'desktop') canvas.classList.add(size);
 }
 
-/* undo/redo: every layout mutation already ends by calling renderCanvas(), so that single choke point is
-   where a snapshot is taken - nothing else has to call into history bookkeeping directly. */
+/* undo/redo: generic over any JSON-serializable piece of state, snapshotting at whatever single choke
+   point already re-renders after every mutation - nothing else has to call into history bookkeeping
+   directly. Three independent instances below (layout, list columns, lookup result order): each builder
+   panel owns its own state and is visible on its own schedule, so one shared history across all three
+   would mean "undo" jumping into a panel the user isn't even looking at. */
+function createHistory(undoBtnId, redoBtnId) {
+    let stack = [];
+    let index = -1;
+    let suppress = false;
+    let getState = () => null;
+    let applyState = () => {};
 
-let layoutHistory = [];
-let layoutHistoryIndex = -1;
-let suppressLayoutHistory = false;
-
-function resetLayoutHistory() {
-    layoutHistory = [];
-    layoutHistoryIndex = -1;
-    syncHistoryButtons();
-}
-
-// A button that silently no-ops on click (nothing left to undo/redo) is worse than no button: it looks live
-// but gives no feedback. Disabled state is the only signal the bound is real.
-function syncHistoryButtons() {
-    const undoBtn = document.getElementById('builderUndo');
-    const redoBtn = document.getElementById('builderRedo');
-    if (undoBtn) undoBtn.disabled = layoutHistoryIndex <= 0;
-    if (redoBtn) redoBtn.disabled = layoutHistoryIndex >= layoutHistory.length - 1;
-}
-
-function pushLayoutHistory() {
-    if (suppressLayoutHistory) return;
-    const snap = JSON.stringify(layout);
-    if (layoutHistory[layoutHistoryIndex] === snap) {
-        syncHistoryButtons();
-        return;
+    // A button that silently no-ops on click (nothing left to undo/redo) is worse than no button: it looks
+    // live but gives no feedback. Disabled state is the only signal the bound is real.
+    function sync() {
+        const undoBtn = document.getElementById(undoBtnId);
+        const redoBtn = document.getElementById(redoBtnId);
+        if (undoBtn) undoBtn.disabled = index <= 0;
+        if (redoBtn) redoBtn.disabled = index >= stack.length - 1;
     }
-    layoutHistory = layoutHistory.slice(0, layoutHistoryIndex + 1);
-    layoutHistory.push(snap);
-    layoutHistoryIndex++;
-    syncHistoryButtons();
+
+    function restore(target) {
+        if (target < 0 || target >= stack.length) return;
+        index = target;
+        suppress = true;
+        applyState(JSON.parse(stack[target]));
+        suppress = false;
+        sync();
+    }
+
+    return {
+        bind(get, apply) {
+            getState = get;
+            applyState = apply;
+        },
+        reset() {
+            stack = [];
+            index = -1;
+            sync();
+        },
+        push() {
+            if (suppress) return;
+            const snap = JSON.stringify(getState());
+            if (stack[index] === snap) {
+                sync();
+                return;
+            }
+            stack = stack.slice(0, index + 1);
+            stack.push(snap);
+            index++;
+            sync();
+        },
+        undo: () => restore(index - 1),
+        redo: () => restore(index + 1),
+    };
 }
 
-function restoreLayoutSnapshot(index) {
-    if (index < 0 || index >= layoutHistory.length) return;
-    layoutHistoryIndex = index;
-    suppressLayoutHistory = true;
-    layout = JSON.parse(layoutHistory[index]);
+const layoutHistory = createHistory('builderUndo', 'builderRedo');
+layoutHistory.bind(() => layout, (v) => {
+    layout = v;
     renderCanvas();
-    suppressLayoutHistory = false;
-    syncHistoryButtons();
+});
+function resetLayoutHistory() {
+    layoutHistory.reset();
 }
-
 function undoLayout() {
-    restoreLayoutSnapshot(layoutHistoryIndex - 1);
+    layoutHistory.undo();
+}
+function redoLayout() {
+    layoutHistory.redo();
 }
 
-function redoLayout() {
-    restoreLayoutSnapshot(layoutHistoryIndex + 1);
+const listColumnsHistory = createHistory('listUndo', 'listRedo');
+listColumnsHistory.bind(() => listColumns, (v) => {
+    listColumns = v;
+    renderListBuilder();
+});
+function resetListColumnsHistory() {
+    listColumnsHistory.reset();
+}
+function undoListColumns() {
+    listColumnsHistory.undo();
+}
+function redoListColumns() {
+    listColumnsHistory.redo();
+}
+
+const lookupResultHistory = createHistory('lookupResultUndo', 'lookupResultRedo');
+lookupResultHistory.bind(() => lookupResultOrder, (v) => {
+    lookupResultOrder = v;
+    renderLookupResultBuilder();
+});
+function resetLookupResultHistory() {
+    lookupResultHistory.reset();
+}
+function undoLookupResult() {
+    lookupResultHistory.undo();
+}
+function redoLookupResult() {
+    lookupResultHistory.redo();
 }
 
 const COL_WIDTHS = [

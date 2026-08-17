@@ -54,6 +54,7 @@ function loadFormsModule() {
         'lookupMatchFields', 'listSearchFields', 'lookupResultPalette', 'lookupResultCanvas',
         'lookupOnboardNav', 'lookupOnboardBack', 'lookupOnboardNext', 'lookupOnboardSkip',
         'lookupStepMatch', 'lookupStepShow', 'lookupStepNotFound', 'formSuccessRedirect',
+        'listUndo', 'listRedo', 'lookupResultUndo', 'lookupResultRedo',
     ];
     const dom = install(ids);
     global.ui = {
@@ -95,6 +96,13 @@ module.insertLookupResultField = insertLookupResultField;
 module.getLookupResultOrder = () => lookupResultOrder;
 module.getLookupOnboardStep = () => lookupOnboardStep;
 module.checkedValues = checkedValues;
+module.goToLookupStep = goToLookupStep;
+module.insertColumn = insertColumn;
+module.getListColumns = () => listColumns;
+module.undoListColumns = undoListColumns;
+module.redoListColumns = redoListColumns;
+module.undoLookupResult = undoLookupResult;
+module.redoLookupResult = redoLookupResult;
 `);
     return {
         dom,
@@ -1431,11 +1439,21 @@ test('a line-items block only offers array fields that have line-item columns co
         'lineItemFieldCandidates no longer filters on array type + configured columns');
 });
 
-test('undo/redo snapshots the layout at the same choke point every mutation already renders through', () => {
+test('undo/redo snapshots each builder at the same choke point every one of its mutations already renders through', () => {
     const forms = read('forms.js');
+    assert.ok(forms.includes('function createHistory(undoBtnId, redoBtnId)'), 'the shared history factory is missing');
+
     const renderCanvas = forms.slice(forms.indexOf('function renderCanvas('), forms.indexOf('function buildRowElement('));
-    assert.ok(renderCanvas.includes('pushLayoutHistory()'), 'renderCanvas no longer snapshots layout history');
-    assert.ok(forms.includes('function undoLayout()') && forms.includes('function redoLayout()'), 'undo/redo entry points are missing');
+    assert.ok(renderCanvas.includes('layoutHistory.push()'), 'renderCanvas no longer snapshots layout history');
+    assert.ok(forms.includes('function undoLayout()') && forms.includes('function redoLayout()'), 'layout undo/redo entry points are missing');
+
+    const renderListBuilder = forms.slice(forms.indexOf('function renderListBuilder('), forms.indexOf('// data.Id'));
+    assert.ok(renderListBuilder.includes('listColumnsHistory.push()'), 'renderListBuilder no longer snapshots list-column history');
+    assert.ok(forms.includes('function undoListColumns()') && forms.includes('function redoListColumns()'), 'list-column undo/redo entry points are missing');
+
+    const renderLookupResultBuilder = forms.slice(forms.indexOf('function renderLookupResultBuilder('), forms.indexOf('function wireLookupResultDrag('));
+    assert.ok(renderLookupResultBuilder.includes('lookupResultHistory.push()'), 'renderLookupResultBuilder no longer snapshots lookup-result history');
+    assert.ok(forms.includes('function undoLookupResult()') && forms.includes('function redoLookupResult()'), 'lookup-result undo/redo entry points are missing');
 });
 
 test('embed.js renders container, line_items and button_bar without duplicating the button handler', () => {
@@ -1466,14 +1484,19 @@ test("SUM(Field, 'Column') is rewritten to a property access, not left as a free
     assert.ok(/new Function\('data', 'SUM',/.test(embed), 'SUM is no longer injected into the evaluated function scope');
 });
 
-test('undo/redo buttons show a disabled state instead of silently no-opping', () => {
+test('undo/redo buttons show a disabled state instead of silently no-opping, for every builder', () => {
     const html = read('admin/views/forms.html');
-    assert.ok(/id='builderUndo'[^>]*disabled/.test(html), 'the undo button does not start disabled');
-    assert.ok(/id='builderRedo'[^>]*disabled/.test(html), 'the redo button does not start disabled');
+    [
+        ['builderUndo', 'builderRedo'], // submit layout
+        ['listUndo', 'listRedo'], // list columns
+        ['lookupResultUndo', 'lookupResultRedo'], // lookup show fields
+    ].forEach(([undoId, redoId]) => {
+        assert.ok(new RegExp(`id='${undoId}'[^>]*disabled`).test(html), `${undoId} does not start disabled`);
+        assert.ok(new RegExp(`id='${redoId}'[^>]*disabled`).test(html), `${redoId} does not start disabled`);
+    });
     const forms = read('forms.js');
-    assert.ok(forms.includes('function syncHistoryButtons()'), 'syncHistoryButtons is missing');
-    assert.ok(/builderUndo[\s\S]*?\.disabled = layoutHistoryIndex <= 0/.test(forms), 'undo does not disable at the start of history');
-    assert.ok(/builderRedo[\s\S]*?\.disabled = layoutHistoryIndex >= layoutHistory\.length - 1/.test(forms), 'redo does not disable at the end of history');
+    assert.ok(/undoBtn\.disabled = index <= 0/.test(forms), 'the shared history factory does not disable undo at the start of history');
+    assert.ok(/redoBtn\.disabled = index >= stack\.length - 1/.test(forms), 'the shared history factory does not disable redo at the end of history');
     const appCss = read('app.css');
     assert.ok(/\.seg-btn:disabled\s*\{/.test(appCss), 'a disabled seg-btn (Undo/Redo, viewport toggle) has no visual treatment');
 });
@@ -1678,6 +1701,94 @@ test('the list and lookup canvases label a field with normal-case body text, not
     assert.strictEqual(matches.length, 2, 'expected exactly the list-column and lookup-result canvases to use brow-field-name');
     const appCss = read('app.css');
     assert.ok(/\.brow-field-name\s*\{[^}]*text-transform/.test(appCss) === false, 'brow-field-name still forces a text-transform like the eyebrow tag it replaced');
+});
+
+test('the onboarding step indicator is a real control (jumps steps), not a decoration that only looks clickable', () => {
+    // .seg-btn carries cursor:pointer and sits next to the genuinely clickable viewport toggle - shipping it
+    // with no onclick at all makes it look interactive while doing nothing.
+    const html = read('admin/views/forms.html');
+    assert.ok(/data-step='0' onclick='goToLookupStep\(0\)'/.test(html), 'step 0 indicator has no click handler');
+    assert.ok(/data-step='1' onclick='goToLookupStep\(1\)'/.test(html), 'step 1 indicator has no click handler');
+    assert.ok(/data-step='2' onclick='goToLookupStep\(2\)'/.test(html), 'step 2 indicator has no click handler');
+
+    const {
+        module
+    } = loadFormsModule();
+    module.setTableFields([{
+        name: 'Sku',
+        dataType: 'text',
+        isIdentifier: true
+    }]);
+    module.applyFormShape('form', ['lookup']);
+    module.applyKindConfig({});
+    assert.strictEqual(module.getLookupOnboardStep(), 0);
+
+    module.goToLookupStep(2);
+    assert.strictEqual(module.getLookupOnboardStep(), 2, 'clicking the step indicator does not jump to that step');
+
+    module.goToLookupStep(0);
+    assert.strictEqual(module.getLookupOnboardStep(), 0, 'the step indicator cannot jump backward either');
+});
+
+test('list columns and lookup Show fields get their own independent undo, not just the submit layout', () => {
+    // Viewport preview doesn't apply here (a plain ordered list has nothing width-dependent to preview),
+    // but the drag/remove mistakes it protects against are identical to the submit layout's, so it was an
+    // unjustified gap, not a deliberate one.
+    const {
+        dom,
+        module
+    } = loadFormsModule();
+    module.setTableFields([{
+        name: 'Sku',
+        dataType: 'text'
+    }, {
+        name: 'Name',
+        dataType: 'text'
+    }]);
+
+    module.applyFormShape('list', []);
+    module.applyKindConfig({});
+    assert.strictEqual(dom.byId.listUndo.disabled, true, 'list undo is not disabled with nothing to undo yet');
+
+    module.insertColumn('Sku');
+    assert.deepStrictEqual(module.getListColumns().map((c) => c.name), ['Sku']);
+    assert.strictEqual(dom.byId.listUndo.disabled, false, 'inserting a column does not enable list undo');
+
+    module.undoListColumns();
+    assert.deepStrictEqual(module.getListColumns(), [], 'list undo did not remove the inserted column');
+    assert.strictEqual(dom.byId.listRedo.disabled, false, 'undoing does not enable list redo');
+
+    module.redoListColumns();
+    assert.deepStrictEqual(module.getListColumns().map((c) => c.name), ['Sku'], 'list redo did not restore the column');
+});
+
+test('lookup Show fields undo independently of the list and submit builders', () => {
+    const {
+        dom,
+        module
+    } = loadFormsModule();
+    module.setTableFields([{
+        name: 'Sku',
+        dataType: 'text'
+    }, {
+        name: 'Name',
+        dataType: 'text'
+    }]);
+    module.applyFormShape('form', ['lookup']);
+    module.applyKindConfig({
+        matchFields: ['Sku'],
+        resultFields: []
+    });
+    assert.strictEqual(dom.byId.lookupResultUndo.disabled, true, 'lookup-result undo is not disabled with nothing to undo yet');
+
+    module.insertLookupResultField('Name');
+    assert.strictEqual(dom.byId.lookupResultUndo.disabled, false, 'inserting a Show field does not enable lookup-result undo');
+
+    module.undoLookupResult();
+    assert.deepStrictEqual(module.getLookupResultOrder(), [], 'lookup-result undo did not remove the inserted field');
+
+    module.redoLookupResult();
+    assert.deepStrictEqual(module.getLookupResultOrder(), ['Name'], 'lookup-result redo did not restore the field');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
