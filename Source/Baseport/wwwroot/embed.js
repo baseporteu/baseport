@@ -692,6 +692,7 @@
             const node = renderLayoutRow(row, table);
             if (!node) return;
             if (row.t === 'button' && row.action === 'submit') hasSubmitButton = true;
+            if (row.t === 'button_bar' && (row.buttons || []).some((b) => b.action === 'submit')) hasSubmitButton = true;
             formEl.appendChild(node);
         });
 
@@ -769,6 +770,154 @@
         parent.appendChild(formEl);
     }
 
+    // Shared by a standalone "button" block and every button inside a "button_bar".
+    function buildActionButton(row) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'baserow-btn-custom';
+        btn.innerText = row.label || 'Button';
+        btn.onclick = () => {
+            if (row.action === 'submit') formEl.requestSubmit();
+            else if (row.action === 'reset') {
+                formEl.reset();
+                triggerReactiveUpdate();
+            } else if (row.action === 'cancel') {
+                const url = (row.href || '').trim();
+                if (!url) window.history.back();
+                else if (!isUnsafeUrl(url)) window.location.href = url;
+            } else if (row.action === 'validate') {
+                const result = validate();
+                if (result.errors.length) {
+                    markInvalid(result.invalid);
+                    toast(result.errors, 'error');
+                } else {
+                    toast('Looks good.', 'success');
+                }
+            } else if (row.action === 'link') {
+                const url = safeEval(row.hrefExpr, extractFormData());
+                if (typeof url === 'string' && url && !isUnsafeUrl(url)) window.location.href = url;
+            } else if (row.action === 'run') {
+                // A blank button: no fixed outcome, just this expression's result surfaced as a toast.
+                const result = safeEval(row.expr, extractFormData());
+                if (result !== '' && result !== null && result !== undefined) toast(String(result), 'info');
+            }
+        };
+        return btn;
+    }
+
+    // Columns configured on an array field (line-items sub-schema); null means a plain scalar-list array field.
+    function arrayColumns(field) {
+        try {
+            const o = JSON.parse(field.optionsJson || '{}');
+            return Array.isArray(o.columns) && o.columns.length ? o.columns : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function lineItemInputType(dataType) {
+        if (dataType === 'number' || dataType === 'currency') return 'number';
+        if (dataType === 'boolean') return 'checkbox';
+        if (dataType === 'date') return 'date';
+        return 'text'; // also covers 'select': the server accepts any string for a line-item cell of that type
+    }
+
+    // Renders an add/remove-row table bound to one array field. The rows live only in this closure; every
+    // mutation re-serializes into a hidden data-kind="json" input, which extractFormData()/toFormData()
+    // already know how to turn into that field's array-of-objects value, same as any other json/array field.
+    function renderLineItems(rowCfg, table) {
+        const field = table.fields.find((f) => f.name === rowCfg.field);
+        const columns = field ? arrayColumns(field) : null;
+        if (!field || !columns) return null;
+
+        const wrap = document.createElement('div');
+        const caption = document.createElement('label');
+        caption.innerText = field.label || field.name;
+        wrap.appendChild(caption);
+
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.dataset.name = field.name;
+        hidden.dataset.kind = 'json';
+        let rows = [];
+
+        function sync() {
+            hidden.value = JSON.stringify(rows);
+            hidden.dispatchEvent(new Event('input', {
+                bubbles: true
+            }));
+        }
+
+        const tableWrap = document.createElement('div');
+        tableWrap.className = 'baserow-table-wrap';
+        const tableEl = document.createElement('table');
+        tableEl.className = 'baserow-table';
+        const thead = document.createElement('thead');
+        const headRow = document.createElement('tr');
+        columns.forEach((c) => {
+            const th = document.createElement('th');
+            th.innerText = c.label || c.name;
+            headRow.appendChild(th);
+        });
+        headRow.appendChild(document.createElement('th'));
+        thead.appendChild(headRow);
+        tableEl.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        tableEl.appendChild(tbody);
+
+        function renderRows() {
+            tbody.innerHTML = '';
+            rows.forEach((r, i) => {
+                const tr = document.createElement('tr');
+                columns.forEach((c) => {
+                    const td = document.createElement('td');
+                    const type = lineItemInputType(c.dataType);
+                    const inp = document.createElement('input');
+                    inp.type = type;
+                    if (type === 'checkbox') inp.checked = !!r[c.name];
+                    else inp.value = r[c.name] === undefined || r[c.name] === null ? '' : r[c.name];
+                    inp.oninput = () => {
+                        r[c.name] = type === 'checkbox' ? inp.checked : type === 'number' ? (inp.value === '' ? '' : Number(inp.value)) : inp.value;
+                        sync();
+                    };
+                    td.appendChild(inp);
+                    tr.appendChild(td);
+                });
+                const rmTd = document.createElement('td');
+                const rm = document.createElement('button');
+                rm.type = 'button';
+                rm.className = 'baserow-btn-custom';
+                rm.innerText = '✕';
+                rm.onclick = () => {
+                    rows.splice(i, 1);
+                    sync();
+                    renderRows();
+                };
+                rmTd.appendChild(rm);
+                tr.appendChild(rmTd);
+                tbody.appendChild(tr);
+            });
+        }
+        renderRows();
+        tableWrap.appendChild(tableEl);
+        wrap.appendChild(tableWrap);
+
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'baserow-btn-custom';
+        addBtn.innerText = '+ Add row';
+        addBtn.onclick = () => {
+            rows.push({});
+            sync();
+            renderRows();
+        };
+        wrap.appendChild(addBtn);
+        wrap.appendChild(hidden);
+        sync();
+        return wrap;
+    }
+
     function renderLayoutRow(row, table) {
         if (row.t === 'subtotal') {
             const div = document.createElement('div');
@@ -785,35 +934,34 @@
             return div;
         }
 
-        if (row.t === 'button') {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'baserow-btn-custom';
-            btn.innerText = row.label || 'Button';
-            btn.onclick = () => {
-                if (row.action === 'submit') formEl.requestSubmit();
-                else if (row.action === 'reset') {
-                    formEl.reset();
-                    triggerReactiveUpdate();
-                } else if (row.action === 'cancel') {
-                    const url = (row.href || '').trim();
-                    if (!url) window.history.back();
-                    else if (!isUnsafeUrl(url)) window.location.href = url;
-                } else if (row.action === 'validate') {
-                    const result = validate();
-                    if (result.errors.length) {
-                        markInvalid(result.invalid);
-                        toast(result.errors, 'error');
-                    } else {
-                        toast('Looks good.', 'success');
-                    }
-                } else if (row.action === 'link') {
-                    const url = safeEval(row.hrefExpr, extractFormData());
-                    if (typeof url === 'string' && url && !isUnsafeUrl(url)) window.location.href = url;
-                }
-            };
-            return btn;
+        if (row.t === 'button') return buildActionButton(row);
+
+        if (row.t === 'button_bar') {
+            const bar = document.createElement('div');
+            bar.style.display = 'flex';
+            bar.style.gap = '.5rem';
+            bar.style.flexWrap = 'wrap';
+            bar.style.justifyContent = row.align || 'flex-end';
+            (row.buttons || []).forEach((btnCfg) => bar.appendChild(buildActionButton(btnCfg)));
+            return bar;
         }
+
+        if (row.t === 'container') {
+            const wrap = document.createElement('fieldset');
+            wrap.className = 'baserow-group';
+            if (row.title) {
+                const leg = document.createElement('legend');
+                leg.innerText = row.title;
+                wrap.appendChild(leg);
+            }
+            (row.rows || []).forEach((nrow) => {
+                const node = renderLayoutRow(nrow, table);
+                if (node) wrap.appendChild(node);
+            });
+            return wrap;
+        }
+
+        if (row.t === 'line_items') return renderLineItems(row, table);
 
         if (row.t !== 'row' && row.t !== 'group') return null;
 
@@ -1248,12 +1396,19 @@
         return fd;
     }
 
+    // SUM(Field, 'Column') mirrors the server-side JsExpr grammar: a bare field-name argument, not data.Field.
+    // Rewritten to a normal property access here so a plain `new Function` sees it, not a free identifier.
+    function sumOverColumn(arr, col) {
+        return (Array.isArray(arr) ? arr : []).reduce((total, row) => total + (Number(row && row[col]) || 0), 0);
+    }
+
     function safeEval(expr, data) {
         const sData = new Proxy(data || {}, {
             get: (t, p) => (t[p] === undefined ? '' : t[p])
         });
         try {
-            const val = new Function('data', `return ${expr}`)(sData);
+            const rewritten = (expr || '').replace(/\bSUM\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,/g, 'SUM(data.$1,');
+            const val = new Function('data', 'SUM', `return ${rewritten}`)(sData, sumOverColumn);
             if (typeof val === 'number' && !Number.isInteger(val)) return Math.round(val * 100) / 100;
             return val;
         } catch (e) {

@@ -133,6 +133,37 @@ public static class FieldValidation
         return null;
     }
 
+    // One column of a line-items row (an array field's sub-schema). Kept deliberately small: no nested
+    // arrays/objects, no per-column Min/Max/Pattern — a line-item cell is validated on shape, not on every
+    // rule a top-level field can carry.
+    public sealed record ArrayColumn(string Name, string Label, string DataType);
+
+    public static readonly HashSet<string> ArrayColumnTypes = new() { "text", "number", "currency", "select", "date", "boolean" };
+
+    // mirrors RefTableId's shape: { "columns": [{ "name","label","dataType" }, ...] }. Null means "plain
+    // scalar-list array field" (today's behavior), not "array field with zero columns".
+    public static List<ArrayColumn>? ArrayColumns(string optionsJson)
+    {
+        try
+        {
+            var o = JsonSerializer.Deserialize<JsonElement>(string.IsNullOrWhiteSpace(optionsJson) ? "{}" : optionsJson);
+            if (o.ValueKind != JsonValueKind.Object || !o.TryGetProperty("columns", out var cols) || cols.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var list = new List<ArrayColumn>();
+            foreach (var c in cols.EnumerateArray())
+            {
+                if (c.ValueKind != JsonValueKind.Object) continue;
+                var name = c.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? "" : "";
+                var label = c.TryGetProperty("label", out var l) && l.ValueKind == JsonValueKind.String ? l.GetString() ?? "" : "";
+                var dt = c.TryGetProperty("dataType", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() ?? "text" : "text";
+                list.Add(new ArrayColumn(name, label, dt));
+            }
+            return list.Count > 0 ? list : null;
+        }
+        catch { return null; }
+    }
+
     public static List<string> ValidateFieldValue(FieldDefinition f, JsonNode? v, Func<string, bool> recordExists)
     {
         var errs = new List<string>();
@@ -260,8 +291,26 @@ public static class FieldValidation
                 if (v is not JsonArray jarr) { errs.Add($"{f.Name} must be a list of values."); break; }
                 var itemCap = (int)(f.Max ?? 1000);
                 if (jarr.Count > itemCap) { errs.Add($"{f.Name} must have at most {itemCap} items."); break; }
-                if (jarr.Any(item => item is not JsonValue))
-                    errs.Add($"{f.Name} must contain only text, number or boolean values, not nested objects or arrays.");
+
+                var lineCols = ArrayColumns(f.OptionsJson);
+                if (lineCols is null)
+                {
+                    if (jarr.Any(item => item is not JsonValue))
+                        errs.Add($"{f.Name} must contain only text, number or boolean values, not nested objects or arrays.");
+                    break;
+                }
+
+                var colByName = lineCols.ToDictionary(c => c.Name);
+                foreach (var row in jarr)
+                {
+                    if (row is not JsonObject rowObj) { errs.Add($"{f.Name} must contain line-item rows."); continue; }
+                    foreach (var cell in rowObj)
+                    {
+                        if (!colByName.TryGetValue(cell.Key, out var col)) { errs.Add($"{f.Name} row has unknown column '{cell.Key}'."); continue; }
+                        if (cell.Value is null) continue;
+                        errs.AddRange(ValidateArrayCell(col, cell.Value));
+                    }
+                }
                 break;
         }
 
@@ -282,6 +331,29 @@ public static class FieldValidation
             {
                 // invalid pattern was rejected at definition time; ignore here
             }
+        }
+        return errs;
+    }
+
+    // A line-item cell checks shape only (right type), the same narrow scope its column definition carries -
+    // no Min/Max/Pattern/uniqueness, those live on top-level fields, not on a row of one.
+    private static List<string> ValidateArrayCell(ArrayColumn col, JsonNode v)
+    {
+        var errs = new List<string>();
+        switch (NormalizeType(col.DataType) ?? "text")
+        {
+            case "number":
+            case "currency":
+                if (!TryNum(v, out _)) errs.Add($"{col.Name} must be a number.");
+                break;
+            case "boolean":
+                if (v is not JsonValue bj || (bj.GetValueKind() != JsonValueKind.True && bj.GetValueKind() != JsonValueKind.False))
+                    errs.Add($"{col.Name} must be true or false.");
+                break;
+            case "date":
+                if (!DateTime.TryParse(Str(v), CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) errs.Add($"{col.Name} must be a valid date.");
+                break;
+            // text/select: any string is accepted at this scope.
         }
         return errs;
     }
@@ -362,15 +434,90 @@ public static class FieldValidation
                 if (srcField is not null && !otherNames.Contains(srcField))
                     errs.Add($"Slug source field '{srcField}' does not exist.");
                 break;
+            case "array":
+                var arrCols = ArrayColumns(f.OptionsJson);
+                if (arrCols is not null)
+                {
+                    var colNames = new HashSet<string>();
+                    foreach (var c in arrCols)
+                    {
+                        if (string.IsNullOrWhiteSpace(c.Name)) errs.Add("Every line-item column needs a name.");
+                        else if (!FieldNamePattern.IsMatch(c.Name)) errs.Add($"Line-item column name '{c.Name}' must start with a letter or underscore, and contain only letters, digits and underscores.");
+                        else if (!colNames.Add(c.Name)) errs.Add($"Line-item column name '{c.Name}' is used more than once.");
+                        if (!ArrayColumnTypes.Contains(NormalizeType(c.DataType) ?? "")) errs.Add($"Line-item column '{c.Name}' has an unsupported type '{c.DataType}'.");
+                    }
+                }
+                break;
         }
         return errs;
     }
 
-    public static List<string> ValidateLayout(FormConfig form, IReadOnlyCollection<string> fieldNames)
+    // Shared by a standalone "button" row and every button inside a "button_bar".
+    private static List<string> ValidateButton(JsonElement btn, IReadOnlyCollection<string> fieldNames, string context)
+    {
+        var errs = new List<string>();
+        var action = btn.ValueKind == JsonValueKind.Object && btn.TryGetProperty("action", out var ac) ? ac.GetString() : "submit";
+        if (action is not ("submit" or "reset" or "cancel" or "validate" or "link" or "run"))
+        {
+            errs.Add($"{context}: button action must be one of 'submit', 'reset', 'cancel', 'validate', 'link', 'run'.");
+        }
+        else if (action == "link")
+        {
+            var hrefExpr = btn.ValueKind == JsonValueKind.Object && btn.TryGetProperty("hrefExpr", out var he) ? he.GetString() ?? "" : "";
+            if (string.IsNullOrWhiteSpace(hrefExpr)) errs.Add($"{context}: link requires a URL expression.");
+            else
+            {
+                var r = JsExpr.Validate(hrefExpr, fieldNames);
+                if (!r.Valid) errs.AddRange(r.Errors.Select(x => $"{context} link: {x}"));
+            }
+        }
+        // "run" is a blank button: no fixed semantic, just an author expression evaluated on click and
+        // surfaced as a toast - a link without the forced navigation.
+        else if (action == "run")
+        {
+            var expr = btn.ValueKind == JsonValueKind.Object && btn.TryGetProperty("expr", out var ex) ? ex.GetString() ?? "" : "";
+            if (string.IsNullOrWhiteSpace(expr)) errs.Add($"{context}: run requires an expression.");
+            else
+            {
+                var r = JsExpr.Validate(expr, fieldNames);
+                if (!r.Valid) errs.AddRange(r.Errors.Select(x => $"{context} run: {x}"));
+            }
+        }
+        return errs;
+    }
+
+    // Shared by a top-level "row"/"group" and a "row" nested inside a "container".
+    private static void ValidateCols(JsonElement row, int rowIdx, IReadOnlyCollection<string> fieldNames, HashSet<string> seen, List<string> errs)
+    {
+        if (!row.TryGetProperty("cols", out var cols) || cols.ValueKind != JsonValueKind.Array)
+        {
+            errs.Add($"Row {rowIdx + 1}: missing cols array.");
+            return;
+        }
+        foreach (var col in cols.EnumerateArray())
+        {
+            if (col.ValueKind != JsonValueKind.Object || !col.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+            {
+                errs.Add($"Row {rowIdx + 1}: invalid column definition.");
+                continue;
+            }
+            foreach (var item in items.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String) { errs.Add($"Row {rowIdx + 1}: field names must be strings."); continue; }
+                var name = item.GetString() ?? "";
+                if (!fieldNames.Contains(name)) errs.Add($"Layout references unknown field '{name}'.");
+                else if (!seen.Add(name)) errs.Add($"Field '{name}' appears more than once in the layout.");
+            }
+        }
+    }
+
+    public static List<string> ValidateLayout(FormConfig form, IReadOnlyCollection<FieldDefinition> fields)
     {
         var errs = new List<string>();
         if (string.IsNullOrWhiteSpace(form.Title)) errs.Add("Form title is required.");
         else if (form.Title.Length > 128) errs.Add("Form title is too long (max 128 characters).");
+
+        var fieldNames = fields.Select(f => f.Name).ToList();
 
         JsonElement layout;
         try
@@ -393,7 +540,7 @@ public static class FieldValidation
         foreach (var row in rows.EnumerateArray())
         {
             var t = row.ValueKind == JsonValueKind.Object && row.TryGetProperty("t", out var tp) ? tp.GetString() : null;
-            if (t is not ("row" or "group" or "subtotal" or "button"))
+            if (t is not ("row" or "group" or "subtotal" or "button" or "container" or "line_items" or "button_bar"))
             {
                 errs.Add($"Row {rowIdx + 1}: unknown row type '{t}'.");
                 rowIdx++;
@@ -402,28 +549,7 @@ public static class FieldValidation
 
             if (t is "row" or "group")
             {
-                if (!row.TryGetProperty("cols", out var cols) || cols.ValueKind != JsonValueKind.Array)
-                {
-                    errs.Add($"Row {rowIdx + 1}: missing cols array.");
-                }
-                else
-                {
-                    foreach (var col in cols.EnumerateArray())
-                    {
-                        if (col.ValueKind != JsonValueKind.Object || !col.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
-                        {
-                            errs.Add($"Row {rowIdx + 1}: invalid column definition.");
-                            continue;
-                        }
-                        foreach (var item in items.EnumerateArray())
-                        {
-                            if (item.ValueKind != JsonValueKind.String) { errs.Add($"Row {rowIdx + 1}: field names must be strings."); continue; }
-                            var name = item.GetString() ?? "";
-                            if (!fieldNames.Contains(name)) errs.Add($"Layout references unknown field '{name}'.");
-                            else if (!seen.Add(name)) errs.Add($"Field '{name}' appears more than once in the layout.");
-                        }
-                    }
-                }
+                ValidateCols(row, rowIdx, fieldNames, seen, errs);
             }
             else if (t == "subtotal")
             {
@@ -439,17 +565,51 @@ public static class FieldValidation
             }
             else if (t == "button")
             {
-                var action = row.TryGetProperty("action", out var ac) ? ac.GetString() : "submit";
-                if (action is not ("submit" or "reset" or "cancel" or "validate" or "link"))
-                    errs.Add($"Row {rowIdx + 1}: button action must be one of 'submit', 'reset', 'cancel', 'validate', 'link'.");
-                else if (action == "link")
+                errs.AddRange(ValidateButton(row, fieldNames, $"Row {rowIdx + 1}"));
+            }
+            else if (t == "container")
+            {
+                // Capped at one level: a container holds ordinary rows, not other containers or blocks.
+                if (!row.TryGetProperty("rows", out var nested) || nested.ValueKind != JsonValueKind.Array || nested.GetArrayLength() == 0)
                 {
-                    var hrefExpr = row.TryGetProperty("hrefExpr", out var he) ? he.GetString() ?? "" : "";
-                    if (string.IsNullOrWhiteSpace(hrefExpr)) errs.Add($"Row {rowIdx + 1}: link requires a URL expression.");
-                    else
+                    errs.Add($"Row {rowIdx + 1}: a container needs at least one nested row.");
+                }
+                else
+                {
+                    int nestedIdx = 0;
+                    foreach (var nrow in nested.EnumerateArray())
                     {
-                        var r = JsExpr.Validate(hrefExpr, fieldNames);
-                        if (!r.Valid) errs.AddRange(r.Errors.Select(x => $"Row {rowIdx + 1} link: {x}"));
+                        var nt = nrow.ValueKind == JsonValueKind.Object && nrow.TryGetProperty("t", out var ntp) ? ntp.GetString() : null;
+                        if (nt != "row") errs.Add($"Row {rowIdx + 1}, nested row {nestedIdx + 1}: a container may only nest plain rows, not '{nt}'.");
+                        else ValidateCols(nrow, rowIdx, fieldNames, seen, errs);
+                        nestedIdx++;
+                    }
+                }
+            }
+            else if (t == "line_items")
+            {
+                var fieldName = row.TryGetProperty("field", out var fn) ? fn.GetString() ?? "" : "";
+                var field = fields.FirstOrDefault(f => f.Name == fieldName);
+                if (field is null) errs.Add($"Row {rowIdx + 1}: line items references unknown field '{fieldName}'.");
+                else if (NormalizeType(field.DataType) != "array") errs.Add($"Row {rowIdx + 1}: line items must point at an array field.");
+                else if (ArrayColumns(field.OptionsJson) is null) errs.Add($"Row {rowIdx + 1}: '{DisplayName(field)}' has no line-item columns configured.");
+                else if (!seen.Add(fieldName)) errs.Add($"Field '{fieldName}' appears more than once in the layout.");
+            }
+            else if (t == "button_bar")
+            {
+                var align = row.TryGetProperty("align", out var al) ? al.GetString() ?? "flex-end" : "flex-end";
+                if (align is not ("flex-start" or "center" or "flex-end" or "space-between"))
+                    errs.Add($"Row {rowIdx + 1}: alignment must be one of 'flex-start', 'center', 'flex-end', 'space-between'.");
+
+                if (!row.TryGetProperty("buttons", out var buttons) || buttons.ValueKind != JsonValueKind.Array || buttons.GetArrayLength() == 0)
+                    errs.Add($"Row {rowIdx + 1}: a button bar needs at least one button.");
+                else
+                {
+                    int btnIdx = 0;
+                    foreach (var btn in buttons.EnumerateArray())
+                    {
+                        errs.AddRange(ValidateButton(btn, fieldNames, $"Row {rowIdx + 1}, button {btnIdx + 1}"));
+                        btnIdx++;
                     }
                 }
             }
@@ -557,7 +717,7 @@ public static class FieldValidation
 
         if (actions.Contains(FormActions.Submit))
         {
-            errs.AddRange(ValidateLayout(form, names));
+            errs.AddRange(ValidateLayout(form, fields));
             // A layout with no fields saves cleanly and then renders an empty form with nothing but a submit button.
             if (LayoutFieldCount(form.LayoutJson) == 0)
                 errs.Add("A submit form needs at least one field in its layout.");
@@ -673,10 +833,25 @@ public static class FieldValidation
         else rows = layout;
         if (rows.ValueKind != JsonValueKind.Array) return 0;
 
+        return CountRowFields(rows);
+    }
+
+    private static int CountRowFields(JsonElement rows)
+    {
         var count = 0;
         foreach (var row in rows.EnumerateArray())
         {
-            if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("cols", out var cols) || cols.ValueKind != JsonValueKind.Array) continue;
+            if (row.ValueKind != JsonValueKind.Object) continue;
+            var t = row.TryGetProperty("t", out var tp) ? tp.GetString() : null;
+
+            if (t == "line_items") { count++; continue; }
+            if (t == "container")
+            {
+                if (row.TryGetProperty("rows", out var nested) && nested.ValueKind == JsonValueKind.Array)
+                    count += CountRowFields(nested);
+                continue;
+            }
+            if (!row.TryGetProperty("cols", out var cols) || cols.ValueKind != JsonValueKind.Array) continue;
             foreach (var col in cols.EnumerateArray())
                 if (col.ValueKind == JsonValueKind.Object && col.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
                     count += items.EnumerateArray().Count(i => i.ValueKind == JsonValueKind.String);

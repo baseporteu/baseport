@@ -129,6 +129,17 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
+    public void Array_field_with_columns_validates_line_item_rows()
+    {
+        var f = Field("array", optionsJson: """{"columns":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}""");
+
+        Assert.Empty(Validate(f, JsonNode.Parse("""[{"Qty":2,"Price":9.5},{"Qty":1,"Price":3}]""")));
+        Assert.Contains(Validate(f, JsonNode.Parse("""[{"Qty":"not a number","Price":1}]""")), e => e.Contains("Qty must be a number"));
+        Assert.Contains(Validate(f, JsonNode.Parse("""[{"Qty":1,"Sku":"ABC"}]""")), e => e.Contains("unknown column 'Sku'"));
+        Assert.Contains(Validate(f, JsonNode.Parse("""["not an object"]""")), e => e.Contains("must contain line-item rows"));
+    }
+
+    [Fact]
     public void Password_field_validates_plaintext_length_but_not_a_stored_hash()
     {
         var f = Field("password", min: 10);

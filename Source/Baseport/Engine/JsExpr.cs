@@ -25,7 +25,7 @@ public static class JsExpr
     private sealed class MethodVal { public object Target = null!; public string Name = ""; }
 
     private static readonly HashSet<string> Builtins = new()
-        { "round", "abs", "floor", "ceil", "sqrt", "pow", "min", "max", "sign", "trunc", "Number", "String", "GETDATE", "encodeURIComponent" };
+        { "round", "abs", "floor", "ceil", "sqrt", "pow", "min", "max", "sign", "trunc", "Number", "String", "GETDATE", "encodeURIComponent", "SUM" };
 
     public sealed class ValidationResult
     {
@@ -272,6 +272,13 @@ public static class JsExpr
                 if (call.Callee is IdN idc)
                 {
                     if (!Builtins.Contains(idc.Name)) { r.Errors.Add($"Unknown function '{idc.Name}'."); return; }
+                    // SUM iterates a line-items array field directly, so it takes the field itself, not data.Field, and a
+                    // literal column name, not an expression - the same narrow shape every other JsExpr array access uses.
+                    if (idc.Name == "SUM" && (call.Args.Count != 2 || call.Args[0] is not IdN || call.Args[1] is not StrN))
+                    {
+                        r.Errors.Add("SUM expects SUM(field, 'column').");
+                        return;
+                    }
                 }
                 else Walk(call.Callee, call, r, fieldNames);
                 foreach (var a in call.Args) Walk(a, call, r, fieldNames);
@@ -304,7 +311,14 @@ public static class JsExpr
                 if (ix.Base is IdN di && di.Name == "data") return Coerce(get(AsStr(Eval(ix.Idx, get))));
                 throw new FormatException("Only data[...] may be indexed.");
             case CallN call:
-                if (call.Callee is IdN idc) return Builtin(idc.Name, call.Args.Select(a => Eval(a, get)).ToList());
+                if (call.Callee is IdN idc)
+                {
+                    // SUM reads the field's raw JsonArray straight from `get`, bypassing Coerce (which flattens
+                    // a non-scalar to 0) and Builtin's eager numeric arg evaluation.
+                    if (idc.Name == "SUM" && call.Args.Count == 2 && call.Args[0] is IdN sumField && call.Args[1] is StrN sumCol)
+                        return SumArrayColumn(get(sumField.Name), sumCol.V);
+                    return Builtin(idc.Name, call.Args.Select(a => Eval(a, get)).ToList());
+                }
                 return InvokeMethod(Eval(call.Callee, get), call.Args.Select(a => Eval(a, get)).ToList());
             case UnaryN u:
                 var v = Eval(u.Operand, get);
@@ -330,6 +344,16 @@ public static class JsExpr
             }
         }
         return 0.0;
+    }
+
+    private static double SumArrayColumn(JsonNode? field, string column)
+    {
+        if (field is not JsonArray rows) return 0.0;
+        double total = 0;
+        foreach (var row in rows)
+            if (row is JsonObject obj && obj.TryGetPropertyValue(column, out var cell))
+                total += AsNum(Coerce(cell));
+        return total;
     }
 
     private static object InvokeMethod(object m, List<object> args)

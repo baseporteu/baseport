@@ -50,8 +50,10 @@ function loadFormsModule() {
     const ids = ['kindSubmit', 'kindLookup', 'kindList', 'formKinds', 'formActions',
         'formKindHint', 'formKindBadge', 'formProxyNote', 'listSortField', 'listSortDir',
         'listPageSize', 'lookupNotFound', 'listFilters', 'listPalette', 'listCanvas',
-        'formTable', 'formLayout', 'layoutCanvas', 'paletteFields',
-        'lookupMatchFields', 'lookupResultFields', 'listSearchFields'
+        'formTable', 'formLayout', 'layoutCanvas', 'paletteFields', 'submitInactiveHint',
+        'lookupMatchFields', 'listSearchFields', 'lookupResultPalette', 'lookupResultCanvas',
+        'lookupOnboardNav', 'lookupOnboardBack', 'lookupOnboardNext', 'lookupOnboardSkip',
+        'lookupStepMatch', 'lookupStepShow', 'lookupStepNotFound', 'formSuccessRedirect',
     ];
     const dom = install(ids);
     global.ui = {
@@ -71,6 +73,7 @@ function loadFormsModule() {
 
     const src = read('forms.js')
         .replace(/^\(function wireListCanvasDrop[\s\S]*?\}\)\(\);/m, '')
+        .replace(/^\(function wireLookupResultCanvasDrop[\s\S]*?\}\)\(\);/m, '')
         .replace(/^document\.getElementById\('formLayout'\)[\s\S]*?\}\);/m, '')
         .replace(/^document\.querySelectorAll\('\.builder-palette[\s\S]*?\}\);/m, '')
         .replace(/^\(function wireSuccessRedirectTest[\s\S]*?\}\)\(\);/m, '');
@@ -78,25 +81,43 @@ function loadFormsModule() {
         applyFormShape: null,
         normalizeActions: null
     };
-    eval(src + '\n;module.applyFormShape = applyFormShape; module.normalizeActions = normalizeActions; module.applyKindConfig = applyKindConfig; module.filterRow = filterRow; module.collectListFilters = collectListFilters; module.setTableFields = (f) => { formTableFields = f; };');
+    eval(src + `
+;module.applyFormShape = applyFormShape;
+module.normalizeActions = normalizeActions;
+module.applyKindConfig = applyKindConfig;
+module.filterRow = filterRow;
+module.collectListFilters = collectListFilters;
+module.setTableFields = (f) => { formTableFields = f; };
+module.lookupOnboardNext = lookupOnboardNext;
+module.lookupOnboardBack = lookupOnboardBack;
+module.lookupOnboardSkip = lookupOnboardSkip;
+module.insertLookupResultField = insertLookupResultField;
+module.getLookupResultOrder = () => lookupResultOrder;
+module.getLookupOnboardStep = () => lookupOnboardStep;
+module.checkedValues = checkedValues;
+`);
     return {
         dom,
         module
     };
 }
 
-test('a lookup-only form shows the lookup panel, not the submit panel', () => {
+test('a lookup-only form still shows its builder, flagged inactive rather than hidden', () => {
+    // A form's layout belongs to the form, not to whichever action happens to be on: it's built once and
+    // takes effect the moment "Create records" is turned on, so hiding it entirely used to also mean saving
+    // it as '[]' - silently discarding whatever the author had already built. Both bugs, fixed together.
     const {
         dom,
         module
     } = loadFormsModule();
     module.applyFormShape('form', ['lookup']);
     assert.ok(dom.byId.kindLookup.classList.contains('hidden') === false, 'lookup panel hidden');
-    assert.ok(dom.byId.kindSubmit.classList.contains('hidden'), 'submit panel shown');
+    assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'), 'submit builder hidden for a lookup-only form');
+    assert.ok(!dom.byId.submitInactiveHint.classList.contains('hidden'), 'no hint that the layout is currently inactive');
     assert.ok(dom.byId.kindList.classList.contains('hidden'), 'list panel shown');
 });
 
-test('a submit-only form shows the submit panel', () => {
+test('a submit-only form shows the submit panel with no inactive hint', () => {
     const {
         dom,
         module
@@ -104,6 +125,7 @@ test('a submit-only form shows the submit panel', () => {
     module.applyFormShape('form', ['submit']);
     assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'));
     assert.ok(dom.byId.kindLookup.classList.contains('hidden'));
+    assert.ok(dom.byId.submitInactiveHint.classList.contains('hidden'), 'the inactive hint shows while submit is on');
 });
 
 test('an enumerated list filter collects its value select, not a missing input', () => {
@@ -1139,10 +1161,10 @@ test('the sql editor is built only once the view is on screen', () => {
 
 /* form round-tripping: button actions, redirects, and per-row list actions */
 
-test('the button action dropdown offers cancel, validate and link, not just submit and reset', () => {
+test('the button action dropdown offers cancel, validate, link and run, not just submit and reset', () => {
     const forms = read('forms.js');
     const btn = forms.slice(forms.indexOf("row.t === 'button'"), forms.indexOf("row.t === 'group'"));
-    ['submit', 'reset', 'cancel', 'validate', 'link'].forEach((action) => {
+    ['submit', 'reset', 'cancel', 'validate', 'link', 'run'].forEach((action) => {
         assert.ok(btn.includes(`'${action}'`), `button action dropdown is missing '${action}'`);
     });
 });
@@ -1384,6 +1406,278 @@ test('the accounts sheet uses the switch primitive, not hand-written checkbox ma
     assert.ok(js.includes("ui.switchRow('Disabled'"), 'the disabled toggle is not the primitive');
     assert.ok(!/type="checkbox" id="accDisabled"/.test(js), 'hand-written checkbox markup is still there');
     assert.ok(read('ui.js').includes('function switchRow('), 'ui.js has no switchRow primitive');
+});
+
+/* container / line_items / button_bar builder blocks */
+
+test('the palette offers container, line items and button bar blocks', () => {
+    const html = read('admin/views/forms.html');
+    ['container', 'line_items', 'button_bar'].forEach((block) => {
+        assert.ok(new RegExp(`data-block=['"]${block}['"]`).test(html), `no palette entry for '${block}'`);
+    });
+});
+
+test('addRow builds every new block type with the shape ValidateLayout expects', () => {
+    const forms = read('forms.js');
+    const addRow = forms.slice(forms.indexOf('function addRow('), forms.indexOf('function moveRowIn('));
+    assert.ok(/type === 'container'[\s\S]*?rows:\s*\[/.test(addRow), "container is not created with a nested 'rows' array");
+    assert.ok(/type === 'line_items'[\s\S]*?field:/.test(addRow), "line_items is not created with a 'field' property");
+    assert.ok(/type === 'button_bar'[\s\S]*?buttons:\s*\[/.test(addRow), "button_bar is not created with a 'buttons' array");
+});
+
+test('a line-items block only offers array fields that have line-item columns configured', () => {
+    const forms = read('forms.js');
+    assert.ok(/function lineItemFieldCandidates\(\)\s*\{\s*return formTableFields\.filter\(\(f\) => f\.dataType === 'array' && clientArrayColumns\(f\.optionsJson\)\)/.test(forms),
+        'lineItemFieldCandidates no longer filters on array type + configured columns');
+});
+
+test('undo/redo snapshots the layout at the same choke point every mutation already renders through', () => {
+    const forms = read('forms.js');
+    const renderCanvas = forms.slice(forms.indexOf('function renderCanvas('), forms.indexOf('function buildRowElement('));
+    assert.ok(renderCanvas.includes('pushLayoutHistory()'), 'renderCanvas no longer snapshots layout history');
+    assert.ok(forms.includes('function undoLayout()') && forms.includes('function redoLayout()'), 'undo/redo entry points are missing');
+});
+
+test('embed.js renders container, line_items and button_bar without duplicating the button handler', () => {
+    const embed = read('embed.js');
+    assert.ok(embed.includes("row.t === 'container'"), 'embed.js does not render container blocks');
+    assert.ok(embed.includes("row.t === 'line_items'"), 'embed.js does not render line_items blocks');
+    assert.ok(embed.includes("row.t === 'button_bar'"), 'embed.js does not render button_bar blocks');
+    // Both the standalone button and every button inside a bar must funnel through one handler,
+    // the same guarded window.location.href logic the javascript:/data: URL test checks.
+    const definitions = [...embed.matchAll(/function\s+buildActionButton\b/g)];
+    assert.strictEqual(definitions.length, 1, 'buildActionButton is defined more than once');
+    assert.ok(/row\.t === 'button'\)\s*return buildActionButton\(row\)/.test(embed), "the standalone button no longer reuses buildActionButton");
+    assert.ok(/\(row\.buttons \|\| \[\]\)\.forEach\(\(btnCfg\) => bar\.appendChild\(buildActionButton\(btnCfg\)\)\)/.test(embed),
+        'button_bar no longer reuses buildActionButton for each of its buttons');
+});
+
+test('a submit missing only from inside a button_bar still suppresses the default Submit Data button', () => {
+    const embed = read('embed.js');
+    const loop = embed.slice(embed.indexOf('layout.rows.forEach((row) => {'), embed.indexOf('if (!hasSubmitButton)'));
+    assert.ok(/row\.t === 'button_bar'[\s\S]*?some\(\(b\) => b\.action === 'submit'\)/.test(loop),
+        "hasSubmitButton does not look inside a button_bar's buttons");
+});
+
+test("SUM(Field, 'Column') is rewritten to a property access, not left as a free identifier call", () => {
+    const embed = read('embed.js');
+    assert.ok(embed.includes('function sumOverColumn('), 'sumOverColumn helper is missing');
+    assert.ok(/replace\(\/\\bSUM\\\(/.test(embed), 'safeEval no longer rewrites bare-identifier SUM(...) calls');
+    assert.ok(/new Function\('data', 'SUM',/.test(embed), 'SUM is no longer injected into the evaluated function scope');
+});
+
+test('undo/redo buttons show a disabled state instead of silently no-opping', () => {
+    const html = read('admin/views/forms.html');
+    assert.ok(/id='builderUndo'[^>]*disabled/.test(html), 'the undo button does not start disabled');
+    assert.ok(/id='builderRedo'[^>]*disabled/.test(html), 'the redo button does not start disabled');
+    const forms = read('forms.js');
+    assert.ok(forms.includes('function syncHistoryButtons()'), 'syncHistoryButtons is missing');
+    assert.ok(/builderUndo[\s\S]*?\.disabled = layoutHistoryIndex <= 0/.test(forms), 'undo does not disable at the start of history');
+    assert.ok(/builderRedo[\s\S]*?\.disabled = layoutHistoryIndex >= layoutHistory\.length - 1/.test(forms), 'redo does not disable at the end of history');
+    const appCss = read('app.css');
+    assert.ok(/\.seg-btn:disabled\s*\{/.test(appCss), 'a disabled seg-btn (Undo/Redo, viewport toggle) has no visual treatment');
+});
+
+test('the Blocks palette heading gets top spacing, not just an adjacent-h4 selector that never matches', () => {
+    // Fields h4 is followed by a <ul>, then Blocks h4 - so 'h4+h4' never matches either heading.
+    const appCss = read('app.css');
+    assert.ok(!/\.builder-palette h4\+h4/.test(appCss), 'the dead h4+h4 selector is still there');
+    assert.ok(/\.builder-palette h4:not\(:first-child\)\s*\{\s*margin-top:\s*1rem;/.test(appCss),
+        'Blocks has no rule giving it top spacing away from the Fields list above it');
+});
+
+test('raw layout JSON lives inside the builder box it edits, not as a bare line below it', () => {
+    const html = read('admin/views/forms.html');
+    const builderMain = html.slice(html.indexOf("class='builder-main'"), html.indexOf('Redirect on success'));
+    assert.ok(builderMain.includes("id='layoutCanvas'"), 'sanity: builder-main no longer contains the canvas');
+    assert.ok(builderMain.includes("id='formLayout'"), 'the raw layout JSON textarea moved out of builder-main');
+    assert.ok(builderMain.includes("class='builder-raw-json'"), "the raw JSON details lost its container class");
+    const appCss = read('app.css');
+    assert.ok(/\.builder-raw-json\s*\{/.test(appCss), 'builder-raw-json has no spacing/border of its own');
+});
+
+test('the forms sidebar tells Form and List apart by icon alone, with no redundant text tag', () => {
+    const sidebar = read('js/sidebar.js');
+    const formsSpec = sidebar.slice(sidebar.indexOf('forms: {'), sidebar.indexOf('sql: {'));
+    assert.ok(!/badge:/.test(formsSpec), 'a redundant Form/List text tag is still built for every forms sidebar item');
+    assert.ok(/icon: f\.kind === 'list' \? OBJECT_ICONS\.list : OBJECT_ICONS\.form/.test(formsSpec),
+        'the sidebar item no longer picks a kind-specific icon');
+    // The list icon must not be a near-copy of the form icon now that it is the only signal left.
+    const formIcon = /form: SECTION_ICONS\.forms/.test(sidebar);
+    assert.ok(formIcon, 'sanity: form icon definition moved');
+    assert.ok(!sidebar.includes("list: \"<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M8 9h8M8 13h8M8 17h4'/></svg>\""),
+        'the list icon is still a near-duplicate of the form icon (rect + 3 lines)');
+});
+
+test('saving a form never discards its layout just because submit happens to be off', () => {
+    const forms = read('forms.js');
+    assert.ok(!/layoutJson:\s*formKind === 'form' && formActions\.includes\('submit'\)/.test(forms),
+        "formSnapshot still zeroes the layout to '[]' whenever submit is off");
+    assert.ok(/layoutJson:\s*formKind === 'form' \? JSON\.stringify\(layout\) : '\[\]'/.test(forms),
+        'formSnapshot no longer saves the layout for every form kind, regardless of which actions are on');
+});
+
+test('a brand-new lookup starts the onboarding wizard; an already-configured one goes straight to the flat panel', () => {
+    const {
+        dom,
+        module
+    } = loadFormsModule();
+    module.setTableFields([{
+        name: 'Sku',
+        dataType: 'text',
+        isIdentifier: true
+    }, {
+        name: 'Name',
+        dataType: 'text'
+    }]);
+    module.applyFormShape('form', ['lookup']);
+
+    module.applyKindConfig({});
+    assert.strictEqual(module.getLookupOnboardStep(), 0, 'a fresh lookup should start onboarding at step 0');
+    assert.ok(!dom.byId.lookupOnboardNav.classList.contains('hidden'), 'onboarding nav should show for a fresh lookup');
+    assert.ok(!dom.byId.lookupStepMatch.classList.contains('hidden'), 'step 0 should show Match on');
+    assert.ok(dom.byId.lookupStepShow.classList.contains('hidden'), 'step 0 should hide Show');
+    assert.ok(dom.byId.lookupStepNotFound.classList.contains('hidden'), 'step 0 should hide Not-found');
+
+    module.applyKindConfig({
+        matchFields: ['Sku'],
+        resultFields: ['Name']
+    });
+    assert.strictEqual(module.getLookupOnboardStep(), -1, 'an already-configured lookup should skip onboarding');
+    assert.ok(dom.byId.lookupOnboardNav.classList.contains('hidden'), 'onboarding nav should hide once already configured');
+    assert.ok(!dom.byId.lookupStepMatch.classList.contains('hidden'), 'the flat panel should show Match on');
+    assert.ok(!dom.byId.lookupStepShow.classList.contains('hidden'), 'the flat panel should show Show');
+    assert.ok(!dom.byId.lookupStepNotFound.classList.contains('hidden'), 'the flat panel should show Not-found');
+});
+
+test('onboarding Next is gated on the current step, and Skip drops straight to the flat panel', () => {
+    const {
+        dom,
+        module
+    } = loadFormsModule();
+    module.setTableFields([{
+        name: 'Sku',
+        dataType: 'text',
+        isIdentifier: true
+    }, {
+        name: 'Name',
+        dataType: 'text'
+    }]);
+    module.applyFormShape('form', ['lookup']);
+    module.applyKindConfig({});
+
+    module.lookupOnboardNext();
+    assert.strictEqual(module.getLookupOnboardStep(), 1, 'Next did not advance from Match on to Show');
+    assert.strictEqual(dom.byId.lookupOnboardNext.disabled, true, 'Next is enabled with nothing chosen to show yet');
+
+    module.insertLookupResultField('Name');
+    assert.strictEqual(dom.byId.lookupOnboardNext.disabled, false, 'Next stays disabled once a field is chosen to show');
+
+    module.lookupOnboardBack();
+    assert.strictEqual(module.getLookupOnboardStep(), 0, 'Back did not return to the previous step');
+
+    module.lookupOnboardSkip();
+    assert.strictEqual(module.getLookupOnboardStep(), -1, 'Skip did not drop straight to the flat panel');
+    assert.ok(dom.byId.lookupOnboardNav.classList.contains('hidden'), 'the wizard nav is still showing after Skip');
+});
+
+test('the Show field order loaded from a saved config is exactly what gets re-saved', () => {
+    const {
+        module
+    } = loadFormsModule();
+    module.setTableFields([{
+        name: 'Sku',
+        dataType: 'text'
+    }, {
+        name: 'Name',
+        dataType: 'text'
+    }, {
+        name: 'Category',
+        dataType: 'text'
+    }]);
+    module.applyFormShape('form', ['lookup']);
+    module.applyKindConfig({
+        matchFields: ['Sku'],
+        resultFields: ['Category', 'Name']
+    });
+    assert.deepStrictEqual(module.getLookupResultOrder(), ['Category', 'Name'], 'the saved Show order was not preserved on load');
+});
+
+test('dropping a chip on another chip reorders instead of silently doing nothing', () => {
+    // The bug: a same-column drop used to hit `moved.path === path` and just re-render, no reorder at all -
+    // a column's own field order was permanently fixed to insertion order. Every chip is now its own drop
+    // target (insert-before), and the column background stays a plain append.
+    const forms = read('forms.js');
+    assert.ok(forms.includes('function dropFieldAt(ev, targetIndex)'), 'the shared reorder-aware drop handler is missing');
+    assert.ok(/col\.items\.forEach\(\(item, itemIdx\) => \{/.test(forms), "each chip's own index is no longer tracked");
+    assert.ok(/chip\.addEventListener\('drop', \(ev\) => \{[\s\S]{0,250}dropFieldAt\(ev, itemIdx\)/.test(forms),
+        'a chip no longer has its own drop handler inserting before itself');
+    assert.ok(/colEl\.addEventListener\('drop', \(ev\) => \{[\s\S]{0,150}dropFieldAt\(ev, undefined\)/.test(forms),
+        'the column background no longer appends to the end');
+    // The old dead-end must be gone, not just shadowed by the new code.
+    assert.ok(!/JSON\.stringify\(moved\.path\) === JSON\.stringify\(path\)\)\s*\{\s*renderCanvas\(\);\s*return;\s*\}/.test(forms),
+        'a same-column drop still just re-renders without reordering');
+});
+
+test('dragging over a chip shows a drop indicator, not just a silent reorder', () => {
+    // Every chip calls stopPropagation() on its own dragover (needed so its own drop handler, not the
+    // column's, wins), which also meant the column's drop-hover highlight could never fire while hovering
+    // a chip - the exact moment a same-column reorder happens had zero visual feedback.
+    const forms = read('forms.js');
+    assert.ok(/chip\.addEventListener\('dragover', \(ev\) => \{[\s\S]{0,80}chip\.classList\.add\('drop-before'\)/.test(forms),
+        'a chip no longer marks itself as a drop target while dragged over');
+    assert.ok(/chip\.addEventListener\('dragleave'[\s\S]{0,300}chip\.classList\.remove\('drop-before'\)/.test(forms),
+        'the drop indicator is never cleared on dragleave');
+    assert.ok(/chip\.addEventListener\('dragend', \(\) => \{[\s\S]{0,120}drop-before/.test(forms),
+        'a cancelled drag has no cleanup sweep for a stuck drop indicator');
+    const appCss = read('app.css');
+    assert.ok(/\.chip\.drop-before\s*\{/.test(appCss), 'the drop-before marker has no visual style');
+});
+
+test('a column\'s drop-hover border does not flicker off when the drag crosses onto a child chip', () => {
+    // dragleave fires the instant the pointer crosses onto ANY child element (a chip, even the chip's own
+    // x button), which used to blindly clear drop-hover/drop-before even though the drag never actually left
+    // the column/chip - relatedTarget tells you where the pointer really went.
+    const forms = read('forms.js');
+    assert.ok(/colEl\.addEventListener\('dragleave', \(ev\) => \{[\s\S]{0,400}colEl\.contains\(ev\.relatedTarget\)[\s\S]{0,150}colEl\.classList\.remove\('drop-hover'\)/.test(forms),
+        "the column's dragleave still clears drop-hover on every child-boundary crossing");
+    assert.ok(/chip\.addEventListener\('dragleave', \(ev\) => \{[\s\S]{0,400}chip\.contains\(ev\.relatedTarget\)[\s\S]{0,150}chip\.classList\.remove\('drop-before'\)/.test(forms),
+        "a chip's dragleave still clears drop-before on every child-boundary crossing (e.g. its own x button)");
+    // A drag cancelled outside any valid target must not leave the highlight stuck forever.
+    assert.ok(/chip\.addEventListener\('dragend', \(\) => \{[\s\S]{0,300}bcol\.drop-hover/.test(forms),
+        'the dragend safety sweep no longer clears a stuck column border too');
+});
+
+test('a blank "run" button and both its editors (standalone button, button_bar) all reveal an expression field', () => {
+    const forms = read('forms.js');
+    ["row.action === 'run'", "btn.action === 'run'"].forEach((needle) => {
+        assert.ok(forms.includes(needle), `${needle} editor branch is missing`);
+    });
+    const btnEditor = forms.slice(forms.indexOf("row.t === 'button'"), forms.indexOf("row.t === 'group'"));
+    assert.ok(/row\.action === 'run'\)[\s\S]{0,150}labeledInput\('Expression', row, 'expr'/.test(btnEditor),
+        "the standalone button's run action has no expression input");
+    const barEditor = forms.slice(forms.indexOf('function buttonBarEditor'), forms.indexOf('function renderCanvas('));
+    assert.ok(/btn\.action === 'run'\)[\s\S]{0,150}labeledInput\('Expression', btn, 'expr'/.test(barEditor),
+        "a button_bar button's run action has no expression input");
+});
+
+test('a run button evaluates its expression and shows the result as a toast, with no forced navigation', () => {
+    const embed = read('embed.js');
+    assert.ok(/row\.action === 'run'\)[\s\S]{0,350}toast\(String\(result\), 'info'\)/.test(embed),
+        "the run action does not surface its expression's result as a toast");
+    assert.ok(!/row\.action === 'run'\)[\s\S]{0,350}window\.location\.href/.test(embed),
+        'the run action forces navigation like a link, defeating the point of a blank button');
+});
+
+test('the list and lookup canvases label a field with normal-case body text, not the ROW/CONTAINER eyebrow style', () => {
+    // .brow-type is an all-caps, letter-spaced tag sized for a fixed short word like ROW or CONTAINER.
+    // A field's own name is the primary content of that row, not a category label.
+    const forms = read('forms.js');
+    assert.ok(!forms.includes("label.className = 'brow-type';"), "a field-name label still borrows the block-type eyebrow style");
+    const matches = forms.match(/label\.className = 'brow-field-name';/g) || [];
+    assert.strictEqual(matches.length, 2, 'expected exactly the list-column and lookup-result canvases to use brow-field-name');
+    const appCss = read('app.css');
+    assert.ok(/\.brow-field-name\s*\{[^}]*text-transform/.test(appCss) === false, 'brow-field-name still forces a text-transform like the eyebrow tag it replaced');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

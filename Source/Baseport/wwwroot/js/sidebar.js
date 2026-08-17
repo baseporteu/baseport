@@ -14,7 +14,9 @@ const OBJECT_ICONS = {
     folder: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 3.9A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z'/></svg>",
     table: SECTION_ICONS.tables,
     form: SECTION_ICONS.forms,
-    list: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M8 9h8M8 13h8M8 17h4'/></svg>",
+    // Deliberately not a bordered rect like the form icon: with a text badge gone, this is the only
+    // thing telling a form and a list apart at a glance, so it needs its own silhouette, not a near-twin.
+    list: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><circle cx='4' cy='6' r='1' fill='currentColor' stroke='none'/><circle cx='4' cy='12' r='1' fill='currentColor' stroke='none'/><circle cx='4' cy='18' r='1' fill='currentColor' stroke='none'/><path d='M9 6h11M9 12h11M9 18h11'/></svg>",
     query: SECTION_ICONS.sql,
 };
 
@@ -59,8 +61,8 @@ const SIDEBARS = {
                 onSelect: () => navigate('/forms'),
             }].concat(forms.map((f) => ({
                 label: f.title || 'Untitled form',
+                // The icon alone carries form-vs-list now; a text tag saying the same thing next to it was redundant.
                 icon: f.kind === 'list' ? OBJECT_ICONS.list : OBJECT_ICONS.form,
-                badge: f.kind === 'list' ? 'List' : 'Form',
                 active: f.id === formEditingId,
                 onSelect: () => navigate(`/forms/${f.id}`),
             })));

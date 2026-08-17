@@ -602,6 +602,87 @@ function fieldInputRow(label, id, value, placeholder, mono, dataField) {
     return lab;
 }
 
+// Turns an array field into a line-items block: a sub-schema of columns (name/label/type) stored in
+// OptionsJson the same way select options are, so a submit form can render an editable repeating table
+// bound to this field instead of treating it as an opaque JSON blob. Empty columns = today's plain array field.
+const ARRAY_COLUMN_TYPES = ['text', 'number', 'currency', 'select', 'date', 'boolean'];
+
+function arrayColumnsEditor(f) {
+    let cols = [];
+    try {
+        const o = JSON.parse(f.optionsJson || '{}');
+        if (Array.isArray(o.columns)) cols = o.columns.map((c) => ({ name: c.name || '', label: c.label || '', dataType: c.dataType || 'text' }));
+    } catch (e) {}
+
+    const wrap = document.createElement('div');
+
+    const hint = document.createElement('p');
+    hint.className = 'sheet-note';
+    hint.innerText = 'Leave empty for a plain list field. Add columns to turn this into line items a submit form can render as an add/remove-row table.';
+    wrap.appendChild(hint);
+
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.id = 'feConfig';
+    wrap.appendChild(hidden);
+
+    const list = document.createElement('div');
+    wrap.appendChild(list);
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn btn-outline btn-sm';
+    addBtn.innerText = '+ Add column';
+    addBtn.onclick = () => {
+        cols.push({ name: '', label: '', dataType: 'text' });
+        render();
+    };
+    wrap.appendChild(addBtn);
+
+    function sync() {
+        hidden.value = cols.length ? JSON.stringify({ columns: cols }) : '[]';
+    }
+
+    function render() {
+        list.innerHTML = '';
+        cols.forEach((c, i) => {
+            const line = document.createElement('div');
+            line.className = 'brow-fields';
+
+            const nameInp = document.createElement('input');
+            nameInp.className = 'input input-sm';
+            nameInp.placeholder = 'Column name, e.g. Qty';
+            nameInp.value = c.name;
+            nameInp.onchange = () => { c.name = nameInp.value.trim(); sync(); };
+
+            const labelInp = document.createElement('input');
+            labelInp.className = 'input input-sm';
+            labelInp.placeholder = 'Label (optional)';
+            labelInp.value = c.label;
+            labelInp.onchange = () => { c.label = labelInp.value.trim(); sync(); };
+
+            const typeSel = document.createElement('select');
+            typeSel.className = 'input input-sm';
+            typeSel.innerHTML = ARRAY_COLUMN_TYPES.map((t) => `<option value="${t}" ${c.dataType === t ? 'selected' : ''}>${t}</option>`).join('');
+            typeSel.onchange = () => { c.dataType = typeSel.value; sync(); };
+
+            const rm = document.createElement('button');
+            rm.type = 'button';
+            rm.className = 'btn btn-ghost btn-sm';
+            rm.innerText = '✕';
+            rm.title = 'Remove column';
+            rm.onclick = () => { cols.splice(i, 1); sync(); render(); };
+
+            line.append(nameInp, labelInp, typeSel, rm);
+            list.appendChild(line);
+        });
+        sync();
+    }
+    render();
+
+    return wrap;
+}
+
 function openFieldEditor(fieldId) {
     const f = fieldDraft.find((x) => String(fieldKey(x)) === String(fieldId));
     if (!f) return;
@@ -892,14 +973,13 @@ function openFieldEditor(fieldId) {
             lab.innerText = 'Auto-generate from field (optional)';
             lab.appendChild(sel);
             row.appendChild(lab);
+        } else if (t === 'array') {
+            row.appendChild(arrayColumnsEditor(f));
         } else {
             const hint = document.createElement('p');
             hint.className = 'sheet-note';
-            // array/json have no expression or options, but Min/Max below still caps them
-            hint.innerText =
-                t === 'array' ? 'No expression needed; use Maximum below to cap the number of items.' :
-                t === 'json' ? 'No expression needed; use Maximum below to cap the serialized size.' :
-                'No additional configuration needed for this type.';
+            // json has no expression or options, but Maximum below still caps it
+            hint.innerText = t === 'json' ? 'No expression needed; use Maximum below to cap the serialized size.' : 'No additional configuration needed for this type.';
             row.appendChild(hint);
         }
     }
@@ -966,6 +1046,8 @@ function openFieldEditor(fieldId) {
             optionsJson = val ? JSON.stringify({
                 sourceField: val
             }) : '{}';
+        } else if (type === 'array') {
+            optionsJson = val || '[]';
         }
         const body = {
             name: document.getElementById('feName').value.trim(),
@@ -1121,6 +1203,8 @@ async function saveFieldChanges() {
         draft.optionsJson = cfg.value ? JSON.stringify({
             sourceField: cfg.value
         }) : '{}';
+    } else if (cfg && newType === 'array') {
+        draft.optionsJson = cfg.value || '[]';
     }
 
     closeSheet();

@@ -87,6 +87,7 @@ function newForm() {
     layout = {
         rows: []
     };
+    resetLayoutHistory();
     document.getElementById('formEditorTitle').innerText = 'New form';
     document.getElementById('formTitle').value = '';
     document.getElementById('formDescription').value = '';
@@ -131,6 +132,7 @@ async function editForm(id) {
     fillTableSelect(f.tableId);
     document.getElementById('formTable').disabled = true;
     layout = parseLayout(f.layoutJson);
+    resetLayoutHistory();
     applyFormShape(f.kind, f.actions);
     await loadTableFields(f.tableId);
     applyKindConfig(parseConfig(f.configJson));
@@ -171,9 +173,13 @@ function applyFormShape(kind, actions) {
 
     const doesSubmit = formActions.includes('submit');
     const doesLookup = formActions.includes('lookup');
-    document.getElementById('kindSubmit').classList.toggle('hidden', formKind !== 'form' || !doesSubmit);
+    // A form's layout is a property of the form, not of the submit toggle: it's built once and takes effect
+    // whenever submit is later turned on, so the builder stays visible (and its data stays saved, see
+    // formSnapshot) regardless of which actions happen to be on right now.
+    document.getElementById('kindSubmit').classList.toggle('hidden', formKind !== 'form');
     document.getElementById('kindLookup').classList.toggle('hidden', formKind !== 'form' || !doesLookup);
     document.getElementById('kindList').classList.toggle('hidden', formKind !== 'list');
+    document.getElementById('submitInactiveHint').classList.toggle('hidden', formKind !== 'form' || doesSubmit);
 
     document
         .querySelectorAll('#formKinds .seg-btn')
@@ -190,7 +196,7 @@ function applyFormShape(kind, actions) {
         ACTION_HINTS.both :
         ACTION_HINTS[formActions[0]] || '';
 
-    if (formKind === 'form' && doesSubmit) renderCanvas();
+    if (formKind === 'form') renderCanvas();
 }
 
 // At least one action, or the form does nothing at all.
@@ -220,9 +226,10 @@ function onActionsChange() {
 }
 
 async function onFormTableChange() {
-    // Columns, actions and filters name the previous table's fields, so they cannot survive the switch.
+    // Columns, actions, filters and the lookup result order name the previous table's fields, so they cannot survive the switch.
     listColumns = [];
     listActions = [];
+    lookupResultOrder = [];
     await loadTableFields(document.getElementById('formTable').value);
     applyKindConfig({});
 }
@@ -293,7 +300,9 @@ function renderKindFieldPickers(config) {
         cfg.matchFields || [],
         'This table has no field a visitor could type. Mark one as an identifier in the table builder.',
     );
-    checkGrid('lookupResultFields', selectableFields(), cfg.resultFields || [], 'This table has no visible fields yet.');
+    document.getElementById('lookupMatchFields').onchange = () => syncLookupOnboardNav();
+    lookupResultOrder = (cfg.resultFields || []).filter((n) => selectableFields().some((f) => f.name === n));
+    renderLookupResultBuilder();
     checkGrid('listSearchFields', selectableFields(), cfg.searchFields || [], 'This table has no visible fields yet.');
 
     const sort = document.getElementById('listSortField');
@@ -326,7 +335,177 @@ function applyKindConfig(cfg) {
     document.getElementById('listSortDir').value = cfg.sortDir === 'asc' ? 'asc' : 'desc';
     document.getElementById('listPageSize').value = cfg.pageSize || 25;
     document.getElementById('formSuccessRedirect').value = cfg.onSuccessRedirect || '';
+
+    // A brand-new lookup (nothing chosen yet) walks through Match on / Show / Not-found one at a time;
+    // an already-configured one shows them flat, so re-opening a working form never re-triggers the wizard.
+    lookupOnboardStep = (cfg.matchFields || []).length === 0 && (cfg.resultFields || []).length === 0 ? 0 : -1;
+    renderLookupOnboardNav();
 }
+
+/* LOOKUP kind: first-run onboarding wizard around Match on / Show / Not-found. */
+
+let lookupOnboardStep = -1; // -1 = flat panel (default for an already-configured lookup), 0-2 = wizard step
+
+function renderLookupOnboardNav() {
+    const nav = document.getElementById('lookupOnboardNav');
+    const onboarding = lookupOnboardStep >= 0;
+    nav.classList.toggle('hidden', !onboarding);
+    ['lookupStepMatch', 'lookupStepShow', 'lookupStepNotFound'].forEach((id, i) => {
+        document.getElementById(id).classList.toggle('hidden', onboarding && lookupOnboardStep !== i);
+    });
+    if (!onboarding) return;
+    nav.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', Number(b.dataset.step) === lookupOnboardStep));
+    document.getElementById('lookupOnboardBack').classList.toggle('hidden', lookupOnboardStep === 0);
+    document.getElementById('lookupOnboardNext').innerText = lookupOnboardStep === 2 ? 'Finish setup' : 'Next';
+    syncLookupOnboardNav();
+}
+
+// Gates Next on the current step actually having something in it, so onboarding can't complete an empty lookup.
+function syncLookupOnboardNav() {
+    if (lookupOnboardStep < 0) return;
+    const nextBtn = document.getElementById('lookupOnboardNext');
+    if (lookupOnboardStep === 0) nextBtn.disabled = checkedValues('lookupMatchFields').length === 0;
+    else if (lookupOnboardStep === 1) nextBtn.disabled = lookupResultOrder.length === 0;
+    else nextBtn.disabled = false;
+}
+
+function lookupOnboardNext() {
+    lookupOnboardStep = lookupOnboardStep >= 2 ? -1 : lookupOnboardStep + 1;
+    renderLookupOnboardNav();
+}
+
+function lookupOnboardBack() {
+    if (lookupOnboardStep > 0) lookupOnboardStep--;
+    renderLookupOnboardNav();
+}
+
+function lookupOnboardSkip() {
+    lookupOnboardStep = -1;
+    renderLookupOnboardNav();
+}
+
+/* LOOKUP kind: "Show" field order. Same palette-and-canvas drag-reorder shape as the list column builder
+   below, kept as its own small copy rather than parameterizing that one: two call sites don't earn a
+   generalized abstraction, and the list builder's tests pin its exact functions. */
+
+let lookupResultOrder = []; // field names, in display order
+let lookupResultDragFrom = null;
+
+function renderLookupResultPalette() {
+    const ul = document.getElementById('lookupResultPalette');
+    if (!ul) return;
+    ul.innerHTML = '';
+    selectableFields()
+        .filter((f) => !lookupResultOrder.includes(f.name))
+        .forEach((f) => {
+            const li = document.createElement('li');
+            li.className = 'palette-item';
+            li.draggable = true;
+            li.innerText = `${f.name} · ${f.dataType}`;
+            li.addEventListener('dragstart', (ev) => ev.dataTransfer.setData('text/lookup-result', f.name));
+            ul.appendChild(li);
+        });
+    if (!ul.children.length) {
+        const li = document.createElement('li');
+        li.className = 'muted';
+        li.innerText = 'Every field is already shown.';
+        ul.appendChild(li);
+    }
+}
+
+function renderLookupResultCanvas() {
+    const canvas = document.getElementById('lookupResultCanvas');
+    if (!canvas) return;
+    canvas.innerHTML = '';
+    if (!lookupResultOrder.length) {
+        const empty = document.createElement('div');
+        empty.className = 'canvas-empty';
+        empty.innerText = 'Drag fields here to show them when a record is found.';
+        canvas.appendChild(empty);
+    }
+
+    lookupResultOrder.forEach((name, index) => {
+        const field = formTableFields.find((f) => f.name === name);
+        const row = document.createElement('div');
+        row.className = 'brow column-row';
+        row.draggable = true;
+        row.dataset.index = index;
+
+        const head = document.createElement('div');
+        head.className = 'brow-head';
+        const label = document.createElement('span');
+        label.className = 'brow-field-name';
+        label.innerText = `${field ? field.label || field.name : name}${field ? ' · ' + field.dataType : ''}`;
+        const actions = document.createElement('div');
+        actions.className = 'brow-actions';
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn-outline btn-sm';
+        remove.innerText = '✕';
+        remove.title = 'Remove';
+        remove.onclick = () => {
+            lookupResultOrder.splice(index, 1);
+            renderLookupResultBuilder();
+        };
+        actions.appendChild(remove);
+        head.appendChild(label);
+        head.appendChild(actions);
+        row.appendChild(head);
+
+        wireLookupResultDrag(row);
+        canvas.appendChild(row);
+    });
+}
+
+function renderLookupResultBuilder() {
+    renderLookupResultPalette();
+    renderLookupResultCanvas();
+    syncLookupOnboardNav();
+}
+
+function wireLookupResultDrag(row) {
+    row.addEventListener('dragstart', (ev) => {
+        lookupResultDragFrom = Number(row.dataset.index);
+        row.classList.add('dragging');
+        ev.dataTransfer.setData('text/move-lookup-result', String(lookupResultDragFrom));
+    });
+    row.addEventListener('dragend', () => {
+        lookupResultDragFrom = null;
+        document.querySelectorAll('#lookupResultCanvas .column-row').forEach((r) => r.classList.remove('dragging'));
+    });
+    row.addEventListener('dragover', (ev) => ev.preventDefault());
+    row.addEventListener('drop', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const over = Number(row.dataset.index);
+
+        const added = ev.dataTransfer.getData('text/lookup-result');
+        if (added) return insertLookupResultField(added, over);
+
+        if (lookupResultDragFrom === null) return;
+        const moved = lookupResultOrder.splice(lookupResultDragFrom, 1)[0];
+        lookupResultOrder.splice(over, 0, moved);
+        renderLookupResultBuilder();
+    });
+}
+
+function insertLookupResultField(name, at) {
+    if (lookupResultOrder.includes(name)) return;
+    lookupResultOrder.splice(at === undefined ? lookupResultOrder.length : at, 0, name);
+    renderLookupResultBuilder();
+}
+
+(function wireLookupResultCanvasDrop() {
+    const canvas = document.getElementById('lookupResultCanvas');
+    if (!canvas) return;
+    canvas.addEventListener('dragover', (ev) => ev.preventDefault());
+    canvas.addEventListener('drop', (ev) => {
+        ev.preventDefault();
+        const added = ev.dataTransfer.getData('text/lookup-result');
+        if (added) insertLookupResultField(added);
+    });
+})();
 
 /* LIST kind: column builder. Same palette-and-canvas shape as the submit builder. */
 
@@ -377,7 +556,7 @@ function renderListCanvas() {
         const head = document.createElement('div');
         head.className = 'brow-head';
         const label = document.createElement('span');
-        label.className = 'brow-type';
+        label.className = 'brow-field-name';
         label.innerText = `${col.name}${field ? ' · ' + field.dataType : ''}`;
         const actions = document.createElement('div');
         actions.className = 'brow-actions';
@@ -657,7 +836,7 @@ function collectConfig() {
         const cfg = {};
         if (formActions.includes('lookup')) {
             cfg.matchFields = checkedValues('lookupMatchFields');
-            cfg.resultFields = checkedValues('lookupResultFields');
+            cfg.resultFields = lookupResultOrder.slice();
             cfg.notFoundText = document.getElementById('lookupNotFound').value.trim();
         }
         if (formActions.includes('submit')) {
@@ -704,7 +883,7 @@ function formSnapshot() {
         actions: formActions,
         title: document.getElementById('formTitle').value.trim(),
         description: document.getElementById('formDescription').value.trim(),
-        layoutJson: formKind === 'form' && formActions.includes('submit') ? JSON.stringify(layout) : '[]',
+        layoutJson: formKind === 'form' ? JSON.stringify(layout) : '[]',
         configJson: JSON.stringify({
             ...formConfigDraft,
             ...collectConfig()
@@ -822,16 +1001,36 @@ function addRow(type, atIndex) {
         label: 'Button',
         action: 'submit'
     };
+    else if (type === 'container') row = {
+        t: 'container',
+        title: 'Section',
+        rows: [{
+            t: 'row',
+            cols: [emptyCol()]
+        }]
+    };
+    else if (type === 'line_items') row = {
+        t: 'line_items',
+        field: ''
+    };
+    else if (type === 'button_bar') row = {
+        t: 'button_bar',
+        align: 'flex-end',
+        buttons: [{
+            label: 'Submit',
+            action: 'submit'
+        }]
+    };
     if (!row) return;
     layout.rows.splice(atIndex, 0, row);
     renderCanvas();
 }
 
-function moveRow(ri, dir) {
+function moveRowIn(arr, ri, dir) {
     const to = ri + dir;
-    if (to < 0 || to >= layout.rows.length) return;
-    const r = layout.rows.splice(ri, 1)[0];
-    layout.rows.splice(to, 0, r);
+    if (to < 0 || to >= arr.length) return;
+    const r = arr.splice(ri, 1)[0];
+    arr.splice(to, 0, r);
     renderCanvas();
 }
 
@@ -944,6 +1143,7 @@ function rowFields(row) {
                 ['cancel', 'Cancel'],
                 ['validate', 'Validate'],
                 ['link', 'Link'],
+                ['run', 'Run expression'],
             ]
             .map(([v, l]) => `<option value="${v}">${l}</option>`)
             .join('');
@@ -961,11 +1161,156 @@ function rowFields(row) {
             const hrefLab = labeledInput('URL expression', row, 'hrefExpr', LINK_EXPR_PLACEHOLDER);
             hrefLab.appendChild(testExprButton(() => row.hrefExpr));
             div.appendChild(hrefLab);
+        } else if (row.action === 'run') {
+            // A blank button: no fixed outcome, just this expression evaluated on click and shown as a toast.
+            const exprLab = labeledInput('Expression', row, 'expr', "'Total: ' + (data.Qty * data.Price)");
+            exprLab.appendChild(testExprButton(() => row.expr));
+            div.appendChild(exprLab);
         }
     } else if (row.t === 'group') {
         div.appendChild(labeledInput('Title', row, 'title', 'Group'));
+    } else if (row.t === 'line_items') {
+        const candidates = lineItemFieldCandidates();
+        if (!candidates.length) {
+            const hint = document.createElement('p');
+            hint.className = 'muted field-hint';
+            hint.innerText = 'No array field with line-item columns yet. Add columns to an array field in the table schema first.';
+            div.appendChild(hint);
+        } else {
+            if (!row.field || !candidates.some((f) => f.name === row.field)) row.field = candidates[0].name;
+            const lab = document.createElement('label');
+            lab.className = 'brow-field-label';
+            lab.innerText = 'Line-item field';
+            const sel = document.createElement('select');
+            sel.className = 'input input-sm';
+            sel.innerHTML = candidates
+                .map((f) => `<option value="${f.name}" ${row.field === f.name ? 'selected' : ''}>${f.label || f.name}</option>`)
+                .join('');
+            sel.onchange = () => {
+                row.field = sel.value;
+            };
+            lab.appendChild(sel);
+            div.appendChild(lab);
+        }
+    } else if (row.t === 'button_bar') {
+        div.appendChild(buttonBarEditor(row));
     }
     return div;
+}
+
+// Columns configured on an array field (line-items sub-schema), same shape FieldValidation.ArrayColumns parses server-side.
+function clientArrayColumns(optionsJson) {
+    try {
+        const o = JSON.parse(optionsJson || '{}');
+        return Array.isArray(o.columns) && o.columns.length ? o.columns : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function lineItemFieldCandidates() {
+    return formTableFields.filter((f) => f.dataType === 'array' && clientArrayColumns(f.optionsJson));
+}
+
+// A button_bar groups several buttons behind one alignment, unlike a standalone "button" block which is one-per-row.
+function buttonBarEditor(row) {
+    const wrap = document.createElement('div');
+    if (!Array.isArray(row.buttons)) row.buttons = [];
+
+    const alignLab = document.createElement('label');
+    alignLab.className = 'brow-field-label';
+    alignLab.innerText = 'Alignment';
+    const alignSel = document.createElement('select');
+    alignSel.className = 'input input-sm';
+    alignSel.innerHTML = [
+            ['flex-start', 'Left'],
+            ['center', 'Center'],
+            ['flex-end', 'Right'],
+            ['space-between', 'Space between'],
+        ]
+        .map(([v, l]) => `<option value="${v}" ${(row.align || 'flex-end') === v ? 'selected' : ''}>${l}</option>`)
+        .join('');
+    alignSel.onchange = () => {
+        row.align = alignSel.value;
+    };
+    alignLab.appendChild(alignSel);
+    wrap.appendChild(alignLab);
+
+    const list = document.createElement('div');
+    wrap.appendChild(list);
+
+    function renderButtons() {
+        list.innerHTML = '';
+        row.buttons.forEach((btn, i) => {
+            const line = document.createElement('div');
+            line.className = 'brow-fields';
+            line.appendChild(labeledInput('Label', btn, 'label', 'Save'));
+
+            const actionLab = document.createElement('label');
+            actionLab.className = 'brow-field-label';
+            actionLab.innerText = 'Action';
+            const actionSel = document.createElement('select');
+            actionSel.className = 'input input-sm';
+            actionSel.innerHTML = [
+                    ['submit', 'Submit'],
+                    ['reset', 'Reset'],
+                    ['cancel', 'Cancel'],
+                    ['validate', 'Validate'],
+                    ['link', 'Link'],
+                    ['run', 'Run expression'],
+                ]
+                .map(([v, l]) => `<option value="${v}" ${(btn.action || 'submit') === v ? 'selected' : ''}>${l}</option>`)
+                .join('');
+            actionSel.value = btn.action || 'submit';
+            actionSel.onchange = () => {
+                btn.action = actionSel.value;
+                renderButtons();
+            };
+            actionLab.appendChild(actionSel);
+            line.appendChild(actionLab);
+
+            if (btn.action === 'cancel') {
+                line.appendChild(labeledInput('Href (blank = go back)', btn, 'href', '/thanks'));
+            } else if (btn.action === 'link') {
+                const hrefLab = labeledInput('URL expression', btn, 'hrefExpr', LINK_EXPR_PLACEHOLDER);
+                hrefLab.appendChild(testExprButton(() => btn.hrefExpr));
+                line.appendChild(hrefLab);
+            } else if (btn.action === 'run') {
+                const exprLab = labeledInput('Expression', btn, 'expr', "'Total: ' + (data.Qty * data.Price)");
+                exprLab.appendChild(testExprButton(() => btn.expr));
+                line.appendChild(exprLab);
+            }
+
+            const rm = document.createElement('button');
+            rm.type = 'button';
+            rm.className = 'btn btn-ghost btn-sm';
+            rm.title = 'Remove button';
+            rm.innerText = '✕';
+            rm.onclick = () => {
+                row.buttons.splice(i, 1);
+                renderButtons();
+            };
+            line.appendChild(rm);
+
+            list.appendChild(line);
+        });
+    }
+    renderButtons();
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn btn-outline btn-sm';
+    addBtn.innerText = '+ Add button';
+    addBtn.onclick = () => {
+        row.buttons.push({
+            label: 'Button',
+            action: 'submit'
+        });
+        renderButtons();
+    };
+    wrap.appendChild(addBtn);
+
+    return wrap;
 }
 
 function renderCanvas() {
@@ -979,60 +1324,187 @@ function renderCanvas() {
         canvas.appendChild(empty);
     }
 
-    layout.rows.forEach((row, ri) => {
-        const el = document.createElement('div');
-        el.className = 'brow' + (row.t === 'group' ? ' brow-group' : '');
-        el.addEventListener('dragover', (ev) => ev.preventDefault());
-        el.addEventListener('drop', (ev) => {
-            ev.preventDefault();
-            ev.stopPropagation();
-            const block = ev.dataTransfer.getData('text/block');
-            if (block) addRow(block, ri);
-        });
+    layout.rows.forEach((row, ri) => canvas.appendChild(buildRowElement(row, ri, layout.rows, [ri])));
+    document.getElementById('formLayout').value = JSON.stringify(layout);
+    pushLayoutHistory();
+}
 
-        const head = document.createElement('div');
-        head.className = 'brow-head';
-        const type = document.createElement('span');
-        type.className = 'brow-type';
-        type.innerText = row.t;
-        const actions = document.createElement('div');
-        actions.className = 'brow-actions';
+// Builds one block. `path` locates the row for column drag/move: [ri] at top level, [ri, nestedRi] for a row
+// nested inside a container - renderColumn appends its own column index to get a full column path.
+// `ownerArray` is the array `row` actually lives in (layout.rows, or a container's own row.rows), so move/
+// remove act on the right list regardless of nesting.
+function buildRowElement(row, index, ownerArray, path) {
+    const el = document.createElement('div');
+    el.className = 'brow' + (row.t === 'group' ? ' brow-group' : '');
+    el.addEventListener('dragover', (ev) => ev.preventDefault());
+    el.addEventListener('drop', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        // Only the top-level canvas accepts a new block dropped from the palette; a nested row is already inside one.
+        if (path.length > 1) return;
+        const block = ev.dataTransfer.getData('text/block');
+        if (block) addRow(block, index);
+    });
 
-        const mkBtn = (label, fn) => {
-            const b = document.createElement('button');
-            b.type = 'button';
-            b.className = 'btn btn-outline btn-sm';
-            b.innerText = label;
-            b.onclick = fn;
-            actions.appendChild(b);
+    const head = document.createElement('div');
+    head.className = 'brow-head';
+    const type = document.createElement('span');
+    type.className = 'brow-type';
+    type.innerText = row.t;
+    const actions = document.createElement('div');
+    actions.className = 'brow-actions';
+
+    const mkBtn = (label, fn, title) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn btn-outline btn-sm';
+        b.innerText = label;
+        if (title) b.title = title;
+        b.onclick = fn;
+        actions.appendChild(b);
+    };
+    if (row.t === 'row' || row.t === 'group') {
+        const presetSel = document.createElement('select');
+        presetSel.className = 'input input-sm';
+        presetSel.title = 'Apply a column layout preset';
+        presetSel.innerHTML = [
+                ['', 'Preset…'],
+                ['12', '1 column'],
+                ['6-6', '2 columns (half)'],
+                ['4-4-4', '3 columns (thirds)'],
+                ['3-3-3-3', '4 columns (quarters)'],
+                ['8-4', '2 columns (main/side)'],
+            ]
+            .map(([v, l]) => `<option value="${v}">${l}</option>`)
+            .join('');
+        presetSel.onchange = () => {
+            applyRowPreset(row, presetSel.value);
+            presetSel.value = '';
         };
-        if (row.t === 'row' || row.t === 'group')
-            mkBtn('+', () => {
-                row.cols.push(emptyCol());
-                renderCanvas();
-            });
-        mkBtn('↑', () => moveRow(ri, -1));
-        mkBtn('↓', () => moveRow(ri, 1));
-        mkBtn('✕', () => {
-            layout.rows.splice(ri, 1);
+        actions.appendChild(presetSel);
+        mkBtn('+ col', () => {
+            row.cols.push(emptyCol());
             renderCanvas();
         });
+    }
+    if (row.t === 'container')
+        mkBtn('+ row', () => {
+            row.rows.push({
+                t: 'row',
+                cols: [emptyCol()]
+            });
+            renderCanvas();
+        });
+    mkBtn('↑', () => moveRowIn(ownerArray, index, -1), 'Move up');
+    mkBtn('↓', () => moveRowIn(ownerArray, index, 1), 'Move down');
+    mkBtn('✕', () => {
+        ownerArray.splice(index, 1);
+        renderCanvas();
+    }, 'Remove');
 
-        head.appendChild(type);
-        head.appendChild(actions);
-        el.appendChild(head);
+    head.appendChild(type);
+    head.appendChild(actions);
+    el.appendChild(head);
 
-        if (row.t === 'subtotal' || row.t === 'button') {
-            el.appendChild(rowFields(row));
-        } else {
-            const body = document.createElement('div');
-            body.className = 'brow-cols';
-            row.cols.forEach((col, ci) => body.appendChild(renderColumn(row, ri, col, ci)));
-            el.appendChild(body);
+    if (row.t === 'container') {
+        if (!Array.isArray(row.rows)) row.rows = [];
+        el.appendChild(labeledInput('Section title', row, 'title', 'Section'));
+        const body = document.createElement('div');
+        body.className = 'brow-container-rows';
+        row.rows.forEach((nrow, nri) => body.appendChild(buildRowElement(nrow, nri, row.rows, [...path, nri])));
+        if (!row.rows.length) {
+            const empty = document.createElement('div');
+            empty.className = 'canvas-empty';
+            empty.innerText = 'Use "+ row" to add this section\'s first row.';
+            body.appendChild(empty);
         }
-        canvas.appendChild(el);
-    });
-    document.getElementById('formLayout').value = JSON.stringify(layout);
+        el.appendChild(body);
+    } else if (row.t === 'subtotal' || row.t === 'button' || row.t === 'line_items' || row.t === 'button_bar') {
+        el.appendChild(rowFields(row));
+    } else {
+        const body = document.createElement('div');
+        body.className = 'brow-cols';
+        row.cols.forEach((col, ci) => body.appendChild(renderColumn(row, [...path, ci], col, ci)));
+        el.appendChild(body);
+    }
+    return el;
+}
+
+// Applied to a whole row at once: replaces its columns with one per span, keeping only the first column's
+// fields (the rest start empty) - the same trade-off preview.html's setRowPreset makes.
+function applyRowPreset(row, preset) {
+    if (!preset) return;
+    const allFields = row.cols.flatMap((c) => c.items);
+    const spans = preset.split('-').map(Number);
+    row.cols = spans.map((w, idx) => ({
+        t: 'col',
+        w,
+        items: idx === 0 ? allFields : []
+    }));
+    renderCanvas();
+}
+
+/* viewport preview: cosmetic only, toggles the canvas's own max-width */
+
+function setBuilderViewport(size, btn) {
+    document.querySelectorAll('#builderViewport .seg-btn').forEach((b) => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const canvas = document.getElementById('layoutCanvas');
+    canvas.classList.remove('tablet', 'mobile');
+    if (size !== 'desktop') canvas.classList.add(size);
+}
+
+/* undo/redo: every layout mutation already ends by calling renderCanvas(), so that single choke point is
+   where a snapshot is taken - nothing else has to call into history bookkeeping directly. */
+
+let layoutHistory = [];
+let layoutHistoryIndex = -1;
+let suppressLayoutHistory = false;
+
+function resetLayoutHistory() {
+    layoutHistory = [];
+    layoutHistoryIndex = -1;
+    syncHistoryButtons();
+}
+
+// A button that silently no-ops on click (nothing left to undo/redo) is worse than no button: it looks live
+// but gives no feedback. Disabled state is the only signal the bound is real.
+function syncHistoryButtons() {
+    const undoBtn = document.getElementById('builderUndo');
+    const redoBtn = document.getElementById('builderRedo');
+    if (undoBtn) undoBtn.disabled = layoutHistoryIndex <= 0;
+    if (redoBtn) redoBtn.disabled = layoutHistoryIndex >= layoutHistory.length - 1;
+}
+
+function pushLayoutHistory() {
+    if (suppressLayoutHistory) return;
+    const snap = JSON.stringify(layout);
+    if (layoutHistory[layoutHistoryIndex] === snap) {
+        syncHistoryButtons();
+        return;
+    }
+    layoutHistory = layoutHistory.slice(0, layoutHistoryIndex + 1);
+    layoutHistory.push(snap);
+    layoutHistoryIndex++;
+    syncHistoryButtons();
+}
+
+function restoreLayoutSnapshot(index) {
+    if (index < 0 || index >= layoutHistory.length) return;
+    layoutHistoryIndex = index;
+    suppressLayoutHistory = true;
+    layout = JSON.parse(layoutHistory[index]);
+    renderCanvas();
+    suppressLayoutHistory = false;
+    syncHistoryButtons();
+}
+
+function undoLayout() {
+    restoreLayoutSnapshot(layoutHistoryIndex - 1);
+}
+
+function redoLayout() {
+    restoreLayoutSnapshot(layoutHistoryIndex + 1);
 }
 
 const COL_WIDTHS = [
@@ -1044,52 +1516,106 @@ const COL_WIDTHS = [
     [3, 'One quarter'],
 ];
 
-function renderColumn(row, ri, col, ci) {
+// Resolves a column from a path built by buildRowElement/renderColumn: [ri, ci] at top level, [ri, nestedRi, ci] nested.
+function colAtPath(path) {
+    const ci = path[path.length - 1];
+    const row = path.length === 2 ? layout.rows[path[0]] : (layout.rows[path[0]] || {}).rows && layout.rows[path[0]].rows[path[1]];
+    return row && row.cols && row.cols[ci];
+}
+
+function renderColumn(row, path, col, ci) {
     const colEl = document.createElement('div');
     colEl.className = 'bcol';
     colEl.style.flexGrow = col.w || 12;
+
+    // Shared by every drop target in this column (each chip, and the column's own empty background): a chip
+    // drop inserts before that chip, so a same-column drop actually reorders instead of the no-op it used to
+    // be; the column background stays a plain append, for dropping past the last chip or into an empty column.
+    function dropFieldAt(ev, targetIndex) {
+        const field = ev.dataTransfer.getData('text/field');
+        if (!field) return;
+
+        // A chip dragged from another column (or the same one) carries its origin path.
+        let moved = null;
+        try {
+            moved = JSON.parse(ev.dataTransfer.getData('text/movefield') || 'null');
+        } catch (e) {}
+
+        if (moved && JSON.stringify(moved.path) === JSON.stringify(path)) {
+            const fromIdx = col.items.indexOf(field);
+            if (fromIdx === -1) { renderCanvas(); return; }
+            col.items.splice(fromIdx, 1);
+            let insertAt = targetIndex === undefined ? col.items.length : targetIndex;
+            if (fromIdx < insertAt) insertAt--; // removing the source first shifts every later index down by one
+            col.items.splice(insertAt, 0, field);
+            renderCanvas();
+            return;
+        }
+
+        if (moved) {
+            const src = colAtPath(moved.path);
+            if (src) {
+                const idx = src.items.indexOf(field);
+                if (idx >= 0) src.items.splice(idx, 1);
+            }
+        }
+        col.items.splice(targetIndex === undefined ? col.items.length : targetIndex, 0, field);
+        renderCanvas();
+    }
+
     colEl.addEventListener('dragover', (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
         colEl.classList.add('drop-hover');
     });
-    colEl.addEventListener('dragleave', () => colEl.classList.remove('drop-hover'));
+    colEl.addEventListener('dragleave', (ev) => {
+        // dragleave fires the instant the pointer crosses onto a child element (a chip, even the chip's own
+        // × button) - relatedTarget is where the pointer actually went, so a still-inside move is not a real leave.
+        if (ev.relatedTarget && colEl.contains(ev.relatedTarget)) return;
+        colEl.classList.remove('drop-hover');
+    });
     colEl.addEventListener('drop', (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
         colEl.classList.remove('drop-hover');
-        const field = ev.dataTransfer.getData('text/field');
-        if (!field) return;
-
-        // A chip dragged from another column carries its origin, so the move removes it there instead of duplicating the field.
-        let moved = null;
-        try {
-            moved = JSON.parse(ev.dataTransfer.getData('text/movefield') || 'null');
-        } catch (e) {}
-        if (moved && moved.row === ri && moved.col === ci) {
-            renderCanvas();
-            return;
-        }
-        if (moved && layout.rows[moved.row] && layout.rows[moved.row].cols[moved.col]) {
-            const src = layout.rows[moved.row].cols[moved.col].items;
-            const idx = src.indexOf(field);
-            if (idx >= 0) src.splice(idx, 1);
-        }
-        col.items.push(field);
-        renderCanvas();
+        dropFieldAt(ev, undefined);
     });
 
-    col.items.forEach((item) => {
+    col.items.forEach((item, itemIdx) => {
         const chip = document.createElement('span');
         chip.className = 'chip';
         chip.innerText = item;
         chip.draggable = true;
         chip.addEventListener('dragstart', (ev) => {
+            ev.stopPropagation();
             ev.dataTransfer.setData('text/field', item);
             ev.dataTransfer.setData('text/movefield', JSON.stringify({
-                row: ri,
-                col: ci
+                path
             }));
+        });
+        // Safety net: a drag that ends outside any valid target (cancelled, dropped off-canvas) still fires
+        // dragend on the chip being dragged, so this is the one place guaranteed to run and clear every marker.
+        chip.addEventListener('dragend', () => {
+            document.querySelectorAll('.chip.drop-before').forEach((c) => c.classList.remove('drop-before'));
+            document.querySelectorAll('.bcol.drop-hover').forEach((c) => c.classList.remove('drop-hover'));
+        });
+        chip.addEventListener('dragover', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            chip.classList.add('drop-before');
+        });
+        chip.addEventListener('dragleave', (ev) => {
+            ev.stopPropagation();
+            // Same relatedTarget check as the column: crossing onto the chip's own × button is not a real leave.
+            if (ev.relatedTarget && chip.contains(ev.relatedTarget)) return;
+            chip.classList.remove('drop-before');
+        });
+        chip.addEventListener('drop', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            chip.classList.remove('drop-before');
+            colEl.classList.remove('drop-hover');
+            dropFieldAt(ev, itemIdx);
         });
         const x = document.createElement('span');
         x.className = 'chip-x';

@@ -288,7 +288,7 @@ public class FormValidationTests
     {
         var form = Form(FormKinds.Form, "{}", title: "Buttons");
         form.LayoutJson = $$"""{"rows":[{"t":"button","label":"Go","action":"{{action}}"}]}""";
-        Assert.Empty(FieldValidation.ValidateLayout(form, Fields.Select(f => f.Name).ToList()));
+        Assert.Empty(FieldValidation.ValidateLayout(form, Fields));
     }
 
     [Fact]
@@ -296,7 +296,7 @@ public class FormValidationTests
     {
         var form = Form(FormKinds.Form, "{}", title: "Buttons");
         form.LayoutJson = """{"rows":[{"t":"button","label":"Go","action":"teleport"}]}""";
-        Assert.Contains(FieldValidation.ValidateLayout(form, Fields.Select(f => f.Name).ToList()),
+        Assert.Contains(FieldValidation.ValidateLayout(form, Fields),
                         e => e.Contains("button action must be one of"));
     }
 
@@ -305,17 +305,35 @@ public class FormValidationTests
     {
         var missing = Form(FormKinds.Form, "{}", title: "Buttons");
         missing.LayoutJson = """{"rows":[{"t":"button","label":"View","action":"link"}]}""";
-        Assert.Contains(FieldValidation.ValidateLayout(missing, Fields.Select(f => f.Name).ToList()),
+        Assert.Contains(FieldValidation.ValidateLayout(missing, Fields),
                         e => e.Contains("requires a URL expression"));
 
         var bad = Form(FormKinds.Form, "{}", title: "Buttons");
         bad.LayoutJson = """{"rows":[{"t":"button","label":"View","action":"link","hrefExpr":"data.Ghost"}]}""";
-        Assert.Contains(FieldValidation.ValidateLayout(bad, Fields.Select(f => f.Name).ToList()),
+        Assert.Contains(FieldValidation.ValidateLayout(bad, Fields),
                         e => e.Contains("Unknown field 'Ghost'"));
 
         var good = Form(FormKinds.Form, "{}", title: "Buttons");
         good.LayoutJson = """{"rows":[{"t":"button","label":"View","action":"link","hrefExpr":"'/o?n=' + data.OrderNo"}]}""";
-        Assert.Empty(FieldValidation.ValidateLayout(good, Fields.Select(f => f.Name).ToList()));
+        Assert.Empty(FieldValidation.ValidateLayout(good, Fields));
+    }
+
+    [Fact]
+    public void A_run_button_requires_a_valid_expression()
+    {
+        // A "run" button is blank on purpose: no fixed outcome, just an author expression evaluated on
+        // click and shown as a toast - a link without the forced navigation.
+        var missing = Form(FormKinds.Form, "{}", title: "Buttons");
+        missing.LayoutJson = """{"rows":[{"t":"button","label":"Compute","action":"run"}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(missing, Fields), e => e.Contains("requires an expression"));
+
+        var bad = Form(FormKinds.Form, "{}", title: "Buttons");
+        bad.LayoutJson = """{"rows":[{"t":"button","label":"Compute","action":"run","expr":"data.Ghost"}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(bad, Fields), e => e.Contains("Unknown field 'Ghost'"));
+
+        var good = Form(FormKinds.Form, "{}", title: "Buttons");
+        good.LayoutJson = """{"rows":[{"t":"button","label":"Compute","action":"run","expr":"'Order: ' + data.OrderNo"}]}""";
+        Assert.Empty(FieldValidation.ValidateLayout(good, Fields));
     }
 
     [Fact]
@@ -357,5 +375,122 @@ public class FormValidationTests
         var validation = JsExpr.Validate("encodeURIComponent('a b/c')", Array.Empty<string>());
         Assert.True(validation.Valid, string.Join("; ", validation.Errors));
         Assert.Equal("a%20b%2Fc", JsExpr.Evaluate("encodeURIComponent('a b/c')", _ => null));
+    }
+
+    private static readonly FieldDefinition LineItemsField = new()
+    {
+        Id = Ids.NewShortId(12), Name = "Lines", DataType = "array",
+        OptionsJson = """{"columns":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}"""
+    };
+
+    [Fact]
+    public void SUM_totals_a_column_across_a_line_items_array()
+    {
+        var fieldNames = new[] { "Lines" };
+        var validation = JsExpr.Validate("SUM(Lines, 'Qty')", fieldNames);
+        Assert.True(validation.Valid, string.Join("; ", validation.Errors));
+        Assert.Equal(new[] { "Lines" }, validation.ReferencedFields);
+
+        var data = System.Text.Json.Nodes.JsonNode.Parse("""[{"Qty":2,"Price":10},{"Qty":3,"Price":5}]""");
+        Assert.Equal(5.0, JsExpr.Evaluate("SUM(Lines, 'Qty')", n => n == "Lines" ? data : null));
+    }
+
+    [Fact]
+    public void SUM_rejects_any_shape_other_than_field_and_literal_column()
+    {
+        Assert.False(JsExpr.Validate("SUM(Lines)", new[] { "Lines" }).Valid);
+        Assert.False(JsExpr.Validate("SUM(data.Lines, 'Qty')", new[] { "Lines" }).Valid);
+        Assert.False(JsExpr.Validate("SUM(Lines, Lines)", new[] { "Lines" }).Valid);
+    }
+
+    [Fact]
+    public void A_line_items_block_must_reference_a_configured_array_field()
+    {
+        var withField = new List<FieldDefinition>(Fields) { LineItemsField };
+
+        var missing = Form(FormKinds.Form, "{}", title: "Order");
+        missing.LayoutJson = """{"rows":[{"t":"line_items","field":"Ghost"}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(missing, withField), e => e.Contains("unknown field 'Ghost'"));
+
+        var wrongType = Form(FormKinds.Form, "{}", title: "Order");
+        wrongType.LayoutJson = """{"rows":[{"t":"line_items","field":"Customer"}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(wrongType, withField), e => e.Contains("must point at an array field"));
+
+        var noColumns = Form(FormKinds.Form, "{}", title: "Order");
+        var plainArray = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Tags", DataType = "array" };
+        var withPlainArray = new List<FieldDefinition>(Fields) { plainArray };
+        noColumns.LayoutJson = """{"rows":[{"t":"line_items","field":"Tags"}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(noColumns, withPlainArray), e => e.Contains("no line-item columns configured"));
+
+        var good = Form(FormKinds.Form, "{}", title: "Order");
+        good.LayoutJson = """{"rows":[{"t":"line_items","field":"Lines"}]}""";
+        Assert.Empty(FieldValidation.ValidateLayout(good, withField));
+    }
+
+    [Fact]
+    public void A_line_items_block_alone_satisfies_the_at_least_one_field_rule()
+    {
+        var withField = new List<FieldDefinition>(Fields) { LineItemsField };
+        var form = Form(FormKinds.Form, "{}", title: "Order");
+        form.LayoutJson = """{"rows":[{"t":"line_items","field":"Lines"}]}""";
+        Assert.Empty(FieldValidation.ValidateForm(form, withField));
+    }
+
+    [Fact]
+    public void A_container_nests_only_plain_rows()
+    {
+        var good = Form(FormKinds.Form, "{}", title: "Sections");
+        good.LayoutJson = """{"rows":[{"t":"container","title":"Addresses","rows":[{"t":"row","cols":[{"t":"col","w":6,"items":["Customer"]}]}]}]}""";
+        Assert.Empty(FieldValidation.ValidateLayout(good, Fields));
+
+        var nestedContainer = Form(FormKinds.Form, "{}", title: "Sections");
+        nestedContainer.LayoutJson = """{"rows":[{"t":"container","title":"Outer","rows":[{"t":"container","title":"Inner","rows":[]}]}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(nestedContainer, Fields), e => e.Contains("may only nest plain rows"));
+
+        var empty = Form(FormKinds.Form, "{}", title: "Sections");
+        empty.LayoutJson = """{"rows":[{"t":"container","title":"Empty","rows":[]}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(empty, Fields), e => e.Contains("needs at least one nested row"));
+    }
+
+    [Fact]
+    public void A_button_bar_validates_alignment_and_every_button()
+    {
+        var good = Form(FormKinds.Form, "{}", title: "Actions");
+        good.LayoutJson = """{"rows":[{"t":"button_bar","align":"space-between","buttons":[{"label":"Cancel","action":"cancel"},{"label":"Save","action":"submit"}]}]}""";
+        Assert.Empty(FieldValidation.ValidateLayout(good, Fields));
+
+        var badAlign = Form(FormKinds.Form, "{}", title: "Actions");
+        badAlign.LayoutJson = """{"rows":[{"t":"button_bar","align":"middle","buttons":[{"label":"Save","action":"submit"}]}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(badAlign, Fields), e => e.Contains("alignment must be one of"));
+
+        var badButton = Form(FormKinds.Form, "{}", title: "Actions");
+        badButton.LayoutJson = """{"rows":[{"t":"button_bar","buttons":[{"label":"Go","action":"teleport"}]}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(badButton, Fields), e => e.Contains("button action must be one of"));
+
+        var empty = Form(FormKinds.Form, "{}", title: "Actions");
+        empty.LayoutJson = """{"rows":[{"t":"button_bar","buttons":[]}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(empty, Fields), e => e.Contains("needs at least one button"));
+    }
+
+    [Fact]
+    public void Line_item_columns_are_validated_like_field_names()
+    {
+        var goodCols = """{"columns":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}""";
+        var good = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Lines", DataType = "array", OptionsJson = goodCols };
+        Assert.Empty(FieldValidation.ValidateFieldDefinition(good, Array.Empty<string>(), new[] { "Lines" }, _ => true));
+
+        var dupCols = """{"columns":[{"name":"Qty","dataType":"number"},{"name":"Qty","dataType":"text"}]}""";
+        var dup = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Lines", DataType = "array", OptionsJson = dupCols };
+        Assert.Contains(FieldValidation.ValidateFieldDefinition(dup, Array.Empty<string>(), new[] { "Lines" }, _ => true),
+            e => e.Contains("used more than once"));
+
+        var badType = """{"columns":[{"name":"Notes","dataType":"richtext"}]}""";
+        var bad = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Lines", DataType = "array", OptionsJson = badType };
+        Assert.Contains(FieldValidation.ValidateFieldDefinition(bad, Array.Empty<string>(), new[] { "Lines" }, _ => true),
+            e => e.Contains("unsupported type"));
+
+        // A plain array field (no "columns" key) is untouched - today's scalar-list behavior.
+        var plain = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Tags", DataType = "array" };
+        Assert.Empty(FieldValidation.ValidateFieldDefinition(plain, Array.Empty<string>(), new[] { "Tags" }, _ => true));
     }
 }

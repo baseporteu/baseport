@@ -61,15 +61,17 @@
                         </div>
                         <span class='badge hidden' id='formKindBadge'></span>
                         <div class='form-actions-pick' id='formActions'>
-                            <label class='check-inline'><input type='checkbox' value='submit' onchange='onActionsChange()'> Create records</label>
-                            <label class='check-inline'><input type='checkbox' value='lookup' onchange='onActionsChange()'> Look up a record</label>
+                            <label class='switch-row'><span class='switch'><input type='checkbox' value='submit' onchange='onActionsChange()'><span class='track'></span><span class='thumb'></span></span><span>Create records</span></label>
+                            <label class='switch-row'><span class='switch'><input type='checkbox' value='lookup' onchange='onActionsChange()'><span class='track'></span><span class='thumb'></span></span><span>Look up a record</span></label>
                         </div>
                     </div>
                     <p class='muted field-hint' id='formKindHint'></p>
                     <p class='muted field-hint hidden' id='formProxyNote'></p>
 
-                    <!-- SUBMIT: matrix layout designer -->
+                    <!-- SUBMIT: matrix layout designer. Stays visible and saved even with "Create records" off,
+                         since the layout belongs to the form and takes effect the moment that switch is turned on. -->
                     <div id='kindSubmit'>
+                        <p class='muted field-hint' id='submitInactiveHint'>This layout is saved but has no effect until "Create records" is turned on.</p>
                         <div class='builder'>
                             <div class='builder-palette'>
                                 <h4>Fields</h4>
@@ -78,18 +80,34 @@
                                 <ul class='palette-list'>
                                     <li class='palette-item' draggable='true' data-block='row'>Row</li>
                                     <li class='palette-item' draggable='true' data-block='group'>Group</li>
+                                    <li class='palette-item' draggable='true' data-block='container'>Container</li>
+                                    <li class='palette-item' draggable='true' data-block='line_items'>Line items</li>
                                     <li class='palette-item' draggable='true' data-block='subtotal'>Subtotal</li>
                                     <li class='palette-item' draggable='true' data-block='button'>Button</li>
+                                    <li class='palette-item' draggable='true' data-block='button_bar'>Button bar</li>
                                 </ul>
                             </div>
-                            <div class='builder-canvas' id='layoutCanvas'>
-                                <div class='canvas-empty' id='canvasEmpty'>Drag fields into columns, or drop a block here to start.</div>
+                            <div class='builder-main'>
+                                <div class='builder-toolbar'>
+                                    <div class='segmented'>
+                                        <button type='button' class='seg-btn' id='builderUndo' onclick='undoLayout()' title='Undo' disabled>↶ Undo</button>
+                                        <button type='button' class='seg-btn' id='builderRedo' onclick='redoLayout()' title='Redo' disabled>↷ Redo</button>
+                                    </div>
+                                    <div class='segmented' id='builderViewport'>
+                                        <button type='button' class='seg-btn active' onclick='setBuilderViewport("desktop", this)'>Desktop</button>
+                                        <button type='button' class='seg-btn' onclick='setBuilderViewport("tablet", this)'>Tablet</button>
+                                        <button type='button' class='seg-btn' onclick='setBuilderViewport("mobile", this)'>Mobile</button>
+                                    </div>
+                                </div>
+                                <div class='builder-canvas' id='layoutCanvas'>
+                                    <div class='canvas-empty' id='canvasEmpty'>Drag fields into columns, or drop a block here to start.</div>
+                                </div>
+                                <details class='builder-raw-json'>
+                                    <summary class='muted'>Raw layout JSON</summary>
+                                    <textarea id='formLayout' class='input textarea' rows='4'></textarea>
+                                </details>
                             </div>
                         </div>
-                        <details>
-                            <summary class='muted'>Raw layout JSON</summary>
-                            <textarea id='formLayout' class='input textarea' rows='4'></textarea>
-                        </details>
                         <div class='setting-row'>
                             <div class='setting-label'>
                                 <label for='formSuccessRedirect'>Redirect on success</label>
@@ -101,23 +119,45 @@
                         </div>
                     </div>
 
-                    <!-- LOOKUP: match on an identifier, show chosen fields -->
+                    <!-- LOOKUP: match on an identifier, show chosen fields. A brand-new, unconfigured lookup
+                         walks through the three settings one at a time (lookupOnboardStep); an already-
+                         configured one shows them flat, as before, so editing never re-triggers the wizard. -->
                     <div id='kindLookup' class='hidden'>
-                        <div class='setting-row'>
+                        <div class='lookup-onboard-nav hidden' id='lookupOnboardNav'>
+                            <div class='segmented'>
+                                <button type='button' class='seg-btn' data-step='0'>1. Match on</button>
+                                <button type='button' class='seg-btn' data-step='1'>2. Show</button>
+                                <button type='button' class='seg-btn' data-step='2'>3. Not-found message</button>
+                            </div>
+                            <div class='row'>
+                                <button type='button' class='btn btn-outline btn-sm hidden' id='lookupOnboardBack' onclick='lookupOnboardBack()'>Back</button>
+                                <button type='button' class='btn btn-outline btn-sm' id='lookupOnboardSkip' onclick='lookupOnboardSkip()'>Skip setup</button>
+                                <button type='button' class='btn btn-sm' id='lookupOnboardNext' onclick='lookupOnboardNext()' disabled>Next</button>
+                            </div>
+                        </div>
+                        <div class='setting-row' id='lookupStepMatch'>
                             <div class='setting-label'>
                                 <label>Match on</label>
                                 <p class='muted'>The visitor types one of these values. Only fields the visitor could already hold, such as an id, a reference, or an e-mail.</p>
                             </div>
                             <div class='check-grid' id='lookupMatchFields'></div>
                         </div>
-                        <div class='setting-row'>
+                        <div class='setting-row' id='lookupStepShow'>
                             <div class='setting-label'>
                                 <label>Show</label>
-                                <p class='muted'>Fields rendered when a record is found. Everything else stays on the server.</p>
+                                <p class='muted'>Drag fields in to reveal them when a record is found, in this order. Everything else stays on the server.</p>
                             </div>
-                            <div class='check-grid' id='lookupResultFields'></div>
+                            <div class='builder'>
+                                <div class='builder-palette'>
+                                    <h4>Fields</h4>
+                                    <ul id='lookupResultPalette' class='palette-list'></ul>
+                                </div>
+                                <div class='builder-canvas' id='lookupResultCanvas'>
+                                    <div class='canvas-empty'>Drag fields here to show them when a record is found.</div>
+                                </div>
+                            </div>
                         </div>
-                        <div class='setting-row'>
+                        <div class='setting-row' id='lookupStepNotFound'>
                             <div class='setting-label'>
                                 <label for='lookupNotFound'>Not-found message</label>
                                 <p class='muted'>Shown when nothing matches. Keep it identical for every miss so it reveals nothing.</p>
@@ -187,6 +227,6 @@
                         </div>
                     </div>
 
-                    <label class='check-inline'><input type='checkbox' id='formPublished' checked>Turning this off hides the form and returns a 404 on public links.</label>
+                    <label class='switch-row'><span class='switch'><input type='checkbox' id='formPublished' checked><span class='track'></span><span class='thumb'></span></span><span>Turning this off hides the form and returns a 404 on public links.</span></label>
                 </div>
             </div>
