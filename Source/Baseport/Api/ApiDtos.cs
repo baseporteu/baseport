@@ -4,9 +4,18 @@ using System.Text.Json.Nodes;
 
 namespace Baseport;
 
-// Every response shape the outside world sees.
+// Public interface schema for external consumers.
 public static class ApiDtos
 {
+    public static long? DatabaseBytes(AppDbContext db)
+    {
+        var path = db.Database.GetDbConnection().DataSource;
+        return path != ":memory:" && File.Exists(path) ? new FileInfo(path).Length : null;
+    }
+
+    public static long EstimatedIndexBytes(IEnumerable<TableDefinition> tables, Func<string, int> recordCount) =>
+        tables.Sum(t => RecordIndexes.EstimateIndexBytes(t, recordCount(t.Id)));
+
     public static object TableDto(TableDefinition t, int formCount = 0, int recordCount = 0) => new
     {
         t.Id,

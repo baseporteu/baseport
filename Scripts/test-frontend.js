@@ -2114,5 +2114,20 @@ test('a long list gets a filter, a short one gets a heading', () => {
     assert.ok(/next\.setSelectionRange/.test(js), 'typing in the filter loses the caret');
 });
 
+
+test('the overview summary paints from the payload, not from a later fetch', () => {
+    // The bug: a full page load fills currentTables from the bootstrap and never
+    // calls loadTables(), which is the only thing that fetched the stats. The four
+    // cards then read "n/a", "n/a" and 0 until something happened to reload, while
+    // the settings page showed the same numbers correctly.
+    const auth = read('js/auth.js');
+    const core = read('js/core.js');
+    assert.ok(/me\.stats[\s\S]{0,60}summaryStats = me\.stats/.test(auth), 'the payload stats are never read');
+    assert.ok(/if \(me\.tables\) currentTables = me\.tables/.test(auth), 'the payload tables are no longer read either');
+    // The route still repaints on a full load, and loadTables still refreshes in-session.
+    assert.ok(/updateSummary\(currentTables\)/.test(core), 'the overview no longer paints its summary');
+    assert.ok(/summaryStats = await fetch\('\/api\/_admin\/settings'\)/.test(core), 'an in-session reload no longer refreshes the stats');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

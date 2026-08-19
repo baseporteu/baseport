@@ -351,14 +351,14 @@ public static class AdminEndpoints
         {
             var s = await db.SettingsAsync() ?? new AppSettings();
             var dbPath = db.Database.GetDbConnection().DataSource;
-            long? dbSizeBytes = dbPath != ":memory:" && File.Exists(dbPath) ? new FileInfo(dbPath).Length : null;
+            var dbSizeBytes = ApiDtos.DatabaseBytes(db);
 
             // Same estimate the tables list sorts "Index size" by, summed instance-wide.
             var indexTables = await db.Tables.Include(t => t.Fields).ToListAsync();
             var indexRecordCounts = await db.Records.GroupBy(r => r.TableId)
                 .Select(g => new { TableId = g.Key, Count = g.Count() }).ToListAsync();
-            var estimatedIndexBytes = indexTables.Sum(t =>
-                RecordIndexes.EstimateIndexBytes(t, indexRecordCounts.FirstOrDefault(r => r.TableId == t.Id)?.Count ?? 0));
+            var estimatedIndexBytes = ApiDtos.EstimatedIndexBytes(indexTables,
+                id => indexRecordCounts.FirstOrDefault(r => r.TableId == id)?.Count ?? 0);
 
             return Results.Ok(new
             {

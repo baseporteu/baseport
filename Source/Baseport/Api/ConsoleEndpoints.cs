@@ -130,7 +130,14 @@ public static class ConsoleEndpoints
                     t,
                     formCounts.FirstOrDefault(f => f.TableId == t.Id)?.Count ?? 0,
                     recordCounts.FirstOrDefault(r => r.TableId == t.Id)?.Count ?? 0)),
-                settings = new { settings.AppName, settings.Currency }
+                settings = new { settings.AppName, settings.Currency },
+                stats = new
+                {
+                    dbSizeBytes = ApiDtos.DatabaseBytes(db),
+                    estimatedIndexBytes = ApiDtos.EstimatedIndexBytes(tables,
+                        id => recordCounts.FirstOrDefault(r => r.TableId == id)?.Count ?? 0),
+                    usersEnabled = await db.UserAccounts.CountAsync(u => !u.IsDisabled)
+                }
             };
         }
 
