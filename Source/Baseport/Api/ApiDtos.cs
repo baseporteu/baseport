@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Baseport;
@@ -67,19 +66,22 @@ public static class ApiDtos
         f.IsReadOnly
     };
 
-    // a password field's hash never leaves the server
-    public static object RecordDto(Record r, IEnumerable<FieldDefinition> fields)
+    // a password field's hash never leaves the server. Links and expansions are the public API's, so the console passes neither.
+    public static JsonObject RecordDto(Record r, IEnumerable<FieldDefinition> fields, JsonObject? links = null, JsonObject? expanded = null)
     {
         var data = (JsonNode.Parse(string.IsNullOrWhiteSpace(r.JsonData) ? "{}" : r.JsonData) as JsonObject) ?? new JsonObject();
         foreach (var f in fields)
             if (FieldValidation.NormalizeType(f.DataType) == "password") data.Remove(f.Name);
 
-        return new
+        var dto = new JsonObject
         {
-            r.Id,
-            r.CreatedAt,
-            Data = JsonSerializer.Deserialize<JsonElement>(data.ToJsonString())
+            ["id"] = r.Id,
+            ["createdAt"] = JsonValue.Create(r.CreatedAt),
+            ["data"] = data
         };
+        if (links is not null) dto["links"] = links;
+        if (expanded is not null) dto["expanded"] = expanded;
+        return dto;
     }
 
     // Admin-facing form summary. Includes the owning table so the Forms page can stand alone.

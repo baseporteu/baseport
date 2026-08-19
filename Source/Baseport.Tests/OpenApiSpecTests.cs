@@ -201,8 +201,9 @@ public class OpenApiSpecTests
     public void The_documented_record_shape_matches_what_the_api_returns()
     {
         var record = new Record { Id = Ids.NewShortId(12), TableId = "t", JsonData = "{}", CreatedAt = DateTime.UtcNow };
+        // The public API always carries links, and carries expanded whenever $expand asked for one, so the fullest shape is what the document has to describe.
         var returned = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(
-            ApiDtos.RecordDto(record, new List<FieldDefinition>()),
+            ApiDtos.RecordDto(record, new List<FieldDefinition>(), new JsonObject(), new JsonObject()),
             new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)))!.AsObject();
 
         var documented = (OpenApiSpec.BuildPaths(new List<TableDefinition> { Detailed() })

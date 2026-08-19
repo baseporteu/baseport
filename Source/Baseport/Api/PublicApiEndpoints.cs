@@ -58,17 +58,23 @@ public static class PublicApiEndpoints
             var sortField = fields.FirstOrDefault(f => f.Name == sort);
             var descending = !string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase);
 
+            var relations = await ApiLinks.RelationsAsync(db, fields);
+            var (expand, expandError) = ApiLinks.ParseExpand(ctx.Request.Query[ApiLinks.ExpandParameter], relations);
+            if (expandError is { } listProblem) return ApiError(400, listProblem);
+
             var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50,
                 accessFields: fields, accessUserId: caller.Id);
+            var extras = await ApiLinks.ForRecordsAsync(db, apiName, result.Records, relations, expand, caller.Id);
             return Results.Ok(new
             {
-                rows = result.Records.Select(r => ApiDtos.RecordDto(r, fields)),
+                rows = result.Records.Select(r => ApiDtos.RecordDto(r, fields, extras[r.Id].Links, extras[r.Id].Expanded)),
                 result.Page,
                 result.PageSize,
                 result.Total,
                 result.TotalPages,
                 result.HasMore,
-                result.CountExact
+                result.CountExact,
+                links = ApiLinks.PageLinks(ctx.Request, result)
             });
         });
 
@@ -97,9 +103,16 @@ public static class PublicApiEndpoints
             if (MethodGate(table, ctx) is { } denied) return denied;
             var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == rid);
             if (record == null) return ApiError(404, "Record not found.");
-            if (!await RecordAccess.AllowsAsync(db, table, table.Fields.ToList(), Permission.Read, caller.Id, rid))
+            var readFields = table.Fields.OrderBy(f => f.Position).ThenBy(f => f.Id).ToList();
+            if (!await RecordAccess.AllowsAsync(db, table, readFields, Permission.Read, caller.Id, rid))
                 return ApiError(403, "This record is not yours to read.");
-            return Results.Ok(ApiDtos.RecordDto(record, table.Fields));
+
+            var readRelations = await ApiLinks.RelationsAsync(db, readFields);
+            var (readExpand, readProblem) = ApiLinks.ParseExpand(ctx.Request.Query[ApiLinks.ExpandParameter], readRelations);
+            if (readProblem is { } problem) return ApiError(400, problem);
+
+            var read = await ApiLinks.ForRecordAsync(db, apiName, record, readRelations, readExpand, caller.Id);
+            return Results.Ok(ApiDtos.RecordDto(record, readFields, read.Links, read.Expanded));
         });
 
         // Create: same validation/computation as the embedded form. JSON or multipart/form-data (for file fields).
@@ -128,7 +141,8 @@ public static class PublicApiEndpoints
             };
             db.Records.Add(record);
             await db.SaveChangesAsync();
-            return Results.Created($"/api/v1/{apiName}/records/{record.Id}", ApiDtos.RecordDto(record, fields));
+            var created = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields), Array.Empty<ApiLinks.Relation>(), caller.Id);
+            return Results.Created(ApiLinks.Self(apiName, record.Id), ApiDtos.RecordDto(record, fields, created.Links));
         });
 
         // Update: PATCH merges onto the stored record, PUT replaces it. JSON or multipart/form-data.
@@ -158,7 +172,8 @@ public static class PublicApiEndpoints
 
             record.JsonData = merged.ToJsonString();
             await db.SaveChangesAsync();
-            return Results.Ok(ApiDtos.RecordDto(record, fields));
+            var written = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields), Array.Empty<ApiLinks.Relation>(), caller.Id);
+            return Results.Ok(ApiDtos.RecordDto(record, fields, written.Links));
         });
 
         // Delete: single record

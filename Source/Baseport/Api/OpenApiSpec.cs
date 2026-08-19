@@ -93,7 +93,8 @@ public static class OpenApiSpec
             var item = new JsonObject();
             if (allowed.Contains("GET"))
                 item["get"] = BuildOp(t, $"get_{SchemaName(t)}", $"Get a {name} record",
-                    Responses(("200", JsonResp("OK", RecordResponse()))));
+                    Responses(("200", JsonResp("OK", RecordResponse()))),
+                    parameters: new JsonArray(ExpandParameter()));
             if (allowed.Contains("PATCH"))
                 item["patch"] = BuildOp(t, $"update_{SchemaName(t)}", $"Update a {name} record",
                     Responses(
@@ -210,11 +211,15 @@ public static class OpenApiSpec
 
     // Query parameters the paged list operation accepts.
     private static JsonArray ListParameters() => new(
-        Param("q", "Search across every stored value.", "string"),
-        Param("sort", "Field name to sort on. Defaults to the creation date.", "string"),
-        Param("order", "asc or desc. Defaults to desc.", "string"),
-        Param("page", "1-based page number.", "integer"),
-        Param("pageSize", $"Rows per page, 1 to {QueryEngine.MaxPageSize}. Defaults to 50.", "integer"));
+        Param("q", "Search query string used to filter results across indexed fields.", "string"),
+        Param("sort", "Field name to sort results by. Defaults to creation date.", "string"),
+        Param("order", "Sort direction: `asc` (ascending) or `desc` (descending). Defaults to `desc`.", "string"),
+        Param("page", "1-based page number to retrieve. Defaults to 1.", "integer"),
+        Param("pageSize", $"Number of items per page (1 to {QueryEngine.MaxPageSize}). Defaults to 50.", "integer"),
+        ExpandParameter());
+
+    private static JsonNode ExpandParameter() => Param(ApiLinks.ExpandParameter,
+        "List of relation fields to embed under `expanded`. Nested/deep expansion is not supported (1 level deep).", "string");
 
     private static JsonNode Param(string name, string description, string type) => new JsonObject
     {
@@ -233,7 +238,15 @@ public static class OpenApiSpec
             ["page"] = new JsonObject { ["type"] = "integer" },
             ["pageSize"] = new JsonObject { ["type"] = "integer" },
             ["total"] = new JsonObject { ["type"] = "integer" },
-            ["totalPages"] = new JsonObject { ["type"] = "integer" }
+            ["totalPages"] = new JsonObject { ["type"] = "integer" },
+            ["hasMore"] = new JsonObject { ["type"] = "boolean" },
+            ["countExact"] = new JsonObject { ["type"] = "boolean", ["description"] = $"False past {QueryEngine.CountCeiling} matches: total is a floor." },
+            ["links"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["description"] = "self, first, and prev/next/last where they exist.",
+                ["additionalProperties"] = new JsonObject { ["type"] = "string" }
+            }
         }
     };
 
@@ -318,9 +331,21 @@ public static class OpenApiSpec
         {
             ["id"] = new JsonObject { ["type"] = "string", ["description"] = "Unguessable record identifier." },
             ["createdAt"] = new JsonObject { ["type"] = "string", ["format"] = "date-time" },
-            ["data"] = new JsonObject { ["type"] = "object", ["additionalProperties"] = true }
+            ["data"] = new JsonObject { ["type"] = "object", ["additionalProperties"] = true },
+            ["links"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["description"] = "self, collection, and one link per reference field.",
+                ["additionalProperties"] = new JsonObject { ["type"] = "string" }
+            },
+            ["expanded"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["description"] = $"Records named by {ApiLinks.ExpandParameter}, keyed by field.",
+                ["additionalProperties"] = new JsonObject { ["type"] = "object" }
+            }
         },
-        ["required"] = new JsonArray((JsonNode)"id", (JsonNode)"createdAt", (JsonNode)"data")
+        ["required"] = new JsonArray((JsonNode)"id", (JsonNode)"createdAt", (JsonNode)"data", (JsonNode)"links")
     };
 
     // Reference to the shared Error schema, the one shape every non-2xx response speaks.
