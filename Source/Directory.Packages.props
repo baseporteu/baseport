@@ -5,6 +5,7 @@
   <PropertyGroup>
     <EfCoreVersion>10.0.10</EfCoreVersion>
     <SerilogSinksVersion>10.0.0</SerilogSinksVersion>
+    <IdentityModelVersion>8.22.0</IdentityModelVersion>
   </PropertyGroup>
   <ItemGroup Label="App">
     <PackageVersion Include="HtmlSanitizer" Version="9.2.995" />
@@ -15,6 +16,8 @@
     <PackageVersion Include="Cronos" Version="0.13.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EfCoreVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(EfCoreVersion)" />
+    <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="$(IdentityModelVersion)" />
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="$(IdentityModelVersion)" />
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
   </ItemGroup>
   <ItemGroup Label="Client">

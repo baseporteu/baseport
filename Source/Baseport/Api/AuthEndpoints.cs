@@ -38,9 +38,13 @@ public static class AuthEndpoints
                     ? AdminAuth.VerifyPassword(password, user.PasswordHash)
                     : AdminAuth.VerifyPassword(password, DummyHash); // unknown/disabled: same cost, never true
 
+            var credential = otp.Length > 0 ? "one-time code" : "password";
+
             if (!ok)
             {
                 LoginGuard.Failed(username);
+                // The attempt has no session to name the caller by, so the handle that was tried is the only thing that makes the row worth reading. It is a caller's own text, cleaned and capped on the way in.
+                AuditLogMiddleware.Note(ctx, $"Failed console sign-in as \"{username}\" with a {credential}");
                 return Results.Json(new { errors = new[] { otp.Length > 0 ? "That code is not valid or has expired." : "Incorrect username or password." } },
                     statusCode: StatusCodes.Status401Unauthorized);
             }
@@ -50,6 +54,7 @@ public static class AuthEndpoints
             user!.LastLoginAt = now;
             await db.SaveChangesAsync();
 
+            AuditLogMiddleware.Note(ctx, $"Console sign-in as {user.Username} with a {credential}");
             AdminAuth.IssueCookies(ctx, await UserTokens.IssueAsync(db, user, now));
             return Results.Ok(new { user.Username, user.Role, user.MustChangePassword });
         }).RequireRateLimiting(RateLimit.Auth);

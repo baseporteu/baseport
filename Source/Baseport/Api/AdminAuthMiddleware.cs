@@ -49,5 +49,7 @@ public static class AdminAuthMiddleware
         || path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase)
         // Anonymous form traffic. Management lives under /api/_admin/forms.
         || path.StartsWith("/api/forms/", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/api/openapi.json", StringComparison.OrdinalIgnoreCase);
+        || path.Equals("/api/openapi.json", StringComparison.OrdinalIgnoreCase)
+        // Where the browser reports that a script died. Deliberately open, because the failure worth hearing about most is the one on the sign-in screen, before there is a session to authenticate it with.
+        || path.Equals(ClientErrorEndpoints.Route, StringComparison.OrdinalIgnoreCase);
 }

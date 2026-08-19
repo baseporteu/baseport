@@ -14,7 +14,8 @@ public static class SchemaBootstrap
             db.UserAccounts.Add(new UserAccount
             {
                 Id = Ids.NewShortId(12),
-                Username = "admin",
+                // Not "admin": a known handle is a free half of every credential-stuffing attempt, and LoginGuard's per-account lockout is trippable by anyone who knows the name, which turns a delay into a permanent lockout. Logged once beside the password, and `baseport accounts rename` makes it the operator's own.
+                Username = AdminAuth.SeededUsername(),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 Role = AccountRoles.Admin,

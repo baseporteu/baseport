@@ -32,9 +32,11 @@ const SECTIONS = [
 
 const SIDEBARS = {
     tables: {
+        group: 'Tables',
         items: () => [{
-            label: 'All tables',
+            label: 'Show all',
             icon: OBJECT_ICONS.folder,
+            root: true,
             active: !currentTablePublicId,
             onSelect: () => navigate('/tables'),
         }, ].concat(
@@ -51,12 +53,14 @@ const SIDEBARS = {
     },
 
     forms: {
+        group: 'Forms',
         items: () => {
             const forms = (typeof formsAll === 'undefined' ? [] : formsAll).slice()
                 .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
             return [{
-                label: 'All forms',
+                label: 'Show all',
                 icon: OBJECT_ICONS.folder,
+                root: true,
                 active: !formEditingId && routePath() === '/forms',
                 onSelect: () => navigate('/forms'),
             }].concat(forms.map((f) => ({
@@ -70,9 +74,11 @@ const SIDEBARS = {
     },
 
     sql: {
+        group: 'Saved queries',
         items: () => [{
-            label: 'All queries',
+            label: 'Show all',
             icon: OBJECT_ICONS.folder,
+            root: true,
             active: !currentQueryId,
             onSelect: () => navigate('/sql'),
         }, ].concat(
@@ -122,14 +128,62 @@ function renderSectionNav() {
     });
 }
 
+// A list long enough to scroll past is long enough to need finding rather than scanning.
+const SUBBAR_FILTER_FROM = 8;
+const subbarFilters = {};
+
 function renderSidebar(section) {
     const spec = SIDEBARS[section] || SIDEBARS.tables;
 
     const items = spec.items ? spec.items() : [];
     const bar = document.getElementById('subbar');
     bar.innerHTML = '';
-    items.forEach((item) => bar.append(sidebarItem(item)));
     bar.hidden = items.length === 0;
+    if (items.length === 0) return;
+
+    const roots = items.filter((i) => i.root);
+    const rest = items.filter((i) => !i.root);
+    roots.forEach((item) => bar.append(sidebarItem(item)));
+
+    const term = (subbarFilters[section] || '').trim().toLowerCase();
+    const matching = term ? rest.filter((i) => i.label.toLowerCase().includes(term)) : rest;
+
+    const filtered = rest.length >= SUBBAR_FILTER_FROM;
+    // The filter's own box already divides the list from the root above it; a rule as well is two lines doing one job.
+    if (roots.length && rest.length && !filtered) bar.append(ui.el('div', 'subbar-sep'));
+
+    if (filtered) bar.append(subbarFilter(section, spec.group));
+    else if (spec.group && rest.length) bar.append(ui.el('div', 'subbar-group', {
+        textContent: spec.group
+    }));
+
+    matching.forEach((item) => bar.append(sidebarItem(item)));
+
+    // A filter that hides everything has to say so, or it reads as a list that emptied itself.
+    if (term && matching.length === 0) bar.append(ui.el('p', 'subbar-empty', {
+        textContent: `Nothing matches "${term}".`
+    }));
+}
+
+function subbarFilter(section, group) {
+    const wrap = ui.el('div', 'subbar-filter');
+    const input = ui.el('input', 'input input-sm', {
+        type: 'search',
+        value: subbarFilters[section] || '',
+        placeholder: `Filter ${(group || 'items').toLowerCase()}`,
+    });
+    input.oninput = () => {
+        subbarFilters[section] = input.value;
+        renderSidebar(section);
+        // Repainting the bar replaces the field, so the caret has to be put back.
+        const next = document.querySelector('.subbar-filter input');
+        if (next) {
+            next.focus();
+            next.setSelectionRange(next.value.length, next.value.length);
+        }
+    };
+    wrap.append(input);
+    return wrap;
 }
 
 function sidebarItem({
@@ -142,6 +196,7 @@ function sidebarItem({
     const pill = ui.el('button', 'subbar-pill' + (active ? ' active' : ''), {
         type: 'button'
     });
+    if (active) pill.setAttribute('aria-current', 'page');
     if (icon) pill.append(ui.el('span', 'subbar-icon', {
         innerHTML: icon
     }));
@@ -217,11 +272,53 @@ function applySidebarState() {
 
 function toggleAccountMenu(e) {
     if (e) e.stopPropagation();
-    document.getElementById('accountMenu')?.classList.toggle('hidden');
+    const menu = document.getElementById('accountMenu');
+    if (!menu) return;
+    const opening = menu.classList.contains('hidden');
+    // The submenu belongs to the menu that owns it: reopening must not leave the last flyout hanging.
+    closeAppearance();
+    menu.classList.toggle('hidden', !opening);
 }
 
 function closeAccountMenu() {
     document.getElementById('accountMenu')?.classList.add('hidden');
+    closeAppearance();
+}
+
+function closeAppearance() {
+    document.getElementById('appearanceMenu')?.classList.add('hidden');
+    document.getElementById('appearanceTrigger')?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleAppearance(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('appearanceMenu');
+    if (!menu) return;
+    const opening = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden', !opening);
+    document.getElementById('appearanceTrigger')?.setAttribute('aria-expanded', String(opening));
+    if (opening) markAppearance();
+}
+
+// The choice, not what is on screen: with System picked the dark row must not read as selected at night.
+function markAppearance() {
+    const chosen = ui.themeChoice();
+    document.querySelectorAll('#appearanceMenu [data-appearance]').forEach((btn) => {
+        const on = btn.dataset.appearance === chosen;
+        btn.classList.toggle('checked', on);
+        btn.setAttribute('aria-checked', String(on));
+    });
+}
+
+function chooseAppearance(next, e) {
+    if (e) e.stopPropagation();
+    ui.setTheme(next);
+    markAppearance();
+    closeAccountMenu();
 }
 
 document.addEventListener('click', () => closeAccountMenu());
+// An overlay with no keyboard exit is a trap, the same rule the sheet follows.
+document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') closeAccountMenu();
+});

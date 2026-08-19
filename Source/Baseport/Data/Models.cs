@@ -200,6 +200,39 @@ public class UserAccount
     public string PasswordHash { get; set; } = ""; // PBKDF2-SHA256 hash.
     public bool MustChangePassword { get; set; } = false;
     public DateTime? LastLoginAt { get; set; }
+
+    // The identity provider this account signs in through, and the subject it claims there. The pair is what a sign-in matches on: a username is reassignable at the provider, a subject is not.
+    public string OidcProviderId { get; set; } = "";
+    public string OidcSubject { get; set; } = "";
+}
+
+// A registered OpenID Connect identity provider (Authelia, Authentik, Pocket ID, or anything else that publishes a discovery document).
+public class OidcProvider
+{
+    public string Id { get; set; } = "";
+
+    // Url-safe key that appears in the callback path, so the redirect URI registered at the provider survives a rename of the display label.
+    public string Slug { get; set; } = "";
+    public string Name { get; set; } = ""; // Button label on the sign-in screens.
+    public string Authority { get; set; } = ""; // Issuer URL; discovery is read from {Authority}/.well-known/openid-configuration.
+    public string ClientId { get; set; } = "";
+    public string ClientSecret { get; set; } = ""; // Write-only: never returned, exposed as HasClientSecret.
+    public string Scopes { get; set; } = "openid profile email";
+
+    // Which claim carries the username and which the email. Authelia and Authentik send preferred_username; Pocket ID does too.
+    public string UsernameClaim { get; set; } = "preferred_username";
+    public string EmailClaim { get; set; } = "email";
+
+    public bool IsEnabled { get; set; } = false;
+    public bool ConsoleEnabled { get; set; } = false; // Offered at /_/auth.
+    public bool PublicEnabled { get; set; } = false; // Offered at /auth/login.
+
+    // Off means an unknown subject is refused rather than provisioned: the instance is then no more open than its account list.
+    public bool CreateAccounts { get; set; } = false;
+
+    public int Position { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 }
 
 public class UserSession

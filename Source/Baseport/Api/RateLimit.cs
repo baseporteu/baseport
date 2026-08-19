@@ -10,10 +10,12 @@ public static class RateLimit
     public const string List = "form-list";
     public const string Schema = "form-schema";
     public const string Auth = "auth";
+    public const string Oidc = "auth-oidc";
+    public const string ClientError = "client-error";
 
     private static readonly (string Name, int PerMinute)[] Policies =
     {
-        (Submit, 20), (Lookup, 10), (List, 60), (Schema, 60), (Auth, 10)
+        (Submit, 20), (Lookup, 10), (List, 60), (Schema, 60), (Auth, 10), (Oidc, 20), (ClientError, 10)
     };
 
     // the socket address only, nothing a caller can set; UseForwardedHeaders rewrites it behind a trusted proxy

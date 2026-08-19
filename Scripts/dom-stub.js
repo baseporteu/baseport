@@ -80,6 +80,16 @@ function element(tag = 'div') {
             node.attributes[k] = String(v);
         },
         getAttribute: k => node.attributes[k],
+        removeAttribute(k) {
+            delete node.attributes[k];
+        },
+        hasAttribute: k => k in node.attributes,
+        toggleAttribute(k, force) {
+            const on = force === undefined ? !(k in node.attributes) : !!force;
+            if (on) node.attributes[k] = '';
+            else delete node.attributes[k];
+            return on;
+        },
         addEventListener() {},
         removeEventListener() {},
         focus() {},

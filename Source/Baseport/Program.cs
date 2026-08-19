@@ -161,7 +161,11 @@ try
     app.UseRateLimiter();
     app.UseSecurityHeaders();
     app.UseResponseCompression();
-    app.UseStaticFiles();
+    // The console's assets carry no version in their URL, so a browser holding a stale ui.js after an upgrade runs it against fresh markup and the page breaks with something like "ui.themeChoice is not a function". no-cache still revalidates cheaply: the ETag answers 304 and nothing is downloaded twice.
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "no-cache"
+    });
     // Uploaded files: a file field stores an absolute URL, so it must be fetchable the same way any other URL in that field would be -- no session, no token.
     Directory.CreateDirectory(FileStore.Directory);
     app.UseStaticFiles(new StaticFileOptions
@@ -187,6 +191,8 @@ try
 
     app.MapAuthEndpoints();
     app.MapUserAuthEndpoints();
+    app.MapOidcEndpoints();
+    app.MapClientErrorEndpoints();
     app.MapStorageEndpoints();
     app.MapTableEndpoints();
     app.MapFormEndpoints();

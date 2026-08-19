@@ -78,8 +78,25 @@
                         <span class='account-version'>v0.1.0</span>
                     </span>
                 </button>
-                <div class='account-menu hidden' id='accountMenu'>
-                    <button type='button' onclick='signOut()'>Sign out</button>
+                <div class='account-menu hidden' id='accountMenu' role='menu' aria-label='Account'>
+                    <div class='account-menu-head'>
+                        <strong id='accountMenuName'></strong>
+                        <span id='accountMenuEmail'></span>
+                    </div>
+                    <div class='account-menu-sep' role='separator'></div>
+                    <div class='account-menu-nest'>
+                        <button type='button' role='menuitem' id='appearanceTrigger' aria-haspopup='menu' aria-expanded='false' onclick='toggleAppearance(event)'>
+                            Appearance
+                            <svg class='account-menu-chevron' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='m9 18 6-6-6-6'/></svg>
+                        </button>
+                        <div class='account-submenu hidden' id='appearanceMenu' role='menu' aria-label='Appearance'>
+                            <button type='button' role='menuitemradio' data-appearance='light' onclick='chooseAppearance("light", event)'>Light</button>
+                            <button type='button' role='menuitemradio' data-appearance='dark' onclick='chooseAppearance("dark", event)'>Dark</button>
+                            <button type='button' role='menuitemradio' data-appearance='system' onclick='chooseAppearance("system", event)'>System</button>
+                        </div>
+                    </div>
+                    <div class='account-menu-sep' role='separator'></div>
+                    <button type='button' role='menuitem' onclick='signOut()'>Sign out</button>
                 </div>
             </div>
         </aside>

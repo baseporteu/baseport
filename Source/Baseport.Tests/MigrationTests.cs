@@ -27,6 +27,33 @@ public class MigrationTests
     }
 
     [Fact]
+    public async Task TheSeededAdminUsernameIsNotGuessable()
+    {
+        // "admin" gave away half of every credential-stuffing attempt, and it let
+        // anyone trip LoginGuard's per-account lockout against a name they already
+        // knew, which is a lockout rather than the delay that guard intends.
+        using var first = new SqliteConnection("Filename=:memory:");
+        using var second = new SqliteConnection("Filename=:memory:");
+        first.Open();
+        second.Open();
+        await using var a = Open(first);
+        await using var b = Open(second);
+
+        await SchemaBootstrap.ApplyAsync(a);
+        await SchemaBootstrap.ApplyAsync(b);
+
+        var one = (await a.UserAccounts.SingleAsync(TestContext.Current.CancellationToken)).Username;
+        var two = (await b.UserAccounts.SingleAsync(TestContext.Current.CancellationToken)).Username;
+
+        Assert.NotEqual("admin", one);
+        Assert.NotEqual(one, two);
+        // Still obviously the operator's account in a log line and an account list.
+        Assert.StartsWith("admin-", one);
+        // And still a username the API would accept, so `rename` is the only thing that changes it.
+        Assert.Empty(AccountValidation.Validate(one, ""));
+    }
+
+    [Fact]
     public async Task RunningTwiceIsANoOp()
     {
         using var conn = new SqliteConnection("Filename=:memory:");

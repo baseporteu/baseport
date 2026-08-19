@@ -8,7 +8,11 @@ public static class AdminAuth
 {
     public const string AuthCookie = "baseport_auth";
     public const string RefreshCookie = "baseport_refresh";
-    public const string DefaultUsername = "admin";
+    // Same alphabet as the sign-in codes: no characters a human misreads off a log line.
+    private const string ReadableAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+
+    // The prefix says what the account is; the suffix is what stops it being guessed.
+    public static string SeededUsername() => "admin-" + RandomNumberGenerator.GetString(ReadableAlphabet, 8);
 
     private const int Iterations = 210_000; // OWASP guidance for PBKDF2-SHA256
     private const int SaltBytes = 16;
@@ -88,7 +92,8 @@ public static class AdminAuth
         ctx.Response.Cookies.Append(name, value, new CookieOptions
         {
             HttpOnly = true,
-            SameSite = SameSiteMode.Strict,
+            // Lax, not Strict. A browser withholds a Strict cookie from any navigation whose redirect chain started cross-site, and an OpenID Connect return is exactly that: the provider redirects to the callback, the callback sets these and redirects to /_/admin, and that last hop arrives without them. The console then renders the sign-in screen for somebody who just signed in, until they reload by hand. Lax still withholds the cookie from every cross-site POST, PATCH, PUT and DELETE, and no GET route here mutates anything, so the CSRF protection this pays for is intact.
+            SameSite = SameSiteMode.Lax,
             // Set only over HTTPS in production; a Secure cookie on plain http would never be sent back and would lock the console out locally.
             Secure = ctx.Request.IsHttps,
             MaxAge = lifetime,
@@ -102,15 +107,18 @@ public static class AdminAuth
         if (admin is null) return;
         if (!string.IsNullOrEmpty(admin.PasswordHash)) return;
 
-        // same alphabet as the sign-in codes: no characters a human misreads.
-        var password = RandomNumberGenerator.GetString("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789", 20);
+        var password = RandomNumberGenerator.GetString(ReadableAlphabet, 20);
         admin.PasswordHash = HashPassword(password);
         admin.MustChangePassword = true;
         admin.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        Serilog.Log.Warning("Seeded a one-time admin password for {Username}: {Password}. Sign in and change it before exposing this instance.",
-            admin.Username, password);
+        // The username is as much a credential as the password now, so it is printed with it: nothing else ever shows it.
+        // The rename command is built rather than templated: Serilog binds positionally, so a name repeated in the template shifts every value after it, and "baseport" is only a command once somebody has put it on their PATH.
+        var rename = $"{AccountsCli.Invocation()} accounts rename {admin.Username} <name>";
+        Serilog.Log.Warning("Seeded a one-time admin account. Username: {Username}  Password: {Password}. " +
+            "Sign in and change the password before exposing this instance; rename the account with: {Rename}",
+            admin.Username, password, rename);
     }
 }
 

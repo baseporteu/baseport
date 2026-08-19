@@ -79,7 +79,7 @@ public static class Jobs
     {
         var now = DateTime.UtcNow;
         var sessions = await UserTokens.PruneExpiredAsync(db, now);
-        return $"Removed {sessions} session(s), {OneTimeCodes.PruneExpired(now)} code(s), {LoginGuard.PruneExpired(now)} lockout entry(ies).";
+        return $"Removed {sessions} session(s), {OneTimeCodes.PruneExpired(now)} code(s), {LoginGuard.PruneExpired(now)} lockout entry(ies), {OidcFlow.Prune(now)} abandoned sign-in(s).";
     }
 
     private static async Task<string> LogsCleanupAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)

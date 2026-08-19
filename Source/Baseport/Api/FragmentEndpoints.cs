@@ -219,9 +219,9 @@ public static class FragmentEndpoints
                     .Append(Html.Cell(l.CreatedAt.ToLocalTime(), "muted"))
                     .Append(Html.RawCell($"<code>{Html.Text(l.Method)}</code>"))
                     .Append(Html.RawCell($"<code>{Html.Text(l.Path)}</code>"))
-                    // A failed request is what an operator scans for.
-                    .Append(l.Status >= 400
-                        ? $"<td style=\"color:#d63d3d\">{Html.Text(l.Status)}</td>"
+                    // A failed request is what an operator scans for, and a script that died in the browser is one, even though it never had a status.
+                    .Append(l.Status >= 400 || l.Method == ClientErrorEndpoints.ClientMethod
+                        ? $"<td style=\"color:#d63d3d\">{Html.Text(l.Status > 0 ? l.Status.ToString() : "-")}</td>"
                         : Html.Cell(l.Status))
                     .Append(Html.Cell(l.TableName.Length > 0 ? l.TableName : "-", "muted"))
                     .Append(Html.Cell(l.Message.Length > 0 ? l.Message : "-", "muted"))

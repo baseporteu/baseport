@@ -209,8 +209,10 @@ const ui = (() => {
 
     function reportError(source, error) {
         const message = (error && (error.message || error)) || 'Unknown error';
-        const text = `${source}: ${message}`;
-        // A loop that throws every frame must not bury the screen in toasts.
+        // A rejection carries no filename, so the frame it threw from is the only thing that says where to look.
+        const frame = (error && error.stack || '').split('\n')[1];
+        const text = `${source}: ${message}` + (frame ? ` (${frame.trim()})` : '');
+        // A loop that throws every frame must not bury the screen in toasts, or the server in rows.
         if (text === lastError) return;
         lastError = text;
         setTimeout(() => {
@@ -219,6 +221,23 @@ const ui = (() => {
 
         console.error(source, error);
         toast(text, 'error');
+        sendError(text);
+    }
+
+    // sendBeacon rather than fetch: it returns nothing to await, so a failure here cannot itself become an unhandled rejection and feed this function its own output. It also survives the page unload that a hard failure often triggers.
+    function sendError(text) {
+        if (!navigator.sendBeacon) return;
+        try {
+            navigator.sendBeacon('/api/client-errors', new Blob([JSON.stringify({
+                message: text,
+                // The path only: a preview or reset link carries a token in its query, and that must not reach a log.
+                page: location.pathname,
+            })], {
+                type: 'application/json'
+            }));
+        } catch (e) {
+            /* over the beacon size limit, or blocked: the toast already said it */
+        }
     }
 
     window.addEventListener('error', (ev) => {
@@ -237,13 +256,30 @@ const ui = (() => {
         return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
     }
 
+    // What the user picked, which is not what is on screen: 'system' resolves to either.
+    function themeChoice() {
+        try {
+            const stored = localStorage.getItem(THEME_KEY);
+            return stored === 'dark' || stored === 'light' ? stored : 'system';
+        } catch (e) {
+            return 'system';
+        }
+    }
+
+    function systemTheme() {
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
     function setTheme(next, {
         remember = true
     } = {}) {
-        document.documentElement.dataset.theme = next === 'dark' ? 'dark' : 'light';
+        // 'system' is stored as no choice at all, which is what the head script and the media listener both already read.
+        const system = next === 'system';
+        document.documentElement.dataset.theme = system ? systemTheme() : next === 'dark' ? 'dark' : 'light';
         if (!remember) return;
         try {
-            localStorage.setItem(THEME_KEY, next);
+            if (system) localStorage.removeItem(THEME_KEY);
+            else localStorage.setItem(THEME_KEY, next);
         } catch (e) {
             /* private mode: this session only */
         }
@@ -871,6 +907,7 @@ const ui = (() => {
         confirm,
         ask,
         theme,
+        themeChoice,
         setTheme,
         toggleTheme,
     };

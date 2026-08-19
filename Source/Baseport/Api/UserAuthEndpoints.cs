@@ -82,6 +82,7 @@ public static class UserAuthEndpoints
             if (!ok)
             {
                 LoginGuard.Failed($"user:{handle}");
+                AuditLogMiddleware.Note(ctx, $"Failed end-user sign-in as \"{handle}\" with a password");
                 return Error(401, "Incorrect credentials.");
             }
 
@@ -90,6 +91,7 @@ public static class UserAuthEndpoints
             user!.LastLoginAt = now;
             await db.SaveChangesAsync();
 
+            AuditLogMiddleware.Note(ctx, $"End-user sign-in as {user.Username} with a password");
             return Results.Ok(TokenPayload(await UserTokens.IssueAsync(db, user, now)));
         }).RequireRateLimiting(RateLimit.Auth);
 
@@ -199,10 +201,18 @@ public static class UserAuthEndpoints
 
                 ctx.Response.Headers.CacheControl = "no-store";
                 var html = await File.ReadAllTextAsync(Path.Combine(webRoot, "auth", $"{name}.html"), ctx.RequestAborted);
-                return Results.Content(Signup(html, settings.PublicRegistrationEnabled), "text/html; charset=utf-8");
+                html = Signup(html, settings.PublicRegistrationEnabled);
+                // Same reason the console renders its own: the sign-in screen paints its provider buttons on the first byte instead of after a round trip.
+                if (html.Contains(BootstrapMarker, StringComparison.Ordinal))
+                    html = html.Replace(BootstrapMarker,
+                        Html.BootstrapScript(new { providers = await OidcEndpoints.OfferedAsync(db, console: false) }),
+                        StringComparison.Ordinal);
+                return Results.Content(html, "text/html; charset=utf-8");
             });
         }
     }
+
+    private const string BootstrapMarker = "<!--__BOOTSTRAP__-->";
 
     internal static string Signup(string html, bool enabled)
     {

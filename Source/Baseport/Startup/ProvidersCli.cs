@@ -16,6 +16,8 @@ public static class ProvidersCli
             .Build();
         var connectionString = config["Baseport:ConnectionString"] ?? "Data Source=baseport.db";
 
+        if (AccountsCli.MissingDatabase(connectionString)) return 1;
+
         using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connectionString).Options);
 
         try

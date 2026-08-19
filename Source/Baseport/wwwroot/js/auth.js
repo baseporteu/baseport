@@ -54,6 +54,14 @@ async function boot() {
     const accountName = document.getElementById('sidebarAccountName');
     if (accountName) accountName.textContent = username;
 
+    const email = me.email || me.user?.email || me.Email || '';
+    const menuName = document.getElementById('accountMenuName');
+    if (menuName) menuName.textContent = username;
+    const menuEmail = document.getElementById('accountMenuEmail');
+    // An account with no address says so, rather than leaving a blank line where one belongs.
+    if (menuEmail) menuEmail.textContent = email || 'No email address set';
+    markAppearance();
+
     if (me.tables) currentTables = me.tables;
     if (me.settings) settingsData = {
         ...(settingsData || {}),
@@ -66,18 +74,43 @@ async function boot() {
     await render();
 }
 
+// The panels the sign-in screen swaps between. Each carries its own heading, so only one may be on screen at a time, and the provider buttons belong to the first.
+function showPanel(name) {
+    document.getElementById('loginForm').hidden = name !== 'login';
+    document.getElementById('forgotCard').hidden = name !== 'forgot';
+    document.getElementById('changeCard').hidden = name !== 'change';
+    const sso = document.getElementById('ssoBlock');
+    if (sso) sso.hidden = name !== 'login' || ssoProviders().length === 0;
+}
+
 function showLogin() {
     const login = document.getElementById('loginScreen');
     if (login) login.hidden = false;
+    showPanel('login');
     const user = document.getElementById('loginUser');
     if (user) user.focus();
 }
 
+// Password or one-time code. Both submit the same form; the button says which one the next press does.
+function switchAuthMode(mode) {
+    const otp = mode === 'otp';
+    document.getElementById('tabPassword').classList.toggle('active', !otp);
+    document.getElementById('tabOtp').classList.toggle('active', otp);
+
+    const password = document.getElementById('loginPass');
+    const code = document.getElementById('otpCode');
+    document.getElementById('passwordContainer').hidden = otp;
+    document.getElementById('otpContainer').hidden = !otp;
+    password.toggleAttribute('required', !otp);
+    code.toggleAttribute('required', otp);
+
+    document.getElementById('loginBtn').textContent = otp ? 'Request code' : 'Sign in';
+    resetOtpFlow();
+}
+
 function showChangePassword() {
-    document.getElementById('loginForm').hidden = true;
-    document.getElementById('forgotCard').hidden = true;
+    showPanel('change');
     const card = document.getElementById('changeCard');
-    card.hidden = false;
     card.addEventListener('input', () => refreshChangeState(true));
     document.getElementById('curPass').focus();
 }
@@ -193,13 +226,11 @@ function authMode() {
 }
 
 function showForgot() {
-    document.getElementById('loginForm').hidden = true;
-    document.getElementById('forgotCard').hidden = false;
+    showPanel('forgot');
 }
 
 function backToLogin() {
-    document.getElementById('forgotCard').hidden = true;
-    document.getElementById('loginForm').hidden = false;
+    showPanel('login');
     resetOtpFlow();
 }
 
@@ -301,5 +332,11 @@ window.fetch = async (...args) => {
     }
     return res;
 };
+
+// The sign-in screen only: the console page carries none of these controls.
+if (document.getElementById('loginForm')) {
+    ssoInit('console');
+    switchAuthMode('password');
+}
 
 boot();

@@ -99,7 +99,7 @@
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsPublicRegistrationEnabled'>Sign-up</label>
-                                        <p class='muted'>Allows new visitors to register accounts via <code>/auth/register</code>.</p>
+                                        <p class='muted'>Allows new visitors to register accounts via <code>/auth/register</code>. This governs the password form only: a single sign-on provider with <em>Create accounts on first sign-in</em> turned on still provisions, because it trusts a directory you configured rather than the open internet.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsPublicRegistrationEnabled'>
@@ -139,6 +139,22 @@
                                     <span class='muted'></span>
                                     <button class='btn' onclick='submitAuthSettings(this)'>Save</button>
                                 </div>
+                            </div>
+                            <div class='card'>
+                                <div class='card-header'>
+                                    <div>
+                                        <h2>Single sign-on</h2>
+                                        <p class='muted'>OpenID Connect providers offered on the sign-in screens: Authelia, Authentik, Pocket ID, or anything else that publishes a discovery document. An account is matched on the subject the provider issues.</p>
+                                    </div>
+                                    <button class='btn btn-outline' onclick='openOidcSheet()'>Add provider</button>
+                                </div>
+                                <div class='table-wrap'>
+                                    <table class='table'>
+                                        <thead><tr><th>Name</th><th>Issuer</th><th>Offered at</th><th>Enabled</th><th></th></tr></thead>
+                                        <tbody id='oidcBody'></tbody>
+                                    </table>
+                                </div>
+                                <p id='oidcEmpty' class='muted empty-hint'>No providers. Both sign-in screens ask for a password only.</p>
                             </div>
                         </div>
                         <div class='settings-pane hidden' data-pane='providers'>
@@ -247,7 +263,7 @@
                                     <div class='settings-form-row'>
                                         <label for='settingsBackupRetention'>Retention window</label>
                                         <input type='number' class='input' id='settingsBackupRetention' min='1' max='50'>
-                                        <p class='desc'>How many backups to keep. Older ones are deleted automatically. Restore by replacing the store file while the service is stopped.</p>
+                                        <p class='desc'>How many backups to keep. Older ones are deleted automatically.</p>
                                     </div>
                                     <div class='settings-form-footer'>
                                         <button class='btn' onclick='saveBackupSettings(this)'>Save</button>

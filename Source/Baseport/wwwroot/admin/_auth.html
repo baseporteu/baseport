@@ -13,105 +13,44 @@
                 : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
             document.documentElement.dataset.theme = dark ? 'dark' : 'light';
         })();
-
-        function switchAuthMode(mode) {
-            const tabPassword = document.getElementById('tabPassword');
-            const tabOtp = document.getElementById('tabOtp');
-            const passwordContainer = document.getElementById('passwordContainer');
-            const otpContainer = document.getElementById('otpContainer');
-            const passwordInput = document.getElementById('loginPass');
-            const otpInput = document.getElementById('otpCode');
-            const loginBtn = document.getElementById('loginBtn');
-
-            if (mode === 'password') {
-                tabPassword.classList.add('active');
-                tabOtp.classList.remove('active');
-                passwordContainer.removeAttribute('hidden');
-                otpContainer.setAttribute('hidden', '');
-                passwordInput.setAttribute('required', '');
-                otpInput.removeAttribute('required');
-                loginBtn.textContent = 'Sign in';
-                if (typeof resetOtpFlow === 'function') resetOtpFlow();
-
-            } else if (mode === 'otp') {
-                tabOtp.classList.add('active');
-                tabPassword.classList.remove('active');
-                otpContainer.removeAttribute('hidden');
-                passwordContainer.setAttribute('hidden', '');
-                otpInput.setAttribute('required', '');
-                passwordInput.removeAttribute('required');
-                loginBtn.textContent = 'Request code';
-                if (typeof resetOtpFlow === 'function') resetOtpFlow();
-            }
-        }
     </script>
-    <style>
-        * {
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-        }
-    </style>
     <title>Sign in · Baseport</title>
     <link rel='icon' type='image/svg+xml' href='/favicon.svg'>
     <link rel='stylesheet' href='/ui.css'>
     <link rel='stylesheet' href='/app.css'>
 </head>
 <body>
-    <div class='login-screen' id='loginScreen'>
-        <form class='login-card' id='loginForm' onsubmit='return signIn(event)'>
-            <div class='login-brand'><span class='brand-mark'>
-                    <svg viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg' class='brand-tile' aria-hidden='true'>
-                        <g clip-path='url(#bp-login-clip)'>
-                            <rect width='20' height='20' fill='#000' rx='5.5'/>
-                            <rect width='20' height='20' fill='url(#bp-login-gradient)' fill-opacity='0.2' rx='5.5'/>
-                            <g filter='url(#bp-login-blur-1)' opacity='0.3'><circle cx='16' cy='17' r='6' fill='#FF64B4' fill-opacity='0.671'/></g>
-                            <g filter='url(#bp-login-blur-2)' opacity='0.1'><circle cx='16' cy='16' r='6' fill='#FF64B4' fill-opacity='0.671'/></g>
-                            <g filter='url(#bp-login-blur-3)' opacity='0.4'><circle cx='17' cy='19' r='6' fill='#FF64B4' fill-opacity='0.671'/></g>
-                            <rect width='20' height='20' fill='#FF64B4' fill-opacity='0.15' rx='5.5'/>
-                            <g style='mix-blend-mode:hard-light'><rect width='20' height='20' fill='#6A62FF' fill-opacity='0.1' rx='5.5'/></g>
-                        </g>
-                        <rect width='19' height='19' x='0.5' y='0.5' stroke='#FDFDFD' stroke-opacity='0.1' rx='5'/>
-                        <defs>
-                            <filter id='bp-login-blur-1' width='32' height='32' x='0' y='1' color-interpolation-filters='sRGB' filterUnits='userSpaceOnUse'>
-                                <feFlood flood-opacity='0' result='BackgroundImageFix'/><feBlend in='SourceGraphic' in2='BackgroundImageFix' result='shape'/><feGaussianBlur result='effect1_foregroundBlur' stdDeviation='5'/>
-                            </filter>
-                            <filter id='bp-login-blur-2' width='22' height='22' x='5' y='5' color-interpolation-filters='sRGB' filterUnits='userSpaceOnUse'>
-                                <feFlood flood-opacity='0' result='BackgroundImageFix'/><feBlend in='SourceGraphic' in2='BackgroundImageFix' result='shape'/><feGaussianBlur result='effect1_foregroundBlur' stdDeviation='5'/>
-                            </filter>
-                            <filter id='bp-login-blur-3' width='28' height='28' x='3' y='5' color-interpolation-filters='sRGB' filterUnits='userSpaceOnUse'>
-                                <feFlood flood-opacity='0' result='BackgroundImageFix'/><feBlend in='SourceGraphic' in2='BackgroundImageFix' result='shape'/><feGaussianBlur result='effect1_foregroundBlur' stdDeviation='5'/>
-                            </filter>
-                            <linearGradient id='bp-login-gradient' x1='10' y1='0' x2='10' y2='20' gradientUnits='userSpaceOnUse'>
-                                <stop stop-color='#FF64B4'/><stop offset='1' stop-color='#6A62FF' stop-opacity='0'/>
-                            </linearGradient>
-                            <clipPath id='bp-login-clip'><rect width='20' height='20' rx='5.5'/></clipPath>
-                        </defs>
-                    </svg>
-                    <svg class='brand-glyph' width='12' height='12' viewBox='0 0 20 20' fill='none' stroke='#FDFDFD' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>
-                        <path d='M5 4v12'/><path d='M7 4h4.5a3 3 0 0 1 0 6H7'/><path d='M7 10h5a3 3 0 0 1 0 6H7'/>
-                    </svg>
-                </span><strong>Baseport</strong></div>
-            <h1>Sign in</h1>
-            <p class='muted'>The backend is private. Please sign in to continue.</p>
+    <div class='signin-theme'>
+        <button type='button' class='topbar-btn' onclick='toggleTheme()' title='Toggle theme'>
+            <svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='20' height='20'><path d='M8 12a4 4 0 1 0 8 0 4 4 0 1 0-8 0M3 12h1m8-9v1m8 8h1m-9 8v1M5.6 5.6l.7.7m12.1-.7-.7.7m0 11.4.7.7m-12.1-.7-.7.7'></path></svg>
+        </button>
+    </div>
 
-            <div class='segmented'>
+    <main class='signin' id='loginScreen'>
+        <div class='signin-mark' role='img' aria-label='Baseport'></div>
+
+        <form class='signin-panel' id='loginForm' onsubmit='return signIn(event)'>
+            <header class='signin-header'>
+                <h1>Sign in</h1>
+                <p>The console is private. Sign in to continue.</p>
+            </header>
+
+            <div class='segmented signin-modes'>
                 <button type='button' class='seg-btn active' id='tabPassword' onclick='switchAuthMode("password")'>Password</button>
-                <button type='button' class='seg-btn' id='tabOtp' onclick='switchAuthMode("otp")'>One-Time Code</button>
+                <button type='button' class='seg-btn' id='tabOtp' onclick='switchAuthMode("otp")'>One-time code</button>
             </div>
 
             <label class='field-label' for='loginUser'>Username
-                <input type='text' id='loginUser' class='input' autocomplete='username' placeholder='example@domain.com' required autofocus>
+                <input type='text' id='loginUser' class='input' autocomplete='username' placeholder='admin' required autofocus>
             </label>
 
-            <div id='passwordContainer' style='margin-bottom: 0;'>
+            <div id='passwordContainer'>
                 <label class='field-label' for='loginPass'>Password
-                    <input type='password' id='loginPass' class='input' autocomplete='current-password' placeholder='*******' required>
+                    <input type='password' id='loginPass' class='input' autocomplete='current-password' required>
                 </label>
             </div>
 
-            <div id='otpContainer' style='margin-bottom: 0;' hidden>
+            <div id='otpContainer' hidden>
                 <div id='otpCodeRow' hidden>
                     <label class='field-label' for='otpCode'>Code
                         <input type='text' id='otpCode' class='input' autocomplete='one-time-code' spellcheck='false' autocapitalize='off' placeholder='Enter the code' required>
@@ -119,26 +58,29 @@
                 </div>
             </div>
 
-            <button class='btn btn-block' type='submit' id='loginBtn'>Sign in</button>
+            <button class='btn btn-block signin-submit' type='submit' id='loginBtn'>Sign in</button>
 
-            <div class='login-forgot'>
-                <a href='/forgot-password' onclick='showForgot();return false' class='forgot-link'>Forgot your password?</a>
-            </div>
-
-            <p class='login-license'>Licensed under EUPL 1.2</p>
+            <a href='/forgot-password' onclick='showForgot();return false' class='signin-aside'>Forgot your password?</a>
         </form>
 
-        <div class='login-card' id='forgotCard' hidden>
-            <h1>Forgot your password?</h1>
-            <p class='muted'>You can change your password by changing the configuration.</p>
-            <button type='button' class='btn btn-block' onclick='backToLogin()'>Back to login</button>
+        <div class='signin-sso' id='ssoBlock' hidden>
+            <p class='signin-or'>or</p>
+            <div class='signin-providers' id='ssoProviders'></div>
         </div>
 
-        <form class='login-card' id='changeCard' onsubmit='return changePassword(event)' hidden>
-            <h1>
-                Set new password
-            </h1>
-            <p class='muted'>Enter a new password to secure your account and continue.</p>
+        <div class='signin-panel' id='forgotCard' hidden>
+            <header class='signin-header'>
+                <h1>Forgot your password?</h1>
+                <p>Please reset it from the command line using administrative credentials.</p>
+            </header>
+            <button type='button' class='btn btn-outline btn-block' onclick='backToLogin()'>Back to sign in</button>
+        </div>
+
+        <form class='signin-panel' id='changeCard' onsubmit='return changePassword(event)' hidden>
+            <header class='signin-header'>
+                <h1>Set a new password</h1>
+                <p>This account is on a one-time password. Replace it to continue.</p>
+            </header>
             <label class='field-label' for='curPass'>Current password
                 <input type='password' id='curPass' class='input' autocomplete='current-password' maxlength='128' required>
             </label>
@@ -149,17 +91,18 @@
                 <input type='password' id='newPass2' class='input' autocomplete='new-password' minlength='10' maxlength='128' required>
             </label>
             <p class='field-hint invalid hidden' id='changeHint'></p>
-            <button class='btn btn-block' type='submit'>Set password</button>
+            <button class='btn btn-block signin-submit' type='submit'>Set password</button>
             <button class='btn btn-ghost btn-block' type='button' onclick='signOut()'>Cancel</button>
         </form>
-    </div>
 
-    <script>
-        switchAuthMode('password');
-    </script>
+        <footer class='signin-footer'>
+            <p>Licensed under EUPL 1.2</p>
+        </footer>
+    </main>
 
     <!--__BOOTSTRAP__-->
     <script src='/ui.js'></script>
+    <script src='/js/sso.js'></script>
     <script src='/js/auth.js'></script>
 </body>
 </html>

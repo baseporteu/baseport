@@ -19,11 +19,15 @@
     <link rel='stylesheet' href='/app.css'>
 </head>
 <body>
-    <div class='login-screen'>
-        <div class='login-card'>
-            <h1 id='profileUsername'></h1>
-            <p class='muted' id='profileEmail'></p>
-            <p class='muted'>User ID <code id='profileId'></code></p>
+    <main class='signin'>
+        <div class='signin-mark' role='img' aria-label='Baseport'></div>
+
+        <div class='signin-panel'>
+            <header class='signin-header'>
+                <h1 id='profileUsername'></h1>
+                <p id='profileEmail'></p>
+                <p>User ID <code id='profileId'></code></p>
+            </header>
 
             <form onsubmit='return bpChangePassword(event)'>
                 <label class='field-label' for='currentPassword'>Current password
@@ -34,13 +38,13 @@
                     <input type='password' id='newPassword' class='input' autocomplete='new-password' minlength='10' required>
                 </label>
 
-                <button type='submit' class='btn btn-block'>Change password</button>
+                <button type='submit' class='btn btn-block signin-submit'>Change password</button>
             </form>
 
             <button type='button' class='btn btn-outline btn-block' onclick='bpSignOut()'>Sign out</button>
-            <button type='button' class='btn btn-ghost btn-block' onclick='bpDeleteAccount()'>Delete account</button>
+            <button type='button' class='btn btn-ghost btn-block signin-danger' onclick='bpDeleteAccount()'>Delete account</button>
         </div>
-    </div>
+    </main>
     <script src='/ui.js'></script>
     <script src='/js/userauth.js'></script>
     <script>bpLoadProfile();</script>

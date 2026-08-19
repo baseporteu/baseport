@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
@@ -27,12 +26,6 @@ public static class ConsoleEndpoints
     };
 
     private static readonly string[] AuthParts = { "admin/_auth.html" };
-
-    // The default encoder escapes <, > and & as \u003C and friends, which is what stops a value in the payload from closing the script element it sits in.
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
-    {
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Default
-    };
 
     public static void MapConsoleEndpoints(this WebApplication app)
     {
@@ -112,7 +105,8 @@ public static class ConsoleEndpoints
 
         if (user is null)
         {
-            payload = new { authenticated = false };
+            // The sign-in screen paints its provider buttons from this, so it never waits on a round trip to find out whether there are any.
+            payload = new { authenticated = false, providers = authPage ? await OidcEndpoints.OfferedAsync(db, console: true) : new List<OidcButton>() };
         }
         else if (authPage)
         {
@@ -140,12 +134,6 @@ public static class ConsoleEndpoints
             };
         }
 
-        // A JSON script block, not a JS literal: the browser parses it as data, so nothing in it executes even if it reaches the DOM.
-        var json = JsonSerializer.Serialize(payload, Json);
-
-        // Belt and braces.
-        if (json.Contains('<')) json = json.Replace("<", "\\u003C", StringComparison.Ordinal);
-
-        return $"\n<script type=\"application/json\" id=\"bootstrap\">{json}</script>\n";
+        return Html.BootstrapScript(payload);
     }
 }

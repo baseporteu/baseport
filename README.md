@@ -16,7 +16,7 @@
 
 Meet Baseport: define your tables in the console and you get a typed REST API, live updates and an admin UI over them, without writing any of it. Point your mobile, web or desktop app at it and build the rest.
 
-Built on the modern .NET stack, Baseport runs as one process over one SQLite file. There is no database server to run alongside it, allowing for blazing-fast product development. Copy the binary to a server, back up the file, and that is the deployment. Reads stay in single-digit milliseconds at a quarter of a million rows.
+Built on the modern .NET stack, Baseport runs as one process over one SQLite file. There is no database server to run alongside it, allowing for blazing-fast product development. Copy the binary to a server, back up the file. That's all it takes for your deployment. Reads stay in single-digit milliseconds at a quarter of a million rows.
 
 > **Pre-alpha.** Not yet v0.0.1. The database format and the API surface both still move between commits. Do not put production data in it.
 
@@ -31,7 +31,9 @@ docker compose up -d
 docker compose logs baseport | grep "one-time admin password"
 ```
 
-Browse to `http://localhost:5263/_/admin` and sign in as `admin` with the password from the log. If necessary, set your environment variables from a `.env` file:
+Browse to `http://localhost:5263/_/admin` and sign in using the username and (single-use) password from the startup logs. Rename the account with `baseport accounts rename <seeded> <yours>`. 
+
+Set environment variables from a `.env` file if needed:
 
 <details>
 
@@ -65,7 +67,7 @@ tar -xzf Baseport-$VERSION-linux-x64.tar.gz
 
 On Windows the asset is `Baseport-$VERSION-win-x64.zip`; unzip it and run `Baseport.exe` the same way.
 
-Browse to `http://localhost:5263/_/admin` and sign in with the credentials shown in the log for the `admin` account.
+Browse to `http://localhost:5263/_/admin` and sign in with the username and password the log printed on first start.
 
 The binary writes `baseport.db`, `log/` and `uploads/` next to wherever you run it, so put it in its own directory. That directory is the backup.
 
@@ -97,7 +99,7 @@ dotnet publish Baseport/Baseport.csproj -c Release -r linux-x64 -o out
 An empty console is hard to judge. Seed a workspace of products, customers, orders and order lines, with real references between them:
 
 ```bash
-ADMIN_PASSWORD=<from the log> ./POPULATE.sh
+ADMIN_USER=<from the log> ADMIN_PASSWORD=<from the log> ./POPULATE.sh
 ```
 
 That is 294,000 rows and takes about twenty seconds. In a hurry? Put `SCALE=0.05` in front for 15,000 rows in about a second.
@@ -136,6 +138,28 @@ data: {"action":"create","id":"gAOPLyJDI5UU","record":{"OrderNo":"SO-100000",...
 ```
 
 You choose the name a table publishes under, and it's separate use the name you work with in the console.
+
+#### Authentication
+
+Both sign-in screens take a password, or an OpenID Connect provider configured under **Settings → Authentication → Single sign-on**. Authelia, Authentik, Pocket ID, or anything publishing a discovery document works.
+
+Add the provider, copy the redirect URL from the sheet, and register it at your provider:
+
+```
+https://baseport.example.com/api/auth/oidc/{key}/callback
+
+```
+
+Saving validates the discovery document immediately to catch wrong issuer URLs before saving. Authentication uses PKCE, verifying the `id_token` against the provider's JWKS.
+
+Select where SSO appears: the console (`/_/auth`), your application users (`/auth`), or both. Accounts are matched on the provider's subject ID so directory renames do not break access. First sign-in automatically links existing accounts sharing the same username or verified email. Enable **Create accounts on first sign-in** to auto-provision new visitors as plain users.
+
+Admin accounts are never linked automatically. Sign in once, grab the subject ID from the refusal log, and bind it manually:
+
+```bash
+baseport accounts link <username> <provider-key> <subject>
+baseport accounts unlink <username>
+```
 
 #### Forms
 

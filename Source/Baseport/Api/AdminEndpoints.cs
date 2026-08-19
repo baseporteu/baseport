@@ -72,9 +72,8 @@ public static class AdminEndpoints
         {
             var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Id == pid);
             if (account == null) return Results.NotFound();
-            // An admin is out of reach of the console entirely, so console access alone can never take another operator's account over.
-            if (account.Role == AccountRoles.Admin)
-                return Results.BadRequest(new { errors = new[] { AdminOnlyByCli } });
+            // Console access alone must never be enough to take another operator's account over, so on an admin the console may not touch what would: the password, the role, the disabled switch, and deletion. The name and the address are neither. Baseport sends no mail, so there is no reset path behind an address, and pillar 17 already refuses to auto-link an admin by either.
+            var locked = account.Role == AccountRoles.Admin;
             // Validate the resulting account, not just the supplied keys: a PATCH that sets only an e-mail must still be checked against the rules.
             var nextUsername = body["username"] is JsonValue uv && uv.TryGetValue<string>(out var uname) ? uname.Trim() : account.Username;
             var nextEmail = body["email"] is JsonValue ev && ev.TryGetValue<string>(out var mail) ? mail.Trim() : account.Email;
@@ -94,7 +93,7 @@ public static class AdminEndpoints
                 var role = AccountRoles.Normalize(rawRole);
                 if (role is null) return Results.BadRequest(new { errors = new[] { "Role must be admin, consumer or user." } });
                 // Promotion is the console taking on a privilege it cannot be trusted to grant itself; demotion is how one operator removes another. Both belong to whoever has the shell.
-                if (role == AccountRoles.Admin)
+                if (role == AccountRoles.Admin || locked)
                     return Results.BadRequest(new { errors = new[] { AdminOnlyByCli } });
                 account.Role = role;
             }
@@ -102,6 +101,7 @@ public static class AdminEndpoints
             // A password an operator sets for somebody else is a one-time credential: the owner replaces it on first use, and every session opened under the old one is gone.
             if (body["password"] is JsonValue pv && pv.TryGetValue<string>(out var newPassword) && !string.IsNullOrEmpty(newPassword))
             {
+                if (locked) return Results.BadRequest(new { errors = new[] { AdminOnlyByCli } });
                 if (AccountValidation.PasswordProblem(newPassword) is { } passwordProblem)
                     return Results.BadRequest(new { errors = new[] { passwordProblem }, invalid = new[] { "password" } });
 
@@ -110,8 +110,10 @@ public static class AdminEndpoints
                 await UserTokens.RevokeAllAsync(db, account.Id);
             }
 
-            if (body["isDisabled"] is JsonValue dv2 && dv2.TryGetValue<bool>(out var disabled))
+            if (body["isDisabled"] is JsonValue dv2 && dv2.TryGetValue<bool>(out var disabled) && disabled != account.IsDisabled)
             {
+                // Locking another operator out is the same takeover by a different door.
+                if (locked) return Results.BadRequest(new { errors = new[] { AdminOnlyByCli } });
                 // Disabling the last account that can sign in locks the console.
                 if (disabled && !account.IsDisabled && await db.UserAccounts.CountAsync(a => !a.IsDisabled && a.Id != account.Id) == 0)
                     return Results.BadRequest(new { errors = new[] { "This is the last enabled account and cannot be disabled." } });
@@ -618,7 +620,7 @@ public static class AdminEndpoints
     }
 
     // An admin account is changed, deleted and demoted only with shell access, so console access alone cannot take another operator over. TrailBase draws the same line (crates/core/src/admin/user/update_user.rs:38).
-    public const string AdminOnlyByCli = "Admin accounts can only be changed with the CLI: baseport accounts --help.";
+    public const string AdminOnlyByCli = "An admin's password, role and disabled state are set with the CLI, and an admin cannot be deleted here: baseport accounts --help. The name and the address are editable.";
 
     // Nobody reaches the console once the last admin who can sign in is gone, and there is no way back in.
     public static async Task<bool> IsLastEnabledAdmin(AppDbContext db, UserAccount account) =>

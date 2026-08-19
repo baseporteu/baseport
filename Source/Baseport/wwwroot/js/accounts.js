@@ -134,7 +134,8 @@ function openAccountForm(pid) {
     }
 
     if (locked) {
-        ['accUsername', 'accEmail', 'accRole', 'accPassword', 'accDisabled']
+        // Only what the API actually refuses on an admin. The name and the address are not takeover vectors, and greying them said they were.
+        ['accRole', 'accPassword', 'accDisabled']
             .forEach((id) => {
                 const input = document.getElementById(id) || body.querySelector(`#${id}`);
                 if (input) input.disabled = true;
@@ -151,13 +152,11 @@ function openAccountForm(pid) {
     actions.appendChild(ui.button('Cancel', closeSheet, {
         variant: 'btn-outline'
     }));
-    if (!locked) {
-        const saveBtn = ui.button(pid ? 'Save' : 'Create user', () => ui.busy(saveBtn, () => submitAccount(pid)));
-        actions.appendChild(saveBtn);
-    }
+    const saveBtn = ui.button(pid ? 'Save' : 'Create user', () => ui.busy(saveBtn, () => submitAccount(pid)));
+    actions.appendChild(saveBtn);
 
     openSheet(a ? `Edit ${a.username}` : 'New user', body, actions);
-    if (!locked) setTimeout(() => document.getElementById('accUsername').focus(), 50);
+    setTimeout(() => document.getElementById('accUsername').focus(), 50);
 }
 
 // 10 to 12 characters, because AccountValidation.PasswordMin is 10 and the command would refuse anything shorter.
@@ -167,11 +166,12 @@ function randomPassword() {
     return [...bytes].map((b) => alphabet[b % alphabet.length]).join('').slice(0, 10 + (bytes[0] % 3));
 }
 
-// Says where the refused operations live, rather than leaving an operator to guess why the fields are dead.
+// Says where the refused operations live, rather than leaving an operator to guess why those fields are dead.
 function adminNotice(a) {
     const wrap = ui.el('div', 'token-panel');
     wrap.append(ui.el('p', 'muted', {
-        textContent: 'This is an admin. Console access alone must not be enough to take over another operator\'s account, so the password, the role and deletion are set from the shell instead.',
+        // Names exactly what is greyed, and no more: the lock is on the fields that take an account over, not on the whole sheet.
+        textContent: 'This is an admin. Console access alone must not be enough to take over another operator\'s account, so the password, the role and the disabled switch are greyed out and deletion is refused; set the first two from the shell, with the commands below. The name, the address and the API token are not credentials, and are edited here as on any other account.',
     }));
     const commands = ui.el('pre', 'code-block');
     // Generated once per sheet, so the line copies as something runnable rather than a placeholder to fill in.
@@ -279,12 +279,18 @@ async function submitAccount(pid) {
     const body = {
         username: document.getElementById('accUsername').value.trim(),
         email: document.getElementById('accEmail').value.trim(),
-        role: document.getElementById('accRole').value,
     };
-    const disabled = document.getElementById('accDisabled');
-    if (disabled) body.isDisabled = disabled.checked;
-    const password = document.getElementById('accPassword');
-    if (password && password.value) body.password = password.value;
+    // A greyed control still reads back a value, and the role select does not even
+    // offer `admin` when editing: sending either on an admin would ask the API for
+    // exactly the change it refuses, and the save an operator did make would fail.
+    const locked = !!pid && accountsData.find((x) => x.id === pid)?.role === 'admin';
+    if (!locked) {
+        body.role = document.getElementById('accRole').value;
+        const disabled = document.getElementById('accDisabled');
+        if (disabled) body.isDisabled = disabled.checked;
+        const password = document.getElementById('accPassword');
+        if (password && password.value) body.password = password.value;
+    }
 
     // Every rule here is enforced by the API; this call just reports what it says.
     const saved = await ui.send(pid ? `/api/_admin/accounts/${pid}` : '/api/_admin/accounts', {

@@ -121,7 +121,7 @@ async function bpLoadProfile() {
         return;
     }
     document.getElementById('profileUsername').textContent = data.username || '';
-    document.getElementById('profileEmail').textContent = data.email || 'No email address';
+    document.getElementById('profileEmail').textContent = data.email || 'No email address set';
     document.getElementById('profileId').textContent = data.sub || '';
 }
 

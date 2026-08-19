@@ -19,10 +19,14 @@
     <link rel='stylesheet' href='/app.css'>
 </head>
 <body>
-    <div class='login-screen'>
-        <form class='login-card' onsubmit='return bpRegister(event)'>
-            <h1>Create an account</h1>
-            <p class='muted'>Pick a password of at least 10 characters.</p>
+    <main class='signin'>
+        <div class='signin-mark' role='img' aria-label='Baseport'></div>
+
+        <form class='signin-panel' onsubmit='return bpRegister(event)'>
+            <header class='signin-header'>
+                <h1>Create an account</h1>
+                <p>Pick a password of at least 10 characters.</p>
+            </header>
 
             <label class='field-label' for='authEmail'>Email
                 <input type='email' id='authEmail' class='input' autocomplete='email' required autofocus>
@@ -36,10 +40,10 @@
                 <input type='password' id='authPassword' class='input' autocomplete='new-password' minlength='10' required>
             </label>
 
-            <button type='submit' class='btn btn-block'>Create account</button>
-            <p class='muted'>Already registered? <a href='/auth/login'>Sign in</a>.</p>
+            <button type='submit' class='btn btn-block signin-submit'>Create account</button>
+            <p class='signin-aside'>Already registered? <a href='/auth/login'>Sign in</a>.</p>
         </form>
-    </div>
+    </main>
     <script src='/ui.js'></script>
     <script src='/js/userauth.js'></script>
     <script>bpGuestOnly();</script>

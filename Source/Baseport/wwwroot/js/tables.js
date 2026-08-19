@@ -1353,3 +1353,26 @@ function deleteField(fieldId) {
         },
     });
 }
+
+/* dropdown menu */
+function toggleDropdown(e) {
+    if (e) e.stopPropagation();
+    const menu = e.currentTarget.nextElementSibling;
+    if (!menu) return;
+    const opening = menu.classList.contains('hidden');
+    closeDropdown();
+    if (opening) menu.classList.remove('hidden');
+}
+
+function closeDropdown() {
+    document.querySelectorAll('.dropdown-menu').forEach((m) => m.classList.add('hidden'));
+}
+
+document.addEventListener('click', closeDropdown);
+
+function openImportDefinition() {
+    const body = ui.el('p', 'muted', { textContent: 'Paste a table definition (JSON) to import. This feature is coming soon.' });
+    const actions = ui.el('div', 'row');
+    actions.appendChild(ui.button('Cancel', ui.closeModal, { variant: 'btn-outline' }));
+    ui.modal('Import from definition', body, actions);
+}

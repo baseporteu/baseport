@@ -95,6 +95,19 @@ public static class Html
         return node.ToString();
     }
 
+    // The default encoder escapes <, > and & as \u003C and friends, which is what stops a value in the payload from closing the script element it sits in.
+    private static readonly System.Text.Json.JsonSerializerOptions BootstrapJson =
+        new(System.Text.Json.JsonSerializerDefaults.Web) { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Default };
+
+    // A JSON script block, not a JS literal: the browser parses it as data, so nothing in it executes even if it reaches the DOM. Every server-rendered page that seeds its first paint uses this one.
+    public static string BootstrapScript(object payload)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(payload, BootstrapJson);
+        // Belt and braces.
+        if (json.Contains('<')) json = json.Replace("<", "\\u003C", StringComparison.Ordinal);
+        return $"\n<script type=\"application/json\" id=\"bootstrap\">{json}</script>\n";
+    }
+
     private static string Class(string? className) =>
         className is null ? "" : $" class=\"{Text(className)}\"";
 }

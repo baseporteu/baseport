@@ -6,9 +6,15 @@
                             <p class='page-sub'>Define your data model: tables, fields and validation.</p>
                         </div>
                         <div class='page-actions'>
-                            <button class='btn btn-outline' onclick='openProxySheet()'>Proxy import</button>
                             <button class='btn btn-outline' onclick='loadTables().then(() => render())'>Refresh</button>
-                            <button class='btn' onclick='newTable()'>New table</button>
+                            <div class='dropdown'>
+                                <button class='btn' onclick='toggleDropdown(event)'>New table</button>
+                                <div class='dropdown-menu hidden' id='newTableMenu'>
+                                    <button onclick='closeDropdown(); newTable()'>Create new table</button>
+                                    <button onclick='closeDropdown(); openProxySheet()'>Create new proxy</button>
+                                    <button onclick='closeDropdown(); openImportDefinition()'>Import from definition</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<SavedQuery> SavedQueries => Set<SavedQuery>();
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
     public DbSet<JobConfig> JobConfigs => Set<JobConfig>();
+    public DbSet<OidcProvider> OidcProviders => Set<OidcProvider>();
 
     // Settings are a single row. Ordered so EF does not warn that an unordered First could return anything.
     public Task<AppSettings?> SettingsAsync() =>
@@ -34,6 +35,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<SavedQuery>().ToTable("_queries");
         modelBuilder.Entity<AppSettings>().ToTable("_settings");
         modelBuilder.Entity<JobConfig>().ToTable("_jobs");
+        modelBuilder.Entity<OidcProvider>().ToTable("_oidc_providers");
 
         // Every relation keys on the unguessable id, because that is the only key these rows have.
         modelBuilder.Entity<TableDefinition>()
@@ -67,7 +69,8 @@ public class AppDbContext : DbContext
                      modelBuilder.Entity<UserAccount>().Metadata,
                      modelBuilder.Entity<UserSession>().Metadata,
                      modelBuilder.Entity<SavedQuery>().Metadata,
-                     modelBuilder.Entity<AuditLog>().Metadata
+                     modelBuilder.Entity<AuditLog>().Metadata,
+                     modelBuilder.Entity<OidcProvider>().Metadata
                  })
         {
             entity.FindProperty(nameof(TableDefinition.Id))!.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
@@ -84,6 +87,14 @@ public class AppDbContext : DbContext
             .HasIndex(u => u.ApiTokenHash)
             .IsUnique()
             .HasFilter("\"ApiTokenHash\" <> ''");
+
+        modelBuilder.Entity<OidcProvider>().HasIndex(p => p.Slug).IsUnique();
+
+        // One provider identity maps to at most one account, or a second sign-in would have two accounts to choose between.
+        modelBuilder.Entity<UserAccount>()
+            .HasIndex(u => new { u.OidcProviderId, u.OidcSubject })
+            .IsUnique()
+            .HasFilter("\"OidcSubject\" <> ''");
 
         modelBuilder.Entity<UserSession>().HasIndex(s => s.RefreshTokenHash).IsUnique();
         modelBuilder.Entity<UserSession>().HasIndex(s => s.UserId);

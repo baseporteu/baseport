@@ -100,6 +100,7 @@ async function loadSettings() {
     document.getElementById('settingsTdsPort').value = settingsData.tdsPort ?? 1433;
     document.getElementById('settingsTdsBindAddress').value = settingsData.tdsBindAddress || '127.0.0.1';
     await loadApiTables();
+    await loadOidcProviders();
     await loadJobs();
     await loadBackups();
 }
@@ -615,4 +616,221 @@ async function saveAllowedOrigins(btn) {
         document.getElementById('settingsAllowedOrigins').value = saved.allowedOrigins || '';
         renderAllowedOrigins(saved.allowedOrigins || '');
     });
+}
+
+
+/* Single sign-on: OpenID Connect providers */
+
+let oidcData = [];
+
+async function loadOidcProviders() {
+    oidcData = await fetch('/api/_admin/oidc-providers').then((r) => r.json());
+    const body = document.getElementById('oidcBody');
+    if (!body) return;
+    body.innerHTML = '';
+    document.getElementById('oidcEmpty').classList.toggle('hidden', oidcData.length > 0);
+
+    oidcData.forEach((p) => {
+        const tr = document.createElement('tr');
+        tr.className = 'row-link';
+        tr.onclick = (ev) => {
+            if (ev.target.closest('button, label')) return;
+            openOidcSheet(p.id);
+        };
+
+        const name = document.createElement('td');
+        name.textContent = p.name;
+        tr.append(name);
+
+        const authority = document.createElement('td');
+        authority.className = 'muted';
+        authority.textContent = p.authority;
+        tr.append(authority);
+
+        // Which sign-in screens offer it; a provider enabled for neither is configured but unreachable.
+        const doors = document.createElement('td');
+        doors.className = 'muted';
+        const offered = [p.consoleEnabled && 'Console', p.publicEnabled && 'End users'].filter(Boolean);
+        // Switched off, the surfaces are remembered but nothing is offered; saying "Nowhere" would read as a misconfiguration rather than a parked provider.
+        doors.textContent = !p.isEnabled ? 'Off' : offered.join(', ');
+        tr.append(doors);
+
+        const enabledTd = document.createElement('td');
+        const toggle = switchHtml(`oidcEnabled-${p.id}`, p.isEnabled);
+        toggle.querySelector('input').addEventListener('change', (ev) =>
+            saveOidcProvider(p.id, { isEnabled: ev.target.checked }));
+        enabledTd.append(toggle);
+        tr.append(enabledTd);
+
+        const actions = document.createElement('td');
+        actions.className = 'cell-actions end';
+        actions.append(ui.button('Configure', () => openOidcSheet(p.id), {
+            size: 'btn-sm',
+            variant: 'btn-outline'
+        }));
+        tr.append(actions);
+
+        body.append(tr);
+    });
+}
+
+async function saveOidcProvider(id, body) {
+    const saved = await ui.send(`/api/_admin/oidc-providers/${id}`, {
+        method: 'PATCH',
+        body,
+        success: 'Provider saved.',
+        failure: 'Could not save the provider.',
+    });
+    if (saved) await loadOidcProviders();
+    return saved;
+}
+
+function openOidcSheet(id) {
+    const p = id ? oidcData.find((x) => x.id === id) : null;
+    const body = document.createElement('div');
+
+    const name = ui.field('Name', {
+        id: 'oidcName',
+        value: p ? p.name : '',
+        placeholder: 'Authelia',
+        help: 'What the button on the sign-in screen says.',
+    });
+    const slug = ui.field('Key', {
+        id: 'oidcSlug',
+        value: p ? p.slug : '',
+        placeholder: 'authelia',
+        help: 'Appears in the callback URL below. Lowercase letters, digits and hyphens.',
+    });
+    // Shaped as it is typed rather than policed on save, the way an API name is.
+    slug.ctrl.addEventListener('input', () => {
+        slug.ctrl.value = slug.ctrl.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+        redirect.ctrl.value = callbackFor(slug.ctrl.value);
+    });
+
+    const authority = ui.field('Issuer URL', {
+        id: 'oidcAuthority',
+        value: p ? p.authority : '',
+        placeholder: 'https://auth.example.com',
+        help: 'The discovery document is read from this address on save; a wrong URL is refused there rather than at sign-in.',
+    });
+
+    const redirect = ui.field('Redirect URL', {
+        id: 'oidcRedirect',
+        value: p ? p.redirectUri : callbackFor(''),
+        mono: true,
+        help: 'Register this exact address at the provider.',
+    });
+    redirect.ctrl.readOnly = true;
+
+    const clientId = ui.field('Client ID', {
+        id: 'oidcClientId',
+        value: p ? p.clientId : ''
+    });
+    const clientSecret = ui.field('Client secret', {
+        id: 'oidcClientSecret',
+        type: 'password',
+        value: '',
+        placeholder: p && p.hasClientSecret ? 'Set. Type to replace it.' : 'Leave empty for a public client.'
+    });
+
+    const scopes = ui.field('Scopes', {
+        id: 'oidcScopes',
+        value: p ? p.scopes : 'openid profile email',
+        help: 'Space separated. Must include openid.',
+    });
+    const usernameClaim = ui.field('Username claim', {
+        id: 'oidcUsernameClaim',
+        value: p ? p.usernameClaim : 'preferred_username'
+    });
+    const emailClaim = ui.field('Email claim', {
+        id: 'oidcEmailClaim',
+        value: p ? p.emailClaim : 'email'
+    });
+
+    // A new provider is on and offered on the console: that is why an operator is
+    // adding one, and the server refuses an enabled provider offered nowhere anyway.
+    const enabled = ui.switchRow('Enabled', {
+        id: 'oidcIsEnabled',
+        checked: p ? p.isEnabled : true
+    });
+    const console_ = ui.switchRow('Offer on the console sign-in', {
+        id: 'oidcConsoleEnabled',
+        checked: p ? p.consoleEnabled : true
+    });
+    const publicSurface = ui.switchRow('Offer on the end-user sign-in', {
+        id: 'oidcPublicEnabled',
+        checked: p ? p.publicEnabled : false
+    });
+    const createAccounts = ui.switchRow('Create accounts on first sign-in', {
+        id: 'oidcCreateAccounts',
+        checked: p ? p.createAccounts : false
+    });
+
+    body.append(name, slug, authority, redirect, clientId, clientSecret, scopes, usernameClaim, emailClaim,
+        enabled, console_, publicSurface, createAccounts);
+
+    const payload = () => ({
+        name: name.ctrl.value.trim(),
+        slug: slug.ctrl.value.trim(),
+        authority: authority.ctrl.value.trim(),
+        clientId: clientId.ctrl.value.trim(),
+        // An untouched field leaves the stored secret alone; the server only reads the key when it is sent.
+        ...(clientSecret.ctrl.value ? { clientSecret: clientSecret.ctrl.value } : {}),
+        scopes: scopes.ctrl.value.trim(),
+        usernameClaim: usernameClaim.ctrl.value.trim(),
+        emailClaim: emailClaim.ctrl.value.trim(),
+        isEnabled: enabled.ctrl.checked,
+        consoleEnabled: console_.ctrl.checked,
+        publicEnabled: publicSurface.ctrl.checked,
+        createAccounts: createAccounts.ctrl.checked,
+    });
+
+    const actions = ui.el('div', 'form-actions');
+    // Deletion sits with the provider it removes, and never next to the button that saves.
+    if (p) {
+        actions.append(ui.button('Delete', async () => {
+            const ok = await ui.confirm({
+                title: 'Delete provider',
+                message: `Remove ${p.name}? Accounts linked to it keep their history and fall back to their password.`,
+                confirmLabel: 'Delete',
+                danger: true,
+            });
+            if (!ok) return;
+            const done = await ui.send(`/api/_admin/oidc-providers/${p.id}`, {
+                method: 'DELETE',
+                success: 'Provider deleted.',
+                failure: 'Could not delete the provider.',
+            });
+            if (!done) return;
+            ui.closeSheet();
+            await loadOidcProviders();
+        }, {
+            variant: 'btn-danger'
+        }), ui.el('div', 'form-actions-spacer'));
+    }
+    actions.append(ui.button('Cancel', ui.closeSheet, {
+        variant: 'btn-outline'
+    }));
+    const saveBtn = ui.button(p ? 'Save' : 'Add provider', () =>
+        ui.busy(saveBtn, async () => {
+            const saved = p
+                ? await saveOidcProvider(p.id, payload())
+                : await ui.send('/api/_admin/oidc-providers', {
+                    method: 'POST',
+                    body: payload(),
+                    success: 'Provider added.',
+                    failure: 'Could not add the provider.',
+                });
+            if (!saved) return;
+            ui.closeSheet();
+            await loadOidcProviders();
+        }));
+    actions.append(saveBtn);
+
+    ui.sheet(p ? p.name : 'Add provider', body, actions);
+}
+
+function callbackFor(slug) {
+    const origin = (settingsData && settingsData.siteUrl || '').trim().replace(/\/+$/, '') || location.origin;
+    return `${origin}/api/auth/oidc/${slug || '<key>'}/callback`;
 }
