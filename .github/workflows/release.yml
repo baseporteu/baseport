@@ -8,6 +8,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 env:
   DOTNET_VERSION: '11.0.x'
   SOLUTION_PATH: 'Source/Baseport.slnx'
@@ -43,6 +46,7 @@ jobs:
     needs: tag
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - rid: linux-x64
@@ -107,7 +111,36 @@ jobs:
           cd ..
           sha256sum "${NAME}.${{ matrix.archive }}" > "${NAME}.${{ matrix.archive }}.sha256"
 
-      - name: Generate Release Notes
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}
+          path: |
+            Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}
+            Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}.sha256
+          retention-days: 90
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag_name }}
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: baseport-${{ github.event.inputs.tag_name }}-*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate release notes
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
 
@@ -119,7 +152,7 @@ jobs:
             git log --no-merges --pretty=format:"* %s by @%an in %h" >> release_notes.md
           fi
 
-      - name: Create GitHub Release
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name }}
@@ -127,15 +160,6 @@ jobs:
           draft: false
           prerelease: false
           body_path: release_notes.md
-          files: |
-            Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}
-            Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}.sha256
+          files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}
-          path: Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}
-          retention-days: 90
