@@ -318,7 +318,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public void An_enabled_provider_offered_on_neither_screen_configures_nothing()
+    public async Task An_enabled_provider_offered_on_neither_screen_configures_nothing()
     {
         // It saved cleanly, listed as "Enabled", and showed no button anywhere.
         // Refusing renderable-nothing is the same rule a form with an empty layout follows.
@@ -333,7 +333,7 @@ public class OidcTests : IDisposable
             ["publicEnabled"] = false
         };
 
-        var problem = OidcEndpoints.ApplyAsync(_db, new OidcProvider { Id = "prov00000002" }, body, TestContext.Current.CancellationToken).Result;
+        var problem = await OidcEndpoints.ApplyAsync(_db, new OidcProvider { Id = "prov00000002" }, body, TestContext.Current.CancellationToken);
 
         Assert.Contains("at least one sign-in screen", problem);
     }

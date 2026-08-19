@@ -90,7 +90,15 @@ public static class OidcEndpoints
             user.LastLoginAt = now;
             // The flag guards a seeded password that is no longer the credential in use, and the change screen would ask for a password this account may never have had.
             user.MustChangePassword = false;
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                Serilog.Log.Warning(ex, "Could not link {Username} to {Provider}: the identity is already held by another account.", user.Username, provider.Slug);
+                return Results.Redirect(Back(flow.Console, OidcFlow.Failed));
+            }
 
             AuditLogMiddleware.Note(ctx, $"{Door(flow.Console)} sign-in as {user.Username} through {provider.Name}");
             AdminAuth.IssueCookies(ctx, await UserTokens.IssueAsync(db, user, now));
@@ -349,7 +357,18 @@ public static class OidcEndpoints
             UpdatedAt = now
         };
         db.UserAccounts.Add(user);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            db.Entry(user).State = EntityState.Detached;
+            var linked = await db.UserAccounts.FirstOrDefaultAsync(u =>
+                u.OidcProviderId == provider.Id && u.OidcSubject == identity.Subject);
+            if (linked is null) throw;
+            return linked;
+        }
         Serilog.Log.Information("Created account {Username} on first sign-in through {Provider}.", username, provider.Slug);
         return user;
     }

@@ -58,13 +58,13 @@ public static class PublicApiEndpoints
             var sortField = fields.FirstOrDefault(f => f.Name == sort);
             var descending = !string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase);
 
-            var relations = await ApiLinks.RelationsAsync(db, fields);
+            var relations = await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted);
             var (expand, expandError) = ApiLinks.ParseExpand(ctx.Request.Query[ApiLinks.ExpandParameter], relations);
             if (expandError is { } listProblem) return ApiError(400, listProblem);
 
             var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50,
                 accessFields: fields, accessUserId: caller.Id);
-            var extras = await ApiLinks.ForRecordsAsync(db, apiName, result.Records, relations, expand, caller.Id);
+            var extras = await ApiLinks.ForRecordsAsync(db, apiName, result.Records, relations, expand, caller.Id, ctx.RequestAborted);
             return Results.Ok(new
             {
                 rows = result.Records.Select(r => ApiDtos.RecordDto(r, fields, extras[r.Id].Links, extras[r.Id].Expanded)),
@@ -107,11 +107,11 @@ public static class PublicApiEndpoints
             if (!await RecordAccess.AllowsAsync(db, table, readFields, Permission.Read, caller.Id, rid))
                 return ApiError(403, "This record is not yours to read.");
 
-            var readRelations = await ApiLinks.RelationsAsync(db, readFields);
+            var readRelations = await ApiLinks.RelationsAsync(db, readFields, ctx.RequestAborted);
             var (readExpand, readProblem) = ApiLinks.ParseExpand(ctx.Request.Query[ApiLinks.ExpandParameter], readRelations);
             if (readProblem is { } problem) return ApiError(400, problem);
 
-            var read = await ApiLinks.ForRecordAsync(db, apiName, record, readRelations, readExpand, caller.Id);
+            var read = await ApiLinks.ForRecordAsync(db, apiName, record, readRelations, readExpand, caller.Id, ctx.RequestAborted);
             return Results.Ok(ApiDtos.RecordDto(record, readFields, read.Links, read.Expanded));
         });
 
@@ -141,7 +141,7 @@ public static class PublicApiEndpoints
             };
             db.Records.Add(record);
             await db.SaveChangesAsync();
-            var created = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields), Array.Empty<ApiLinks.Relation>(), caller.Id);
+            var created = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller.Id, ctx.RequestAborted);
             return Results.Created(ApiLinks.Self(apiName, record.Id), ApiDtos.RecordDto(record, fields, created.Links));
         });
 
@@ -172,7 +172,7 @@ public static class PublicApiEndpoints
 
             record.JsonData = merged.ToJsonString();
             await db.SaveChangesAsync();
-            var written = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields), Array.Empty<ApiLinks.Relation>(), caller.Id);
+            var written = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller.Id, ctx.RequestAborted);
             return Results.Ok(ApiDtos.RecordDto(record, fields, written.Links));
         });
 

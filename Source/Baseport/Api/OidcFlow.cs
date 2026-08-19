@@ -70,7 +70,6 @@ public static class OidcFlow
         var verifier = Ids.NewShortId(64);
         var challenge = Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
 
-        Prune(DateTime.UtcNow);
         Pending[state] = new PendingFlow(provider.Id, verifier, nonce, redirectUri, returnTo, console, DateTime.UtcNow.Add(FlowLifetime));
 
         var query = new Dictionary<string, string?>

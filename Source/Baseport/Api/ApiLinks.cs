@@ -6,12 +6,10 @@ using System.Text.Json.Nodes;
 
 namespace Baseport;
 
-// HATEOAS links and $expand for the public REST API. A link is only written for a destination this API would actually serve, and an expansion is one level deep.
 public static class ApiLinks
 {
     public const string ExpandParameter = "$expand";
 
-    // A reference field whose target table is published, so it can be linked to and expanded into.
     public sealed record Relation(FieldDefinition Field, TableDefinition Target, List<FieldDefinition> TargetFields);
 
     public sealed record RecordExtras(JsonObject Links, JsonObject? Expanded);
@@ -20,8 +18,7 @@ public static class ApiLinks
 
     public static string Self(string apiName, string recordId) => $"/api/v1/{apiName}/records/{recordId}";
 
-    // An unpublished target, or one whose GET is switched off, gets no relation at all: a link the API would refuse is worse than no link, and expanding into it would publish a table the author never did.
-    public static async Task<List<Relation>> RelationsAsync(AppDbContext db, IEnumerable<FieldDefinition> fields)
+    public static async Task<List<Relation>> RelationsAsync(AppDbContext db, IEnumerable<FieldDefinition> fields, CancellationToken token = default)
     {
         var references = fields
             .Where(f => FieldValidation.NormalizeType(f.DataType) == "reference")
@@ -33,7 +30,7 @@ public static class ApiLinks
         var targetIds = references.Select(x => x.TargetId!).Distinct().ToList();
         var targets = await db.Tables.Include(t => t.Fields)
             .Where(t => targetIds.Contains(t.Id) && t.ApiEnabled)
-            .ToListAsync();
+            .ToListAsync(token);
 
         var relations = new List<Relation>();
         foreach (var (field, targetId) in references)
@@ -45,7 +42,6 @@ public static class ApiLinks
         return relations;
     }
 
-    // A misspelled relation is refused rather than ignored: a client that asked for an embed and silently got none cannot tell that from a null reference.
     public static (List<Relation> Expand, string? Error) ParseExpand(string? expand, IReadOnlyList<Relation> relations)
     {
         var chosen = new List<Relation>();
@@ -59,14 +55,14 @@ public static class ApiLinks
         return (chosen, null);
     }
 
-    // Links and embeds for one page of records, computed together so each stored record is parsed once.
     public static async Task<Dictionary<string, RecordExtras>> ForRecordsAsync(
         AppDbContext db,
         string apiName,
         IReadOnlyList<Record> records,
         IReadOnlyList<Relation> relations,
         IReadOnlyList<Relation> expand,
-        string? userId)
+        string? userId,
+        CancellationToken token = default)
     {
         var data = records.ToDictionary(r => r.Id, Data);
         var embedded = new Dictionary<string, Dictionary<string, JsonObject>>(StringComparer.Ordinal);
@@ -76,15 +72,9 @@ public static class ApiLinks
             var ids = records.Select(r => Reference(data[r.Id], relation.Field.Name)).OfType<string>().Distinct().ToList();
             if (ids.Count == 0) continue;
 
-            var targets = await db.Records.Where(t => t.TableId == relation.Target.Id && ids.Contains(t.Id)).ToListAsync();
+            var targets = await ReadableAsync(db, relation, ids, userId, token);
             var visible = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
-            var ruled = RecordAccess.HasRule(relation.Target, Permission.Read);
-            foreach (var target in targets)
-            {
-                // An embed must refuse exactly what a direct read of the target would refuse, or $expand becomes a way around the rule.
-                if (ruled && !await RecordAccess.AllowsAsync(db, relation.Target, relation.TargetFields, Permission.Read, userId, target.Id)) continue;
-                visible[target.Id] = ApiDtos.RecordDto(target, relation.TargetFields);
-            }
+            foreach (var target in targets) visible[target.Id] = ApiDtos.RecordDto(target, relation.TargetFields);
             embedded[relation.Field.Name] = visible;
         }
 
@@ -96,7 +86,6 @@ public static class ApiLinks
                 if (Reference(data[record.Id], relation.Field.Name) is { } targetId)
                     links[relation.Field.Name] = Self(relation.Target.ApiName, targetId);
 
-            // Assigned last so the two navigation links a client always needs cannot be shadowed by a field that happens to be named after one.
             links["self"] = Self(apiName, record.Id);
             links["collection"] = Collection(apiName);
 
@@ -113,8 +102,32 @@ public static class ApiLinks
     }
 
     public static async Task<RecordExtras> ForRecordAsync(
-        AppDbContext db, string apiName, Record record, IReadOnlyList<Relation> relations, IReadOnlyList<Relation> expand, string? userId) =>
-        (await ForRecordsAsync(db, apiName, new[] { record }, relations, expand, userId))[record.Id];
+        AppDbContext db, string apiName, Record record, IReadOnlyList<Relation> relations, IReadOnlyList<Relation> expand, string? userId,
+        CancellationToken token = default) =>
+        (await ForRecordsAsync(db, apiName, new[] { record }, relations, expand, userId, token))[record.Id];
+
+    private static Task<List<Record>> ReadableAsync(AppDbContext db, Relation relation, List<string> ids, string? userId, CancellationToken token)
+    {
+        var args = new List<object> { relation.Target.Id };
+        var where = "r.\"TableId\" = {0}";
+
+        if (RecordAccess.ListClause(relation.Target, relation.TargetFields, "r", userId, args) is { } clause)
+            where += $" AND ({clause})";
+
+        var slots = new List<string>();
+        foreach (var id in ids)
+        {
+            slots.Add($"{{{args.Count}}}");
+            args.Add(id);
+        }
+        where += $" AND r.\"Id\" IN ({string.Join(", ", slots)})";
+
+        var sql = $"""
+            SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt"
+            FROM "_records" r WHERE {where}
+            """;
+        return db.Records.FromSqlRaw(sql, args.ToArray()).AsNoTracking().ToListAsync(token);
+    }
 
     public static JsonObject PageLinks(HttpRequest request, QueryEngine.ListPage page)
     {
@@ -125,7 +138,6 @@ public static class ApiLinks
         };
         if (page.Page > 1) links["prev"] = Href(request, page.Page - 1);
         if (page.HasMore) links["next"] = Href(request, page.Page + 1);
-        // Past QueryEngine.CountCeiling the total is a floor, and a last link computed from it would point at the wrong page.
         if (page.CountExact && page.TotalPages > 0) links["last"] = Href(request, page.TotalPages);
         return links;
     }
