@@ -63,8 +63,8 @@ public static class WireCatalog
             {
                 var id = reader.GetString(0);
                 var name = reader.GetString(1);
-                // a leading underscore is the storage schema's own prefix, and a temp view takes precedence over main, so projecting one would shadow _records or _users out from under the console
-                if (!IsPlainIdentifier(name) || name[0] == '_') continue;
+                // a leading underscore is the storage schema's own prefix, and a temp view takes precedence over main, so projecting one would shadow _records or _users out from under the console. sqlite_ is sqlite's own prefix and it refuses to create any object under it, so projecting one throws while the catalog is being built and every query on that connection answers that error instead of its own result
+                if (!IsPlainIdentifier(name) || name[0] == '_' || name.StartsWith("sqlite_", StringComparison.OrdinalIgnoreCase)) continue;
                 var readRule = reader.IsDBNull(2) ? "" : reader.GetString(2);
                 tables.Add(new CatalogTable(id, name, oid, counts.GetValueOrDefault(id), columns.GetValueOrDefault(id) ?? new List<CatalogColumn>(), readRule));
                 oid += 16;

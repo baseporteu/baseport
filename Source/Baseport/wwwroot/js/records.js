@@ -40,7 +40,8 @@ async function loadRecords(page) {
     if (!meta) return;
 
     document.getElementById('recordsEmpty').classList.toggle('hidden', meta.total > 0);
-    document.getElementById('recordsEmpty').innerText = q ? 'No records match that search.' : 'No records yet.';
+    document.getElementById('recordsEmpty').innerText =
+        q ? 'No records match that search. Try a whole word, or the start of one.' : 'No records yet.';
     renderRecordPager(meta);
 }
 
@@ -61,11 +62,12 @@ function renderRecordPager(data) {
                 <button class="btn btn-outline btn-sm" ${last ? 'disabled' : ''} onclick="loadRecords(${data.page + 1})">Next</button>`;
 }
 
-function deleteRecord(rid) {
+function deleteRecord(rid, label) {
     openModal({
         title: 'Delete record',
-        // To-do: if we have a PK column defined, we should print this here "to delete record #123" or similar.
-        message: 'Are you sure you want to delete this record? This cannot be undone.',
+        message: label
+            ? `Are you sure you want to delete "${label}"? This cannot be undone.`
+            : 'Are you sure you want to delete this record? This cannot be undone.',
         confirmLabel: 'Delete',
         danger: true,
         onConfirm: async () => {

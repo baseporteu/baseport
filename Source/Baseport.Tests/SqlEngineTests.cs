@@ -59,6 +59,24 @@ public class SqlEngineTests : IDisposable
         Assert.Equal("2", Assert.Single(storage.Rows)[0]);
     }
 
+    // A table name is not validated against sqlite's own reserved prefix, and sqlite refuses to create any object under it. Projecting one threw while the catalog was being built, so every console query answered "object name reserved for internal use" instead of its own result. The name is skipped like any other name the projection cannot carry.
+    [Fact]
+    public async Task A_table_named_after_sqlites_own_prefix_does_not_break_the_console()
+    {
+        var tableId = Ids.NewShortId(12);
+        _db.Tables.Add(new TableDefinition { Id = tableId, Name = "Orders" });
+        _db.Fields.Add(new FieldDefinition { Id = Ids.NewShortId(12), TableId = tableId, Name = "Total", DataType = "number" });
+        _db.Records.Add(new Record { Id = Ids.NewShortId(12), TableId = tableId, JsonData = """{"Total":10}""" });
+        _db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = "sqlite_master" });
+        _db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = "SQLite_Sequence" });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await SqlEngine.ReadAsync(_db, "SELECT SUM(Total) AS Revenue FROM Orders", WireCatalog.Views, restrict: false);
+
+        Assert.Null(result.Error);
+        Assert.Equal("10", Assert.Single(result.Rows)[0]);
+    }
+
     [Fact]
     public async Task A_broken_query_reports_the_error_instead_of_throwing()
     {

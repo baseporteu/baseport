@@ -95,6 +95,10 @@ public static class Html
         return node.ToString();
     }
 
+    // A confirmation dialog names the row it is about, and a longtext value would push the buttons off the sheet.
+    public static string Shorten(string value, int max = 60) =>
+        value.Length <= max ? value : value[..max].TrimEnd() + "\u2026";
+
     // The default encoder escapes <, > and & as \u003C and friends, which is what stops a value in the payload from closing the script element it sits in.
     private static readonly System.Text.Json.JsonSerializerOptions BootstrapJson =
         new(System.Text.Json.JsonSerializerDefaults.Web) { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Default };

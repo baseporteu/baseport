@@ -57,10 +57,10 @@ public class JobsTests : IDisposable
     public void The_registry_is_the_fixed_set_of_maintenance_jobs()
     {
         Assert.Equal(
-            new[] { "backup", "heartbeat", "logs-cleanup", "session-cleanup", "query-optimizer", "file-deletions" },
+            new[] { "backup", "heartbeat", "logs-cleanup", "session-cleanup", "query-optimizer", "search-index", "file-deletions" },
             Jobs.All.Select(j => j.Key));
         // Every job finds itself, and a missing key resolves to nothing.
-        Assert.Equal(6, Jobs.All.Count(j => Jobs.Find(j.Key) == j));
+        Assert.Equal(7, Jobs.All.Count(j => Jobs.Find(j.Key) == j));
         Assert.Null(Jobs.Find("nope"));
     }
 
@@ -159,13 +159,13 @@ public class JobsTests : IDisposable
         await SchemaBootstrap.ApplyAsync(_db);
 
         var jobs = await _db.JobConfigs.ToListAsync(TestContext.Current.CancellationToken);
-        Assert.Equal(6, jobs.Count);
+        Assert.Equal(7, jobs.Count);
         Assert.All(jobs, j => Assert.NotNull(j.NextRunAt));
         Assert.True(jobs.Single(j => j.Key == "backup").Enabled);
         Assert.False(jobs.Single(j => j.Key == "file-deletions").Enabled);
 
         // A second start neither duplicates nor re-enables an operator's edits.
         await SchemaBootstrap.ApplyAsync(_db);
-        Assert.Equal(6, await _db.JobConfigs.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(7, await _db.JobConfigs.CountAsync(TestContext.Current.CancellationToken));
     }
 }

@@ -34,7 +34,7 @@ public static class SchemaBootstrap
         }
         if (string.IsNullOrEmpty(settings.PreviewSecret))
             settings.PreviewSecret = Ids.NewShortId(48);
-        settings.AuthSigningKey = UserTokens.Initialize(settings.AuthSigningKey);
+        KeyStore.Write(db, UserTokens.Initialize(KeyStore.Read(db)));
         UserTokens.Configure(settings);
         await db.SaveChangesAsync();
 
@@ -44,6 +44,8 @@ public static class SchemaBootstrap
         // Guarantees all dynamic table indexes exist.
         foreach (var table in await db.Tables.Include(t => t.Fields).ToListAsync())
             await RecordIndexes.SyncAsync(db, table);
+
+        await RecordSearch.EnsureAsync(db);
 
         // Seed missing system job defaults and schedule initial runs.
         var now = DateTime.UtcNow;

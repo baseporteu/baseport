@@ -200,6 +200,60 @@ public class UserAuthTests : IDisposable
         Assert.Null(await UserTokens.ReauthAsync(_db, issued.RefreshToken, DateTime.UtcNow));
     }
 
+    // The signing key forges an admin cookie, so it must not be a row anything with SQL can select. It lives beside the database instead, owner-readable only, and survives a restart so a running instance's tokens do not all die on a reboot.
+    [Fact]
+    public async Task The_signing_key_lives_in_a_file_beside_the_database_and_not_in_a_row()
+    {
+        var dir = Directory.CreateTempSubdirectory("baseport-keystore").FullName;
+        try
+        {
+            var dbPath = Path.Combine(dir, "baseport.db");
+            var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite($"Data Source={dbPath}").Options;
+
+            string first;
+            await using (var db = new AppDbContext(options))
+            {
+                await db.Database.MigrateAsync(TestContext.Current.CancellationToken);
+                await SchemaBootstrap.ApplyAsync(db);
+                first = KeyStore.Read(db)!;
+            }
+
+            var keyFile = Path.Combine(dir, "baseport.key");
+            Assert.True(File.Exists(keyFile));
+            Assert.False(string.IsNullOrWhiteSpace(first));
+            if (!OperatingSystem.IsWindows())
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(keyFile));
+
+            await using (var db = new AppDbContext(options))
+            {
+                await SchemaBootstrap.ApplyAsync(db);
+                Assert.Equal(first, KeyStore.Read(db));
+            }
+
+            using var raw = new SqliteConnection($"Data Source={dbPath}");
+            raw.Open();
+            using var cmd = raw.CreateCommand();
+            cmd.CommandText = "SELECT * FROM _settings LIMIT 1";
+            using var reader = cmd.ExecuteReader();
+            var columns = Enumerable.Range(0, reader.FieldCount).Select(reader.GetName).ToList();
+            Assert.DoesNotContain("AuthSigningKey", columns);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    // An in-memory database dies with the process, so writing its key to the working directory would leave a real credential lying around after a test run.
+    [Fact]
+    public void An_in_memory_database_keeps_its_key_in_memory()
+    {
+        Assert.Equal("", KeyStore.PathFor(_db));
+        Assert.Null(KeyStore.Read(_db));
+        KeyStore.Write(_db, "should-not-be-written");
+        Assert.False(File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "baseport.key")));
+    }
+
     [Theory]
     [InlineData("jane@example.com")]
     [InlineData("j@x.io")]

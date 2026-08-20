@@ -274,9 +274,6 @@ public class AppSettings
     // Self sign-up at /auth/register. Off until an operator opens it; an admin can still create user accounts from the console.
     public bool PublicRegistrationEnabled { get; set; } = false;
 
-    // ES256 signing key for end-user JWTs, PKCS#8 base64 (generated on first boot).
-    public string AuthSigningKey { get; set; } = "";
-
     // iss and aud on issued JWTs. Changing it invalidates every token already handed out.
     public string AuthIssuer { get; set; } = "baseport";
 

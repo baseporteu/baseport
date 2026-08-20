@@ -497,7 +497,7 @@ public static class AdminEndpoints
             var s = await db.SettingsAsync();
             if (s == null) { s = new AppSettings(); db.AppSettings.Add(s); }
 
-            s.AuthSigningKey = UserTokens.Rotate();
+            KeyStore.Write(db, UserTokens.Rotate());
             await db.UserSessions.ExecuteDeleteAsync();
             await db.SaveChangesAsync();
             return Results.Ok(new { rotated = true });

@@ -71,6 +71,8 @@ public static class FragmentEndpoints
             if (table == null) return Results.NotFound();
 
             var fields = table.Fields.OrderBy(f => f.Position).ThenBy(f => f.Id).Where(f => !f.IsHidden).ToList();
+            // Names the row in the delete confirmation. A lookup identifier is the closest thing a table has to a primary key an author would recognise, and validation already refuses to let one be hidden.
+            var identifier = fields.FirstOrDefault(f => f.IsIdentifier);
             var sortField = fields.FirstOrDefault(f => f.Name == sort);
             var descending = !string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase);
 
@@ -85,7 +87,7 @@ public static class FragmentEndpoints
                     html.Append(Html.Cell(Html.DisplayValue(data[f.Name])));
                 html.Append(Html.Cell(record.CreatedAt.ToLocalTime(), "muted"))
                     .Append(Html.Cell(record.UpdatedAt.ToLocalTime(), "muted"))
-                    .Append(Html.RawCell(Html.Button("Delete", "deleteRecord", record.Id)))
+                    .Append(Html.RawCell(Html.Button("Delete", "deleteRecord", record.Id, Html.Shorten(identifier is null ? "" : Html.DisplayValue(data[identifier.Name])))))
                     .Append("</tr>");
             }
 

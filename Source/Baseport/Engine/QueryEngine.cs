@@ -98,34 +98,52 @@ public static class QueryEngine
             };
         }
 
+        var search = "";
+        string? rankJoin = null;
         if (!string.IsNullOrWhiteSpace(query))
         {
             var slot = args.Count;
-            args.Add($"%{EscapeLike(query.Trim())}%");
-            where += searchFields.Count > 0
+            var term = query.Trim();
+            string? match = null;
+            if (searchFields.Count == 0 && RecordSearch.MatchExpression(table.Id, term) is { } expression && await RecordSearch.AvailableAsync(db))
+                match = expression;
+
+            args.Add(match ?? $"%{EscapeLike(term)}%");
+            if (searchFields.Count > 0)
                 // Restricted search: only the columns the form exposes.
-                ? " AND (" + string.Join(" OR ", searchFields.Select(f => $"{Column(f)} LIKE {{{slot}}} ESCAPE '\\'")) + ")"
-                // Unrestricted search: json_each walks every stored value, so a field added later is searchable without a schema change.
-                : $" AND EXISTS (SELECT 1 FROM json_each(r.\"JsonData\") je WHERE je.value LIKE {{{slot}}} ESCAPE '\\')";
+                search = " AND (" + string.Join(" OR ", searchFields.Select(f => $"{Column(f)} LIKE {{{slot}}} ESCAPE '\\'")) + ")";
+            else if (match is not null)
+            {
+                // Unrestricted search over the fts5 index. Right now it just matches whole words and prefixes, not fragments inside a word, which is the trade for not scanning every record
+                search = RecordSearch.Clause("r", slot);
+                rankJoin = RecordSearch.RankJoin(slot);
+            }
+            else
+                // No index, or nothing in the term fts5 can tokenize: json_each walks every stored value, so a field added later is searchable without a schema change.
+                search = $" AND EXISTS (SELECT 1 FROM json_each(r.\"JsonData\") je WHERE je.value LIKE {{{slot}}} ESCAPE '\\')";
         }
 
         // Counting doubles the work: the same scan again, for a number most callers only render as "page 1 of n".
         var countSql = $"""
             SELECT COUNT(*) AS "Value" FROM (
-                SELECT 1 FROM "_records" r WHERE {where} LIMIT {CountCeiling}
+                SELECT 1 FROM "_records" r WHERE {where}{search} LIMIT {CountCeiling}
             )
             """;
         var total = await db.Database.SqlQueryRaw<int>(countSql, args.ToArray()).SingleAsync();
 
-        var order = sortField is null
-            ? "r.\"CreatedAt\""
-            : Column(sortField);
-        var direction = sortDescending ? "DESC" : "ASC";
+        // A caller that named a sort field asked for that order and gets it; relevance only fills in for the default, where "newest first" says nothing about a search term.
+        var ranked = rankJoin is not null && sortField is null;
+        var order = ranked
+            ? "m.\"Rank\""
+            : sortField is null
+                ? "r.\"CreatedAt\""
+                : Column(sortField);
+        var direction = ranked || !sortDescending ? "ASC" : "DESC";
 
         var pageSql = $$"""
             SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt", r."UpdatedAt"
-            FROM "_records" r
-            WHERE {{where}}
+            FROM "_records" r{{(ranked ? rankJoin : "")}}
+            WHERE {{where}}{{(ranked ? "" : search)}}
             ORDER BY {{order}} {{direction}}, r."Id" DESC
             LIMIT {{pageSize + 1}} OFFSET {{(page - 1) * pageSize}}
             """;
