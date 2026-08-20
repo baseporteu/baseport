@@ -23,6 +23,18 @@ if (args.Length > 0 && args[0] == "providers")
 if (args.Length > 0 && args[0] == "accounts")
     return await AccountsCli.RunAsync(args, bundledSettings, localSettings);
 
+if (args.Length > 0 && args[0] is "help" or "-h" or "--help")
+    return CliHelp.List("commands", CliHelp.Commands);
+
+if (args.Length > 0 && args[0] == "version")
+{
+    Console.WriteLine(CliHelp.Version);
+    return 0;
+}
+
+// Every host option is a switch, so a bare first word is a mistyped verb rather than an argument for the server.
+if (args.Length > 0 && !args[0].StartsWith('-')) return CliHelp.Invalid();
+
 // Logging is not up yet, so a failure here can only report itself.
 var logDirectory = Path.Combine(Directory.GetCurrentDirectory(), "log");
 try

@@ -257,26 +257,14 @@ public static class AccountsCli
         return null;
     }
 
-    private static void PrintUsage()
+    private static void PrintUsage() => CliHelp.List("accounts commands", new[]
     {
-        Console.WriteLine($"""
-            Usage: {Invocation()} accounts <command>
-
-              list                          Show every account, its role, state and provider.
-              promote <account>             Grant console access.
-              demote <account>              Remove console access.
-              password <account> <pw>       Set a one-time password; the owner must change it.
-              rename <account> <new>        Change the username.
-              link <account> <key> <sub>    Bind a single sign-on identity to the account.
-              unlink <account>              Drop it again.
-
-            <account> is a username or an e-mail address.
-
-            The console refuses all of these on an admin account, deliberately: console
-            access alone must not be enough to take over another operator's account.
-            An admin is never linked to a provider automatically either, for the same
-            reason: `link` is the only way one gets a single sign-on identity, and the
-            subject it takes is printed by the sign-in that was refused.
-            """);
-    }
+        "list",
+        "promote <account>",
+        "demote <account>",
+        "password <account> <pw>",
+        "rename <account> <new>",
+        "link <account> <key> <subject>",
+        "unlink <account>"
+    });
 }

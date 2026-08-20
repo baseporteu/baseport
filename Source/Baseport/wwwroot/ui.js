@@ -103,6 +103,13 @@ const ui = (() => {
         return true;
     }
 
+    // The track and thumb that render a checkbox as a switch; shared so switchRow and field emit one markup.
+    function switchTrack(input) {
+        const track = el('span', 'switch');
+        track.append(input, el('span', 'track'), el('span', 'thumb'));
+        return track;
+    }
+
     // A checkbox rendered as a switch, with its label. Same markup the settings rows use, so both inherit one stylesheet.
     function switchRow(label, {
         id,
@@ -110,15 +117,13 @@ const ui = (() => {
         disabled = false
     } = {}) {
         const row = el('label', 'switch-row');
-        const track = el('span', 'switch');
         const input = el('input', '', {
             type: 'checkbox'
         });
         if (id) input.id = id;
         input.checked = !!checked;
         input.disabled = !!disabled;
-        track.append(input, el('span', 'track'), el('span', 'thumb'));
-        row.append(track, el('span', null, {
+        row.append(switchTrack(input), el('span', null, {
             textContent: label
         }));
         row.ctrl = input;
@@ -422,7 +427,7 @@ const ui = (() => {
         if (type === 'checkbox') input.checked = !!value;
         else input.value = value ?? '';
 
-        wrap.append(input);
+        wrap.append(type === 'checkbox' ? switchTrack(input) : input);
         if (help) wrap.append(el('span', 'field-help', {
             textContent: help
         }));

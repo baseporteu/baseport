@@ -21,11 +21,53 @@ Baseport__AdminAddress=0.0.0.0:5264
 
 Everything else you would change while running lives in the console under **Settings** and is stored in the database.
 
+## Listening address
+
+`--urls` decides which interfaces Kestrel binds:
+
+| Value | Reachable from |
+| --- | --- |
+| `http://localhost:5263` | The machine itself only |
+| `http://0.0.0.0:5263` | Any interface, so anything that can route to the host |
+
+`localhost` is the safe default and the one to keep if a reverse proxy on the same host is the only thing talking to Baseport. Use `0.0.0.0` when something on another machine connects directly.
+
+Baseport serves plain HTTP and does not terminate TLS itself, so binding `0.0.0.0` on anything public means unencrypted traffic. Put a proxy in front of it.
+
 ## Behind a reverse proxy
 
 Set `Baseport__TrustForwardedHeaders` to `true`. Rate limiting works off the client address, so without this every request looks like it came from the proxy and they all share one budget.
 
 If you want the console off the public port altogether, give it its own address with `Baseport__AdminAddress` and only expose that port on loopback.
+
+## Running it as a service
+
+Install to `/opt/baseport`, then let `-d` write the unit:
+
+```bash
+BASEPORT_DIR=/opt/baseport BASEPORT_BIN=/usr/local/bin \
+  curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.sh | bash
+
+sudo /usr/local/bin/baseport -d
+```
+
+`-d` needs root, creates a `baseport` system user, hands it the directory, writes `/etc/systemd/system/baseport.service`, then enables and starts it. Pass anything else through and it lands in `ExecStart`:
+
+```bash
+sudo /usr/local/bin/baseport -d --urls http://0.0.0.0:5263
+```
+
+Use the full path with `sudo`. Its `secure_path` does not include `~/.local/bin`, so a wrapper installed there will not resolve.
+
+`-d` refuses rather than producing a unit that cannot start. It stops if a `baseport.service` already exists, if there is no systemd, or if the service account cannot read the install directory. That last one is why `/opt` and not `~/.baseport`: `/root` is mode 0700, so a `User=baseport` service cannot read anything inside it.
+
+`/opt/baseport` holds the binary and the data together, because Baseport writes `baseport.db`, `log/` and `uploads/` relative to `WorkingDirectory`. Splitting the binary into `/opt` and data into `/var/lib` would need a second path the application does not have a concept of.
+
+After `baseport update`, restart the service to pick up the new binary.
+
+:::warning
+`baseport update` only updates the directory the wrapper was installed with. If you installed as root to `/root/.baseport` but your service runs from `/opt/baseport`, you will update a copy nothing is running. The installer warns when it detects this, and you can point it at the right place with `BASEPORT_DIR`.
+:::
 
 ## Backups
 

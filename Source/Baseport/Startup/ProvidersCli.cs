@@ -89,12 +89,12 @@ public static class ProvidersCli
         return 0;
     }
 
-    private static void PrintUsage() => Console.WriteLine("""
-        Usage:
-          baseport providers status
-          baseport providers postgres enable [--port N] [--bind ADDR]
-          baseport providers postgres disable
-          baseport providers tds enable [--port N] [--bind ADDR]
-          baseport providers tds disable
-        """);
+    private static void PrintUsage() => CliHelp.List("providers commands", new[]
+    {
+        "status",
+        "postgres enable [--port N] [--bind ADDR]",
+        "postgres disable",
+        "tds enable [--port N] [--bind ADDR]",
+        "tds disable"
+    });
 }

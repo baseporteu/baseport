@@ -29,7 +29,7 @@ curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/ins
 iwr https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.ps1 | iex
 ```
 
-Both put a `baseport` command on your PATH, so `baseport --urls http://localhost:5263` starts it and `baseport update` upgrades it in place. Releases ship `linux-x64` and `win-x64`.
+Both put a `baseport` command on your PATH, so `baseport --urls http://localhost:5263` starts it, `baseport logs` follows the log, and `baseport update` upgrades it in place. Releases ship `linux-x64` and `win-x64`.
 
 **Docker**
 

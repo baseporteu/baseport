@@ -31,6 +31,7 @@ BASE="https://github.com/$REPO/releases/download/$TAG"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
+echo "Installing into $DIR (override with BASEPORT_DIR)"
 echo "Fetching $ASSET"
 curl -fSL --progress-bar -o "$TMP/$ASSET" "$BASE/$ASSET" || fail "Release $TAG has no asset named $ASSET."
 curl -fsSL -o "$TMP/$ASSET.sha256" "$BASE/$ASSET.sha256" || fail "Release $TAG has no checksum for $ASSET."
@@ -56,11 +57,75 @@ chmod +x "$DIR/Baseport"
 mkdir -p "$BIN"
 cat > "$BIN/baseport" <<EOF
 #!/bin/sh
+if [ "\$1" = "help" ] || [ "\$1" = "-h" ] || [ "\$1" = "--help" ]; then
+  exec "$DIR/Baseport" help
+fi
+
 if [ "\$1" = "update" ]; then
   curl -fsSL "$INSTALLER" | BASEPORT_REPO="$REPO" BASEPORT_DIR="$DIR" BASEPORT_BIN="$BIN" bash
   exit \$?
 fi
+
+if [ "\$1" = "-d" ]; then
+  if [ "\$(id -u)" != "0" ]; then
+    echo "Creating a service needs root. Try:" >&2
+    echo "  sudo \$0 -d" >&2
+    exit 1
+  fi
+  command -v systemctl >/dev/null 2>&1 || { echo "No systemd on this machine." >&2; exit 1; }
+  if [ -e /etc/systemd/system/baseport.service ]; then
+    echo "baseport.service already exists. Edit it, or remove it and run this again:" >&2
+    echo "  systemctl disable --now baseport && rm /etc/systemd/system/baseport.service" >&2
+    exit 1
+  fi
+
+  NOLOGIN=/usr/sbin/nologin
+  [ -x "\$NOLOGIN" ] || NOLOGIN=/sbin/nologin
+  id baseport >/dev/null 2>&1 || useradd --system --home "$DIR" --shell "\$NOLOGIN" baseport
+  chown -R baseport:baseport "$DIR"
+
+  if ! su -s /bin/sh baseport -c "test -r '$DIR/Baseport'"; then
+    echo "The baseport user cannot read $DIR, so a service there would not start." >&2
+    echo "Install somewhere reachable and try again:" >&2
+    echo "  BASEPORT_DIR=/opt/baseport BASEPORT_BIN=/usr/local/bin curl -sSL $INSTALLER | bash" >&2
+    exit 1
+  fi
+
+  shift
+  ARGS="\$*"
+  [ -n "\$ARGS" ] || ARGS="--urls http://localhost:5263"
+
+  cat > /etc/systemd/system/baseport.service <<UNIT
+[Unit]
+Description=Baseport
+After=network.target
+
+[Service]
+User=baseport
+WorkingDirectory=$DIR
+ExecStart=$DIR/Baseport \$ARGS
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+  systemctl daemon-reload
+  systemctl enable --now baseport >/dev/null 2>&1
+  echo "baseport.service created and started."
+  echo "  ExecStart=$DIR/Baseport \$ARGS"
+  echo
+  echo "  systemctl status baseport"
+  echo "  journalctl -u baseport -f"
+  exit 0
+fi
+
 cd "$DIR" || exit 1
+if [ "\$1" = "logs" ]; then
+  [ -n "\$(ls log/baseport-*.log 2>/dev/null)" ] || { echo "No log files in $DIR/log yet." >&2; exit 1; }
+  exec tail -n "\${2:-200}" -f log/baseport-*.log
+fi
 exec ./Baseport "\$@"
 EOF
 chmod +x "$BIN/baseport"
@@ -68,28 +133,49 @@ chmod +x "$BIN/baseport"
 echo
 if [ "$UPDATE" = "yes" ]; then
   echo "Baseport updated to $TAG in $DIR."
-  echo "Your baseport.db, baseport.key, log/, uploads/, backups/ and appsettings.json were left alone."
+  echo "Kept: baseport.db, baseport.key, log/, uploads/, backups/, appsettings.json."
 else
   echo "Baseport $TAG installed in $DIR."
 fi
 echo
-echo "Start it:"
-echo "  baseport --urls http://localhost:5263"
-echo
-echo "Other commands:"
-echo "  baseport accounts list"
-echo "  baseport providers status"
-echo "  baseport update"
+echo "  baseport --urls http://localhost:5263    start, loopback only"
+echo "  baseport --urls http://0.0.0.0:5263      start, every interface"
+echo "  sudo baseport -d                         run it as a systemd service"
+echo "  baseport help                            everything else"
 echo
 echo "Console: http://localhost:5263/_/admin"
-echo "The first start prints a one-time admin username and password."
+echo "First start prints a one-time admin username and password."
+
+if [ -e "$PWD/Baseport" ] && [ "$PWD" != "$DIR" ]; then
+  echo
+  echo "Warning: another Baseport sits in $PWD. It was not updated."
+  echo "If that is the one you run:"
+  echo "  BASEPORT_DIR=\"$PWD\" curl -sSL $INSTALLER | bash"
+fi
+
+if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files baseport.service >/dev/null 2>&1 \
+   && systemctl cat baseport.service >/dev/null 2>&1; then
+  RUNDIR=$(systemctl show baseport.service -p WorkingDirectory --value 2>/dev/null)
+  echo
+  if [ -n "$RUNDIR" ] && [ "$RUNDIR" != "$DIR" ]; then
+    echo "Warning: the service runs from $RUNDIR. That copy was not updated."
+    echo "  BASEPORT_DIR=\"$RUNDIR\" curl -sSL $INSTALLER | bash"
+  else
+    echo "Restart the service:"
+    echo "  systemctl restart baseport"
+  fi
+elif [ "$(id -u)" = "0" ]; then
+  echo
+  echo "Run it as a service with:  sudo baseport -d"
+  echo "$DIR is not readable by a service account. Install to /opt first:"
+  echo "  BASEPORT_DIR=/opt/baseport BASEPORT_BIN=/usr/local/bin curl -sSL $INSTALLER | bash"
+fi
 
 case ":$PATH:" in
   *":$BIN:"*) ;;
   *)
     echo
-    echo "Note: $BIN is not on your PATH, so \"baseport\" will not resolve yet."
-    echo "Add it with:"
+    echo "$BIN is not on your PATH. Add it:"
     echo "  echo 'export PATH=\"$BIN:\$PATH\"' >> ~/.bashrc && . ~/.bashrc"
     ;;
 esac

@@ -31,6 +31,7 @@ try {
     $archive = Join-Path $tmp $asset
     $sumFile = "$archive.sha256"
 
+    Write-Host "Installing into $dir (override with BASEPORT_DIR)"
     Write-Host "Fetching $asset"
     try { Invoke-WebRequest -Uri "$base/$asset" -OutFile $archive }
     catch { throw "Release $tag has no asset named $asset." }
@@ -58,14 +59,35 @@ try {
 
     $shim = @"
 @echo off
-if /I "%~1"=="update" (
-  set "BASEPORT_REPO=$repo"
-  set "BASEPORT_DIR=$dir"
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr $installer | iex"
-  exit /b %errorlevel%
-)
+if /I "%~1"=="update" goto :bpupdate
+if /I "%~1"=="logs" goto :bplogs
+if /I "%~1"=="-h" goto :bphelp
+if /I "%~1"=="--help" goto :bphelp
 cd /d "%~dp0"
 "%~dp0Baseport.exe" %*
+exit /b %errorlevel%
+
+:bphelp
+cd /d "%~dp0"
+"%~dp0Baseport.exe" help
+exit /b %errorlevel%
+
+:bpupdate
+set "BASEPORT_REPO=$repo"
+set "BASEPORT_DIR=$dir"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr $installer | iex"
+exit /b %errorlevel%
+
+:bplogs
+cd /d "%~dp0"
+if not exist "log\baseport-*.log" (
+  echo No log files in %~dp0log yet.>&2
+  exit /b 1
+)
+set "COUNT=%~2"
+if not defined COUNT set "COUNT=200"
+powershell -NoProfile -Command "Get-Content (Get-ChildItem 'log\baseport-*.log' | Sort-Object LastWriteTime | Select-Object -Last 1).FullName -Tail %COUNT% -Wait"
+exit /b %errorlevel%
 "@
     Set-Content -Path (Join-Path $dir 'baseport.cmd') -Value $shim -Encoding ASCII
 
@@ -83,21 +105,32 @@ finally {
 Write-Host ""
 if ($update) {
     Write-Host "Baseport updated to $tag in $dir."
-    Write-Host "Your baseport.db, baseport.key, log, uploads, backups and appsettings.json were left alone."
+    Write-Host "Kept: baseport.db, baseport.key, log, uploads, backups, appsettings.json."
 } else {
     Write-Host "Baseport $tag installed in $dir."
 }
 Write-Host ""
-Write-Host "Start it:"
-Write-Host "  baseport --urls http://localhost:5263"
-Write-Host ""
-Write-Host "Other commands:"
-Write-Host "  baseport accounts list"
-Write-Host "  baseport providers status"
-Write-Host "  baseport update"
+Write-Host "  baseport --urls http://localhost:5263    start, loopback only"
+Write-Host "  baseport --urls http://0.0.0.0:5263      start, every interface"
+Write-Host "  baseport help                            everything else"
 Write-Host ""
 Write-Host "Console: http://localhost:5263/_/admin"
-Write-Host "The first start prints a one-time admin username and password."
+Write-Host "First start prints a one-time admin username and password."
+
+$here = (Get-Location).Path
+if ((Test-Path (Join-Path $here 'Baseport.exe')) -and ($here -ne $dir)) {
+    Write-Host ""
+    Write-Host "Warning: another Baseport sits in $here. It was not updated."
+    Write-Host "If that is the one you run:"
+    Write-Host "  `$env:BASEPORT_DIR='$here'; iwr $installer | iex"
+}
+
+$task = Get-ScheduledTask -TaskName 'Baseport' -ErrorAction SilentlyContinue
+if ($task) {
+    Write-Host ""
+    Write-Host "Restart the scheduled task:"
+    Write-Host "  Stop-ScheduledTask -TaskName Baseport; Start-ScheduledTask -TaskName Baseport"
+}
 
 if ($addedToPath) {
     Write-Host ""

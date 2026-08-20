@@ -44,17 +44,35 @@ The first start prints an admin username and a one-time password. On Docker, rea
 
 Open `http://localhost:5263/_/admin` and sign in.
 
+`--urls http://localhost:5263` listens on loopback only, so nothing else on your network can reach it. Running on a server? Then you may want to reach from elsewhere, bind to every interface instead using `0.0.0.0` as your hostname.
+
+Baseport speaks plain HTTP. For anything reachable beyond your own machine, put it behind a reverse proxy that terminates TLS. See [Going to production](/docs/going-to-production).
+
 ## The baseport command
 
 The installer puts a small `baseport` wrapper on your PATH. It always runs the binary from its own directory, so the database, logs and uploads stay in one place no matter where you call it from:
 
 ```bash
+baseport help
 baseport accounts list
 baseport providers status
+baseport logs
 baseport update
+sudo baseport -d
 ```
 
+`baseport logs` follows the rolling log files in the install directory, 200 lines back by default. Pass a number for more or less: `baseport logs 50`. Under systemd, `journalctl -u baseport` shows the same output.
+
 `baseport update` downloads the current release and replaces the binary, leaving your data alone.
+
+The installer ignores the directory you run it from. It installs into `~/.baseport` and puts the wrapper in `~/.local/bin`, and it prints both before downloading anything. To choose somewhere else, and you should on a server:
+
+```bash
+BASEPORT_DIR=/opt/baseport BASEPORT_BIN=/usr/local/bin \
+  curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.sh | bash
+```
+
+The wrapper remembers that directory, so `baseport update` returns to it rather than falling back to the default.
 
 On Docker there is no wrapper to install, so define the same command as a shell function. Point it at wherever you keep the compose file:
 
