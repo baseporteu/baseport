@@ -68,13 +68,26 @@ fi
 
 if [ "\$1" = "-d" ]; then
   if [ "\$(id -u)" != "0" ]; then
-    echo "Creating a service needs root. Try:" >&2
+    echo "Controlling the service needs root. Try:" >&2
     echo "  sudo \$0 -d" >&2
+    exit 1
+  fi
+  [ -e /etc/systemd/system/baseport.service ] || { echo "No baseport.service yet. Create it with:" >&2; echo "  sudo \$0 -i" >&2; exit 1; }
+  systemctl restart baseport
+  echo "baseport.service restarted."
+  echo "  systemctl status baseport"
+  exit 0
+fi
+
+if [ "\$1" = "-i" ]; then
+  if [ "\$(id -u)" != "0" ]; then
+    echo "Creating a service needs root. Try:" >&2
+    echo "  sudo \$0 -i" >&2
     exit 1
   fi
   command -v systemctl >/dev/null 2>&1 || { echo "No systemd on this machine." >&2; exit 1; }
   if [ -e /etc/systemd/system/baseport.service ]; then
-    echo "baseport.service already exists. Edit it, or remove it and run this again:" >&2
+    echo "baseport.service already exists. Restart it with 'baseport -d', or remove it and run this again:" >&2
     echo "  systemctl disable --now baseport && rm /etc/systemd/system/baseport.service" >&2
     exit 1
   fi
@@ -137,10 +150,20 @@ if [ "$UPDATE" = "yes" ]; then
 else
   echo "Baseport $TAG installed in $DIR."
 fi
+# A home directory is 0700 on most distros, so a service account could not read the install there.
+case "$DIR" in
+  /root|/root/*|/home/*) SERVICE_OK=no ;;
+  *) SERVICE_OK=yes ;;
+esac
+
 echo
 echo "  baseport --urls http://localhost:5263    start, loopback only"
 echo "  baseport --urls http://0.0.0.0:5263      start, every interface"
-echo "  sudo baseport -d                         run it as a systemd service"
+if [ "$SERVICE_OK" = "yes" ]; then
+  echo "  baseport -i                              install it as a systemd service"
+  echo "  baseport -d                              restart that service"
+fi
+echo "  baseport logs                            follow the log files"
 echo "  baseport help                            everything else"
 echo
 echo "Console: http://localhost:5263/_/admin"
@@ -162,12 +185,14 @@ if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files baseport.se
     echo "  BASEPORT_DIR=\"$RUNDIR\" curl -sSL $INSTALLER | bash"
   else
     echo "Restart the service:"
-    echo "  systemctl restart baseport"
+    echo "  baseport -d"
   fi
-elif [ "$(id -u)" = "0" ]; then
+elif [ "$SERVICE_OK" = "yes" ]; then
   echo
-  echo "Run it as a service with:  sudo baseport -d"
-  echo "$DIR is not readable by a service account. Install to /opt first:"
+  echo "Run it as a service with:  baseport -i"
+else
+  echo
+  echo "To run it as a service, install where a service account can read it:"
   echo "  BASEPORT_DIR=/opt/baseport BASEPORT_BIN=/usr/local/bin curl -sSL $INSTALLER | bash"
 fi
 

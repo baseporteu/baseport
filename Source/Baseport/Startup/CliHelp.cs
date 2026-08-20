@@ -9,12 +9,16 @@ public static class CliHelp
         (Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
          ?? "unknown").Split('+')[0];
 
+    // Handled by the wrapper script the installer writes, never by the binary; listed here so both print one menu.
+    public static readonly string[] WrapperCommands = { "logs", "update", "-i", "-d" };
+
     public static readonly string[] Commands =
     {
         "accounts",
         "providers",
         "logs",
         "update",
+        "-i",
         "-d",
         "version",
         "help"

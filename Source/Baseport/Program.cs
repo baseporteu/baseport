@@ -32,6 +32,13 @@ if (args.Length > 0 && args[0] == "version")
     return 0;
 }
 
+// Reached only when the binary is run directly: the wrapper would have handled these itself and never exec'd us.
+if (args.Length > 0 && CliHelp.WrapperCommands.Contains(args[0]))
+{
+    Console.Error.WriteLine($"'{args[0]}' comes from the baseport wrapper script, not the binary. Run: baseport {args[0]}");
+    return 1;
+}
+
 // Every host option is a switch, so a bare first word is a mistyped verb rather than an argument for the server.
 if (args.Length > 0 && !args[0].StartsWith('-')) return CliHelp.Invalid();
 

@@ -58,6 +58,7 @@ baseport accounts list
 baseport providers status
 baseport logs
 baseport update
+sudo baseport -i
 sudo baseport -d
 ```
 

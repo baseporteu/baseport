@@ -42,28 +42,28 @@ If you want the console off the public port altogether, give it its own address 
 
 ## Running it as a service
 
-Install to `/opt/baseport`, then let `-d` write the unit:
+Install to `/opt/baseport`, then let `-i` write the service:
 
 ```bash
 BASEPORT_DIR=/opt/baseport BASEPORT_BIN=/usr/local/bin \
   curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.sh | bash
 
-sudo /usr/local/bin/baseport -d
+sudo /usr/local/bin/baseport -i
 ```
 
-`-d` needs root, creates a `baseport` system user, hands it the directory, writes `/etc/systemd/system/baseport.service`, then enables and starts it. Pass anything else through and it lands in `ExecStart`:
+Parameter `-i` requires root permissions as it creates a `baseport` system user and configures the services:
 
 ```bash
-sudo /usr/local/bin/baseport -d --urls http://0.0.0.0:5263
+sudo /usr/local/bin/baseport -i --urls http://0.0.0.0:5263
 ```
 
 Use the full path with `sudo`. Its `secure_path` does not include `~/.local/bin`, so a wrapper installed there will not resolve.
 
-`-d` refuses rather than producing a unit that cannot start. It stops if a `baseport.service` already exists, if there is no systemd, or if the service account cannot read the install directory. That last one is why `/opt` and not `~/.baseport`: `/root` is mode 0700, so a `User=baseport` service cannot read anything inside it.
+`-i` refuses rather than producing a unit that cannot start. It stops if a `baseport.service` already exists, if there is no systemd, or if the service account cannot read the install directory. That last one is why `/opt` and not `~/.baseport`: `/root` is mode 0700, so a `User=baseport` service cannot read anything inside it.
 
 `/opt/baseport` holds the binary and the data together, because Baseport writes `baseport.db`, `log/` and `uploads/` relative to `WorkingDirectory`. Splitting the binary into `/opt` and data into `/var/lib` would need a second path the application does not have a concept of.
 
-After `baseport update`, restart the service to pick up the new binary.
+After `baseport update`, run `sudo baseport -d` to restart the service on the new binary.
 
 :::warning
 `baseport update` only updates the directory the wrapper was installed with. If you installed as root to `/root/.baseport` but your service runs from `/opt/baseport`, you will update a copy nothing is running. The installer warns when it detects this, and you can point it at the right place with `BASEPORT_DIR`.
