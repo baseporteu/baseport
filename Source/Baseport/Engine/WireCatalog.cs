@@ -59,7 +59,7 @@ public static class WireCatalog
     {
         foreach (var table in tables)
         {
-            var projection = new StringBuilder($"SELECT r.Id AS {Quote("id")}, r.CreatedAt AS {Quote("created_at")}");
+            var projection = new StringBuilder($"SELECT r.Id AS {Quote("id")}, r.CreatedAt AS {Quote("created_at")}, r.UpdatedAt AS {Quote("updated_at")}");
             foreach (var column in table.Columns)
                 projection.Append($", json_extract(r.JsonData, '$.{column.Name}') AS {Quote(column.Name)}");
             projection.Append($" FROM main._records r WHERE r.TableId = {Literal(table.Id)}");
@@ -84,7 +84,7 @@ public static class WireCatalog
         Fill(conn, "pg_catalog", "pg_class",
             "oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relkind, relnatts, relchecks, relhasrules, relhastriggers, relhassubclass, relrowsecurity, relforcerowsecurity, relispopulated, relreplident, relispartition, relacl, reloptions, relpartbound",
             tables.Select(t =>
-                $"{t.Oid}, {Literal(t.Name)}, 2200, 0, 0, 10, 0, {t.Oid}, 0, 1, {t.Rows}, 0, 0, 0, 0, 'p', 'r', {t.Columns.Count + 2}, 0, 0, 0, 0, 0, 0, 1, 'd', 0, NULL, NULL, NULL"));
+                $"{t.Oid}, {Literal(t.Name)}, 2200, 0, 0, 10, 0, {t.Oid}, 0, 1, {t.Rows}, 0, 0, 0, 0, 'p', 'r', {t.Columns.Count + SystemColumns.Length}, 0, 0, 0, 0, 0, 0, 1, 'd', 0, NULL, NULL, NULL"));
 
         Fill(conn, "pg_catalog", "pg_attribute",
             "attrelid, attname, atttypid, attnum, attnotnull, atttypmod, attisdropped, attlen, attndims, atthasdef, attidentity, attgenerated, attcollation, attalign, attstorage, attacl, attoptions, attfdwoptions, atthasmissing, attinhcount, attstattarget",
@@ -178,7 +178,7 @@ public static class WireCatalog
         Fill(conn, "sys", "tables",
             "name, object_id, principal_id, schema_id, parent_object_id, type, type_desc, create_date, modify_date, is_ms_shipped, is_published, is_schema_published, lob_data_space_id, filestream_data_space_id, max_column_id_used, lock_on_bulk_load, uses_ansi_nulls, is_replicated, has_replication_filter, is_merge_published, is_sync_tran_subscribed, has_unchecked_assembly_data, text_in_row_limit, large_value_types_out_of_row, is_tracked_by_cdc, lock_escalation, lock_escalation_desc, is_filetable, is_memory_optimized, durability, durability_desc, temporal_type, temporal_type_desc, history_table_id, is_external",
             tables.Select(t =>
-                $"{Literal(t.Name)}, {t.Oid}, 1, 1, 0, 'U ', 'USER_TABLE', '2020-01-01 00:00:00', '2020-01-01 00:00:00', 0, 0, 0, 0, 0, {t.Columns.Count + 2}, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'TABLE', 0, 0, 0, 'SCHEMA_AND_DATA', 0, 'NON_TEMPORAL_TABLE', NULL, 0"));
+                $"{Literal(t.Name)}, {t.Oid}, 1, 1, 0, 'U ', 'USER_TABLE', '2020-01-01 00:00:00', '2020-01-01 00:00:00', 0, 0, 0, 0, 0, {t.Columns.Count + SystemColumns.Length}, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'TABLE', 0, 0, 0, 'SCHEMA_AND_DATA', 0, 'NON_TEMPORAL_TABLE', NULL, 0"));
 
         Fill(conn, "sys", "columns",
             "object_id, name, column_id, system_type_id, user_type_id, max_length, precision, scale, collation_name, is_nullable, is_ansi_padded, is_rowguidcol, is_identity, is_computed, is_filestream, is_replicated, is_non_sql_subscribed, is_merge_published, is_dts_replicated, is_xml_document, xml_collection_id, default_object_id, rule_object_id, is_sparse, is_column_set, generated_always_type, generated_always_type_desc, is_hidden, is_masked",
@@ -234,9 +234,14 @@ public static class WireCatalog
         Empty(conn, "INFORMATION_SCHEMA", "ROUTINES", "SPECIFIC_CATALOG, SPECIFIC_SCHEMA, SPECIFIC_NAME, ROUTINE_CATALOG, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DATA_TYPE");
     }
 
-    // id and created_at are real columns of the view, so they belong in the catalog beside the author's fields.
+    // id, created_at and updated_at are real columns of the view, so they belong in the catalog beside the author's fields.
     private static IEnumerable<CatalogColumn> Attributes(CatalogTable table) =>
-        new[] { new CatalogColumn("id", "text", true), new CatalogColumn("created_at", "datetime", true) }.Concat(table.Columns);
+        SystemColumns.Concat(table.Columns);
+
+    private static readonly CatalogColumn[] SystemColumns =
+    [
+        new("id", "text", true), new("created_at", "datetime", true), new("updated_at", "datetime", true)
+    ];
 
     private static readonly (string Name, int Oid, string Category)[] PostgresTypes =
     [

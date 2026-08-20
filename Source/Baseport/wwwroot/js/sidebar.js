@@ -128,8 +128,6 @@ function renderSectionNav() {
     });
 }
 
-// A list long enough to scroll past is long enough to need finding rather than scanning.
-const SUBBAR_FILTER_FROM = 8;
 const subbarFilters = {};
 
 function renderSidebar(section) {
@@ -148,14 +146,8 @@ function renderSidebar(section) {
     const term = (subbarFilters[section] || '').trim().toLowerCase();
     const matching = term ? rest.filter((i) => i.label.toLowerCase().includes(term)) : rest;
 
-    const filtered = rest.length >= SUBBAR_FILTER_FROM;
-    // The filter's own box already divides the list from the root above it; a rule as well is two lines doing one job.
-    if (roots.length && rest.length && !filtered) bar.append(ui.el('div', 'subbar-sep'));
-
-    if (filtered) bar.append(subbarFilter(section, spec.group));
-    else if (spec.group && rest.length) bar.append(ui.el('div', 'subbar-group', {
-        textContent: spec.group
-    }));
+    // Every section that names a group is a list of objects an author accumulates, so all three get the same box rather than one of them growing it at eight items and the others never.
+    if (spec.group && rest.length) bar.append(subbarFilter(section, spec.group));
 
     matching.forEach((item) => bar.append(sidebarItem(item)));
 
@@ -170,8 +162,10 @@ function subbarFilter(section, group) {
     const input = ui.el('input', 'input input-sm', {
         type: 'search',
         value: subbarFilters[section] || '',
-        placeholder: `Filter ${(group || 'items').toLowerCase()}`,
+        placeholder: 'Filter…',
     });
+    // The placeholder is generic because the list it sits above is already named by the section; a screen reader has no such context.
+    input.setAttribute('aria-label', `Filter ${(group || 'items').toLowerCase()}`);
     input.oninput = () => {
         subbarFilters[section] = input.value;
         renderSidebar(section);

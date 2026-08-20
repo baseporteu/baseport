@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace Baseport.Client;
 
-public sealed record BaseportRecord(string Id, DateTime CreatedAt, JsonElement Data)
+public sealed record BaseportRecord(string Id, DateTime CreatedAt, DateTime UpdatedAt, JsonElement Data)
 {
     public T? As<T>() => Data.Deserialize<T>(BaseportClient.Json);
 }
@@ -146,5 +146,6 @@ internal sealed class RecordApi : IRecordApi
     private static BaseportRecord ReadRecord(JsonElement element) => new(
         element.GetProperty("id").GetString()!,
         element.GetProperty("createdAt").GetDateTime(),
+        element.GetProperty("updatedAt").GetDateTime(),
         element.TryGetProperty("data", out var data) ? data.Clone() : default);
 }

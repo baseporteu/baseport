@@ -395,6 +395,12 @@ function fieldLimits(f) {
     return '';
 }
 
+// Added to every record by the server, so they are listed but never editable.
+const SYSTEM_COLUMNS = [
+    ['Created', 'System column, set once when the record is written.', 'Date.now()'],
+    ['Modified', 'System column, restamped on every change.', 'Date.now()'],
+];
+
 function renderFields(fields) {
     const tbody = document.getElementById('fieldsList');
     const empty = document.getElementById('fieldsEmpty');
@@ -426,14 +432,16 @@ function renderFields(fields) {
         tbody.appendChild(tr);
     });
     if (fields.length > 0) {
-        const sys = document.createElement('tr');
-        sys.className = 'field-row system-field';
-        sys.innerHTML = `<td class="drag-cell" aria-hidden="true"></td>
-        <td><strong>Created</strong><div class="muted">System column, added to every record automatically.</div></td>
+        SYSTEM_COLUMNS.forEach(([name, note, expression]) => {
+            const sys = document.createElement('tr');
+            sys.className = 'field-row system-field';
+            sys.innerHTML = `<td class="drag-cell" aria-hidden="true"></td>
+        <td><strong>${name}</strong><div class="muted">${note}</div></td>
         <td><span class="type-cell">${typeIcon('datetime')}<span class="type-label">Timestamp</span></span></td>
-        <td><code>Date.now()</code></td>
+        <td><code>${expression}</code></td>
         <td></td>`;
-        tbody.appendChild(sys);
+            tbody.appendChild(sys);
+        });
     }
 }
 

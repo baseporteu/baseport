@@ -77,6 +77,7 @@ public static class ApiDtos
         {
             ["id"] = r.Id,
             ["createdAt"] = JsonValue.Create(r.CreatedAt),
+            ["updatedAt"] = JsonValue.Create(r.UpdatedAt),
             ["data"] = data
         };
         if (links is not null) dto["links"] = links;

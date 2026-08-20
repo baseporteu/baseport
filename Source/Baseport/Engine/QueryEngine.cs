@@ -49,7 +49,7 @@ public static class QueryEngine
         // One json_extract per identifier field; LIKE without wildcards is an exact but case-insensitive comparison in SQLite, which is what a human-typed identifier needs.
         var conditions = string.Join(" OR ", matchFields.Select(f => $"{Column(f)} LIKE {{1}} ESCAPE '\\'"));
         var sql = $$"""
-            SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt"
+            SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt", r."UpdatedAt"
             FROM "_records" r
             WHERE r."TableId" = {0} AND ({{conditions}})
             ORDER BY r."CreatedAt" DESC
@@ -123,7 +123,7 @@ public static class QueryEngine
         var direction = sortDescending ? "DESC" : "ASC";
 
         var pageSql = $$"""
-            SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt"
+            SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt", r."UpdatedAt"
             FROM "_records" r
             WHERE {{where}}
             ORDER BY {{order}} {{direction}}, r."Id" DESC

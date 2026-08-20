@@ -90,6 +90,15 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor
                 _ => null
             };
             if (action is null) continue;
+
+            // Stamped here rather than in an endpoint for the same reason the events are: this is the one place every write passes. Assigning through the entry marks the column modified, which a plain property set after change detection would not.
+            // An insert that never set CreatedAt would otherwise be stamped as year 1, which is worse than a timestamp a millisecond late.
+            if (entry.State is EntityState.Added or EntityState.Modified)
+                entry.Property(r => r.UpdatedAt).CurrentValue =
+                    entry.State is EntityState.Added && entry.Entity.CreatedAt != default
+                        ? entry.Entity.CreatedAt
+                        : DateTime.UtcNow;
+
             pending.Add(new RecordEvent(action, entry.Entity.TableId, entry.Entity.Id,
                 action == "delete" ? null : entry.Entity.JsonData));
         }

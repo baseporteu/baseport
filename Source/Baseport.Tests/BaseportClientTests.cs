@@ -89,7 +89,7 @@ public class BaseportClientTests
         await client.LoginAsync("jane", "supersecret1", TestContext.Current.CancellationToken);
 
         handler.Reply(HttpStatusCode.OK, TokenResponse(Token("user1", fresh), "refresh-2", fresh));
-        handler.Reply(HttpStatusCode.OK, """{"id":"rec1","createdAt":"2026-08-13T10:00:00Z","data":{"title":"x"}}""");
+        handler.Reply(HttpStatusCode.OK, """{"id":"rec1","createdAt":"2026-08-13T10:00:00Z","updatedAt":"2026-08-13T10:00:00Z","data":{"title":"x"}}""");
 
         var record = await client.Records("notes").ReadAsync("rec1", TestContext.Current.CancellationToken);
 
@@ -105,7 +105,7 @@ public class BaseportClientTests
         var (client, handler) = Build();
         client.UseApiToken("static-token");
         handler.Reply(HttpStatusCode.OK,
-            """{"rows":[{"id":"rec1","createdAt":"2026-08-13T10:00:00Z","data":{"title":"x"}}],"page":2,"pageSize":5,"total":6,"totalPages":2,"hasMore":false}""");
+            """{"rows":[{"id":"rec1","createdAt":"2026-08-13T10:00:00Z","updatedAt":"2026-08-13T10:00:00Z","data":{"title":"x"}}],"page":2,"pageSize":5,"total":6,"totalPages":2,"hasMore":false}""");
 
         var page = await client.Records("notes").ListAsync("term", "title", "asc", 2, 5, TestContext.Current.CancellationToken);
 

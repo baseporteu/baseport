@@ -84,6 +84,7 @@ public static class FragmentEndpoints
                 foreach (var f in fields)
                     html.Append(Html.Cell(Html.DisplayValue(data[f.Name])));
                 html.Append(Html.Cell(record.CreatedAt.ToLocalTime(), "muted"))
+                    .Append(Html.Cell(record.UpdatedAt.ToLocalTime(), "muted"))
                     .Append(Html.RawCell(Html.Button("Delete", "deleteRecord", record.Id)))
                     .Append("</tr>");
             }

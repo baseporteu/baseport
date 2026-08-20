@@ -325,12 +325,13 @@ public static class OpenApiSpec
     private static JsonObject RecordResponse() => new()
     {
         ["type"] = "object",
-        ["description"] = "One record: its identifier, when it was created, and the stored values.",
+        ["description"] = "One record: its identifier, when it was created and last changed, and the stored values.",
         // These names must match ApiDtos.RecordDto exactly.
         ["properties"] = new JsonObject
         {
             ["id"] = new JsonObject { ["type"] = "string", ["description"] = "Unguessable record identifier." },
             ["createdAt"] = new JsonObject { ["type"] = "string", ["format"] = "date-time" },
+            ["updatedAt"] = new JsonObject { ["type"] = "string", ["format"] = "date-time", ["description"] = "Equal to createdAt until the record is first changed." },
             ["data"] = new JsonObject { ["type"] = "object", ["additionalProperties"] = true },
             ["links"] = new JsonObject
             {
@@ -345,7 +346,7 @@ public static class OpenApiSpec
                 ["additionalProperties"] = new JsonObject { ["type"] = "object" }
             }
         },
-        ["required"] = new JsonArray((JsonNode)"id", (JsonNode)"createdAt", (JsonNode)"data", (JsonNode)"links")
+        ["required"] = new JsonArray((JsonNode)"id", (JsonNode)"createdAt", (JsonNode)"updatedAt", (JsonNode)"data", (JsonNode)"links")
     };
 
     // Reference to the shared Error schema, the one shape every non-2xx response speaks.

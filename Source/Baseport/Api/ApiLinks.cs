@@ -123,7 +123,7 @@ public static class ApiLinks
         where += $" AND r.\"Id\" IN ({string.Join(", ", slots)})";
 
         var sql = $"""
-            SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt"
+            SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt", r."UpdatedAt"
             FROM "_records" r WHERE {where}
             """;
         return db.Records.FromSqlRaw(sql, args.ToArray()).AsNoTracking().ToListAsync(token);

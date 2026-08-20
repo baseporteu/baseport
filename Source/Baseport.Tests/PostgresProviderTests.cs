@@ -161,7 +161,7 @@ public class PostgresProviderTests : IAsyncLifetime
         using var client = await ConnectAsync();
         var (_, rows) = await RunQueryAsync(client,
             "SELECT column_name FROM information_schema.columns WHERE table_name = 'Orders' ORDER BY ordinal_position");
-        Assert.Equal(new[] { "id", "created_at" }, rows.Select(r => r[0]));
+        Assert.Equal(new[] { "id", "created_at", "updated_at" }, rows.Select(r => r[0]));
     }
 
     // dbeaver/jdbc probe objects the catalog does not emulate; those must still answer empty rather than aborting the connection with a raw "SQLite Error 1: no such table"

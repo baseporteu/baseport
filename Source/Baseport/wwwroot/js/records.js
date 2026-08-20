@@ -29,7 +29,7 @@ async function loadRecords(page) {
     const table = currentTables.find((t) => t.id === currentTablePublicId);
     const columns = (table ? table.fields : []).filter((f) => !f.isHidden);
     document.getElementById('recordsHead').innerHTML =
-        columns.map((f) => `<th>${escapeHtml(f.label || f.name)}</th>`).join('') + '<th>Created</th><th></th>';
+        columns.map((f) => `<th>${escapeHtml(f.label || f.name)}</th>`).join('') + '<th>Created</th><th>Modified</th><th></th>';
 
     // Rows arrive rendered; the browser assigns one string.
     const meta = await ui.fragment(

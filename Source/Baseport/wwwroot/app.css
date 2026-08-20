@@ -349,18 +349,6 @@ body {
     box-shadow: 0 0 0 2px hsl(var(--ring) / .35);
 }
 
-.subbar-sep {
-    margin: .5rem .625rem;
-    border-bottom: 1px solid hsl(var(--border));
-}
-
-.subbar-group {
-    padding: 0 .625rem .25rem;
-    font-size: .75rem;
-    font-weight: 500;
-    color: hsl(var(--muted-foreground));
-}
-
 .subbar-filter {
     padding: .375rem .125rem .5rem;
 }
