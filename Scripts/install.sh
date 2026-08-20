@@ -2,8 +2,14 @@
 set -euo pipefail
 
 REPO="${BASEPORT_REPO:-baseporteu/baseport}"
-DIR="${BASEPORT_DIR:-$HOME/.baseport}"
-BIN="${BASEPORT_BIN:-$HOME/.local/bin}"
+# Root installs exist to be services, so they default where a service account can read: /root is 0700, /opt is not.
+if [ "$(id -u)" = "0" ]; then
+  DIR="${BASEPORT_DIR:-/opt/baseport}"
+  BIN="${BASEPORT_BIN:-/usr/local/bin}"
+else
+  DIR="${BASEPORT_DIR:-$HOME/.baseport}"
+  BIN="${BASEPORT_BIN:-$HOME/.local/bin}"
+fi
 API="https://api.github.com/repos/$REPO/releases"
 INSTALLER="https://raw.githubusercontent.com/$REPO/main/Scripts/install.sh"
 
@@ -99,8 +105,8 @@ if [ "\$1" = "-i" ]; then
 
   if ! su -s /bin/sh baseport -c "test -r '$DIR/Baseport'"; then
     echo "The baseport user cannot read $DIR, so a service there would not start." >&2
-    echo "Install somewhere reachable and try again:" >&2
-    echo "  BASEPORT_DIR=/opt/baseport BASEPORT_BIN=/usr/local/bin curl -sSL $INSTALLER | bash" >&2
+    echo "Reinstall as root, which lands in /opt/baseport, and try again:" >&2
+    echo "  curl -sSL $INSTALLER | sudo bash" >&2
     exit 1
   fi
 
@@ -190,10 +196,6 @@ if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files baseport.se
 elif [ "$SERVICE_OK" = "yes" ]; then
   echo
   echo "Run it as a service with:  baseport -i"
-else
-  echo
-  echo "To run it as a service, install where a service account can read it:"
-  echo "  BASEPORT_DIR=/opt/baseport BASEPORT_BIN=/usr/local/bin curl -sSL $INSTALLER | bash"
 fi
 
 case ":$PATH:" in

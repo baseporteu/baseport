@@ -66,11 +66,11 @@ sudo baseport -d
 
 `baseport update` downloads the current release and replaces the binary, leaving your data alone.
 
-The installer ignores the directory you run it from. It installs into `~/.baseport` and puts the wrapper in `~/.local/bin`, and it prints both before downloading anything. To choose somewhere else, and you should on a server:
+The installer ignores the directory you run it from. Run as yourself it installs into `~/.baseport` with the wrapper in `~/.local/bin`; run as root it uses `/opt/baseport` and `/usr/local/bin`, which is what a service needs. It prints both before downloading anything. To choose somewhere else:
 
 ```bash
-BASEPORT_DIR=/opt/baseport BASEPORT_BIN=/usr/local/bin \
-  curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.sh | bash
+BASEPORT_DIR=/srv/baseport BASEPORT_BIN=/usr/local/bin \
+  curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.sh | sudo bash
 ```
 
 The wrapper remembers that directory, so `baseport update` returns to it rather than falling back to the default.
