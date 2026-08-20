@@ -33,7 +33,7 @@ public static class SqlEngine
     }
 
     // Runs a validated query and hands back the grid. configure runs against the connection before the query, for dialect compatibility functions a wire provider needs.
-    public static async Task<Result> ReadAsync(AppDbContext db, string sql, Action<SqliteConnection>? configure = null)
+    public static async Task<Result> ReadAsync(AppDbContext db, string sql, Action<SqliteConnection>? configure = null, bool restrict = true)
     {
         var owned = db.Database.GetDbConnection();
         var source = new SqliteConnectionStringBuilder(owned.ConnectionString);
@@ -62,8 +62,8 @@ public static class SqlEngine
                 // the owned connection belongs to the app and must stay writable; the ones opened here are ours to lock down before the caller's statement runs
                 if (!inMemory) Pragma(conn, "query_only = 1");
             }
-            // The wire providers (configure is not null) run an untrusted, api-token-authenticated statement, so it is confined to the projected catalog: no direct read of the system tables or the raw record store. The admin console and saved queries pass no configure and stay unrestricted.
-            if (configure is not null && conn is SqliteConnection guarded) WireCatalog.Restrict(guarded);
+            // The wire providers run an untrusted, api-token-authenticated statement, so it is confined to the projected catalog: no direct read of the system tables or the raw record store. The admin console and saved queries project the same row views but pass restrict: false, so they keep reading the storage schema too.
+            if (restrict && configure is not null && conn is SqliteConnection guarded) WireCatalog.Restrict(guarded);
             
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql.TrimEnd().TrimEnd(';');

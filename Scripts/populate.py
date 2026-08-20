@@ -599,7 +599,9 @@ def fill(db_path, counts, products, customers, orders, lines):
 
 
 def seed_queries():
-    """A worked example for the SQL console: it joins on names, so it survives a reseed."""
+    """Two worked examples for the SQL console: the same answer against the raw
+    record store and against the projected table views, so the pair shows what
+    the views save."""
     existing = {q["name"] for q in call("GET", "/api/_admin/queries")[0]}
     if "Revenue by country" in existing:
         print("  Queries: already present, skipping")
@@ -616,7 +618,18 @@ GROUP BY Country
 ORDER BY Revenue DESC"""
 
     call("POST", "/api/_admin/queries", {"name": "Revenue by country", "sql": sql})
-    print("  Queries: 1 saved query")
+
+    projected = """SELECT
+    c.Country,
+    COUNT(DISTINCT o.id) As Orders,
+    ROUND(SUM(o.Total), 2) As Revenue
+FROM Orders o
+INNER JOIN Customers c ON c.id = o.Customer
+GROUP BY c.Country
+ORDER BY Revenue DESC"""
+
+    call("POST", "/api/_admin/queries", {"name": "Revenue by country (table views)", "sql": projected})
+    print("  Queries: 2 saved queries")
 
 
 def seed_portway():

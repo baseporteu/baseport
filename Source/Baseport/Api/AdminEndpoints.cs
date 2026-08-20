@@ -510,7 +510,7 @@ public static class AdminEndpoints
             var validationError = SqlEngine.Validate(sql);
             if (validationError != null)
                 return Results.BadRequest(new { errors = new[] { validationError } });
-            var run = await SqlEngine.ReadAsync(db, sql);
+            var run = await SqlEngine.ReadAsync(db, sql, WireCatalog.Views, restrict: false);
             return run.Error is not null
                 ? Results.BadRequest(new { errors = new[] { run.Error } })
                 : Results.Ok(new { columns = run.Columns, rows = run.Rows, truncated = run.Truncated, rowCount = run.Rows.Count });
@@ -574,7 +574,7 @@ public static class AdminEndpoints
             var validationError = SqlEngine.Validate(query.Sql);
             if (validationError != null)
                 return Results.BadRequest(new { errors = new[] { validationError } });
-            var run = await SqlEngine.ReadAsync(db, query.Sql);
+            var run = await SqlEngine.ReadAsync(db, query.Sql, WireCatalog.Views, restrict: false);
             if (run.Error is not null) return Results.BadRequest(new { errors = new[] { run.Error } });
 
             query.LastExecutedAt = DateTime.UtcNow;

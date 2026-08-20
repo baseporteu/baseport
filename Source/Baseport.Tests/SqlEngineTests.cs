@@ -40,6 +40,26 @@ public class SqlEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task The_console_selects_author_tables_by_name_without_touching_the_record_store()
+    {
+        var tableId = Ids.NewShortId(12);
+        _db.Tables.Add(new TableDefinition { Id = tableId, Name = "Orders" });
+        _db.Fields.Add(new FieldDefinition { Id = Ids.NewShortId(12), TableId = tableId, Name = "Total", DataType = "number" });
+        _db.Records.Add(new Record { Id = Ids.NewShortId(12), TableId = tableId, JsonData = """{"Total":10}""" });
+        _db.Records.Add(new Record { Id = Ids.NewShortId(12), TableId = tableId, JsonData = """{"Total":32}""" });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await SqlEngine.ReadAsync(_db, "SELECT SUM(Total) AS Revenue FROM Orders", WireCatalog.Views, restrict: false);
+
+        Assert.Null(result.Error);
+        Assert.Equal("42", Assert.Single(result.Rows)[0]);
+
+        var storage = await SqlEngine.ReadAsync(_db, "SELECT COUNT(*) FROM _records", WireCatalog.Views, restrict: false);
+        Assert.Null(storage.Error);
+        Assert.Equal("2", Assert.Single(storage.Rows)[0]);
+    }
+
+    [Fact]
     public async Task A_broken_query_reports_the_error_instead_of_throwing()
     {
         var result = await SqlEngine.ReadAsync(_db, "SELECT NoSuchColumn FROM _tables");

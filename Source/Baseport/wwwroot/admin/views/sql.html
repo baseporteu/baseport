@@ -2,7 +2,7 @@
                 <div class='page-header'>
                     <div>
                         <h1>SQL Console</h1>
-                        <p class='page-sub'>Run your read-only queries against your data store.</p>
+                        <p class='page-sub'>Run your read-only queries against your data store. Every table is selectable by name, with its fields as columns.</p>
                     </div>
                     <div class='page-actions'>
                         <button class='icon-btn' onclick='newQuery()' title='New query'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 5v14M5 12h14'/></svg></button>
@@ -24,7 +24,7 @@
                             class='input textarea sql-editor' 
                             spellcheck='false' 
                             rows="5"
-                            placeholder='SELECT Name, COUNT(f.Id) AS FieldCount FROM _tables t LEFT JOIN _fields f ON f.TableId = t.Id GROUP BY t.Id ORDER BY t.Name;'>
+                            placeholder='SELECT c.Country, COUNT(*) AS Orders, ROUND(SUM(o.Total), 2) AS Revenue FROM Orders o JOIN Customers c ON c.id = o.Customer GROUP BY c.Country ORDER BY Revenue DESC;'>
                         </textarea>
                         <div id='sqlResult' class='sql-result hidden'></div>
                         <div id='sqlNoData' class='sql-nodata hidden'>No data</div>
