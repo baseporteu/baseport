@@ -4,6 +4,7 @@
   "lang": "en",
   "theme": "default",
   "brand": "Baseport",
+  "brandImage": "/assets/baseporteu.png",
   "favicon": "\ud83d\udedf",
   "lastUpdated": true,
   "footer": "\u00a9 {year} Baseport \u00b7 Licensed under [EUPL 1.2](https://github.com/baseporteu/baseport/blob/main/LICENSE). Built with [Bark](https://github.com/melosso/bark/).",
@@ -14,7 +15,7 @@
   "head": [],
   "topNav": [
     {
-      "text": "Home",
+      "text": "Start",
       "link": "/"
     },
     {
