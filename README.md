@@ -12,7 +12,7 @@
 
 Meet Baseport: a .NET-first, single-binary alternative to Firebase designed to deliver sub-millisecond performance. It lets you define your tables in the console to instantly get a typed REST API, live updates, and an admin UI without writing any boilerplate. Point your mobile, web, or desktop app at it and build the rest. 
 
-Built on .NET 11, Baseport runs as one process over one SQLite file. There is no database server to run alongside it, allowing for blazing-fast product development. Copy the binary to a server, back up the file. That is all it takes for your deployment. Reads stay in single-digit milliseconds at a quarter of a million rows.
+Built on .NET 11, Baseport runs as one process over one SQLite database file. There is no database server to run alongside it, allowing for blazing-fast product development. Copy the binary to a server, back up the file. That is all it takes for your deployment. Reads stay in single-digit milliseconds at a quarter of a million rows.
 
 > **Pre-alpha.** Not yet v0.0.1. The database format and the API surface both still move between commits. Do not put production data in it.
 
