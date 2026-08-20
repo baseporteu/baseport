@@ -78,16 +78,31 @@ public class PostgresProviderTests : IAsyncLifetime
     [Fact]
     public async Task A_query_over_the_wire_matches_SqlEngine_run_directly()
     {
+        const string sql = "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'";
         using var client = await ConnectAsync();
-        var (columns, rows) = await RunQueryAsync(client, "SELECT Name FROM _tables");
+        var (columns, rows) = await RunQueryAsync(client, sql);
 
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var direct = await SqlEngine.ReadAsync(db, "SELECT Name FROM _tables");
+        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Postgres));
 
         Assert.Equal(direct.Columns, columns);
         Assert.Equal(direct.Rows, rows);
         Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
+    }
+
+    // The wire is an api-token surface, so it must reach only the projected author tables, never the storage schema behind them: _users holds password hashes and _settings the jwt signing key. A direct read of the main schema is refused by the connection authorizer.
+    [Theory]
+    [InlineData("SELECT authsigningkey FROM _settings")]
+    [InlineData("SELECT passwordhash FROM _users")]
+    [InlineData("SELECT * FROM _records")]
+    [InlineData("SELECT name FROM sqlite_master")]
+    public async Task A_read_of_a_system_table_is_refused(string sql)
+    {
+        using var client = await ConnectAsync();
+        var stream = client.GetStream();
+        await SendQueryAsync(stream, sql);
+        Assert.Equal('E', (await ReadMessageAsync(stream))!.Value.Type);
     }
 
     [Fact]
@@ -112,15 +127,15 @@ public class PostgresProviderTests : IAsyncLifetime
         using var client = await ConnectAsync();
 
         var stream = client.GetStream();
-        await SendQueryAsync(stream, "SELECT NoSuchColumn FROM _tables");
+        await SendQueryAsync(stream, "SELECT NoSuchColumn FROM \"Orders\"");
         var errorMsg = await ReadMessageAsync(stream);
         Assert.Equal('E', errorMsg!.Value.Type);
         var ready = await ReadMessageAsync(stream);
         Assert.Equal('Z', ready!.Value.Type);
 
         // the same connection must still answer a subsequent, valid query
-        var (columns, rows) = await RunQueryAsync(client, "SELECT Name FROM _tables");
-        Assert.Equal(new[] { "Name" }, columns);
+        var (columns, rows) = await RunQueryAsync(client, "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'");
+        Assert.Equal(new[] { "tablename" }, columns);
         Assert.Single(rows);
     }
 

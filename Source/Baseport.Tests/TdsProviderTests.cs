@@ -78,16 +78,32 @@ public class TdsProviderTests : IAsyncLifetime
     [Fact]
     public async Task A_query_over_the_wire_matches_SqlEngine_run_directly()
     {
+        const string sql = "SELECT name FROM sys.tables";
         using var client = await ConnectAsync(Token);
-        var (columns, rows) = await RunBatchAsync(client, "SELECT Name FROM _tables");
+        var (columns, rows) = await RunBatchAsync(client, sql);
 
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var direct = await SqlEngine.ReadAsync(db, "SELECT Name FROM _tables");
+        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Tds));
 
         Assert.Equal(direct.Columns, columns);
         Assert.Equal(direct.Rows, rows);
         Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
+    }
+
+    // The wire is an api-token surface, so it must reach only the projected author tables, never the storage schema behind them: _users holds password hashes and _settings the jwt signing key. A direct read of the main schema is refused by the connection authorizer.
+    [Theory]
+    [InlineData("SELECT authsigningkey FROM _settings")]
+    [InlineData("SELECT passwordhash FROM _users")]
+    [InlineData("SELECT * FROM _records")]
+    [InlineData("SELECT name FROM sqlite_master")]
+    public async Task A_read_of_a_system_table_is_refused(string sql)
+    {
+        using var client = await ConnectAsync(Token);
+        var stream = client.GetStream();
+        await WriteTdsMessageAsync(stream, 0x01, Encoding.Unicode.GetBytes(sql));
+        var (_, payload) = await ReadTdsMessageAsync(stream);
+        Assert.Equal(0xAA, payload[0]); // error token
     }
 
     [Fact]
@@ -111,13 +127,13 @@ public class TdsProviderTests : IAsyncLifetime
         using var client = await ConnectAsync(Token);
         var stream = client.GetStream();
 
-        await WriteTdsMessageAsync(stream, 0x01, Encoding.Unicode.GetBytes("SELECT NoSuchColumn FROM _tables"));
+        await WriteTdsMessageAsync(stream, 0x01, Encoding.Unicode.GetBytes("SELECT NoSuchColumn FROM Orders"));
         var (_, errorPayload) = await ReadTdsMessageAsync(stream);
         Assert.Equal(0xAA, errorPayload[0]); // error token
 
         // the same connection must still answer a subsequent, valid batch
-        var (columns, rows) = await RunBatchAsync(client, "SELECT Name FROM _tables");
-        Assert.Equal(["Name"], columns);
+        var (columns, rows) = await RunBatchAsync(client, "SELECT name FROM sys.tables");
+        Assert.Equal(["name"], columns);
         Assert.Single(rows);
     }
 
@@ -149,14 +165,14 @@ public class TdsProviderTests : IAsyncLifetime
 
     // t-sql caps the row count at the front of the statement, sqlite at the end
     [Theory]
-    [InlineData("SELECT TOP 10 Name FROM _tables")]
-    [InlineData("SELECT TOP (10) Name FROM _tables")]
-    [InlineData("select top 10 Name from _tables;")]
+    [InlineData("SELECT TOP 10 name FROM sys.tables")]
+    [InlineData("SELECT TOP (10) name FROM sys.tables")]
+    [InlineData("select top 10 name from sys.tables;")]
     public async Task A_top_clause_caps_the_result_instead_of_erroring(string sql)
     {
         using var client = await ConnectAsync(Token);
         var (columns, rows) = await RunBatchAsync(client, sql);
-        Assert.Equal(["Name"], columns);
+        Assert.Equal(["name"], columns);
         Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
     }
 

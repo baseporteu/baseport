@@ -62,6 +62,9 @@ public static class SqlEngine
                 // the owned connection belongs to the app and must stay writable; the ones opened here are ours to lock down before the caller's statement runs
                 if (!inMemory) Pragma(conn, "query_only = 1");
             }
+            // The wire providers (configure is not null) run an untrusted, api-token-authenticated statement, so it is confined to the projected catalog: no direct read of the system tables or the raw record store. The admin console and saved queries pass no configure and stay unrestricted.
+            if (configure is not null && conn is SqliteConnection guarded) WireCatalog.Restrict(guarded);
+            
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql.TrimEnd().TrimEnd(';');
             using var reader = await cmd.ExecuteReaderAsync();
@@ -83,6 +86,8 @@ public static class SqlEngine
         }
         finally
         {
+            // Clear the authorizer before the handle returns to the pool (or, for an in-memory db, before the owned connection is reused by the app), so the restriction never rides along on the next borrow.
+            if (configure is not null && conn is SqliteConnection guarded) WireCatalog.Unrestrict(guarded);
             if (!wasOpen) await conn.CloseAsync();
             if (!inMemory) await conn.DisposeAsync();
         }

@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using SQLitePCL;
 
 namespace Baseport;
 
@@ -22,6 +23,16 @@ public static class WireCatalog
         if (dialect == WireDialect.Postgres) BuildPostgres(conn, tables);
         else BuildTds(conn, tables);
     }
+
+    // A wire client authenticates with an api token but must only ever see the projected author tables, never the storage schema behind them: _users holds password hashes and _settings holds the jwt signing key, so a raw SELECT there is a full-instance compromise. The temp views and the emulated pg_catalog/information_schema are the whole intended surface. This denies every direct read of the main schema (the system tables and the raw _records store) while leaving those views readable; a view's own read of main._records reports the view as the innermost object, so projected author data still resolves. Installed only on the untrusted wire connection, and cleared before that connection returns to the pool.
+    private static readonly delegate_authorizer DenyMainReads = (_, action, _, _, dbName, viaObject) =>
+        action == raw.SQLITE_READ && dbName.utf8_to_string() == "main" && string.IsNullOrEmpty(viaObject.utf8_to_string())
+            ? raw.SQLITE_DENY
+            : raw.SQLITE_OK;
+
+    public static void Restrict(SqliteConnection conn) => raw.sqlite3_set_authorizer(conn.Handle, DenyMainReads, null);
+
+    public static void Unrestrict(SqliteConnection conn) => raw.sqlite3_set_authorizer(conn.Handle, (delegate_authorizer?)null, null);
 
     private static List<CatalogTable> Read(SqliteConnection conn)
     {
