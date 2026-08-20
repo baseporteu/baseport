@@ -3,10 +3,6 @@
    <img src=".github/assets/baseport.webp" alt="Logo">
 </p>
 
-<p align="center">
-  A single-executable backend for your data, with a type-safe REST API, realtime subscriptions, an admin console and embeddable forms, built on .NET 11 and SQLite.
-<p>
-
 # Baseport
 
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-EUPL%201.2-blue" alt="License - EUPL 1.2" /></a>
@@ -14,9 +10,9 @@
 <img src="https://img.shields.io/badge/database-SQLite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
 <img src="https://img.shields.io/badge/status-pre--alpha-orange" alt="Status - pre-alpha" />
 
-Meet Baseport: define your tables in the console and you get a typed REST API, live updates and an admin UI over them, without writing any of it. Point your mobile, web or desktop app at it and build the rest.
+Meet Baseport: a .NET-first, single-binary alternative to Firebase designed to deliver sub-millisecond performance. It lets you define your tables in the console to instantly get a typed REST API, live updates, and an admin UI without writing any boilerplate. Point your mobile, web, or desktop app at it and build the rest. 
 
-Built on the modern .NET stack, Baseport runs as one process over one SQLite file. There is no database server to run alongside it, allowing for blazing-fast product development. Copy the binary to a server, back up the file. That's all it takes for your deployment. Reads stay in single-digit milliseconds at a quarter of a million rows.
+Built on .NET 11, Baseport runs as one process over one SQLite file. There is no database server to run alongside it, allowing for blazing-fast product development. Copy the binary to a server, back up the file. That is all it takes for your deployment. Reads stay in single-digit milliseconds at a quarter of a million rows.
 
 > **Pre-alpha.** Not yet v0.0.1. The database format and the API surface both still move between commits. Do not put production data in it.
 
@@ -179,6 +175,10 @@ https://portal.example.org
 ```
 
 Leave it empty and any site may embed, which is what you want while developing. Though beware that if you configure this once, you'll have to make sure your whitelist is up to date.
+
+## Contributing
+
+Contributions are greatly appreciated. For any changes beyond simple bug fixes, please open an issue first (use tag: `enhancement`) so we can align on the proposal and make sure it fits the project roadmap.
 
 ## License
 
