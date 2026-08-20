@@ -24,6 +24,8 @@ const ui = (() => {
         return el;
     }
 
+    const TOAST_MAX_MS = 60000;
+
     function toast(message, kind = 'info', timeout = 4500) {
         const text = Array.isArray(message) ? message.join(' ') : String(message ?? '');
         if (!text.trim()) return;
@@ -44,8 +46,8 @@ const ui = (() => {
         el.appendChild(actions);
 
         host().appendChild(el);
-        // Errors stay until dismissed: they carry a field name worth reading.
-        if (kind !== 'error' && timeout) setTimeout(() => dismiss(el), timeout);
+        // Errors linger, they carry a field name worth reading, but nothing outlives the ceiling. Equal delays fire in spawn order, so a stack clears top-down.
+        setTimeout(() => dismiss(el), kind === 'error' || !timeout ? TOAST_MAX_MS : Math.min(timeout, TOAST_MAX_MS));
         return el;
     }
 
