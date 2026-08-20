@@ -25,6 +25,7 @@ public static class SecurityHeaders
     private static bool IsEmbeddable(string path) =>
         path.StartsWith("/preview/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/api/forms/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/f/", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/embed.js", StringComparison.OrdinalIgnoreCase);
 
     // Fetchable from another origin, a wider set than the framable one: a file field stores an absolute URL meant to load like any other asset, so an upload must not carry a same-origin resource policy. It keeps the console's CSP and X-Frame-Options, because being fetchable is not being framable.

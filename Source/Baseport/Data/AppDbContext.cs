@@ -6,6 +6,17 @@ public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
+    // The one place that knows how a Baseport connection is set up. Options built by hand elsewhere miss the pragmas and the stamping-and-events interceptor, so their writes land unstamped and no subscriber hears them.
+    public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
+        options.UseSqlite(connectionString).AddInterceptors(new SqlitePragmas(), new RecordChangeInterceptor());
+
+    public static AppDbContext Open(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>();
+        Configure(options, connectionString);
+        return new AppDbContext(options.Options);
+    }
+
     public DbSet<TableDefinition> Tables => Set<TableDefinition>();
     public DbSet<FieldDefinition> Fields => Set<FieldDefinition>();
     public DbSet<FormConfig> FormConfigs => Set<FormConfig>();

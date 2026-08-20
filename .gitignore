@@ -39,6 +39,7 @@ appsettings.*.local.json
 !README.md
 !CONTRIBUTING.md
 !CONFIGURATION.md
+!Documentation/**/*.md
 
 # configuration & environments
 appsettings.*.json
@@ -53,3 +54,4 @@ appsettings.*.json
 # directory rules
 .*/
 !.github/
+Source/Baseport/*.key

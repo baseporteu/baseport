@@ -1,0 +1,94 @@
+{
+  "title": "Baseport",
+  "description": "A .NET-first, single-binary backend: typed tables, a REST API, live updates and embeddable forms over one SQLite file",
+  "lang": "en",
+  "theme": "default",
+  "brand": "Baseport",
+  "favicon": "\ud83d\udedf",
+  "lastUpdated": true,
+  "footer": "\u00a9 {year} Baseport \u00b7 Licensed under [EUPL 1.2](https://github.com/baseporteu/baseport/blob/main/LICENSE). Built with [Bark](https://github.com/melosso/bark/).",
+  "editLink": {
+    "pattern": "https://github.com/baseporteu/baseport/edit/main/Documentation/docs/:path",
+    "text": "Edit this page on GitHub"
+  },
+  "head": [],
+  "topNav": [
+    {
+      "text": "Home",
+      "link": "/"
+    },
+    {
+      "text": "Documentation",
+      "link": "/docs/"
+    },
+    {
+      "text": "More",
+      "items": [
+        {
+          "text": "Download",
+          "link": "https://github.com/baseporteu/baseport/releases/"
+        },
+        {
+          "text": "Source",
+          "link": "https://github.com/baseporteu/baseport"
+        }
+      ]
+    }
+  ],
+  "sidebar": {
+    "/docs/": [
+      {
+        "title": "Introduction",
+        "path": "docs/"
+      },
+      {
+        "title": "Getting started",
+        "collapsed": false,
+        "items": [
+          {
+            "title": "How to use Baseport",
+            "path": "docs/how-to-use"
+          },
+          {
+            "title": "Tables and fields",
+            "path": "docs/tables-and-fields"
+          },
+          {
+            "title": "Access rules",
+            "path": "docs/access-rules"
+          }
+        ]
+      },
+      {
+        "title": "Working with data",
+        "collapsed": false,
+        "items": [
+          {
+            "title": "Authentication",
+            "path": "docs/authentication"
+          },
+          {
+            "title": "Files and uploads",
+            "path": "docs/files"
+          },
+          {
+            "title": "Relations",
+            "path": "docs/relations"
+          },
+          {
+            "title": "Forms and embeds",
+            "path": "docs/forms"
+          }
+        ]
+      },
+      {
+        "title": "Going to production",
+        "path": "docs/going-to-production"
+      },
+      {
+        "title": "Web APIs reference",
+        "path": "docs/api"
+      }
+    ]
+  }
+}

@@ -51,8 +51,22 @@ function settingsPage(page) {
     navigate(`/settings/${page}`);
 }
 
+// A link round trip comes back here rather than to a sign-in screen, so the console reports its own outcome. Taken out of the address bar so a reload does not repeat it.
+function reportLinkOutcome() {
+    const code = new URLSearchParams(location.search).get('sso');
+    if (!code) return;
+
+    const url = new URL(location.href);
+    url.searchParams.delete('sso');
+    history.replaceState(null, '', url);
+
+    if (code === 'linked') ui.toast('Your account is now linked. Every other session has been signed out.', 'success', 8000);
+    else ui.toast(SSO_PROBLEMS[code] || SSO_PROBLEMS.failed, 'error', 8000);
+}
+
 function applySettingsPage(page) {
     settingsCurrentPage = page;
+    if (page === 'auth') reportLinkOutcome();
     document.querySelectorAll('.settings-pane').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== page));
     const titles = {
         host: 'Host',
@@ -90,6 +104,8 @@ async function loadSettings() {
     document.getElementById('settingsApiDescription').value = settingsData.apiDescription || '';
     document.getElementById('settingsPublicAuthEnabled').checked = settingsData.publicAuthEnabled === true;
     document.getElementById('settingsPublicRegistrationEnabled').checked = settingsData.publicRegistrationEnabled === true;
+    document.getElementById('settingsAnonymousAuthEnabled').checked = settingsData.anonymousAuthEnabled === true;
+    document.getElementById('settingsAnonymousRetention').value = settingsData.anonymousRetentionDays ?? 30;
     document.getElementById('settingsAuthIssuer').value = settingsData.authIssuer || 'baseport';
     document.getElementById('settingsAuthTokenLifetime').value = settingsData.authTokenLifetimeSec ?? 3600;
     document.getElementById('settingsAuthRefreshLifetime').value = settingsData.authRefreshLifetimeDays ?? 30;
@@ -204,6 +220,8 @@ async function submitAuthSettings(btn) {
             body: {
                 publicAuthEnabled: document.getElementById('settingsPublicAuthEnabled').checked,
                 publicRegistrationEnabled: document.getElementById('settingsPublicRegistrationEnabled').checked,
+                anonymousAuthEnabled: document.getElementById('settingsAnonymousAuthEnabled').checked,
+                anonymousRetentionDays: Number(document.getElementById('settingsAnonymousRetention').value) || 0,
                 authIssuer: document.getElementById('settingsAuthIssuer').value.trim() || 'baseport',
                 authTokenLifetimeSec: Number(document.getElementById('settingsAuthTokenLifetime').value) || 3600,
                 authRefreshLifetimeDays: Number(document.getElementById('settingsAuthRefreshLifetime').value) || 30,
@@ -666,6 +684,12 @@ async function loadOidcProviders() {
 
         const actions = document.createElement('td');
         actions.className = 'cell-actions end';
+        // Offered only where it can work: an account already linked has to be unlinked first, and a provider not offered on the console cannot complete a console round trip.
+        if (p.isEnabled && p.consoleEnabled && !currentAccount?.linked)
+            actions.append(ui.button('Link my account', () => linkMyAccount(p), {
+                size: 'btn-sm',
+                variant: 'btn-outline'
+            }));
         actions.append(ui.button('Configure', () => openOidcSheet(p.id), {
             size: 'btn-sm',
             variant: 'btn-outline'
@@ -674,6 +698,26 @@ async function loadOidcProviders() {
 
         body.append(tr);
     });
+}
+
+// Binds this provider's identity to the account already signed in here. The account is fixed by the session before the redirect, so nothing the provider sends chooses who gets linked.
+async function linkMyAccount(p) {
+    const password = await ui.ask({
+        title: `Link my account to ${p.name}`,
+        label: 'Your current password',
+        type: 'password',
+        confirmLabel: 'Continue',
+        help: `You will sign in at ${p.name} once. The identity it returns is bound to the account you are signed in as here.`,
+    });
+    if (!password) return;
+
+    const started = await ui.send(`/api/auth/oidc/${p.slug}/link`, {
+        method: 'POST',
+        body: {
+            currentPassword: password
+        },
+    });
+    if (started && started.authorizeUrl) location.href = started.authorizeUrl;
 }
 
 async function saveOidcProvider(id, body) {

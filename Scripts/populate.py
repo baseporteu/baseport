@@ -15,6 +15,7 @@ Deterministic: the RNG is seeded, so two runs produce the same database.
 Run through POPULATE.sh, which supplies the environment.
 """
 import argparse
+import glob
 import json
 import os
 import random
@@ -27,7 +28,7 @@ import urllib.request
 from datetime import date
 
 BASE = os.environ.get("BASE_URL", "http://localhost:5263").rstrip("/")
-USER = os.environ.get("ADMIN_USER", "admin")
+USER = os.environ.get("ADMIN_USER", "")
 PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 NEW_PASSWORD = os.environ.get("ADMIN_NEW_PASSWORD", "baseport-dev-password")
 SPEC = os.environ.get("PORTWAY_SPEC", "")
@@ -155,7 +156,7 @@ def call(method, path, body=None, expect_json=True):
             headers = response.headers
             # Any response may re-issue the session: changing the password ends every session.
             for value in headers.get_all("Set-Cookie") or []:
-                if value.startswith("baseport_session="):
+                if value.startswith("baseport_auth="):
                     _cookie = value.split(";")[0]
             return (json.loads(raw) if expect_json and raw else raw), headers
     except urllib.error.HTTPError as error:
@@ -169,12 +170,36 @@ def call(method, path, body=None, expect_json=True):
         raise SystemExit(f"Could not reach {BASE}: {error.reason}. Is Baseport running?")
 
 
+def _auto_detect_from_log(db_path):
+    """Parse the most recent log file for the one-time admin username and password."""
+    global USER, PASSWORD
+    log_dir = os.path.join(os.path.dirname(db_path), "log")
+    files = sorted(glob.glob(os.path.join(log_dir, "baseport-*.log")), reverse=True)
+    for f in files:
+        try:
+            with open(f) as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        matches = list(re.finditer(
+            r"Seeded a one-time admin account\.\s+Username:\s+(\S+)\s+Password:\s+(\S+?)(?=\.)",
+            text))
+        if matches:
+            USER, PASSWORD = matches[-1].group(1), matches[-1].group(2)
+            print(f"  Credentials from log: {USER}")
+            return
+    raise SystemExit(
+        "No one-time admin account found in the log files.\n"
+        "Set ADMIN_USER and ADMIN_PASSWORD manually, or check log/baseport-*.log.")
+
+
 def sign_in():
     global _cookie
     if not PASSWORD:
         raise SystemExit(
-            "Set ADMIN_PASSWORD. A fresh instance logs a one-time admin password on first start;\n"
-            "grep the console output or log/baseport-*.log for 'one-time admin password'.")
+            "Set ADMIN_USER and ADMIN_PASSWORD, or ensure the log directory is accessible.\n"
+            "A fresh instance logs a one-time admin account on first start;\n"
+            "check log/baseport-*.log for 'Seeded a one-time admin account'.")
 
     call("POST", "/api/auth/login", {"username": USER, "password": PASSWORD})
     if not _cookie:
@@ -290,6 +315,8 @@ def main():
     counts["lines"] = max(counts["lines"], counts["orders"])
 
     print(f"Seeding {BASE} (db {args.db}, scale {args.scale})")
+    if not USER and not PASSWORD:
+        _auto_detect_from_log(args.db)
     sign_in()
 
     products, fresh_p = table("Products", "Catalogue the order lines sell from", product_fields())
@@ -628,7 +655,7 @@ INNER JOIN Customers c ON c.id = o.Customer
 GROUP BY c.Country
 ORDER BY Revenue DESC"""
 
-    call("POST", "/api/_admin/queries", {"name": "Revenue by country (table views)", "sql": projected})
+    call("POST", "/api/_admin/queries", {"name": "Revenue by country (virtual)", "sql": projected})
     print("  Queries: 2 saved queries")
 
 

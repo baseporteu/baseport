@@ -14,7 +14,7 @@ public static class AdminAuth
     // The prefix says what the account is; the suffix is what stops it being guessed.
     public static string SeededUsername() => "admin-" + RandomNumberGenerator.GetString(ReadableAlphabet, 8);
 
-    private const int Iterations = 210_000; // OWASP guidance for PBKDF2-SHA256
+    private const int Iterations = 600_000; // Exceeds OWASP minimum for PBKDF2-SHA256
     private const int SaltBytes = 16;
     private const int HashBytes = 32;
 

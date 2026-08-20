@@ -30,5 +30,43 @@
                         <div id='sqlNoData' class='sql-nodata hidden'>No data</div>
                         <div id='sqlStatus' class='field-hint'></div>
                     </div>
+                    <div class='card hidden' id='sqlSchedule'>
+                        <div class='card-header'>
+                            <div>
+                                <h2>Schedule</h2>
+                                <p class='muted'>Runs this query unattended and posts the result where you point it.</p>
+                            </div>
+                            <button class='btn btn-outline' onclick='runScheduleNow()' title='Run it the way the tick would, webhook included'>Run now</button>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label for='sqlScheduleCron'>Cron expression</label>
+                                <p class='muted'>Five fields, or six to include seconds. Macros like <code>@daily</code> work too. Leave it empty to keep the query manual.</p>
+                            </div>
+                            <input type='text' id='sqlScheduleCron' class='input' maxlength='128' placeholder='0 7 * * *'>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label for='sqlScheduleWebhook'>Post results to</label>
+                                <p class='muted'>An absolute http:// or https:// address. Each run posts <code>{query, ranAt, columns, rows}</code> as JSON. Leave it empty to record the row count here instead.</p>
+                            </div>
+                            <input type='text' id='sqlScheduleWebhook' class='input' maxlength='2048' placeholder='https://example.com/hooks/report'>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label for='sqlScheduleEnabled'>Enabled</label>
+                                <p class='muted'>Pauses the schedule without losing the expression.</p>
+                            </div>
+                            <label class='switch'>
+                                <input type='checkbox' id='sqlScheduleEnabled'>
+                                <span class='track'></span>
+                                <span class='thumb'></span>
+                            </label>
+                        </div>
+                        <div class='card-footer'>
+                            <span class='muted' id='sqlScheduleStatus'></span>
+                            <button class='btn' onclick='saveSchedule()'>Save schedule</button>
+                        </div>
+                    </div>
                 </div>
             </div>

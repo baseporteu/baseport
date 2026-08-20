@@ -91,10 +91,18 @@ public sealed class BaseportClient : IBaseportClient
         return Tokens!;
     }
 
+    // Sent authenticated, because registering while holding an anonymous token claims that account instead of opening a second one. With no token held it is an ordinary sign-up.
     public async Task<BaseportTokens> RegisterAsync(string email, string password, string? username = null, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Post, $"{AuthApi}/register",
-            JsonContent.Create(new { email, password, username = username ?? "" }), cancellationToken, authenticate: false);
+            JsonContent.Create(new { email, password, username = username ?? "" }), cancellationToken);
+        Adopt(await ReadTokensAsync(response, cancellationToken));
+        return Tokens!;
+    }
+
+    public async Task<BaseportTokens> SignInAnonymouslyAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"{AuthApi}/anonymous", null, cancellationToken, authenticate: false);
         Adopt(await ReadTokensAsync(response, cancellationToken));
         return Tokens!;
     }

@@ -122,6 +122,52 @@ function applyQuery(q) {
     clearSqlOutput();
     showQueryPlaceholder(q.name);
     renderQueryBreadcrumb();
+    renderSchedule(q);
+}
+
+function renderSchedule(q) {
+    const panel = document.getElementById('sqlSchedule');
+    if (!panel) return;
+    panel.classList.toggle('hidden', !q);
+    if (!q) return;
+    document.getElementById('sqlScheduleCron').value = q.schedule || '';
+    document.getElementById('sqlScheduleWebhook').value = q.webhookUrl || '';
+    document.getElementById('sqlScheduleEnabled').checked = q.scheduleEnabled === true;
+    showScheduleStatus(q);
+}
+
+function showScheduleStatus(q) {
+    const el = document.getElementById('sqlScheduleStatus');
+    if (!el) return;
+    const parts = [];
+    if (q.scheduleEnabled && q.nextRunAt) parts.push(`Next run ${new Date(q.nextRunAt).toLocaleString()}`);
+    else if (q.schedule) parts.push('Paused');
+    if (q.lastResult) parts.push(q.lastResult);
+    el.textContent = parts.join(' · ');
+}
+
+async function saveSchedule() {
+    if (!currentQueryId) return;
+    const saved = await ui.send(`/api/_admin/queries/${currentQueryId}`, {
+        method: 'PATCH',
+        body: {
+            schedule: document.getElementById('sqlScheduleCron').value.trim(),
+            webhookUrl: document.getElementById('sqlScheduleWebhook').value.trim(),
+            scheduleEnabled: document.getElementById('sqlScheduleEnabled').checked,
+        },
+        success: 'Schedule saved.',
+    });
+    if (saved) renderSchedule(saved);
+}
+
+// Proves the destination answers without waiting for the cron, so a wrong url is found here rather than in tomorrow's log.
+async function runScheduleNow() {
+    if (!currentQueryId) return;
+    const ran = await ui.send(`/api/_admin/queries/${currentQueryId}/run`, {
+        method: 'POST',
+        success: 'Query ran.',
+    });
+    if (ran) renderSchedule(ran);
 }
 
 function newQuery() {
@@ -134,6 +180,7 @@ function clearQuery() {
     setSqlValue('');
     clearSqlOutput();
     renderQueryBreadcrumb();
+    renderSchedule(null);
 }
 
 async function saveQuery() {
@@ -167,6 +214,7 @@ async function saveQuery() {
     }
     currentQueryId = data.id;
     currentQueryName = data.name;
+    renderSchedule(data);
     const status = document.getElementById('sqlStatus');
     status.style.color = '';
     status.innerText = `Saved ${new Date(data.updatedAt).toLocaleTimeString()}`;

@@ -36,6 +36,45 @@ public static class OidcEndpoints
             }
         }).RequireRateLimiting(RateLimit.Oidc);
 
+        // An account binding a provider identity to itself. Pillar 17 refuses to let a claim choose an account, and this does not: the account is fixed here, from a session that is already authenticated, before the redirect is built. What comes back from the provider is written, never matched, so `Linkable` and the admin rule behind it are untouched.
+        // The password is asked for the same reason /api/auth/password asks: a borrowed session must not be able to bolt a second way in onto somebody else's account.
+        app.MapPost($"{Base}/{{slug}}/link", async (AppDbContext db, HttpContext ctx, JsonObject body, string slug) =>
+        {
+            if (await AdminAuth.ResolveAsync(db, ctx) is not { } user)
+                return Results.Json(new { errors = new[] { "Sign in to continue." } }, statusCode: 401);
+
+            var provider = await UsableAsync(db, slug, console: true);
+            if (provider is null) return Results.NotFound();
+
+            if (!LoginGuard.Allowed($"user:{user.Id}"))
+            {
+                ctx.Response.Headers.RetryAfter = "300";
+                return Results.Json(new { errors = new[] { "Too many attempts. Wait a few minutes and try again." } }, statusCode: 429);
+            }
+
+            var password = body["currentPassword"] is JsonValue pv && pv.TryGetValue<string>(out var typed) ? typed : "";
+            if (!AdminAuth.VerifyPassword(password, user.PasswordHash))
+            {
+                LoginGuard.Failed($"user:{user.Id}");
+                AuditLogMiddleware.Note(ctx, $"Failed link attempt for {user.Username} through {provider.Name}");
+                return Results.BadRequest(new { errors = new[] { "That password is incorrect." } });
+            }
+            LoginGuard.Succeeded($"user:{user.Id}");
+
+            try
+            {
+                var settings = await db.SettingsAsync() ?? new AppSettings();
+                var start = await OidcFlow.BeginAsync(provider, RedirectUri(ctx, settings, provider.Slug),
+                    "/_/admin/settings/auth", console: true, ctx.RequestAborted, linkTo: user.Id);
+                return Results.Ok(new { authorizeUrl = start.AuthorizeUrl });
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or IOException)
+            {
+                Serilog.Log.Error(ex, "Could not read the discovery document for {Provider}", provider.Slug);
+                return Results.BadRequest(new { errors = new[] { "That provider could not be reached. Check its issuer URL." } });
+            }
+        }).RequireRateLimiting(RateLimit.Oidc);
+
         app.MapGet($"{Base}/{{slug}}/callback", async (AppDbContext db, HttpContext ctx, IHttpClientFactory clients,
             string slug, string? code, string? state, string? error) =>
         {
@@ -70,6 +109,9 @@ public static class OidcEndpoints
                 identity = null;
             }
             if (identity is null) return Results.Redirect(Back(flow.Console, OidcFlow.Failed));
+
+            if (flow.LinkTo.Length > 0)
+                return await CompleteLinkAsync(db, ctx, provider, flow, identity);
 
             var (user, problem) = await ResolveAccountAsync(db, provider, identity);
             if (user is null)
@@ -279,6 +321,10 @@ public static class OidcEndpoints
 
         if (user is null)
         {
+            // Above the branch on purpose. With CreateAccounts on, an admin who tried to sign in is passed over for a fresh plain account and the refusal an operator would have read never happens, which is the same confusion with none of the explanation.
+            if (await AdminNeverLinksNoteAsync(db, provider, identity) is { Length: > 0 } adminNote)
+                Serilog.Log.Warning("{Note}", adminNote);
+
             if (!provider.CreateAccounts)
             {
                 // The subject is the only handle `baseport accounts link` takes, and a refused sign-in is the one place it is ever seen. The command is built here rather than templated, so no property is repeated: Serilog binds positionally, and a name repeated in the template silently shifts every value after it.
@@ -309,13 +355,23 @@ public static class OidcEndpoints
 
         var holder = await db.UserAccounts.FirstOrDefaultAsync(u => u.Email == identity.Email && u.Email != "");
         if (holder is null)
-            return $"No Baseport account carries the e-mail {identity.Email}. Put it on the account you want matched, and the next sign-in links itself.";
+            return $"No Baseport account carries the e-mail {identity.Email}. Put it on the non-admin account you want matched, and the next sign-in links itself.";
 
         if (holder.Role == AccountRoles.Admin)
             return $"{holder.Username} carries {identity.Email} but is an admin, and an admin is never linked automatically: " +
                 "console access must not follow from a name in somebody else's directory. Link it by hand, once.";
 
         return $"{holder.Username} carries {identity.Email} but is already linked to another provider identity. Unlink it first.";
+    }
+
+    // Both claim paths run through `Linkable`, which filters admins out, so no claim will ever link an admin however it is spelled. The other two notes read as though fixing the claim or the e-mail would help, and for the operator bootstrapping their own console it never can. Only emitted where it applies: an instance whose admins are all linked already has nothing to explain.
+    internal static async Task<string> AdminNeverLinksNoteAsync(AppDbContext db, OidcProvider provider, OidcIdentity identity)
+    {
+        if (!await db.UserAccounts.AnyAsync(u => u.Role == AccountRoles.Admin && u.OidcSubject == "")) return "";
+
+        var command = $"{AccountsCli.Invocation()} accounts link <username> {provider.Slug} {identity.Subject}";
+        return "An admin account is never linked by a claim, whatever the provider sends: console access must not follow from a name in somebody else's directory. " +
+            $"If the account you mean is an admin, sign in to the console and use Link my account under Settings > Authentication, or run: {command}";
     }
 
     // A name claim that could never be a Baseport username matches nothing and says nothing, which leaves an operator auditing their account list when the claim is what is wrong. Pocket ID sending an address as preferred_username is the common way in.
@@ -325,7 +381,7 @@ public static class OidcEndpoints
         if (AccountValidation.Validate(identity.Username, "").Count == 0) return "";
 
         return $"{provider.Name} {provider.UsernameClaim} claim \"{identity.Username}\" is invalid for Baseport. " +
-            "Auto-matching skipped. Link manually or update the provider's claim to a plain username.";
+            "Auto-matching skipped. Link manually, or update the provider's claim to a plain username that a non-admin account carries.";
     }
 
     // An account already tied to another provider identity is not a candidate: linking it would move it.
@@ -374,6 +430,51 @@ public static class OidcEndpoints
     }
 
     // A code, never a message: nothing the provider or a caller wrote reaches the address bar, and the screen owns the wording.
+    // The whole decision, kept out of the handler so it can be tested without a browser. Two refusals, and the first is the one that matters: the session presenting the callback must be the same account that started the flow, or a link begun in one operator's browser could be finished in another's.
+    internal static async Task<string?> LinkRefusalAsync(AppDbContext db, OidcProvider provider, OidcFlow.PendingFlow flow, OidcIdentity identity, string sessionUserId)
+    {
+        if (flow.LinkTo.Length == 0) return "that flow was a sign-in, not a link";
+        if (sessionUserId.Length == 0) return "there is no signed-in account to link";
+        if (sessionUserId != flow.LinkTo) return "the session no longer holds the account that started it";
+
+        // One provider identity maps to at most one account, the same floor `baseport accounts link` keeps.
+        return await db.UserAccounts.AnyAsync(a => a.OidcProviderId == provider.Id && a.OidcSubject == identity.Subject && a.Id != flow.LinkTo)
+            ? "that identity is already held by another account"
+            : null;
+    }
+
+    // The account is re-resolved from the session rather than trusted from the flow: a link that started in one operator's browser must not finish in another's. The subject is the only thing taken from the provider, and it is written to that account, never used to find one.
+    private static async Task<IResult> CompleteLinkAsync(AppDbContext db, HttpContext ctx, OidcProvider provider, OidcFlow.PendingFlow flow, OidcIdentity identity)
+    {
+        var user = await AdminAuth.ResolveAsync(db, ctx);
+        if (await LinkRefusalAsync(db, provider, flow, identity, user?.Id ?? "") is { } refusal)
+        {
+            AuditLogMiddleware.Note(ctx, $"Refused a link through {provider.Name}: {refusal}");
+            return Results.Redirect(Back(true, OidcFlow.NotLinked));
+        }
+
+        user!.OidcProviderId = provider.Id;
+        user.OidcSubject = identity.Subject;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            Serilog.Log.Warning(ex, "Could not link {Username} to {Provider}: the identity is already held by another account.", user.Username, provider.Slug);
+            return Results.Redirect(Back(true, OidcFlow.NotLinked));
+        }
+
+        // A second way into the account is a change of credentials, so every session opened before it is done with, exactly as the CLI does it. The one being used right now is reissued instead of dropped, the way a password change does, or linking would sign the operator out of the screen they did it from.
+        await UserTokens.RevokeAllAsync(db, user.Id);
+        AdminAuth.IssueCookies(ctx, await UserTokens.IssueAsync(db, user, DateTime.UtcNow));
+
+        AuditLogMiddleware.Note(ctx, $"{user.Username} linked their account to {provider.Name}");
+        return Results.Redirect($"{flow.ReturnTo}?sso={OidcFlow.Linked}");
+    }
+
     private static string Back(bool console, string problem) =>
         console ? $"/_/auth?sso={problem}" : $"/auth/login?sso={problem}";
 }

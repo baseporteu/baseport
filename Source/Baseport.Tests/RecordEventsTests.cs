@@ -116,6 +116,41 @@ public class RecordEventsTests : IDisposable
         }
     }
 
+    // The CLIs build their own context rather than resolving one from the host, so what is pinned is that the shared factory carries the interceptor with it.
+    [Fact]
+    public async Task AContextOpenedByTheSharedFactoryStampsAndPublishes()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"bp-{Ids.NewShortId(8)}.db");
+        try
+        {
+            using var db = AppDbContext.Open($"Data Source={file}");
+            await db.Database.MigrateAsync(TestContext.Current.CancellationToken);
+            db.Tables.Add(new TableDefinition { Id = "table-3", Name = "V", CreatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var channel = RecordEvents.Subscribe();
+            try
+            {
+                var record = new Record { Id = Ids.NewShortId(12), TableId = "table-3", JsonData = "{}" };
+                db.Records.Add(record);
+                await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+                Assert.True(channel.Reader.TryRead(out var e));
+                Assert.Equal("create", e!.Action);
+                Assert.NotEqual(default, record.UpdatedAt);
+            }
+            finally
+            {
+                RecordEvents.Unsubscribe(channel);
+            }
+        }
+        finally
+        {
+            foreach (var path in new[] { file, file + "-wal", file + "-shm" })
+                if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
     [Fact]
     public void UnsubscribingRemovesTheSubscriber()
     {

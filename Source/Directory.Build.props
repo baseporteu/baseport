@@ -9,13 +9,13 @@
 
   <PropertyGroup>
     <Version>0.0.1-alpha.4</Version>
-    <Authors>Melosso</Authors>
+    <Authors>Baseport</Authors>
     <Company>Melosso</Company>
     <Product>Baseport</Product>
-    <Copyright>Copyright © Melosso $([System.DateTime]::Now.Year)</Copyright>
-    <RepositoryUrl>https://github.com/melosso/baseport</RepositoryUrl>
+    <Copyright>Copyright © Baseport $([System.DateTime]::Now.Year)</Copyright>
+    <RepositoryUrl>https://github.com/baseporteu/baseport</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageProjectUrl>https://melosso.com</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/baseporteu/baseport</PackageProjectUrl>
     <PackageLicenseExpression>EUPL-1.2</PackageLicenseExpression>
   </PropertyGroup>
 

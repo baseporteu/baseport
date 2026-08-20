@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// Runs due maintenance jobs on a 30-second tick.
+// Runs due maintenance jobs and the operator's own scheduled queries on a 30-second tick.
 public sealed class JobScheduler : BackgroundService
 {
     private readonly IServiceScopeFactory _scopes;
@@ -56,6 +56,20 @@ public sealed class JobScheduler : BackgroundService
                 job.LastResult = $"Failed: {ex.Message}";
                 _log.Error(ex, "Job {Key} failed", job.Key);
             }
+            await db.SaveChangesAsync(ct);
+        }
+
+        await RunScheduledQueriesAsync(scope, db, now, ct);
+    }
+
+    // The operator's own tasks. Kept separate from the fixed registry because one of them failing is their business, not a fault in the instance: it is recorded on the query and read in the console.
+    private async Task RunScheduledQueriesAsync(IServiceScope scope, AppDbContext db, DateTime now, CancellationToken ct)
+    {
+        var http = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
+        foreach (var query in await ScheduledQueries.DueAsync(db, now, ct))
+        {
+            await ScheduledQueries.RunAsync(db, query, http, now, ct);
+            _log.Debug("Scheduled query {Name} ran: {Result}", query.Name, query.LastResult);
             await db.SaveChangesAsync(ct);
         }
     }

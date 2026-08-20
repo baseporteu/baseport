@@ -39,12 +39,23 @@ public class OpenApiSpecTests
             (item["properties"]!["action"]!["enum"] as JsonArray)!.Select(v => v!.GetValue<string>()));
     }
 
+    // A client watching one row needs to find the route in the document, not guess it from the table one.
+    [Fact]
+    public void The_single_record_stream_is_published_beside_the_table_stream()
+    {
+        var op = (Paths(Table())["/api/v1/orders/subscribe/{recordId}"] as JsonObject)?["get"] as JsonObject;
+        Assert.NotNull(op);
+        Assert.NotNull(op!["responses"]!["200"]!["content"]!["text/event-stream"]);
+        AssertErrorRef((op["responses"] as JsonObject)!, "404");
+    }
+
     [Fact]
     public void The_stream_follows_the_GET_switch()
     {
         var t = Table();
         t.ApiMethods = "POST";
         Assert.Null(Paths(t)["/api/v1/orders/subscribe"]);
+        Assert.Null(Paths(t)["/api/v1/orders/subscribe/{recordId}"]);
     }
 
     [Fact]
@@ -54,6 +65,7 @@ public class OpenApiSpecTests
         var t = Table();
         t.IsProxy = true;
         Assert.Null(Paths(t)["/api/v1/orders/subscribe"]);
+        Assert.Null(Paths(t)["/api/v1/orders/subscribe/{recordId}"]);
     }
 
     private static void AssertErrorRef(JsonObject responses, string code)

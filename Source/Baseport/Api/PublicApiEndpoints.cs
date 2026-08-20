@@ -91,7 +91,28 @@ public static class PublicApiEndpoints
             if (MethodGate(table, ctx) is { } denied) return denied;
             if (table.IsProxy) return ApiError(400, "Proxy tables store nothing locally and emit no changes.");
 
-            return TypedResults.ServerSentEvents(Stream(scopes, table.Id, caller.Id, ctx.RequestAborted), "record");
+            return TypedResults.ServerSentEvents(Stream(scopes, table.Id, null, caller.Id, ctx.RequestAborted), "record");
+        });
+
+        // Live changes for one record. A client watching a single row would otherwise take the whole table's traffic and filter it itself.
+        app.MapGet("/api/v1/{apiName}/subscribe/{rid}", async (IServiceScopeFactory scopes, HttpContext ctx, string apiName, string rid) =>
+        {
+            using var scope = scopes.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
+            var table = await db.Tables.FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
+            if (table == null) return ApiError(404, "Table not found.");
+            if (MethodGate(table, ctx) is { } denied) return denied;
+            if (table.IsProxy) return ApiError(400, "Proxy tables store nothing locally and emit no changes.");
+
+            // The row is checked at the handshake for the same reason the single-record GET checks it: opening a stream on a record the caller may not read would confirm it exists.
+            if (!await db.Records.AnyAsync(r => r.TableId == table.Id && r.Id == rid)) return ApiError(404, "Record not found.");
+            var fields = await db.Fields.Where(f => f.TableId == table.Id).ToListAsync();
+            if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, caller.Id, rid))
+                return ApiError(403, "This record is not yours to read.");
+
+            return TypedResults.ServerSentEvents(Stream(scopes, table.Id, rid, caller.Id, ctx.RequestAborted), "record");
         });
 
         // Read: single record
@@ -197,7 +218,7 @@ public static class PublicApiEndpoints
 
     // Every error the public API returns speaks one shape, {"errors": [...]}, so a client parses failures the same way across every status code.
     private static async IAsyncEnumerable<object> Stream(
-        IServiceScopeFactory scopes, string tableId, string userId,
+        IServiceScopeFactory scopes, string tableId, string? recordId, string userId,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
     {
         var channel = RecordEvents.Subscribe();
@@ -206,6 +227,7 @@ public static class PublicApiEndpoints
             await foreach (var e in channel.Reader.ReadAllAsync(token))
             {
                 if (e.TableId != tableId) continue;
+                if (recordId is not null && e.RecordId != recordId) continue;
                 if (!await AllowsEventAsync(scopes, tableId, userId, e, token)) continue;
                 yield return new
                 {

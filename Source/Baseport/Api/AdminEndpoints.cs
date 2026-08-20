@@ -373,6 +373,8 @@ public static class AdminEndpoints
                 s.OpenApiEnabled,
                 s.PublicAuthEnabled,
                 s.PublicRegistrationEnabled,
+                s.AnonymousAuthEnabled,
+                s.AnonymousRetentionDays,
                 s.AuthIssuer,
                 s.AuthTokenLifetimeSec,
                 s.AuthRefreshLifetimeDays,
@@ -454,6 +456,14 @@ public static class AdminEndpoints
                 s.PublicAuthEnabled = publicAuthEnabled;
             if (body["publicRegistrationEnabled"] is JsonValue prv && prv.TryGetValue<bool>(out var registrationEnabled))
                 s.PublicRegistrationEnabled = registrationEnabled;
+            if (body["anonymousAuthEnabled"] is JsonValue aav && aav.TryGetValue<bool>(out var anonymousEnabled))
+                s.AnonymousAuthEnabled = anonymousEnabled;
+            if (body["anonymousRetentionDays"] is JsonValue ard && ard.TryGetValue<int>(out var anonymousRetention))
+            {
+                if (anonymousRetention < 0 || anonymousRetention > 3650)
+                    return Results.BadRequest(new { errors = new[] { "Anonymous retention must be between 0 and 3650 days." } });
+                s.AnonymousRetentionDays = anonymousRetention;
+            }
             if (body["authIssuer"] is JsonValue aiv && aiv.TryGetValue<string>(out var issuer))
             {
                 var trimmed = (issuer ?? "").Trim();
@@ -486,7 +496,8 @@ public static class AdminEndpoints
             return Results.Ok(new
             {
                 s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.BackupRetention, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled,
-                s.PublicAuthEnabled, s.PublicRegistrationEnabled, s.AuthIssuer, s.AuthTokenLifetimeSec, s.AuthRefreshLifetimeDays,
+                s.PublicAuthEnabled, s.PublicRegistrationEnabled, s.AnonymousAuthEnabled, s.AnonymousRetentionDays,
+                s.AuthIssuer, s.AuthTokenLifetimeSec, s.AuthRefreshLifetimeDays,
                 s.ProxyPrivateTargetsEnabled,
                 s.PostgresEnabled, s.PostgresPort, s.PostgresBindAddress, s.TdsEnabled, s.TdsPort, s.TdsBindAddress
             });
@@ -518,10 +529,7 @@ public static class AdminEndpoints
 
         // Saved queries: CRUD + execute.
         app.MapGet("/api/_admin/queries", async (AppDbContext db) =>
-            Results.Ok(await db.SavedQueries.OrderBy(q => q.Name).Select(q => new
-            {
-                q.Id, q.Name, q.Sql, q.CreatedAt, q.UpdatedAt, q.LastExecutedAt
-            }).ToListAsync()));
+            Results.Ok((await db.SavedQueries.OrderBy(q => q.Name).ToListAsync()).Select(QueryDto)));
 
         app.MapPost("/api/_admin/queries", async (AppDbContext db, JsonObject body) =>
         {
@@ -534,9 +542,11 @@ public static class AdminEndpoints
                 return Results.BadRequest(new { errors = new[] { validationError } });
             var now = DateTime.UtcNow;
             var query = new SavedQuery { Id = Ids.NewShortId(12), Name = name, Sql = sql, CreatedAt = now, UpdatedAt = now };
+            if (ApplySchedule(body, query, now) is { } scheduleError)
+                return Results.BadRequest(new { errors = new[] { scheduleError } });
             db.SavedQueries.Add(query);
             await db.SaveChangesAsync();
-            return Results.Ok(new { query.Id, query.Name, query.CreatedAt, query.UpdatedAt, query.LastExecutedAt });
+            return Results.Ok(QueryDto(query));
         });
 
         app.MapPatch("/api/_admin/queries/{pid}", async (AppDbContext db, string pid, JsonObject body) =>
@@ -552,9 +562,12 @@ public static class AdminEndpoints
                     return Results.BadRequest(new { errors = new[] { validationError } });
                 query.Sql = s.Trim();
             }
-            query.UpdatedAt = DateTime.UtcNow;
+            var edited = DateTime.UtcNow;
+            if (ApplySchedule(body, query, edited) is { } scheduleError)
+                return Results.BadRequest(new { errors = new[] { scheduleError } });
+            query.UpdatedAt = edited;
             await db.SaveChangesAsync();
-            return Results.Ok(new { query.Id, query.Name, query.UpdatedAt, query.LastExecutedAt });
+            return Results.Ok(QueryDto(query));
         });
 
         app.MapDelete("/api/_admin/queries/{pid}", async (AppDbContext db, string pid) =>
@@ -582,6 +595,48 @@ public static class AdminEndpoints
             return Results.Ok(new { columns = run.Columns, rows = run.Rows, truncated = run.Truncated, rowCount = run.Rows.Count });
         });
 
+        // Runs a scheduled query the way the tick would, webhook included, so an operator can prove the destination works without waiting for the cron.
+        app.MapPost("/api/_admin/queries/{pid}/run", async (AppDbContext db, IHttpClientFactory http, string pid) =>
+        {
+            var query = await db.SavedQueries.FirstOrDefaultAsync(q => q.Id == pid);
+            if (query == null) return Results.NotFound();
+            if (query.Schedule.Length == 0)
+                return Results.BadRequest(new { errors = new[] { "This query has no schedule. Give it a cron expression first." } });
+
+            await ScheduledQueries.RunAsync(db, query, http, DateTime.UtcNow, CancellationToken.None);
+            await db.SaveChangesAsync();
+            return Results.Ok(QueryDto(query));
+        });
+
+    }
+
+    private static object QueryDto(SavedQuery q) => new
+    {
+        q.Id, q.Name, q.Sql, q.CreatedAt, q.UpdatedAt, q.LastExecutedAt,
+        q.Schedule, q.ScheduleEnabled, q.WebhookUrl, q.NextRunAt, q.LastResult
+    };
+
+    // Returns the message to hand back, or null. The cron and the destination are checked when the query is saved rather than when the tick reaches it, the same way an access rule is: a typo is a message in the sheet, not a failure nobody sees until tomorrow morning.
+    private static string? ApplySchedule(JsonObject body, SavedQuery query, DateTime now)
+    {
+        if (body["schedule"] is JsonValue cv && cv.TryGetValue<string>(out var cron))
+        {
+            var trimmed = (cron ?? "").Trim();
+            if (ScheduledQueries.ScheduleProblem(trimmed) is { } problem) return problem;
+            query.Schedule = trimmed;
+        }
+        if (body["webhookUrl"] is JsonValue wv && wv.TryGetValue<string>(out var url))
+        {
+            var trimmed = (url ?? "").Trim();
+            if (ScheduledQueries.WebhookProblem(trimmed) is { } problem) return problem;
+            query.WebhookUrl = trimmed;
+        }
+        if (body["scheduleEnabled"] is JsonValue ev && ev.TryGetValue<bool>(out var enabled))
+            query.ScheduleEnabled = enabled;
+
+        if (query.Schedule.Length == 0) query.ScheduleEnabled = false;
+        query.NextRunAt = query.ScheduleEnabled ? Jobs.NextRun(query.Schedule, now) : null;
+        return null;
     }
 
     // shared by the settings put endpoint: keeps postgres/tds bind-address and port validation in one place

@@ -3,6 +3,7 @@ let currentTablePublicId = null;
 let currentTableProxyUrl = '';
 let currentTables = [];
 let currentSection = 'tables';
+let currentAccount = null; // the signed-in operator, from the bootstrap payload
 let lastRenderedUrl = location.href; // where popstate falls back to if the user cancels leaving unsaved changes
 let proxyOps = [];
 let editingFieldId = null;

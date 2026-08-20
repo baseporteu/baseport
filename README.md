@@ -1,4 +1,3 @@
-
 <p align="center">
    <img src=".github/assets/baseport.webp" alt="Logo">
 </p>
@@ -10,7 +9,7 @@
 <img src="https://img.shields.io/badge/database-SQLite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
 <img src="https://img.shields.io/badge/status-pre--alpha-orange" alt="Status - pre-alpha" />
 
-Meet Baseport: a .NET-first, single-binary alternative to Firebase designed to deliver sub-millisecond performance. It lets you define your tables in the console to instantly get a typed REST API, live updates, exposable web forms and an admin interface without writing any boilerplate. Point your mobile, web, or desktop app at it and build the rest. 
+Meet Baseport: a .NET-first, single-binary alternative to Firebase designed to deliver sub-millisecond performance. It lets you define your tables in the console to instantly get a typed REST API, live updates, exposable web forms and an admin interface without writing any boilerplate. Point your mobile, web, or desktop app at it and build the rest.
 
 Built on .NET 11, Baseport runs as one process over one SQLite database file. There is no database server to run alongside it, allowing for blazing-fast product development. Copy the binary to a server, back up the file. That is all it takes for your deployment. Reads stay in single-digit milliseconds at a quarter of a million rows.
 
@@ -18,167 +17,62 @@ Built on .NET 11, Baseport runs as one process over one SQLite database file. Th
 
 ## Installation
 
-Pick whichever path fits your environment. Docker is the fastest way to get running; the published binary is the fastest way to deploy.
+**Linux**
 
-### Option A: Docker
+```bash
+curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.sh | bash
+```
+
+**Windows**
+
+```powershell
+iwr https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.ps1 | iex
+```
+
+Both put a `baseport` command on your PATH, so `baseport --urls http://localhost:5263` starts it and `baseport update` upgrades it in place. Releases ship `linux-x64` and `win-x64`.
+
+**Docker**
 
 ```bash
 docker compose up -d
 docker compose logs baseport | grep "one-time admin password"
 ```
 
-Browse to `http://localhost:5263/_/admin` and sign in using the username and (single-use) password from the startup logs. Rename the account with `baseport accounts rename <seeded> <yours>`. 
+Browse to `http://localhost:5263/_/admin` and sign in with the one-time admin username and password the first start printed.
 
-Set environment variables from a `.env` file if needed:
-
-<details>
-
-```ini
-BASEPORT_TAG=latest
-BASEPORT_PORT=5263
-BASEPORT_TRUST_FORWARDED_HEADERS=false
-```
-
-Behind a reverse proxy set `BASEPORT_TRUST_FORWARDED_HEADERS` to `true`, or rate limiting puts every visitor in one bucket.
-
-Anything else in `appsettings.json` is reachable the same way: any `Baseport:*` setting becomes an environment variable by replacing the colon with a double underscore. To keep the console off the public port entirely, add `Baseport__AdminAddress: "0.0.0.0:5264"` to the service's `environment` and publish that port to loopback only.
-
-</details>
-
-### Option B: Single executable
-
-Every release ships one self-contained file per platform. `wwwroot`, `appsettings.json` and the .NET runtime all travel inside it, so there is nothing to install alongside it. Grab a tag from [Releases](https://github.com/hawkinslabdev/baseport/releases):
+For Docker, define `baseport` as a shell function so the same commands work there:
 
 ```bash
-VERSION=v0.1.0
-BASE=https://github.com/hawkinslabdev/baseport/releases/download/$VERSION
-
-curl -LO $BASE/Baseport-$VERSION-linux-x64.tar.gz
-curl -LO $BASE/Baseport-$VERSION-linux-x64.tar.gz.sha256
-sha256sum -c Baseport-$VERSION-linux-x64.tar.gz.sha256
-
-tar -xzf Baseport-$VERSION-linux-x64.tar.gz
-./Baseport --urls http://localhost:5263
+baseport() {
+  local compose="docker compose -f $HOME/baseport/docker-compose.yml"
+  if [ "$1" = "update" ]; then
+    $compose pull && $compose up -d
+  else
+    $compose exec baseport /app/Baseport "$@"
+  fi
+}
 ```
 
-On Windows the asset is `Baseport-$VERSION-win-x64.zip`; unzip it and run `Baseport.exe` the same way.
+Updating leaves `baseport.db`, `baseport.key`, `log/`, `uploads/` and `appsettings.json` alone.
 
-Browse to `http://localhost:5263/_/admin` and sign in with the username and password the log printed on first start.
+## Documentation
 
-The binary writes `baseport.db`, `log/` and `uploads/` next to wherever you run it, so put it in its own directory. That directory is the backup.
+Full documentation lives at **[baseporteu.github.io/baseport](https://baseporteu.github.io/baseport/docs/)**.
 
-### Option C: From source
+- [How to use Baseport](https://baseporteu.github.io/baseport/docs/how-to-use) walks from an empty console to a working REST call
+- [Tables and fields](https://baseporteu.github.io/baseport/docs/tables-and-fields), [Access rules](https://baseporteu.github.io/baseport/docs/access-rules) and [Relations](https://baseporteu.github.io/baseport/docs/relations) cover modelling your data
+- [Authentication](https://baseporteu.github.io/baseport/docs/authentication) covers API tokens, end user accounts, single sign-on and anonymous accounts
+- [Forms and embeds](https://baseporteu.github.io/baseport/docs/forms) covers publishing a table as a public page
+- [Going to production](https://baseporteu.github.io/baseport/docs/going-to-production) covers configuration, backups and the switches that are off by default
+- [Web APIs reference](https://baseporteu.github.io/baseport/docs/api) lists every published route
 
-Working on Baseport itself? Skip the publish step:
-
-```bash
-cd Source
-dotnet run --project Baseport --urls http://localhost:5263
-```
-
-Tests and build:
-
-```bash
-dotnet test Baseport.slnx
-dotnet build Baseport.slnx     # must be warning-free
-node ../Scripts/test-frontend.js
-```
-
-To build the same single file the release workflow publishes:
-
-```bash
-dotnet publish Baseport/Baseport.csproj -c Release -r linux-x64 -o out
-```
-
-### Option D: Demo data
-
-An empty console is hard to judge. Seed a workspace of products, customers, orders and order lines, with real references between them:
-
-```bash
-ADMIN_USER=<from the log> ADMIN_PASSWORD=<from the log> ./POPULATE.sh
-```
-
-That is 294,000 rows and takes about twenty seconds. In a hurry? Put `SCALE=0.05` in front for 15,000 rows in about a second.
-
-## Configuration
-
-#### Modelling your data
-
-Create a table and add its fields. Fields are typed rather than plain text: number, currency, date, select, file, reference, plus `calculated` and `derived` values worked out on the server and never taken from the client.
-
-Tick `Required`, `Unique` or `Identifier` and it is enforced on every write, whether the record arrives from a form, the REST API or the console.
-
-Indexing is handled automatically.
-
-#### Reading and writing it
-
-Every table is private. You can opt in to expose one through the REST API. To consume it, issue a token to an account, which then gets full CRUD access:
-
-```
-GET    /api/v1/{apiName}/records          paged, searchable, sortable
-POST   /api/v1/{apiName}/records
-PATCH  /api/v1/{apiName}/records/{id}     merge
-PUT    /api/v1/{apiName}/records/{id}     replace
-DELETE /api/v1/{apiName}/records/{id}
-GET    /api/v1/{apiName}/subscribe        Server-Sent Events
-```
-
-When you subscribe once, you'll receive updates for every write:
-
-```bash
-curl -N -H "Authorization: Bearer $TOKEN" \
-  https://baseport.example.com/api/v1/sales-orders/subscribe
-
-event: record
-data: {"action":"create","id":"gAOPLyJDI5UU","record":{"OrderNo":"SO-100000",...}}
-```
-
-You choose the name a table publishes under, and it's separate use the name you work with in the console.
-
-#### Authentication
-
-Both sign-in screens take a password, or an OpenID Connect provider configured under **Settings → Authentication → Single sign-on**. Authelia, Authentik, Pocket ID, or anything publishing a discovery document works.
-
-Add the provider, copy the redirect URL from the sheet, and register it at your provider:
-
-```
-https://baseport.example.com/api/auth/oidc/{key}/callback
-
-```
-
-Saving validates the discovery document immediately to catch wrong issuer URLs before saving. Authentication uses PKCE, verifying the `id_token` against the provider's JWKS.
-
-Select where SSO appears: the console (`/_/auth`), your application users (`/auth`), or both. Accounts are matched on the provider's subject ID so directory renames do not break access. First sign-in automatically links existing accounts sharing the same username or verified email. Enable **Create accounts on first sign-in** to auto-provision new visitors as plain users.
-
-Admin accounts are never linked automatically. Sign in once, grab the subject ID from the refusal log, and bind it manually:
-
-```bash
-baseport accounts link <username> <provider-key> <subject>
-baseport accounts unlink <username>
-```
-
-#### Forms
-
-A table can also be published as a form, so you get a public page without building a front end. Point a form at the table and the console hands you one line:
-
-```html
-<script src="https://baseport.example.com/embed.js?id=Kf3nQ8xR2vLm"></script>
-```
-
-The form will render exactly where you want it to. In order to customize (style) it you'll have to override the CSS variables on `.baserow-embed`.
-
-You can determine how you want to expose your data. This can be a form or an overview. Decide which sites may embed them under **Settings → Sites**, one origin per line:
-
-```
-https://shop.example.com
-https://portal.example.org
-```
-
-Leave it empty and any site may embed, which is what you want while developing. Though beware that if you configure this once, you'll have to make sure your whitelist is up to date.
+Your own instance also serves its OpenAPI document at `/api/openapi.json` and renders it at `/docs`.
 
 ## Contributing
 
 Contributions are greatly appreciated. For any changes beyond simple bug fixes, please open an issue first (use tag: `enhancement`) so we can align on the proposal and make sure it fits the project roadmap.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for building and testing from source.
 
 ## License
 

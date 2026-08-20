@@ -2,13 +2,13 @@
 # Seeds a running Baseport with a demo workspace. Needs the instance's database
 # file: schema goes through the admin API, the rows go straight into SQLite.
 #
-# Overrides work as environment or as NAME=value arguments:
+# On a fresh instance the script reads the one-time credentials from the log
+# automatically; override with NAME=value arguments:
 #
-#   ADMIN_PASSWORD=<one-time password from the startup log> ./POPULATE.sh
-#   ./POPULATE.sh ADMIN_PASSWORD='...' BASE_URL=http://localhost:8080 SCALE=0.02
+#   ./POPULATE.sh ADMIN_USER=admin-xxx ADMIN_PASSWORD=xxx
+#   BASE_URL=http://localhost:8080 SCALE=0.02 ./POPULATE.sh
 #
-# ADMIN_PASSWORD is the one-time password logged on first start; it gets
-# replaced with ADMIN_NEW_PASSWORD. PORTWAY_TOKEN stays out of this repo.
+# PORTWAY_TOKEN stays out of this repo.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -23,7 +23,7 @@ for arg in "$@"; do
 done
 
 BASE_URL="${BASE_URL:-http://localhost:5263}"
-ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_USER="${ADMIN_USER:-}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 ADMIN_NEW_PASSWORD="${ADMIN_NEW_PASSWORD:-baseport-dev-password}"
 PORTWAY_SPEC="${PORTWAY_SPEC:-https://portway-demo.melosso.com/docs/openapi/v1/openapi.json}"

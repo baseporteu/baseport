@@ -28,6 +28,49 @@ public class JobsTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    // The sweep is the only thing that ever deletes an account without an operator asking, so what is pinned is which ones it will not touch.
+    [Fact]
+    public async Task The_anonymous_sweep_takes_only_unreachable_anonymous_accounts()
+    {
+        var now = DateTime.UtcNow;
+        var old = now.AddDays(-60);
+        _db.AppSettings.Add(new AppSettings { AnonymousRetentionDays = 30 });
+
+        _db.UserAccounts.AddRange(
+            new UserAccount { Id = "anon-swept-1", Username = "a1", Role = AccountRoles.User, IsAnonymous = true, CreatedAt = old },
+            new UserAccount { Id = "anon-live-01", Username = "a2", Role = AccountRoles.User, IsAnonymous = true, CreatedAt = old },
+            new UserAccount { Id = "anon-fresh-1", Username = "a3", Role = AccountRoles.User, IsAnonymous = true, CreatedAt = now },
+            new UserAccount { Id = "real-old-001", Username = "a4", Role = AccountRoles.User, IsAnonymous = false, CreatedAt = old });
+
+        _db.UserSessions.AddRange(
+            new UserSession { Id = "sess-live-01", UserId = "anon-live-01", RefreshTokenHash = "live", CreatedAt = old, ExpiresAt = now.AddDays(1) },
+            new UserSession { Id = "sess-dead-01", UserId = "anon-swept-1", RefreshTokenHash = "dead", CreatedAt = old, ExpiresAt = old.AddDays(1) });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await Jobs.Find("anonymous-cleanup")!.Run(_db, Log, TestContext.Current.CancellationToken);
+
+        Assert.Contains("1 abandoned", result);
+        Assert.Equal(
+            new[] { "anon-fresh-1", "anon-live-01", "real-old-001" },
+            await _db.UserAccounts.Select(u => u.Id).OrderBy(id => id).ToListAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task The_anonymous_sweep_keeps_everything_when_retention_is_off()
+    {
+        _db.AppSettings.Add(new AppSettings { AnonymousRetentionDays = 0 });
+        _db.UserAccounts.Add(new UserAccount
+        {
+            Id = "anon-ancient1", Username = "a5", Role = AccountRoles.User, IsAnonymous = true, CreatedAt = DateTime.UtcNow.AddYears(-5)
+        });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await Jobs.Find("anonymous-cleanup")!.Run(_db, Log, TestContext.Current.CancellationToken);
+
+        Assert.Contains("disabled", result);
+        Assert.Equal(1, await _db.UserAccounts.CountAsync(TestContext.Current.CancellationToken));
+    }
+
     [Theory]
     // 5-field, 6-field (with seconds) and the macros Cronos accepts.
     [InlineData("0 3 * * *", true)]
@@ -57,10 +100,10 @@ public class JobsTests : IDisposable
     public void The_registry_is_the_fixed_set_of_maintenance_jobs()
     {
         Assert.Equal(
-            new[] { "backup", "heartbeat", "logs-cleanup", "session-cleanup", "query-optimizer", "search-index", "file-deletions" },
+            new[] { "backup", "heartbeat", "logs-cleanup", "session-cleanup", "query-optimizer", "search-index", "anonymous-cleanup", "file-deletions" },
             Jobs.All.Select(j => j.Key));
         // Every job finds itself, and a missing key resolves to nothing.
-        Assert.Equal(7, Jobs.All.Count(j => Jobs.Find(j.Key) == j));
+        Assert.Equal(8, Jobs.All.Count(j => Jobs.Find(j.Key) == j));
         Assert.Null(Jobs.Find("nope"));
     }
 
@@ -159,13 +202,13 @@ public class JobsTests : IDisposable
         await SchemaBootstrap.ApplyAsync(_db);
 
         var jobs = await _db.JobConfigs.ToListAsync(TestContext.Current.CancellationToken);
-        Assert.Equal(7, jobs.Count);
+        Assert.Equal(8, jobs.Count);
         Assert.All(jobs, j => Assert.NotNull(j.NextRunAt));
         Assert.True(jobs.Single(j => j.Key == "backup").Enabled);
         Assert.False(jobs.Single(j => j.Key == "file-deletions").Enabled);
 
         // A second start neither duplicates nor re-enables an operator's edits.
         await SchemaBootstrap.ApplyAsync(_db);
-        Assert.Equal(7, await _db.JobConfigs.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(8, await _db.JobConfigs.CountAsync(TestContext.Current.CancellationToken));
     }
 }

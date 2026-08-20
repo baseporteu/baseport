@@ -271,6 +271,8 @@
                 if (actions.includes('lookup')) renderLookup(data.form, data.table, container);
                 if (actions.includes('submit')) renderForm(data.form, data.table, container);
             }
+            // The hosted page at /f/{id} ships its rows in the html so a crawler and a scriptless reader get them. It stays on screen until this render replaces it, or the page would blank for the length of the fetch.
+            document.getElementById('baseport-ssr')?.remove();
         })
         .catch(() => {
             container.innerHTML = '<p>This form is not available.</p>';

@@ -125,11 +125,18 @@ public static class OpenApiSpec
 
             // The stream is a read, so it rides on the GET switch.
             if (allowed.Contains("GET") && !t.IsProxy)
+            {
                 paths[$"/api/v1/{t.ApiName}/subscribe"] = new JsonObject
                 {
                     ["get"] = BuildOp(t, $"subscribe_{SchemaName(t)}", $"Stream {name} changes",
                         Responses(("200", SseResp())))
                 };
+                paths[$"/api/v1/{t.ApiName}/subscribe/{{recordId}}"] = new JsonObject
+                {
+                    ["get"] = BuildOp(t, $"subscribe_{SchemaName(t)}_record", $"Stream changes to one {name} record",
+                        Responses(("200", SseResp()), ("404", JsonResp("Record not found", ErrorResponse()))))
+                };
+            }
         }
         return paths;
     }

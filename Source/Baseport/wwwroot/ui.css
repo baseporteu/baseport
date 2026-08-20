@@ -19,20 +19,22 @@ body:has(.sheet.open) .toasts {
 }
 
 .toast {
+    --toast-border: hsl(var(--border));
+    --toast-entry-bg: hsl(var(--primary) / 0.15);
     display: flex;
     align-items: flex-start;
     gap: .625rem;
     padding: .625rem .75rem;
-    border: 1px solid hsl(var(--border));
+    border: 1px solid var(--toast-border);
     border-radius: .5rem;
     background: hsl(var(--card));
     color: hsl(var(--foreground));
     font-size: .875rem;
     line-height: 1.4;
     box-shadow: 0 4px 16px rgb(0 0 0 / .12);
-    animation: toast-in .16s ease-out;
+    animation: toast-in .5s ease-out;
     cursor: pointer;
-    transition: border-color .15s ease, box-shadow .15s ease;
+    transition: border-color .35s ease, box-shadow .35s ease, opacity .35s ease, transform .35s ease;
 }
 
 .toast:hover {
@@ -87,28 +89,37 @@ body:has(.sheet.open) .toasts {
     outline-offset: 1px;
 }
 
-.toast-success .toast-icon {
-    color: hsl(var(--success));
+.toast-error {
+    --toast-border: hsl(var(--destructive) / .4);
+    --toast-entry-bg: hsl(var(--destructive) / 0.18);
 }
 
-.toast-error {
-    border-color: hsl(var(--destructive) / .4);
+.toast-success {
+    --toast-border: hsl(var(--success) / .55);
+    --toast-entry-bg: hsl(var(--success) / 0.18);
+}
+
+.toast-info {
+    --toast-border: hsl(var(--primary) / .4);
+    --toast-entry-bg: hsl(var(--primary) / 0.18);
+}
+
+.toast.toast-copied {
+    --toast-border: hsl(var(--success) / .55);
+    --toast-entry-bg: hsl(var(--success) / 0.18);
 }
 
 .toast-error .toast-icon {
     color: hsl(var(--destructive));
 }
 
-.toast-info .toast-icon {
-    color: hsl(var(--primary));
-}
-
-.toast.toast-copied {
-    border-color: hsl(var(--success) / .55);
-}
-
+.toast-success .toast-icon,
 .toast-copied .toast-icon {
     color: hsl(var(--success));
+}
+
+.toast-info .toast-icon {
+    color: hsl(var(--primary));
 }
 
 .toast-out {
@@ -121,11 +132,13 @@ body:has(.sheet.open) .toasts {
     from {
         opacity: 0;
         transform: translateY(.5rem);
+        background-color: var(--toast-entry-bg);
     }
 
     to {
         opacity: 1;
         transform: none;
+        background-color: hsl(var(--card));
     }
 }
 

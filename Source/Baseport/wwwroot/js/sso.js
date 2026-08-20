@@ -7,6 +7,7 @@ const SSO_PROBLEMS = {
     no_account: 'No account here is linked to that identity.',
     disabled: 'That account is disabled.',
     no_console: 'That account does not have console access.',
+    not_linked: 'That identity was not linked. It may already belong to another account, or the session that started the link is gone.',
 };
 
 // Server-rendered into the page, so the buttons are there on the first paint instead of after a round trip.

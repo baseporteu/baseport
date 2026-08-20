@@ -202,6 +202,9 @@ public class UserAccount
     public bool MustChangePassword { get; set; } = false;
     public DateTime? LastLoginAt { get; set; }
 
+    // A throwaway account with no credential of any kind. It is claimed by setting one, and swept when it is abandoned. Stored rather than inferred from an empty PasswordHash, because an OIDC account and a half-created one have no password either and neither is disposable.
+    public bool IsAnonymous { get; set; } = false;
+
     // The identity provider this account signs in through, and the subject it claims there. The pair is what a sign-in matches on: a username is reassignable at the provider, a subject is not.
     public string OidcProviderId { get; set; } = "";
     public string OidcSubject { get; set; } = "";
@@ -253,6 +256,18 @@ public class SavedQuery
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? LastExecutedAt { get; set; }
+
+    // A saved query that carries a cron expression is the operator's own scheduled task, run by the same scheduler as the maintenance jobs. Empty is a query somebody runs by hand.
+    public string Schedule { get; set; } = "";
+
+    // Paused rather than unscheduled: the cron survives so the operator does not have to write it again.
+    public bool ScheduleEnabled { get; set; } = false;
+
+    // Where the result is posted after a scheduled run. Empty records the row count on the query instead, which is a report an operator reads in the console.
+    public string WebhookUrl { get; set; } = "";
+
+    public DateTime? NextRunAt { get; set; }
+    public string LastResult { get; set; } = "";
 }
 
 // Global application settings.
@@ -273,6 +288,12 @@ public class AppSettings
 
     // Self sign-up at /auth/register. Off until an operator opens it; an admin can still create user accounts from the console.
     public bool PublicRegistrationEnabled { get; set; } = false;
+
+    // Throwaway accounts at /api/auth/v1/anonymous, so a visitor can carry data before deciding to sign up. Off by default: it lets an unauthenticated caller create rows in _users.
+    public bool AnonymousAuthEnabled { get; set; } = false;
+
+    // Abandoned anonymous accounts are swept after this many days. Zero keeps them forever. Rows they created stay: a record is owned by a value in its own json, not by a foreign key, so nothing here can find them.
+    public int AnonymousRetentionDays { get; set; } = 30;
 
     // iss and aud on issued JWTs. Changing it invalidates every token already handed out.
     public string AuthIssuer { get; set; } = "baseport";

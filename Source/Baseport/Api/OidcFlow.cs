@@ -21,6 +21,8 @@ public static class OidcFlow
     public const string NoAccount = "no_account";
     public const string Disabled = "disabled";
     public const string NoConsole = "no_console";
+    public const string Linked = "linked";
+    public const string NotLinked = "not_linked";
 
     // A code lives exactly as long as a human takes to sign in at the provider.
     public static readonly TimeSpan FlowLifetime = TimeSpan.FromMinutes(10);
@@ -31,7 +33,8 @@ public static class OidcFlow
     // Keyed on the authority too, so editing a provider's URL drops the document cached for the old one instead of authenticating against it.
     private static readonly ConcurrentDictionary<string, ConfigurationManager<OpenIdConnectConfiguration>> Documents = new(StringComparer.Ordinal);
 
-    public sealed record PendingFlow(string ProviderId, string Verifier, string Nonce, string RedirectUri, string ReturnTo, bool Console, DateTime ExpiresAt);
+    // LinkTo is empty for a sign-in. When it carries an account id the flow is that account binding a provider identity to itself, so the callback writes the subject it gets instead of matching on it. The account was chosen by a console session before the redirect, never by a claim coming back from the provider.
+    public sealed record PendingFlow(string ProviderId, string Verifier, string Nonce, string RedirectUri, string ReturnTo, bool Console, DateTime ExpiresAt, string LinkTo = "");
 
     public sealed record Start(string AuthorizeUrl, string State);
 
@@ -56,11 +59,11 @@ public static class OidcFlow
                 Documents.TryRemove(key, out _);
     }
 
-    public static async Task<Start> BeginAsync(OidcProvider provider, string redirectUri, string returnTo, bool console, CancellationToken token) =>
-        Begin(await DocumentAsync(provider, token), provider, redirectUri, returnTo, console);
+    public static async Task<Start> BeginAsync(OidcProvider provider, string redirectUri, string returnTo, bool console, CancellationToken token, string linkTo = "") =>
+        Begin(await DocumentAsync(provider, token), provider, redirectUri, returnTo, console, linkTo);
 
     // Split from the fetch so the redirect it builds, and the one-time state behind it, are testable without a provider.
-    internal static Start Begin(OpenIdConnectConfiguration document, OidcProvider provider, string redirectUri, string returnTo, bool console)
+    internal static Start Begin(OpenIdConnectConfiguration document, OidcProvider provider, string redirectUri, string returnTo, bool console, string linkTo = "")
     {
         if (string.IsNullOrEmpty(document.AuthorizationEndpoint))
             throw new InvalidConfigurationException("The provider's discovery document declares no authorization endpoint.");
@@ -70,7 +73,7 @@ public static class OidcFlow
         var verifier = Ids.NewShortId(64);
         var challenge = Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
 
-        Pending[state] = new PendingFlow(provider.Id, verifier, nonce, redirectUri, returnTo, console, DateTime.UtcNow.Add(FlowLifetime));
+        Pending[state] = new PendingFlow(provider.Id, verifier, nonce, redirectUri, returnTo, console, DateTime.UtcNow.Add(FlowLifetime), linkTo);
 
         var query = new Dictionary<string, string?>
         {

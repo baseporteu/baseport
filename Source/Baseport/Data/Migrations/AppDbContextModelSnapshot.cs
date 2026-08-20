@@ -27,6 +27,12 @@ namespace Baseport.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("AnonymousAuthEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AnonymousRetentionDays")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ApiDescription")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -402,15 +408,33 @@ namespace Baseport.Data.Migrations
                     b.Property<DateTime?>("LastExecutedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("LastResult")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("NextRunAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Schedule")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("ScheduleEnabled")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Sql")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WebhookUrl")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -528,6 +552,9 @@ namespace Baseport.Data.Migrations
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsAnonymous")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsDisabled")
                         .HasColumnType("INTEGER");

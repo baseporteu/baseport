@@ -256,6 +256,68 @@ $$"""
             });
         }
 
+        // The embed is a script tag on somebody else's page, so nothing it draws is in the html a crawler reads. This is the same form at an address of its own, with its first page of rows already in the response: a link that can be shared, indexed, and read with scripting off. The embed then takes over and replaces it with the interactive version, renderers and actions included, which is why the server-rendered copy stays deliberately plain rather than growing into a second renderer that drifts from the first.
+        app.MapGet("/f/{fpid}", PageAsync).RequireRateLimiting(RateLimit.List);
+
+        static async Task<IResult> PageAsync(AppDbContext db, HttpContext ctx, string fpid, string? q, int? page)
+        {
+            var (form, table, fields) = await LoadAsync(db, fpid);
+            if (form is null || table is null) return Results.NotFound();
+
+            var body = new System.Text.StringBuilder();
+            body.Append($"<h1>{Html.Text(form.Title.Length > 0 ? form.Title : table.Name)}</h1>");
+            if (form.Description.Length > 0) body.Append($"<p>{Html.Text(form.Description)}</p>");
+
+            // A list is the only kind with something to say before scripting runs. A submit form is a set of inputs whose post target is the embed's, and rendering a second one that cannot be posted to would be a form that silently does nothing.
+            if (form.Kind == FormKinds.List && !table.IsProxy)
+                body.Append(await ListTableAsync(db, form, table, fields, q, page));
+
+            var origin = ctx.Request.Host.HasValue ? $"{ctx.Request.Scheme}://{ctx.Request.Host}" : "";
+            ctx.Response.Headers.CacheControl = "no-store";
+            return Results.Content(
+$$"""
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>{{Html.Text(form.Title.Length > 0 ? form.Title : table.Name)}}</title>
+<meta name='description' content='{{Html.Text(Html.Shorten(form.Description, 160))}}'>
+</head>
+<body style="font-family:system-ui; margin:0; padding:1rem;">
+<div id='baseport-ssr'>{{body}}</div>
+<script src="{{origin}}/embed.js?id={{Html.Text(fpid)}}"></script>
+</body>
+</html>
+""", "text/html; charset=utf-8");
+        }
+
+        // Exactly the columns the list was configured to show, through the same projection the JSON route uses: the server-rendered copy must never reveal a field the embed would have hidden.
+        static async Task<string> ListTableAsync(AppDbContext db, FormConfig form, TableDefinition table, List<FieldDefinition> fields, string? q, int? page)
+        {
+            var config = QueryEngine.ParseConfig(form.ConfigJson);
+            var columns = ListColumns(form, fields);
+            var searchFields = QueryEngine.Resolve(fields, config["searchFields"]);
+            if (searchFields.Count == 0) searchFields = columns;
+
+            var sortField = fields.FirstOrDefault(f => f.Name == Str(config, "sortField"));
+            var descending = !string.Equals(Str(config, "sortDir", "desc"), "asc", StringComparison.OrdinalIgnoreCase);
+            var filters = QueryEngine.ParseFilters(fields, config["filters"]);
+            var configured = (int?)(config["pageSize"] as JsonValue)?.GetValue<double?>() ?? 25;
+            var effective = configured > 0 ? configured : QueryEngine.MaxPageSize;
+
+            var result = await QueryEngine.ListAsync(db, table, searchFields, sortField, descending, q, page ?? 1, effective, filters);
+
+            var head = Html.Row([.. columns.Select(c => $"<th>{Html.Text(string.IsNullOrWhiteSpace(c.Label) ? c.Name : c.Label)}</th>")]);
+            var rows = result.Records
+                .Select(r => QueryEngine.Project(r, columns))
+                .Select(data => Html.Row([.. columns.Select(c => Html.Cell(Html.DisplayValue(data[c.Name])))]));
+
+            return result.Records.Count == 0
+                ? "<p>No records.</p>"
+                : $"<table><thead>{head}</thead><tbody>{string.Concat(rows)}</tbody></table>";
+        }
+
         app.MapGet("/api/forms/{fpid}/list", ListAsync).RequireRateLimiting(RateLimit.List);
 
         static async Task<IResult> ListAsync(AppDbContext db, HttpClient http, HttpContext ctx, string fpid, string? q, int? page, int? pageSize)

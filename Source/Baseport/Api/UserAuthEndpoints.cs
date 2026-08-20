@@ -17,6 +17,32 @@ public static class UserAuthEndpoints
         app.MapGet($"{ApiBase}/jwks.json", async (AppDbContext db) =>
             await EnabledAsync(db) ? Results.Json(UserTokens.Jwks()) : Results.NotFound());
 
+        // A visitor carries data before deciding to sign up. No credential is set, so this account cannot sign in again: the token pair it goes home with is the only way back to it, and register claims it when the visitor commits.
+        app.MapPost($"{ApiBase}/anonymous", async (AppDbContext db, HttpContext ctx) =>
+        {
+            var settings = await db.SettingsAsync() ?? new AppSettings();
+            if (!settings.PublicAuthEnabled) return Results.NotFound();
+            if (!settings.AnonymousAuthEnabled)
+                return Error(403, "Anonymous accounts are not enabled on this instance.");
+
+            var now = DateTime.UtcNow;
+            var user = new UserAccount
+            {
+                Id = Ids.NewShortId(12),
+                Username = "anon-" + Ids.NewShortId(10),
+                Role = AccountRoles.User,
+                IsAnonymous = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+                LastLoginAt = now
+            };
+            db.UserAccounts.Add(user);
+            await db.SaveChangesAsync();
+
+            AuditLogMiddleware.Note(ctx, $"Anonymous account {user.Username} created");
+            return Results.Created($"{ApiBase}/status", TokenPayload(await UserTokens.IssueAsync(db, user, now)));
+        }).RequireRateLimiting(RateLimit.Auth);
+
         app.MapPost($"{ApiBase}/register", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
         {
             var settings = await db.SettingsAsync() ?? new AppSettings();
@@ -34,24 +60,36 @@ public static class UserAuthEndpoints
             if (AccountValidation.PasswordProblem(password) is { } problem) errors.Add(problem);
             if (errors.Count > 0) return Results.BadRequest(new { errors });
 
-            if (await db.UserAccounts.AnyAsync(u => u.Username == username))
+            // Signing up while carrying an anonymous token claims that account rather than opening a second one, so the rows the visitor already created stay theirs. Any other caller registers as before.
+            var claiming = await CurrentAsync(db, ctx) is { IsAnonymous: true } anonymous ? anonymous : null;
+
+            if (await db.UserAccounts.AnyAsync(u => u.Username == username && u.Id != (claiming == null ? "" : claiming.Id)))
                 return Error(409, "That username is taken.");
-            if (email.Length > 0 && await db.UserAccounts.AnyAsync(u => u.Email == email && u.Role == AccountRoles.User))
+            if (email.Length > 0 && await db.UserAccounts.AnyAsync(u => u.Email == email && u.Role == AccountRoles.User && u.Id != (claiming == null ? "" : claiming.Id)))
                 return Error(409, "That email is already registered.");
 
             var now = DateTime.UtcNow;
-            var user = new UserAccount
+            var user = claiming ?? new UserAccount
             {
                 Id = Ids.NewShortId(12),
-                Username = username,
-                Email = email,
                 Role = AccountRoles.User,
-                PasswordHash = AdminAuth.HashPassword(password),
-                CreatedAt = now,
-                UpdatedAt = now
+                CreatedAt = now
             };
-            db.UserAccounts.Add(user);
+            user.Username = username;
+            user.Email = email;
+            user.PasswordHash = AdminAuth.HashPassword(password);
+            user.IsAnonymous = false;
+            user.UpdatedAt = now;
+
+            if (claiming is null) db.UserAccounts.Add(user);
             await db.SaveChangesAsync();
+
+            // The anonymous token was a bearer credential for an account that now has a password, so it does not outlive the claim.
+            if (claiming is not null)
+            {
+                await UserTokens.RevokeAllAsync(db, user.Id);
+                AuditLogMiddleware.Note(ctx, $"Anonymous account claimed as {user.Username}");
+            }
 
             var tokens = await UserTokens.IssueAsync(db, user, now);
             return Results.Created($"{ApiBase}/status", TokenPayload(tokens));
@@ -129,7 +167,8 @@ public static class UserAuthEndpoints
                     sub = user.Id,
                     user.Username,
                     user.Email,
-                    user.Role
+                    user.Role,
+                    anonymous = user.IsAnonymous
                 });
         });
 

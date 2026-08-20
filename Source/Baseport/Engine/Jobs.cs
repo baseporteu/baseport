@@ -37,6 +37,9 @@ public static class Jobs
         new("search-index", "Search index", "0 30 5 * * 0", true,
             "Optimize the full text search index, rebuilding it when it has drifted from the records.",
             (db, _, ct) => RecordSearch.MaintainAsync(db, ct)),
+        new("anonymous-cleanup", "Anonymous cleanup", "0 15 4 * * *", true,
+            "Delete abandoned anonymous accounts once no live session can reach them any more.",
+            AnonymousCleanupAsync),
         new("file-deletions", "File deletions", "0 0 6 * * *", false,
             "Delete uploads no record's JsonData references any more.",
             FileDeletionsAsync),
@@ -83,6 +86,21 @@ public static class Jobs
         var now = DateTime.UtcNow;
         var sessions = await UserTokens.PruneExpiredAsync(db, now);
         return $"Removed {sessions} session(s), {OneTimeCodes.PruneExpired(now)} code(s), {LoginGuard.PruneExpired(now)} lockout entry(ies), {OidcFlow.Prune(now)} abandoned sign-in(s).";
+    }
+
+    // An anonymous account is reachable only through the token pair it was handed, so once every session on it has expired nobody can ever sign back into it. Retention is the grace period after that, and rows it created keep a dead owner id: nothing here can find them, since a record is owned by a value in its own json.
+    private static async Task<string> AnonymousCleanupAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)
+    {
+        var settings = await db.AppSettings.FirstOrDefaultAsync(ct) ?? new AppSettings();
+        if (settings.AnonymousRetentionDays <= 0) return "Anonymous retention is disabled; nothing to sweep.";
+
+        var now = DateTime.UtcNow;
+        var cutoff = now.AddDays(-settings.AnonymousRetentionDays);
+        var removed = await db.UserAccounts
+            .Where(u => u.IsAnonymous && u.CreatedAt < cutoff)
+            .Where(u => !db.UserSessions.Any(s => s.UserId == u.Id && s.ExpiresAt > now))
+            .ExecuteDeleteAsync(ct);
+        return removed == 0 ? "No abandoned anonymous accounts." : $"Deleted {removed} abandoned anonymous account(s).";
     }
 
     private static async Task<string> LogsCleanupAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)

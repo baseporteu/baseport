@@ -31,7 +31,7 @@
 
         <form class='signin-panel' id='loginForm' onsubmit='return signIn(event)'>
             <header class='signin-header'>
-                <h1>Sign in</h1>
+                <h1 class="select-none">Sign in</h1>
                 <p>The console is private. Sign in to continue.</p>
             </header>
 
@@ -70,7 +70,7 @@
 
         <div class='signin-panel' id='forgotCard' hidden>
             <header class='signin-header'>
-                <h1>Forgot your password?</h1>
+                <h1 class="select-none">Forgot your password?</h1>
                 <p>Please reset it from the command line using administrative credentials.</p>
             </header>
             <button type='button' class='btn btn-outline btn-block' onclick='backToLogin()'>Back to sign in</button>
@@ -78,7 +78,7 @@
 
         <form class='signin-panel' id='changeCard' onsubmit='return changePassword(event)' hidden>
             <header class='signin-header'>
-                <h1>Set a new password</h1>
+                <h1 class="select-none">Set a new password</h1>
                 <p>This account is on a one-time password. Replace it to continue.</p>
             </header>
             <label class='field-label' for='curPass'>Current password
@@ -96,7 +96,7 @@
         </form>
 
         <footer class='signin-footer'>
-            <p>Licensed under EUPL 1.2</p>
+            <p class="select-none">Licensed under EUPL 1.2</p>
         </footer>
     </main>
 

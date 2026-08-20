@@ -7,5 +7,5 @@ namespace Baseport;
 public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
     public AppDbContext CreateDbContext(string[] args) =>
-        new(new DbContextOptionsBuilder<AppDbContext>().UseSqlite("Data Source=baseport.db").Options);
+        AppDbContext.Open("Data Source=baseport.db");
 }

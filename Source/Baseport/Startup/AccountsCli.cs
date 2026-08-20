@@ -53,7 +53,7 @@ public static class AccountsCli
 
         if (MissingDatabase(connectionString)) return 1;
 
-        using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connectionString).Options);
+        using var db = AppDbContext.Open(connectionString);
 
         try
         {

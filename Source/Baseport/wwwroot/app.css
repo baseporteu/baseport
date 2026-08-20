@@ -85,6 +85,11 @@ body {
     display: none !important;
 }
 
+.select-none, 
+.disabled {
+    user-select: none;
+}
+
 .shell {
     display: flex;
     min-height: 100vh;

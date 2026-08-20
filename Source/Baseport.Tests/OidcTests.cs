@@ -57,6 +57,9 @@ public class OidcTests : IDisposable
         return account;
     }
 
+    private static OidcFlow.PendingFlow Flow(OidcProvider provider, string linkTo = "") =>
+        new(provider.Id, "verifier", "nonce", "https://app.example.com/cb", "/_/admin", true, DateTime.UtcNow.AddMinutes(5), linkTo);
+
     private static OpenIdConnectConfiguration Document() => new()
     {
         Issuer = "https://auth.example.com",
@@ -191,6 +194,101 @@ public class OidcTests : IDisposable
         Assert.Equal(OidcFlow.NoAccount, problem);
         // Nothing was written on the way to refusing.
         Assert.Equal("", (await _db.UserAccounts.SingleAsync(TestContext.Current.CancellationToken)).OidcSubject);
+    }
+
+    // Self-link is the one path that binds an identity without matching a claim, so what
+    // is pinned is that the account is chosen before the redirect and re-checked after it.
+    [Fact]
+    public void A_link_flow_carries_the_account_that_started_it_and_a_sign_in_carries_none()
+    {
+        var provider = Provider();
+        var link = OidcFlow.Begin(Document(), provider, "https://app.example.com/cb", "/_/admin/settings/auth", console: true, linkTo: "acct00000001");
+        var signIn = OidcFlow.Begin(Document(), provider, "https://app.example.com/cb", "/_/admin", console: true);
+
+        Assert.Equal("acct00000001", OidcFlow.Claim(link.State)!.LinkTo);
+        // An ordinary sign-in must never fall into the link branch.
+        Assert.Equal("", OidcFlow.Claim(signIn.State)!.LinkTo);
+    }
+
+    // The escalation this closes: a link begun in one operator's browser, finished in another's.
+    [Fact]
+    public async Task A_link_started_by_one_account_never_binds_another()
+    {
+        var provider = Provider();
+        var starter = Account("alice");
+        var other = Account("mallory");
+        var flow = Flow(provider, linkTo: starter.Id);
+
+        var refusal = await OidcEndpoints.LinkRefusalAsync(_db, provider, flow, new OidcIdentity("sub-1", "", "", false), other.Id);
+
+        Assert.Equal("the session no longer holds the account that started it", refusal);
+        Assert.Equal("", (await _db.UserAccounts.SingleAsync(u => u.Id == other.Id, TestContext.Current.CancellationToken)).OidcSubject);
+    }
+
+    [Fact]
+    public async Task A_link_with_no_session_behind_it_is_refused()
+    {
+        var provider = Provider();
+        var flow = Flow(provider, linkTo: Account("alice").Id);
+
+        Assert.Equal("there is no signed-in account to link",
+            await OidcEndpoints.LinkRefusalAsync(_db, provider, flow, new OidcIdentity("sub-1", "", "", false), ""));
+    }
+
+    // A sign-in flow reaching the link branch would write a subject nobody asked to bind.
+    [Fact]
+    public async Task A_sign_in_flow_is_not_a_link_flow()
+    {
+        var provider = Provider();
+        var alice = Account("alice");
+
+        Assert.Equal("that flow was a sign-in, not a link",
+            await OidcEndpoints.LinkRefusalAsync(_db, provider, Flow(provider), new OidcIdentity("sub-1", "", "", false), alice.Id));
+    }
+
+    // The same floor `baseport accounts link` keeps: one identity, at most one account.
+    [Fact]
+    public async Task A_link_refuses_a_subject_another_account_already_holds()
+    {
+        var provider = Provider();
+        Account("bob", providerId: provider.Id, subject: "sub-1");
+        var alice = Account("alice");
+        var flow = Flow(provider, linkTo: alice.Id);
+
+        Assert.Equal("that identity is already held by another account",
+            await OidcEndpoints.LinkRefusalAsync(_db, provider, flow, new OidcIdentity("sub-1", "", "", false), alice.Id));
+    }
+
+    [Fact]
+    public async Task A_link_the_session_still_holds_is_allowed()
+    {
+        var provider = Provider();
+        var alice = Account("alice");
+        var flow = Flow(provider, linkTo: alice.Id);
+
+        Assert.Null(await OidcEndpoints.LinkRefusalAsync(_db, provider, flow, new OidcIdentity("sub-1", "", "", false), alice.Id));
+    }
+
+    // Both claim paths refuse an admin, so the refusal has to say so. The other two notes read as though fixing the claim would help, and for an admin it never can.
+    [Fact]
+    public async Task A_refusal_says_that_no_claim_will_ever_link_an_admin()
+    {
+        var provider = Provider();
+        Account("admin-a1b2c3d4", role: AccountRoles.Admin);
+
+        var note = await OidcEndpoints.AdminNeverLinksNoteAsync(_db, provider, new OidcIdentity("sub-1", "", "", false));
+
+        Assert.Contains("never linked by a claim", note);
+        Assert.Contains("accounts link", note);
+    }
+
+    [Fact]
+    public async Task An_instance_whose_admins_are_all_linked_has_nothing_to_explain()
+    {
+        var provider = Provider();
+        Account("admin-a1b2c3d4", role: AccountRoles.Admin, providerId: provider.Id, subject: "sub-9");
+
+        Assert.Equal("", await OidcEndpoints.AdminNeverLinksNoteAsync(_db, provider, new OidcIdentity("sub-1", "", "", false)));
     }
 
     [Fact]

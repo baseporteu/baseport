@@ -2,7 +2,7 @@ name: baseport
 
 services:
   baseport:
-    image: ghcr.io/hawkinslabdev/baseport:${BASEPORT_TAG:-latest}
+    image: ghcr.io/baseporteu/baseport:${BASEPORT_TAG:-latest}
     container_name: baseport
     restart: unless-stopped
     environment:

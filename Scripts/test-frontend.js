@@ -2094,23 +2094,87 @@ test('a subbar row is the same control as a primary nav row', () => {
             `the subbar row and the nav row disagree on ${prop}`);
 });
 
-test('the section root is separated from the things it heads', () => {
-    // "Show all" sat as a peer of the tables below it, at the same weight.
+function loadSidebar() {
+    const dom = install(['subbar']);
+    global.ui = {
+        el: (tag, className, props) => {
+            const e = dom.element(tag);
+            if (className) e.className = className;
+            Object.assign(e, props || {});
+            return e;
+        },
+        escape: s => String(s == null ? '' : s),
+    };
+    global.navigate = () => {};
+    global.routePath = () => '/';
+    global.currentTables = [];
+    global.currentTablePublicId = null;
+    global.formsAll = [];
+    global.formEditingId = null;
+    global.savedQueries = [];
+    global.currentQueryId = null;
+    global.settingsCurrentPage = 'host';
+
     const js = read('js/sidebar.js');
-    assert.ok(/root: true/.test(js), 'nothing marks the section root any more');
-    assert.ok(/const roots = items\.filter\(\(i\) => i\.root\)/.test(js), 'the root is rendered inline with the list again');
-    assert.ok(/subbar-sep|subbar-group/.test(js), 'the root and its list run together');
+    const src = js.slice(js.indexOf('const SECTION_ICONS'), js.indexOf('function refreshSidebar'));
+    const module = {};
+    eval(src + `
+;module.renderSidebar = renderSidebar;
+module.filters = subbarFilters;
+module.sections = SIDEBARS;
+`);
+    return { dom, module, subbar: dom.byId.subbar };
+}
+
+const pills = (bar) => bar.children.filter((c) => c.classList.contains('subbar-pill'));
+
+test('the section root is not a peer of the list it heads', () => {
+    const { module, subbar } = loadSidebar();
+    global.currentTables = [{ id: 't1', name: 'Orders' }, { id: 't2', name: 'Customers' }];
+
+    module.renderSidebar('tables');
+
+    assert.strictEqual(subbar.children[0].className.includes('subbar-pill'), true, 'the root is not rendered first');
+    assert.strictEqual(pills(subbar).length, 3, 'the root and both tables should each be a row');
+
+    assert.ok(!subbar.children[1].classList.contains('subbar-pill'),
+        'the root and its list run together');
 });
 
-test('a long list gets a filter, a short one gets a heading', () => {
+test('every section with a root also names a group, so something always divides them', () => {
+    const { module } = loadSidebar();
+    const rooted = Object.entries(module.sections)
+        .filter(([, spec]) => (spec.items ? spec.items() : []).some((i) => i.root))
+        .filter(([, spec]) => !spec.group)
+        .map(([name]) => name);
+    assert.deepStrictEqual(rooted, [], `rooted sections with no group: ${rooted.join(', ')}`);
+});
+
+test('a short list gets the same filter box as a long one', () => {
+    const { module, subbar } = loadSidebar();
+    global.savedQueries = [{ id: 'q1', name: 'Revenue' }];
+
+    module.renderSidebar('sql');
+
+    assert.strictEqual(subbar.children.filter((c) => c.classList.contains('subbar-filter')).length, 1,
+        'a short list is left without the box its longer siblings get');
+});
+
+test('a filter that matches nothing says so', () => {
+    const { module, subbar } = loadSidebar();
+    global.currentTables = [{ id: 't1', name: 'Orders' }];
+    module.filters.tables = 'zzz';
+
+    module.renderSidebar('tables');
+
+    assert.strictEqual(pills(subbar).length, 1, 'a non-matching table is still listed');
+    assert.ok(subbar.children.some((c) => c.classList.contains('subbar-empty')),
+        'a filter that matches nothing leaves the list silently empty');
+});
+
+test('typing in the filter keeps the caret', () => {
+    // Every keystroke repaints the bar, which replaces the field being typed into.
     const js = read('js/sidebar.js');
-    assert.ok(/SUBBAR_FILTER_FROM = \d+/.test(js), 'the filter threshold is gone');
-    assert.ok(/rest\.length >= SUBBAR_FILTER_FROM/.test(js), 'the filter no longer depends on the list being long');
-    // Two horizontal rules stacked is one job done twice.
-    assert.ok(/!filtered\) bar\.append\(ui\.el\('div', 'subbar-sep'\)\)/.test(js), 'the rule and the filter box both divide the list');
-    // A filter that hides everything must say so.
-    assert.ok(/subbar-empty/.test(js), 'a filter that matches nothing leaves the list silently empty');
-    // Repainting replaces the field, so the caret has to survive it.
     assert.ok(/next\.setSelectionRange/.test(js), 'typing in the filter loses the caret');
 });
 

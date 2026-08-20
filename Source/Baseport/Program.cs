@@ -96,7 +96,7 @@ try
 
     // Pooled: a DbContext is a request-lifetime allocation with a change tracker behind it, and this one is created for every request including the ones that only read.
     builder.Services.AddDbContextPool<AppDbContext>(options =>
-        options.UseSqlite(connectionString).AddInterceptors(new SqlitePragmas(), new RecordChangeInterceptor()));
+        AppDbContext.Configure(options, connectionString));
 
     // The embed runs on customer domains, so the form routes must be callable cross-origin.
     builder.Services.AddCors(options =>

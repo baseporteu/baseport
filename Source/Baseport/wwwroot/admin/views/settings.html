@@ -108,6 +108,24 @@
                                     </label>
                                 </div>
                                 <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsAnonymousAuthEnabled'>Anonymous accounts</label>
+                                        <p class='muted'>Lets a visitor try your app before signing up. <code>POST /api/auth/v1/anonymous</code> returns a token pair for a throwaway account with no credential; signing up while carrying that token claims the account, so the rows already created stay theirs.</p>
+                                    </div>
+                                    <label class='switch'>
+                                        <input type='checkbox' id='settingsAnonymousAuthEnabled'>
+                                        <span class='track'></span>
+                                        <span class='thumb'></span>
+                                    </label>
+                                </div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsAnonymousRetention'>Anonymous retention (days)</label>
+                                        <p class='muted'>How long an unclaimed anonymous account is kept after its last session expired and nobody can reach it any more. Zero keeps them forever.</p>
+                                    </div>
+                                    <input type='number' id='settingsAnonymousRetention' class='input' min='0' max='3650'>
+                                </div>
+                                <div class='setting-row'>
                                     <div class="setting-label">
                                         <label for="settingsAuthIssuer">Token issuer</label>
                                         <p class="muted">The issuer identifier for the JWT. Beware, changing this value invalidates all active tokens.</p>

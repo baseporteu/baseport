@@ -769,10 +769,11 @@ const ui = (() => {
         const panel = el('div', 'modal');
         panel.addEventListener('click', (ev) => ev.stopPropagation());
         panel.append(
-            el('h3', null, {
+            el('h3', 'select-none', {
                 textContent: title
             }),
         );
+        
         const body = el('div', 'modal-body');
         body.append(bodyEl);
         panel.append(body);
@@ -805,13 +806,17 @@ const ui = (() => {
         label,
         value = '',
         placeholder = '',
-        confirmLabel = 'Save'
+        confirmLabel = 'Save',
+        type = 'text',
+        help = ''
     }) {
         return new Promise((resolve) => {
             const body = el('div');
             const input = field(label, {
                 value,
-                placeholder
+                placeholder,
+                type,
+                help
             });
             body.append(input);
 

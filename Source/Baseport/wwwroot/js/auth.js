@@ -62,6 +62,7 @@ async function boot() {
     if (menuEmail) menuEmail.textContent = email || 'No email address set';
     markAppearance();
 
+    if (me.user) currentAccount = me.user;
     if (me.tables) currentTables = me.tables;
     // Server-rendered alongside the tables, so the overview's four numbers paint with them rather than reading "n/a" until something reloads.
     if (me.stats) summaryStats = me.stats;

@@ -102,9 +102,15 @@ internal sealed class RecordApi : IRecordApi
         using var response = await _client.SendAsync(HttpMethod.Delete, $"{Base}/{Uri.EscapeDataString(id)}", null, cancellationToken);
     }
 
-    public async IAsyncEnumerable<RecordChange> SubscribeAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<RecordChange> SubscribeAsync(CancellationToken cancellationToken = default) =>
+        StreamAsync($"api/v1/{ApiName}/subscribe", cancellationToken);
+
+    public IAsyncEnumerable<RecordChange> SubscribeAsync(string id, CancellationToken cancellationToken = default) =>
+        StreamAsync($"api/v1/{ApiName}/subscribe/{Uri.EscapeDataString(id)}", cancellationToken);
+
+    private async IAsyncEnumerable<RecordChange> StreamAsync(string path, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        using var response = await _client.SendAsync(HttpMethod.Get, $"api/v1/{ApiName}/subscribe", null, cancellationToken,
+        using var response = await _client.SendAsync(HttpMethod.Get, path, null, cancellationToken,
             completion: HttpCompletionOption.ResponseHeadersRead);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
