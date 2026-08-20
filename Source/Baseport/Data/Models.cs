@@ -296,6 +296,9 @@ public class AppSettings
     public string ApiDescription { get; set; } =
         "A secure REST API for managing your resources. All endpoints are under `/api/v1/` and require a bearer token.";
 
+    // Outbound proxy fetches otherwise reach anything the server can reach, including cloud metadata and the console's own port. Off means only public addresses; on says the server's own network is a legitimate target.
+    public bool ProxyPrivateTargetsEnabled { get; set; } = false;
+
     // Postgres wire-protocol listener: off by default, it's a second authentication surface.
     public bool PostgresEnabled { get; set; } = false;
     public int PostgresPort { get; set; } = 5432;

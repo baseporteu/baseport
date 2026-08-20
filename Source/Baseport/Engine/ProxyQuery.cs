@@ -21,7 +21,7 @@ public static class ProxyQuery
 
         // One field can be pushed down as $filter; more than one would need an `or` chain the remote may not support, so those fall back to matching in memory over a wider fetch.
         if (declared.Contains("$filter") && matchFields.Count == 1)
-            query.Add("$filter=" + Uri.EscapeDataString($"{matchFields[0].Name} eq '{term.Replace("'", "''")}'"));
+            query.Add("$filter=" + Uri.EscapeDataString($"{matchFields[0].Name} eq {ODataLiteral(term)}"));
         else if (declared.Contains("$top"))
             query.Add("$top=1000");
 
@@ -49,7 +49,7 @@ public static class ProxyQuery
         if (declared.Contains("$top")) query.Add("$top=" + wanted);
 
         if (declared.Contains("$filter") && !string.IsNullOrWhiteSpace(search) && searchFields.Count == 1)
-            query.Add("$filter=" + Uri.EscapeDataString($"contains({searchFields[0].Name}, '{search.Trim().Replace("'", "''")}')"));
+            query.Add("$filter=" + Uri.EscapeDataString($"contains({searchFields[0].Name}, {ODataLiteral(search.Trim())})"));
 
         var (body, error) = await GetAsync(http, table, query);
         if (error != null) return (null, error);
@@ -77,9 +77,14 @@ public static class ProxyQuery
         return (new Page(slice, total, declared.Count > 0), null);
     }
 
+    // A visitor's search term ends up inside a single-quoted literal in somebody else's query language. Doubling the quote is the OData escape, and a control character is dropped rather than escaped: no legitimate lookup value carries one, and an upstream that parses loosely is the one place a stray newline could still break out of the literal. Both call sites re-match locally, so a term this narrows is still found.
+    private static string ODataLiteral(string value) =>
+        $"'{new string(value.Where(c => !char.IsControl(c)).ToArray()).Replace("'", "''")}'";
+
     private static async Task<(JsonNode? Body, string? Error)> GetAsync(HttpClient http, TableDefinition table, List<string> query)
     {
         var url = table.ProxyReadUrl;
+        if (ProxyTarget.Problem(url) is { } blocked) return (null, blocked);
         if (query.Count > 0) url += (url.Contains('?') ? "&" : "?") + string.Join("&", query);
 
         return await ProxyLog.TraceAsync("read", table.Name, "GET", url, async () =>

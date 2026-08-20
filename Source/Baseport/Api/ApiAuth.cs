@@ -27,11 +27,9 @@ public static class ApiAuth
         var settings = await db.SettingsAsync();
         if (settings is null || !settings.PublicAuthEnabled) return null;
 
-        var claims = UserTokens.Verify(token, DateTime.UtcNow);
-        if (claims is null) return null;
-
-        var account = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == claims.Sub);
-        return account is null || account.IsDisabled ? null : account;
+        var now = DateTime.UtcNow;
+        var claims = UserTokens.Verify(token, now);
+        return claims is null ? null : await UserTokens.AccountForAsync(db, claims, now);
     }
 
     // same resolution, for callers with no HttpContext to pull a bearer header from (the postgres/tds wire listeners authenticate off the password field instead)

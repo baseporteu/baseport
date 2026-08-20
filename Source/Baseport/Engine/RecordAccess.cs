@@ -162,6 +162,20 @@ public static partial class RecordAccess
         return SlotToken().Replace(expression, m => $"{{{int.Parse(m.Groups["n"].Value) + offset}}}");
     }
 
+    // The read rule as a self-contained boolean with its values inlined as SQL literals, for a context that cannot bind parameters: the wire providers build one static temp view per table. A read rule carries only _USER_.id, a system-issued short id, and it is escaped as a literal regardless. Returns null when the table has no read rule, so the caller leaves the view unfiltered.
+    public static string? ReadClauseLiteral(string readRule, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId)
+    {
+        if (string.IsNullOrWhiteSpace(readRule)) return null;
+
+        var args = new List<object?>();
+        var expression = Rewrite(readRule, fields, rowAlias, userId, null, null, args);
+        return SlotToken().Replace(expression, m =>
+        {
+            var value = args[int.Parse(m.Groups["n"].Value)];
+            return value is null ? "NULL" : $"'{value.ToString()!.Replace("'", "''")}'";
+        });
+    }
+
     private static string Slot(List<object?> args, object? value)
     {
         args.Add(value);

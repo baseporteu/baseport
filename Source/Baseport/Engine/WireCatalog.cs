@@ -13,12 +13,13 @@ public enum WireDialect { Postgres, Tds }
 public static class WireCatalog
 {
     private sealed record CatalogColumn(string Name, string DataType, bool Required);
-    private sealed record CatalogTable(string Id, string Name, int Oid, long Rows, List<CatalogColumn> Columns);
+    private sealed record CatalogTable(string Id, string Name, int Oid, long Rows, List<CatalogColumn> Columns, string ReadRule);
 
-    public static void Apply(SqliteConnection conn, WireDialect dialect)
+    // userId is the account the wire session authenticated as. It scopes the row views to the same rows the REST api would return that account (pillar 15), so the wire is not a way around a table's read rule.
+    public static void Apply(SqliteConnection conn, WireDialect dialect, string? userId)
     {
         var tables = Read(conn);
-        CreateRowViews(conn, tables);
+        CreateRowViews(conn, tables, userId);
 
         if (dialect == WireDialect.Postgres) BuildPostgres(conn, tables);
         else BuildTds(conn, tables);
@@ -53,20 +54,22 @@ public static class WireCatalog
 
         var tables = new List<CatalogTable>();
         var oid = 16384;
-        using (var reader = Query(conn, "SELECT Id, Name FROM _tables WHERE IsProxy = 0 ORDER BY Name"))
+        // Only published tables (ApiEnabled), so the wire exposes the same set of tables a token reaches over REST, never an author's unpublished working table.
+        using (var reader = Query(conn, "SELECT Id, Name, ReadRule FROM _tables WHERE IsProxy = 0 AND ApiEnabled = 1 ORDER BY Name"))
             while (reader.Read())
             {
                 var id = reader.GetString(0);
                 var name = reader.GetString(1);
                 if (!IsPlainIdentifier(name)) continue;
-                tables.Add(new CatalogTable(id, name, oid, counts.GetValueOrDefault(id), columns.GetValueOrDefault(id) ?? new List<CatalogColumn>()));
+                var readRule = reader.IsDBNull(2) ? "" : reader.GetString(2);
+                tables.Add(new CatalogTable(id, name, oid, counts.GetValueOrDefault(id), columns.GetValueOrDefault(id) ?? new List<CatalogColumn>(), readRule));
                 oid += 16;
             }
         return tables;
     }
 
     // The view is what makes the catalog honest: every object it lists can actually be selected from.
-    private static void CreateRowViews(SqliteConnection conn, List<CatalogTable> tables)
+    private static void CreateRowViews(SqliteConnection conn, List<CatalogTable> tables, string? userId)
     {
         foreach (var table in tables)
         {
@@ -74,6 +77,11 @@ public static class WireCatalog
             foreach (var column in table.Columns)
                 projection.Append($", json_extract(r.JsonData, '$.{column.Name}') AS {Quote(column.Name)}");
             projection.Append($" FROM main._records r WHERE r.TableId = {Literal(table.Id)}");
+
+            // A rule naming a field this catalog skipped rewrites to NULL, which reads as a refusal, so an unprojectable field closes the view rather than opening it.
+            var fields = table.Columns.Select(c => new FieldDefinition { Name = c.Name }).ToList();
+            if (RecordAccess.ReadClauseLiteral(table.ReadRule, fields, "r", userId) is { } clause)
+                projection.Append($" AND COALESCE(({clause}), 0)");
 
             Exec(conn, $"DROP VIEW IF EXISTS temp.{Quote(table.Name)}");
             Exec(conn, $"CREATE TEMP VIEW {Quote(table.Name)} AS {projection}");

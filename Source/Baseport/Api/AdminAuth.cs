@@ -52,8 +52,8 @@ public static class AdminAuth
 
         if (UserTokens.Verify(ctx.Request.Cookies[AuthCookie], now) is { } claims)
         {
-            var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == claims.Sub);
-            return user is null || user.IsDisabled ? null : Remember(ctx, user);
+            var user = await UserTokens.AccountForAsync(db, claims, now);
+            if (user is not null) return Remember(ctx, user);
         }
 
         // A cookie has a back-channel a bearer header does not, so a stale auth cookie is reminted here rather than answering 401.

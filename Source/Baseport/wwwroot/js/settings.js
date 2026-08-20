@@ -85,6 +85,7 @@ async function loadSettings() {
     renderAllowedOrigins(settingsData.allowedOrigins || '');
     document.getElementById('settingsBackupRetention').value = settingsData.backupRetention ?? 5;
     document.getElementById('settingsOpenApiEnabled').checked = settingsData.openApiEnabled !== false;
+    document.getElementById('settingsProxyPrivateTargetsEnabled').checked = settingsData.proxyPrivateTargetsEnabled === true;
     document.getElementById('settingsApiTitle').value = settingsData.apiTitle || '';
     document.getElementById('settingsApiDescription').value = settingsData.apiDescription || '';
     document.getElementById('settingsPublicAuthEnabled').checked = settingsData.publicAuthEnabled === true;
@@ -247,6 +248,7 @@ async function saveProviderSettings(btn) {
                 tdsEnabled: document.getElementById('settingsTdsEnabled').checked,
                 tdsPort: Number(document.getElementById('settingsTdsPort').value) || 1433,
                 tdsBindAddress: document.getElementById('settingsTdsBindAddress').value.trim() || '127.0.0.1',
+                proxyPrivateTargetsEnabled: document.getElementById('settingsProxyPrivateTargetsEnabled').checked,
             },
             success: 'Provider settings have been updated. Listening ports apply within a few seconds.',
         });

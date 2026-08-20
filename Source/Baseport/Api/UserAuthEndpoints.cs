@@ -236,11 +236,9 @@ public static class UserAuthEndpoints
         var header = ctx.Request.Headers.Authorization.ToString();
         if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
-            var claims = UserTokens.Verify(header["Bearer ".Length..].Trim(), DateTime.UtcNow);
-            if (claims is null) return null;
-
-            var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == claims.Sub);
-            return user is null || user.IsDisabled ? null : user;
+            var now = DateTime.UtcNow;
+            var claims = UserTokens.Verify(header["Bearer ".Length..].Trim(), now);
+            return claims is null ? null : await UserTokens.AccountForAsync(db, claims, now);
         }
 
         // Headers take priority, cookies are the fallback: one sign-in on this origin is a sign-in on both surfaces. Same precedence as TrailBase's extract_tokens_from_request_parts, and the same reason a cookie can be reminted here where a header cannot.

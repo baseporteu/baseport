@@ -31,7 +31,7 @@ public class UserAuthTests : IDisposable
     public void A_minted_token_verifies_and_carries_its_claims()
     {
         var now = DateTime.UtcNow;
-        var claims = UserTokens.Verify(UserTokens.Mint(Jane(), now), now);
+        var claims = UserTokens.Verify(UserTokens.Mint(Jane(), "session00001", now), now);
 
         Assert.NotNull(claims);
         Assert.Equal("user00000001", claims!.Sub);
@@ -44,7 +44,7 @@ public class UserAuthTests : IDisposable
     public void A_tampered_payload_is_refused()
     {
         var now = DateTime.UtcNow;
-        var parts = UserTokens.Mint(Jane(), now).Split('.');
+        var parts = UserTokens.Mint(Jane(), "session00001", now).Split('.');
         var forged = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
             $$"""{"iss":"baseport","aud":"baseport","sub":"admin","iat":0,"exp":{{DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds()}}}"""))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -56,14 +56,14 @@ public class UserAuthTests : IDisposable
     public void An_expired_token_is_refused()
     {
         var issued = DateTime.UtcNow.AddDays(-1);
-        Assert.Null(UserTokens.Verify(UserTokens.Mint(Jane(), issued), DateTime.UtcNow));
+        Assert.Null(UserTokens.Verify(UserTokens.Mint(Jane(), "session00001", issued), DateTime.UtcNow));
     }
 
     [Fact]
     public void Changing_the_issuer_rejects_tokens_minted_under_the_old_one()
     {
         var now = DateTime.UtcNow;
-        var token = UserTokens.Mint(Jane(), now);
+        var token = UserTokens.Mint(Jane(), "session00001", now);
 
         UserTokens.Configure(new AppSettings { AuthIssuer = "acme" });
         Assert.Null(UserTokens.Verify(token, now));
@@ -76,7 +76,7 @@ public class UserAuthTests : IDisposable
     public void Rotating_the_signing_key_rejects_tokens_minted_under_the_old_one()
     {
         var now = DateTime.UtcNow;
-        var token = UserTokens.Mint(Jane(), now);
+        var token = UserTokens.Mint(Jane(), "session00001", now);
 
         UserTokens.Rotate();
         Assert.Null(UserTokens.Verify(token, now));
@@ -152,6 +152,38 @@ public class UserAuthTests : IDisposable
 
         Assert.Null(await UserTokens.ReauthAsync(_db, first.RefreshToken, DateTime.UtcNow));
         Assert.Null(await UserTokens.ReauthAsync(_db, second.RefreshToken, DateTime.UtcNow));
+    }
+
+    // A stateless access token cannot be recalled, so it names its session row and every resolution re-reads it: without that, signing out revoked the refresh token and left the access token good for its full lifetime.
+    [Fact]
+    public async Task Revoking_a_session_kills_the_access_token_it_issued()
+    {
+        await SchemaBootstrap.ApplyAsync(_db);
+        var user = Jane();
+        _db.UserAccounts.Add(user);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var issued = await UserTokens.IssueAsync(_db, user, DateTime.UtcNow);
+        var claims = UserTokens.Verify(issued.AuthToken, DateTime.UtcNow);
+        Assert.NotNull(await UserTokens.AccountForAsync(_db, claims!, DateTime.UtcNow));
+
+        await UserTokens.RevokeAsync(_db, issued.RefreshToken);
+
+        Assert.NotNull(UserTokens.Verify(issued.AuthToken, DateTime.UtcNow));
+        Assert.Null(await UserTokens.AccountForAsync(_db, claims!, DateTime.UtcNow));
+    }
+
+    // A token minted before the session claim existed names no session, and is refused rather than trusted.
+    [Fact]
+    public async Task An_access_token_without_a_session_claim_is_refused()
+    {
+        await SchemaBootstrap.ApplyAsync(_db);
+        var user = Jane();
+        _db.UserAccounts.Add(user);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var claims = UserTokens.Verify(UserTokens.Mint(user, "", DateTime.UtcNow), DateTime.UtcNow);
+        Assert.Null(await UserTokens.AccountForAsync(_db, claims!, DateTime.UtcNow));
     }
 
     // One session store for every role: revoking an operator's sessions has to reach the console, which it only can if the console session is a row in the same table.

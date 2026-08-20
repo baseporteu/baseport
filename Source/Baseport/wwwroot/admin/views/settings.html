@@ -222,6 +222,24 @@
                                     <button class='btn' onclick='saveProviderSettings(this)'>Save</button>
                                 </div>
                             </div>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>Proxy targets</h2><p class='muted'>Where a proxy table and an OpenAPI import may fetch from.</p></div></div>
+                                <div class='setting-row'>
+                                    <div class='setting-label'>
+                                        <label for='settingsProxyPrivateTargetsEnabled'>Allow private targets</label>
+                                        <p class='muted'>Off, a proxy may only reach public addresses. On, it may also reach localhost, your LAN and the cloud metadata endpoint, so only turn it on when the target really is on this network.</p>
+                                    </div>
+                                    <label class='switch'>
+                                        <input type='checkbox' id='settingsProxyPrivateTargetsEnabled'>
+                                        <span class='track'></span>
+                                        <span class='thumb'></span>
+                                    </label>
+                                </div>
+                                <div class='card-footer'>
+                                    <span class='muted'></span>
+                                    <button class='btn' onclick='saveProviderSettings(this)'>Save</button>
+                                </div>
+                            </div>
                         </div>
                         <div class='settings-pane hidden' data-pane='sites'>
                             <div class='card'>

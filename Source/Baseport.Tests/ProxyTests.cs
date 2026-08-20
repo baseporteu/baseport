@@ -140,4 +140,49 @@ public class ProxyTests
         };
         Assert.Equal(new[] { "Charlie", "Alice" }, ProxyQuery.Sorted(records, null, false).Select(r => r["Name"]!.GetValue<string>()));
     }
+
+    // A proxy target is a url an operator types and the server fetches from inside its own network, so it is the one place an ssrf reaches cloud metadata or a neighbour's admin port.
+    [Theory]
+    [InlineData("http://169.254.169.254/latest/meta-data/")]
+    [InlineData("http://127.0.0.1:5263/api/openapi.json")]
+    [InlineData("http://localhost:5263/api/openapi.json")]
+    [InlineData("http://10.0.0.5/spec.json")]
+    [InlineData("http://192.168.1.10/spec.json")]
+    [InlineData("http://172.16.4.4/spec.json")]
+    [InlineData("http://[::1]/spec.json")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("ftp://example.com/spec.json")]
+    [InlineData("not a url")]
+    public void A_private_or_non_http_proxy_target_is_refused(string url)
+    {
+        ProxyTarget.Configure(new AppSettings());
+        Assert.NotNull(ProxyTarget.Problem(url));
+    }
+
+    [Fact]
+    public void A_public_proxy_target_is_allowed()
+    {
+        ProxyTarget.Configure(new AppSettings());
+        Assert.Null(ProxyTarget.Problem("https://93.184.216.34/openapi.json"));
+    }
+
+    // The intended target often is local (a Portway on the same host), so the block is a default an operator can lift, not a wall.
+    [Fact]
+    public void An_operator_can_open_private_targets()
+    {
+        ProxyTarget.Configure(new AppSettings { ProxyPrivateTargetsEnabled = true });
+        Assert.Null(ProxyTarget.Problem("http://127.0.0.1:5263/api/openapi.json"));
+
+        ProxyTarget.Configure(new AppSettings());
+        Assert.NotNull(ProxyTarget.Problem("http://127.0.0.1:5263/api/openapi.json"));
+    }
+
+    // A scheme is refused whatever the setting says: only http(s) is ever fetched.
+    [Fact]
+    public void Opening_private_targets_does_not_open_other_schemes()
+    {
+        ProxyTarget.Configure(new AppSettings { ProxyPrivateTargetsEnabled = true });
+        Assert.NotNull(ProxyTarget.Problem("file:///etc/passwd"));
+        ProxyTarget.Configure(new AppSettings());
+    }
 }

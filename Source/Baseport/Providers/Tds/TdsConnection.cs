@@ -60,7 +60,7 @@ public static class TdsConnection
                 continue;
             }
 
-            await RunQueryAsync(stream, scopes, ExtractBatchText(m.Payload), ct);
+            await RunQueryAsync(stream, scopes, ExtractBatchText(m.Payload), account.Id, ct);
         }
     }
 
@@ -147,7 +147,7 @@ public static class TdsConnection
         _ => null,
     };
 
-    private static async Task RunQueryAsync(NetworkStream stream, IServiceScopeFactory scopes, string sql, CancellationToken ct)
+    private static async Task RunQueryAsync(NetworkStream stream, IServiceScopeFactory scopes, string sql, string userId, CancellationToken ct)
     {
         if (NoOpStatement.IsMatch(sql))
         {
@@ -166,7 +166,7 @@ public static class TdsConnection
             ? await SqlEngine.ReadAsync(db, sql, conn =>
             {
                 RegisterCompatibilityFunctions(conn);
-                WireCatalog.Apply(conn, WireDialect.Tds);
+                WireCatalog.Apply(conn, WireDialect.Tds, userId);
             })
             : new SqlEngine.Result([], [], false, invalid);
 

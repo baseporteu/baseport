@@ -378,6 +378,7 @@ public static class AdminEndpoints
                 s.AuthRefreshLifetimeDays,
                 authJwksPath = "/api/auth/v1/jwks.json",
                 authUiPath = "/auth/login",
+                s.ProxyPrivateTargetsEnabled,
                 s.PostgresEnabled,
                 s.PostgresPort,
                 s.PostgresBindAddress,
@@ -476,12 +477,17 @@ public static class AdminEndpoints
             var providerError = ApplyProviderSettings(body, s);
             if (providerError is not null) return Results.BadRequest(new { errors = new[] { providerError } });
 
+            if (body["proxyPrivateTargetsEnabled"] is JsonValue papt && papt.TryGetValue<bool>(out var allowPrivate))
+                s.ProxyPrivateTargetsEnabled = allowPrivate;
+
             await db.SaveChangesAsync();
             UserTokens.Configure(s);
+            ProxyTarget.Configure(s);
             return Results.Ok(new
             {
                 s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.BackupRetention, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled,
                 s.PublicAuthEnabled, s.PublicRegistrationEnabled, s.AuthIssuer, s.AuthTokenLifetimeSec, s.AuthRefreshLifetimeDays,
+                s.ProxyPrivateTargetsEnabled,
                 s.PostgresEnabled, s.PostgresPort, s.PostgresBindAddress, s.TdsEnabled, s.TdsPort, s.TdsBindAddress
             });
         });

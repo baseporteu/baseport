@@ -29,6 +29,8 @@ public static class OpenApiProxy
 
     public static async Task<(List<OpInfo> Ops, string BaseUrl, string? Error)> FetchOperationsAsync(HttpClient http, string specUrl)
     {
+        if (ProxyTarget.Problem(specUrl) is { } blocked) return (new(), "", blocked);
+
         string? json;
         try
         {
@@ -126,6 +128,8 @@ public static class OpenApiProxy
     // Infers fields by reading one live record.
     public static async Task<(List<FieldProp> Props, string? Error)> SampleFieldsAsync(HttpClient http, string url, string token, int limit = 1)
     {
+        if (ProxyTarget.Problem(url) is { } blocked) return (new(), blocked);
+
         var probe = url;
         if (!probe.Contains('?')) probe += "?$top=" + limit;
 

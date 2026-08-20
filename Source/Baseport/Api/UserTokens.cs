@@ -9,7 +9,7 @@ namespace Baseport;
 
 public sealed record UserTokenPair(string AuthToken, string RefreshToken, DateTime ExpiresAt);
 
-public sealed record UserClaims(string Sub, string? Email, string? Username, string Role, long IssuedAt, long ExpiresAt);
+public sealed record UserClaims(string Sub, string? SessionId, string? Email, string? Username, string Role, long IssuedAt, long ExpiresAt);
 
 public static class UserTokens
 {
@@ -75,7 +75,7 @@ public static class UserTokens
         return string.IsNullOrWhiteSpace(storedKey) ? Convert.ToBase64String(key.ExportPkcs8PrivateKey()) : storedKey;
     }
 
-    public static string Mint(UserAccount user, DateTime now)
+    public static string Mint(UserAccount user, string sessionId, DateTime now)
     {
         var key = _key ?? throw new InvalidOperationException("UserTokens.Initialize was never called.");
 
@@ -85,6 +85,7 @@ public static class UserTokens
             ["iss"] = Issuer,
             ["aud"] = Issuer,
             ["sub"] = user.Id,
+            ["sid"] = sessionId,
             ["iat"] = new DateTimeOffset(now, TimeSpan.Zero).ToUnixTimeSeconds(),
             ["exp"] = new DateTimeOffset(now.Add(AuthTokenLifetime), TimeSpan.Zero).ToUnixTimeSeconds(),
             ["email"] = string.IsNullOrEmpty(user.Email) ? null : user.Email,
@@ -132,7 +133,7 @@ public static class UserTokens
         var iat = Number(payload, "iat");
         if (exp is null || exp <= new DateTimeOffset(now, TimeSpan.Zero).ToUnixTimeSeconds()) return null;
 
-        return new UserClaims(sub, Text(payload, "email"), Text(payload, "username"), Text(payload, "role") ?? "", iat ?? 0, exp.Value);
+        return new UserClaims(sub, Text(payload, "sid"), Text(payload, "email"), Text(payload, "username"), Text(payload, "role") ?? "", iat ?? 0, exp.Value);
     }
 
     public static JsonObject Jwks()
@@ -160,9 +161,10 @@ public static class UserTokens
     public static async Task<UserTokenPair> IssueAsync(AppDbContext db, UserAccount user, DateTime now)
     {
         var refresh = Ids.NewShortId(48);
+        var sessionId = Ids.NewShortId(12);
         db.UserSessions.Add(new UserSession
         {
-            Id = Ids.NewShortId(12),
+            Id = sessionId,
             UserId = user.Id,
             RefreshTokenHash = HashRefreshToken(refresh),
             CreatedAt = now,
@@ -171,7 +173,7 @@ public static class UserTokens
         await db.UserSessions.Where(s => s.UserId == user.Id && s.ExpiresAt < now).ExecuteDeleteAsync();
         await db.SaveChangesAsync();
 
-        return new UserTokenPair(Mint(user, now), refresh, now.Add(AuthTokenLifetime));
+        return new UserTokenPair(Mint(user, sessionId, now), refresh, now.Add(AuthTokenLifetime));
     }
 
     // A refresh token is not spent by the refresh it pays for: two console tabs whose auth cookies expire together would otherwise race, and the loser would be signed out.
@@ -186,7 +188,17 @@ public static class UserTokens
         var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == session.UserId);
         if (user is null || user.IsDisabled) return null;
 
-        return (user, new UserTokenPair(Mint(user, now), refreshToken, now.Add(AuthTokenLifetime)));
+        return (user, new UserTokenPair(Mint(user, session.Id, now), refreshToken, now.Add(AuthTokenLifetime)));
+    }
+
+    // An access token is stateless and cannot be recalled, so it names the session row that issued it and every resolution re-reads that row. Sign-out, a password an operator resets and an expiry all delete the row, and the outstanding access token dies with it instead of outliving the sign-out by its full lifetime. A token minted before this claim existed carries no sid and is refused.
+    public static async Task<UserAccount?> AccountForAsync(AppDbContext db, UserClaims claims, DateTime now)
+    {
+        if (string.IsNullOrEmpty(claims.SessionId)) return null;
+        if (!await db.UserSessions.AnyAsync(s => s.Id == claims.SessionId && s.ExpiresAt > now)) return null;
+
+        var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Id == claims.Sub);
+        return user is null || user.IsDisabled ? null : user;
     }
 
     public static Task<int> PruneExpiredAsync(AppDbContext db, DateTime now) =>

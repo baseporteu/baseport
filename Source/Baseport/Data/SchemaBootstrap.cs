@@ -39,6 +39,7 @@ public static class SchemaBootstrap
         await db.SaveChangesAsync();
 
         EmbedOrigins.Set(settings.AllowedOrigins);
+        ProxyTarget.Configure(settings);
 
         // Guarantees all dynamic table indexes exist.
         foreach (var table in await db.Tables.Include(t => t.Fields).ToListAsync())

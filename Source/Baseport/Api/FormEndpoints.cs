@@ -387,6 +387,9 @@ $$"""
     // Proxy tables store nothing locally: the validated payload is relayed and the remote verdict returned.
     private static async Task<IResult> ForwardAsync(HttpClient http, TableDefinition table, JsonObject obj)
     {
+        if (ProxyTarget.Problem(table.ProxyUrl) is { } blocked)
+            return Results.BadRequest(new { errors = new[] { blocked } });
+
         using var req = new HttpRequestMessage(
             new HttpMethod(string.IsNullOrWhiteSpace(table.ProxyMethod) ? "POST" : table.ProxyMethod),
             table.ProxyUrl);

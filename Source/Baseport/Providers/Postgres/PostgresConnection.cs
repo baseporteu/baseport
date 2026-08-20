@@ -54,7 +54,7 @@ public static class PostgresConnection
                     return;
 
                 case 'Q':
-                    await RunQueryAsync(stream, scopes, ReadCStringFromStart(m.Payload), ct);
+                    await RunQueryAsync(stream, scopes, ReadCStringFromStart(m.Payload), account.Id, ct);
                     await WriteReadyForQueryAsync(stream, ct);
                     break;
 
@@ -70,11 +70,11 @@ public static class PostgresConnection
                     break;
 
                 case 'D' when !hadError:
-                    await HandleDescribeAsync(stream, m.Payload, scopes, portals, ct);
+                    await HandleDescribeAsync(stream, m.Payload, scopes, portals, account.Id, ct);
                     break;
 
                 case 'E' when !hadError:
-                    hadError = await HandleExecuteAsync(stream, m.Payload, scopes, portals, ct);
+                    hadError = await HandleExecuteAsync(stream, m.Payload, scopes, portals, account.Id, ct);
                     break;
 
                 case 'C':
@@ -174,7 +174,7 @@ public static class PostgresConnection
             }
             : result;
 
-    private static async Task<SqlEngine.Result> ExecuteAsync(IServiceScopeFactory scopes, string sql)
+    private static async Task<SqlEngine.Result> ExecuteAsync(IServiceScopeFactory scopes, string sql, string userId)
     {
         if (ShowResult(sql) is { } show) return show;
         sql = StripCasts(sql);
@@ -187,7 +187,7 @@ public static class PostgresConnection
         var result = await SqlEngine.ReadAsync(db, sql, conn =>
         {
             RegisterCompatibilityFunctions(conn);
-            WireCatalog.Apply(conn, WireDialect.Postgres);
+            WireCatalog.Apply(conn, WireDialect.Postgres, userId);
         });
 
         // the catalog covers what a browser reads; anything else under pg_catalog still answers empty rather than handing back a sqlite error
@@ -196,11 +196,11 @@ public static class PostgresConnection
             : NameColumnsLikePostgres(result);
     }
 
-    private static async Task RunQueryAsync(NetworkStream stream, IServiceScopeFactory scopes, string sql, CancellationToken ct)
+    private static async Task RunQueryAsync(NetworkStream stream, IServiceScopeFactory scopes, string sql, string userId, CancellationToken ct)
     {
         if (NoOpTag(sql) is { } noOpTag) { await WriteCommandCompleteAsync(stream, noOpTag, ct); return; }
 
-        var result = await ExecuteAsync(scopes, sql);
+        var result = await ExecuteAsync(scopes, sql, userId);
 
         if (result.Error is not null)
         {
@@ -395,7 +395,7 @@ public static class PostgresConnection
 
     private static readonly HashSet<string> TwoWordTypes = new(StringComparer.OrdinalIgnoreCase) { "varying", "precision" };
 
-    private static async Task HandleDescribeAsync(NetworkStream stream, byte[] payload, IServiceScopeFactory scopes, Dictionary<string, Portal> portals, CancellationToken ct)
+    private static async Task HandleDescribeAsync(NetworkStream stream, byte[] payload, IServiceScopeFactory scopes, Dictionary<string, Portal> portals, string userId, CancellationToken ct)
     {
         var i = 0;
         var target = (char)payload[i++];
@@ -415,7 +415,7 @@ public static class PostgresConnection
             return;
         }
 
-        await EnsureExecutedAsync(portal, scopes, ct);
+        await EnsureExecutedAsync(portal, scopes, userId, ct);
         if (portal.NoOpCommandTag is not null || portal.Result is not { Columns.Count: > 0 })
             await WriteMessageAsync(stream, (byte)'n', [], ct); // nodata
         else
@@ -423,7 +423,7 @@ public static class PostgresConnection
     }
 
     // returns whether the connection is now in an error state (pending a sync to clear)
-    private static async Task<bool> HandleExecuteAsync(NetworkStream stream, byte[] payload, IServiceScopeFactory scopes, Dictionary<string, Portal> portals, CancellationToken ct)
+    private static async Task<bool> HandleExecuteAsync(NetworkStream stream, byte[] payload, IServiceScopeFactory scopes, Dictionary<string, Portal> portals, string userId, CancellationToken ct)
     {
         var i = 0;
         var name = ReadCString(payload, ref i);
@@ -433,7 +433,7 @@ public static class PostgresConnection
             return true;
         }
 
-        await EnsureExecutedAsync(portal, scopes, ct);
+        await EnsureExecutedAsync(portal, scopes, userId, ct);
         if (portal.NoOpCommandTag is not null)
         {
             await WriteCommandCompleteAsync(stream, portal.NoOpCommandTag, ct);
@@ -459,14 +459,14 @@ public static class PostgresConnection
     }
 
     // reads (or, for a no-op statement, tags) the portal's outcome the first time it's touched by describe or execute, so either can come first
-    private static async Task EnsureExecutedAsync(Portal portal, IServiceScopeFactory scopes, CancellationToken ct)
+    private static async Task EnsureExecutedAsync(Portal portal, IServiceScopeFactory scopes, string userId, CancellationToken ct)
     {
         if (portal.Executed) return;
         portal.Executed = true;
 
         if (NoOpTag(portal.Sql) is { } noOpTag) { portal.NoOpCommandTag = noOpTag; return; }
 
-        portal.Result = await ExecuteAsync(scopes, portal.Sql);
+        portal.Result = await ExecuteAsync(scopes, portal.Sql, userId);
     }
 
     private static byte[] BuildEmptyParameterDescription()

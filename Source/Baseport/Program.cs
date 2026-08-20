@@ -147,25 +147,31 @@ try
         : ctx.Response.StatusCode >= 400 ? Serilog.Events.LogEventLevel.Warning
         : IsStaticAsset(ctx.Request.Path) ? Serilog.Events.LogEventLevel.Verbose
         : Serilog.Events.LogEventLevel.Debug);
+
     app.UseExceptionHandler(errorApp => errorApp.Run(async ctx =>
     {
         var ex = ctx.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
-        if (ex != null) Log.Error(ex, "Unhandled exception on {Path}", ctx.Request.Path);
+        // A request ASP.NET could not parse is the caller's error and already carries the status that says so; flattening it to 500 reported a server fault for something like ?pageSize=2147483648, and logged it as one.
+        var status = ex is BadHttpRequestException bad ? bad.StatusCode : StatusCodes.Status500InternalServerError;
+        if (ex != null && status >= 500) Log.Error(ex, "Unhandled exception on {Path}", ctx.Request.Path);
         // The OpenAPI document promises every non-2xx answer speaks the Error shape, so an unhandled exception must too, instead of ASP.NET's bare 500.
-        ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        ctx.Response.StatusCode = status;
         if (ctx.Request.Path.StartsWithSegments("/api"))
-            await ctx.Response.WriteAsJsonAsync(new { errors = new[] { "Internal server error." } });
+            await ctx.Response.WriteAsJsonAsync(new { errors = new[] { status >= 500 ? "Internal server error." : "The request could not be parsed." } });
     }));
+
     // Only the visitor-facing form routes are reachable cross-origin, and only from the sites an author listed.
     app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/api/forms"), b => b.UseCors("embed"));
     app.UseRateLimiter();
     app.UseSecurityHeaders();
     app.UseResponseCompression();
+
     // The console's assets carry no version in their URL, so a browser holding a stale ui.js after an upgrade runs it against fresh markup and the page breaks with something like "ui.themeChoice is not a function". no-cache still revalidates cheaply: the ETag answers 304 and nothing is downloaded twice.
     app.UseStaticFiles(new StaticFileOptions
     {
         OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "no-cache"
     });
+    
     // Uploaded files: a file field stores an absolute URL, so it must be fetchable the same way any other URL in that field would be -- no session, no token.
     Directory.CreateDirectory(FileStore.Directory);
     app.UseStaticFiles(new StaticFileOptions

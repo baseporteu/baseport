@@ -14,6 +14,7 @@ namespace Baseport.Tests;
 public class PostgresProviderTests : IAsyncLifetime
 {
     private const string Token = "wire-test-token";
+    private string _accountId = "";
     private SqliteConnection _connection = null!;
     private ServiceProvider _services = null!;
     private TcpListener _listener = null!;
@@ -33,10 +34,11 @@ public class PostgresProviderTests : IAsyncLifetime
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await db.Database.EnsureCreatedAsync();
-            db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = "Orders" });
+            db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = "Orders", ApiEnabled = true, ApiName = "orders" });
+            _accountId = Ids.NewShortId(12);
             db.UserAccounts.Add(new UserAccount
             {
-                Id = Ids.NewShortId(12),
+                Id = _accountId,
                 Username = "wire-test",
                 Email = "wire@test.local",
                 ApiEnabled = true,
@@ -84,7 +86,7 @@ public class PostgresProviderTests : IAsyncLifetime
 
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Postgres));
+        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Postgres, _accountId));
 
         Assert.Equal(direct.Columns, columns);
         Assert.Equal(direct.Rows, rows);
@@ -215,6 +217,54 @@ public class PostgresProviderTests : IAsyncLifetime
         var (columns, rows) = await RunQueryAsync(client, sql);
         Assert.Equal(column, Assert.Single(columns));
         Assert.Equal(value, Assert.Single(Assert.Single(rows)));
+    }
+
+    // The wire is an api-token surface and must show what the rest api shows: an unpublished table is not part of that, so it is neither catalogued nor selectable.
+    [Fact]
+    public async Task An_unpublished_table_is_neither_listed_nor_selectable()
+    {
+        await SeedTableAsync("Drafts", apiEnabled: false, readRule: "");
+
+        using var client = await ConnectAsync();
+        var (_, rows) = await RunQueryAsync(client, "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'");
+        Assert.DoesNotContain("Drafts", rows.Select(r => r[0]));
+
+        var stream = client.GetStream();
+        await SendQueryAsync(stream, "SELECT * FROM \"Drafts\"");
+        Assert.Equal('E', (await ReadMessageAsync(stream))!.Value.Type);
+    }
+
+    // A read rule filters a listing over rest (pillar 15), so the wire has to filter identically or it is a way around the rule.
+    [Fact]
+    public async Task A_read_rule_filters_the_rows_to_the_caller()
+    {
+        var tableId = await SeedTableAsync("Tickets", apiEnabled: true, readRule: "_ROW_.owner = _USER_.id", "owner", "subject");
+        await SeedRecordAsync(tableId, $$"""{"owner":"{{_accountId}}","subject":"mine"}""");
+        await SeedRecordAsync(tableId, """{"owner":"somebody-else","subject":"theirs"}""");
+
+        using var client = await ConnectAsync();
+        var (_, rows) = await RunQueryAsync(client, "SELECT subject FROM \"Tickets\" ORDER BY subject");
+        Assert.Equal("mine", Assert.Single(Assert.Single(rows)));
+    }
+
+    private async Task<string> SeedTableAsync(string name, bool apiEnabled, string readRule, params string[] fields)
+    {
+        using var scope = _services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var id = Ids.NewShortId(12);
+        db.Tables.Add(new TableDefinition { Id = id, Name = name, ApiEnabled = apiEnabled, ApiName = name.ToLowerInvariant(), ReadRule = readRule });
+        foreach (var (field, position) in fields.Select((f, i) => (f, i)))
+            db.Fields.Add(new FieldDefinition { Id = Ids.NewShortId(12), TableId = id, Name = field, Position = position });
+        await db.SaveChangesAsync();
+        return id;
+    }
+
+    private async Task SeedRecordAsync(string tableId, string json)
+    {
+        using var scope = _services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Records.Add(new Record { Id = Ids.NewShortId(12), TableId = tableId, JsonData = json, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
     }
 
     private int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
