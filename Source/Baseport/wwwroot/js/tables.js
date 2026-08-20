@@ -16,7 +16,6 @@ function selectTable(table) {
     document.getElementById('saveFieldsBtn').disabled = true;
     document.getElementById('settingsTableName').innerText = table.name;
     document.getElementById('tableDescription').value = table.description || '';
-    document.getElementById('tableApiEnabled').checked = !!table.apiEnabled;
     applyProxySettings(table);
     document.getElementById('tableFormsHint').innerText =
         (table.formCount || 0) === 0 ?
@@ -80,7 +79,6 @@ function normalizeApiName(input) {
 function tableSettingsPayload() {
     const body = {
         description: document.getElementById('tableDescription').value,
-        apiEnabled: document.getElementById('tableApiEnabled').checked,
     };
     const table = currentTables.find((t) => t.id === currentTablePublicId);
     if (table && table.isProxy) {
@@ -128,6 +126,8 @@ function openEndpointSheet(id) {
 
     const body = ui.el('div', 'sheet-form');
 
+    const exposed = settingSwitch('sheetApiEnabled', !!table.apiEnabled, 'Expose', "Makes this table's records readable and writable at /api/v1.");
+
     const apiName = ui.field('Endpoint name', {
         id: 'sheetApiName',
         value: table.apiName || '',
@@ -139,7 +139,7 @@ function openEndpointSheet(id) {
     // A published table doing without a name would 400 on save; an unpublished one needs no name at all.
     function refreshEndpointSaveState() {
         const name = apiName.ctrl.value.trim();
-        const valid = apiNameIsValid(name, table.apiEnabled);
+        const valid = apiNameIsValid(name, exposed.ctrl.checked);
         saveBtn.disabled = !valid;
         apiNameHelp.textContent = valid ?
             apiNameHelpDefault :
@@ -152,6 +152,7 @@ function openEndpointSheet(id) {
         normalizeApiName(apiName.ctrl);
         refreshEndpointSaveState();
     });
+    exposed.ctrl.addEventListener('change', refreshEndpointSaveState);
 
     const docsEnabled = settingSwitch('sheetApiDocsEnabled', table.apiDocsEnabled !== false, 'Show in API docs', "Off keeps the endpoint live but out of the OpenAPI document -- for an integration you don't want advertised.");
 
@@ -198,7 +199,7 @@ function openEndpointSheet(id) {
         textContent: 'When a method is turned off, it is removed from the documentation and rejected by the API.'
     }));
 
-    body.append(apiName, docsEnabled, displayName, namespace, documentation, methods);
+    body.append(exposed, apiName, docsEnabled, displayName, namespace, documentation, methods);
 
     const actions = ui.el('div', 'form-actions');
     const saveBtn = ui.button('Save', () =>
@@ -207,6 +208,7 @@ function openEndpointSheet(id) {
                 method: 'PATCH',
                 body: {
                     apiName: apiName.ctrl.value.trim().toLowerCase(),
+                    apiEnabled: exposed.ctrl.checked,
                     apiDocsEnabled: docsEnabled.ctrl.checked,
                     apiDisplayName: displayName.ctrl.value,
                     apiNamespace: namespace.ctrl.value,
