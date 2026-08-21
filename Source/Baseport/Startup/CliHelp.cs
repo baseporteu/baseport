@@ -10,7 +10,7 @@ public static class CliHelp
          ?? "unknown").Split('+')[0];
 
     // Handled by the wrapper script the installer writes, never by the binary; listed here so both print one menu.
-    public static readonly string[] WrapperCommands = { "logs", "update", "-i", "-d" };
+    public static readonly string[] WrapperCommands = { "logs", "update", "service", "restart" };
 
     public static readonly string[] Commands =
     {
@@ -18,8 +18,8 @@ public static class CliHelp
         "providers",
         "logs",
         "update",
-        "-i",
-        "-d",
+        "service",
+        "restart",
         "version",
         "help"
     };

@@ -5,7 +5,7 @@ description: "API tokens, end user accounts, single sign-on and anonymous accoun
 
 # Authentication
 
-There are two kinds of credential. An **API token** is a long lived string you issue to an account yourself. A **JWT** is a shorter lived token you get by signing in. Both work on the same `/api/v1` routes.
+There are two kinds of credentials, as we both support API-tokens and JWT-authentications. An **API token** is a long lived string you issue to an account itself, used primarily for the REST API. A **JWT** is a shorter lived token you get by signing in, retrieved by authenticating from the clients. Both work on the same `/api/v1` routes.
 
 ```
 Authorization: Bearer <token or jwt>

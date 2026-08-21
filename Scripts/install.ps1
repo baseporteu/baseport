@@ -31,8 +31,7 @@ try {
     $archive = Join-Path $tmp $asset
     $sumFile = "$archive.sha256"
 
-    Write-Host "Installing into $dir (override with BASEPORT_DIR)"
-    Write-Host "Fetching $asset"
+    Write-Host "Installing $tag into $dir (override with BASEPORT_DIR)"
     try { Invoke-WebRequest -Uri "$base/$asset" -OutFile $archive }
     catch { throw "Release $tag has no asset named $asset." }
     try { Invoke-WebRequest -Uri "$base/$asset.sha256" -OutFile $sumFile }
@@ -105,17 +104,16 @@ finally {
 Write-Host ""
 if ($update) {
     Write-Host "Baseport updated to $tag in $dir."
-    Write-Host "Kept: baseport.db, baseport.key, log, uploads, backups, appsettings.json."
 } else {
     Write-Host "Baseport $tag installed in $dir."
 }
 Write-Host ""
-Write-Host "  baseport --urls http://localhost:5263    start, loopback only"
-Write-Host "  baseport --urls http://0.0.0.0:5263      start, every interface"
-Write-Host "  baseport help                            everything else"
+Write-Host "  baseport                             start on http://localhost:5263"
+Write-Host "  baseport --urls http://0.0.0.0:5263  start on every interface"
+Write-Host "  baseport logs                        follow the log files"
+Write-Host "  baseport help                        everything else"
 Write-Host ""
-Write-Host "Console: http://localhost:5263/_/admin"
-Write-Host "First start prints a one-time admin username and password."
+Write-Host "Console http://localhost:5263/_/admin, first start prints a one-time admin login."
 
 $here = (Get-Location).Path
 if ((Test-Path (Join-Path $here 'Baseport.exe')) -and ($here -ne $dir)) {

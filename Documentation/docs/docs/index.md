@@ -58,8 +58,8 @@ baseport accounts list
 baseport providers status
 baseport logs
 baseport update
-sudo baseport -i
-sudo baseport -d
+sudo baseport service
+sudo baseport restart
 ```
 
 `baseport logs` follows the rolling log files in the install directory, 200 lines back by default. Pass a number for more or less: `baseport logs 50`. Under systemd, `journalctl -u baseport` shows the same output.
