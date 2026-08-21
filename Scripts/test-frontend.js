@@ -304,7 +304,7 @@ test('an explicit theme choice survives a reload and outranks the system', () =>
 test('every id the scripts read exists in the markup or is created at runtime', () => {
     const html = readHtml();
     const js = readAll();
-    const runtime = new Set(['toasts', 'sheetOverlay', 'tableName', 'pwCurrent', 'pwNew', 'fieldEditError',
+    const runtime = new Set(['toasts', 'sheetOverlay', 'pwCurrent', 'pwNew', 'fieldEditError',
         'bootstrap', 'fieldType'
     ]);
     const present = new Set([...html.matchAll(/id=['"]([\w-]+)['"]/g)].map(m => m[1]));
@@ -2268,6 +2268,65 @@ test('the import sheet stores its rows, instead of walking up from an input', ()
     assert.ok(!/parentElement/.test(src), 'the import sheet reaches a row through an input again');
     assert.ok(/importEls = \{/.test(src), 'the sheet no longer keeps references to its own rows');
     assert.ok(!/getElementById\('imp/.test(src), 'the sheet is re-querying its own elements by id');
+});
+
+test('nothing in the runtime whitelist is also a real element', () => {
+    // tableName was whitelisted as runtime-created long after the inline create-table
+    // form that made it had been replaced by ui.ask(). Adding a real #tableName to table
+    // settings then collided with a dead hasUnsavedChanges() check that read it, and every
+    // table opened looked permanently dirty. The whitelist is what hid the clash.
+    const html = readHtml();
+    const runtime = ['toasts', 'sheetOverlay', 'pwCurrent', 'pwNew', 'fieldEditError', 'bootstrap', 'fieldType'];
+    const present = new Set([...html.matchAll(/id=['"]([\w-]+)['"]/g)].map(m => m[1]));
+    const clashes = runtime.filter(id => present.has(id));
+    assert.deepStrictEqual(clashes, [], `whitelisted as runtime but rendered in markup: ${clashes.join(', ')}`);
+});
+
+test('no id is claimed twice in the composed page', () => {
+    // The views are concatenated into one document, so two sections reusing an id
+    // means getElementById silently answers with whichever came first.
+    const ids = [...readHtml().matchAll(/id=['"]([\w-]+)['"]/g)].map(m => m[1]);
+    const seen = new Set();
+    const dupes = [...new Set(ids.filter(id => !seen.add(id)))];
+    assert.deepStrictEqual(dupes, [], `id used more than once: ${dupes.join(', ')}`);
+});
+
+test('unsaved state is tracked by the dirty flags, never sniffed off an input', () => {
+    // Reading a field's value to decide "is there unsaved work" makes any screen that
+    // happens to reuse that id permanently dirty. The flags are set by the oninput
+    // handlers and cleared on save and on open, which is the whole state machine.
+    const core = read('js/core.js');
+    const fn = core.slice(core.indexOf('function hasUnsavedChanges'), core.indexOf('async function navigate'));
+    assert.ok(!/getElementById/.test(fn), 'hasUnsavedChanges reads an element again');
+    assert.ok(/tableDirty \|\| fieldsDirty/.test(fn), 'the dirty flags are no longer what it checks');
+
+    // Opening a table fills the name box programmatically, which fires no input event.
+    const tables = read('js/tables.js');
+    const open = tables.slice(tables.indexOf('function selectTable'), tables.indexOf('function paintTableName'));
+    assert.ok(/tableDirty = false/.test(open), 'opening a table no longer clears the dirty flag');
+});
+
+test('the field editor greys what the server refuses on a computed type', () => {
+    // FieldValidation refuses a computed field that is required or a lookup identifier.
+    // The editor offered both, so choosing System ID on an imported column, which import
+    // infers as required, came back 400 instead of simply not offering the option.
+    const src = read('js/tables.js');
+    assert.ok(/function syncComputedGuards/.test(src), 'the editor no longer mirrors the computed guard');
+    assert.ok(/syncComputedGuards\(t\)/.test(src), 'the guard never runs when the type changes');
+    const fn = src.slice(src.indexOf('function syncComputedGuards'), src.indexOf('function setFieldTypes'));
+    assert.ok(/feRequired/.test(fn) && /feIdentifier/.test(fn), 'both refused switches are not covered');
+    assert.ok(/el\.checked = false/.test(fn), 'a ticked switch survives the change to a computed type');
+});
+
+test('which types are computed comes from the payload, not a copy in the console', () => {
+    // One table says what a field type is; a hardcoded list here drifts from FieldTypes.cs.
+    const src = read('js/tables.js');
+    assert.ok(/if \(t\.computed\) COMPUTED_TYPES\.push\(t\.name\)/.test(src), 'the console no longer reads computed from the payload');
+    assert.ok(!/\['calculated', ?'derived', ?'systemid'\]/.test(src), 'the console keeps its own list of computed types');
+
+    // ...and the server has to actually send it, or the console greys nothing.
+    const console_ = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'Api', 'ConsoleEndpoints.cs'), 'utf8');
+    assert.ok(/fieldTypes = FieldTypes\.All\.Select[^\n]*t\.Computed/.test(console_), 'the bootstrap payload no longer carries Computed');
 });
 
 test('a table can be renamed, and every place showing the name repaints together', () => {

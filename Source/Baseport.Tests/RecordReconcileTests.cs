@@ -208,4 +208,109 @@ public class RecordReconcileTests : IDisposable
         Assert.True(FieldValidation.TryNumber(constructed, out var b));
         Assert.Equal(a, b);
     }
+
+    // Retyping a Y/N column into a system id left every row reading "Y": the values were leftovers of the old type, and the rule that keeps a system id stable kept those instead.
+    [Fact]
+    public async Task Retyping_a_column_into_a_system_id_replaces_what_the_old_type_left_behind()
+    {
+        var table = Seed("""{"qty":1,"flag":"Y"}""", """{"qty":2,"flag":"Y"}""", """{"qty":3,"flag":"N"}""");
+        var flag = AddField(table, new FieldDefinition { Name = "flag", DataType = "text" });
+
+        flag.DataType = "systemid";
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await RecordEngine.ReconcileComputedAsync(_db, table, new[] { "flag" });
+
+        var values = Stored(table).Select(o => o["flag"]!.GetValue<string>()).ToList();
+        Assert.DoesNotContain("Y", values);
+        Assert.DoesNotContain("N", values);
+        Assert.Equal(3, values.Distinct().Count());
+    }
+
+    // Deleting a field leaves its data in the records, so a new field reusing that name would inherit values it never generated.
+    [Fact]
+    public async Task A_new_system_id_reusing_an_old_field_name_does_not_inherit_its_values()
+    {
+        var table = Seed("""{"qty":1,"code":"LEFTOVER"}""");
+        AddField(table, new FieldDefinition { Name = "code", DataType = "systemid" });
+
+        await RecordEngine.ReconcileComputedAsync(_db, table, new[] { "code" });
+
+        Assert.NotEqual("LEFTOVER", Stored(table)[0]["code"]!.GetValue<string>());
+    }
+
+    // Without a reason to think otherwise the identity rule still holds: an ordinary reconcile never moves a system id.
+    [Fact]
+    public async Task A_reconcile_that_names_nothing_stale_still_keeps_every_system_id()
+    {
+        var table = Seed("""{"qty":1}""", """{"qty":2}""");
+        AddField(table, new FieldDefinition { Name = "ref", DataType = "systemid" });
+        await RecordEngine.ReconcileComputedAsync(_db, table, new[] { "ref" });
+        var first = Stored(table).Select(o => o["ref"]!.GetValue<string>()).ToList();
+
+        await RecordEngine.ReconcileComputedAsync(_db, table);
+
+        Assert.Equal(first, Stored(table).Select(o => o["ref"]!.GetValue<string>()));
+    }
+
+    // The records are keyed by field name, so without carrying the values over a rename points the field at nothing: the column reads empty on every row.
+    [Fact]
+    public async Task Renaming_a_field_carries_its_values_over()
+    {
+        var table = Seed("""{"qty":1,"sku":"A1"}""", """{"qty":2,"sku":"A2"}""");
+        AddField(table, new FieldDefinition { Name = "sku", DataType = "text" });
+
+        var moved = await RecordEngine.RenameFieldDataAsync(_db, table, "sku", "article");
+
+        Assert.Equal(2, moved);
+        Assert.All(Stored(table), o =>
+        {
+            Assert.False(o.ContainsKey("sku"));
+            Assert.StartsWith("A", o["article"]!.GetValue<string>());
+        });
+    }
+
+    // A rename is not a retype: the value moved with the field, so it is still the identity that field generated.
+    [Fact]
+    public async Task Renaming_a_system_id_keeps_the_identity_it_already_issued()
+    {
+        var table = Seed("""{"qty":1}""");
+        AddField(table, new FieldDefinition { Name = "ref", DataType = "systemid" });
+        await RecordEngine.ReconcileComputedAsync(_db, table, new[] { "ref" });
+        var issued = Stored(table)[0]["ref"]!.GetValue<string>();
+
+        await RecordEngine.RenameFieldDataAsync(_db, table, "ref", "code");
+        await RecordEngine.ReconcileComputedAsync(_db, table);
+
+        Assert.Equal(issued, Stored(table)[0]["code"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task A_rename_onto_an_orphaned_key_keeps_the_field_own_value()
+    {
+        var table = Seed("""{"qty":1,"sku":"MINE","article":"ORPHAN"}""");
+        await RecordEngine.RenameFieldDataAsync(_db, table, "sku", "article");
+        Assert.Equal("MINE", Stored(table)[0]["article"]!.GetValue<string>());
+    }
+
+    // The console's confirmation says deleting a field irreversibly deletes the data in it, and until this ran it did not.
+    [Fact]
+    public async Task Deleting_a_field_really_removes_its_values()
+    {
+        var table = Seed("""{"qty":1,"secret":"shh"}""", """{"qty":2,"secret":"quiet"}""");
+
+        var cleared = await RecordEngine.DropFieldDataAsync(_db, table, "secret");
+
+        Assert.Equal(2, cleared);
+        Assert.All(Stored(table), o => Assert.False(o.ContainsKey("secret")));
+        // Gone from the stored json itself, not merely hidden from a projection.
+        Assert.DoesNotContain("shh", _db.Records.AsNoTracking().Where(r => r.TableId == table.Id).Select(r => r.JsonData).ToList());
+    }
+
+    [Fact]
+    public async Task Dropping_leaves_every_other_value_untouched()
+    {
+        var table = Seed("""{"qty":1,"keep":"yes","secret":"shh"}""");
+        await RecordEngine.DropFieldDataAsync(_db, table, "secret");
+        Assert.Equal("yes", Stored(table)[0]["keep"]!.GetValue<string>());
+    }
 }

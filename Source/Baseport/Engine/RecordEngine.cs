@@ -241,18 +241,62 @@ public static class RecordEngine
         return (merged, outcome);
     }
 
+    // Carries a field's stored values over when it is renamed. The records are keyed by field name, so without this a rename points the field at nothing: the column reads empty on every row and the values it held are orphaned under the old key. RecordIndexes moves the generated column for the same change; this moves the data under it.
+    public static async Task<int> RenameFieldDataAsync(AppDbContext db, TableDefinition table, string from, string to)
+    {
+        if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to) || from == to) return 0;
+
+        var records = await db.Records.Where(r => r.TableId == table.Id).ToListAsync();
+        var moved = 0;
+        foreach (var record in records)
+        {
+            var obj = (JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject) ?? new JsonObject();
+            if (!obj.TryGetPropertyValue(from, out var value)) continue;
+            obj.Remove(from);
+            // The field's own value wins over anything already sitting under the new key, which can only be an orphan of some earlier field.
+            obj[to] = value?.DeepClone();
+            record.JsonData = obj.ToJsonString();
+            moved++;
+        }
+        if (moved > 0) await db.SaveChangesAsync();
+        return moved;
+    }
+
+    // Removes a deleted field's values from every record. The console's confirmation says deleting a field "will irreversibly delete all the data contained in this field", and until this ran it did not: the values stayed in the record json, invisible to every read that projects by field but reachable from the SQL console and a backup, stripped a row at a time by PrepareAsync as records happened to be written, and inherited whole by any later field that reused the name. The counterpart of RecordIndexes.DropForAsync.
+    public static async Task<int> DropFieldDataAsync(AppDbContext db, TableDefinition table, string name)
+    {
+        if (string.IsNullOrEmpty(name)) return 0;
+
+        var records = await db.Records.Where(r => r.TableId == table.Id).ToListAsync();
+        var cleared = 0;
+        foreach (var record in records)
+        {
+            var obj = (JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject) ?? new JsonObject();
+            if (!obj.Remove(name)) continue;
+            record.JsonData = obj.ToJsonString();
+            cleared++;
+        }
+        if (cleared > 0) await db.SaveChangesAsync();
+        return cleared;
+    }
+
     // Brings stored records back in line with the table's computed fields.
     //
     // A computed field is server owned: the server, not the writer, decides its value, so the promise is that every stored record has one. PrepareAsync keeps that promise at write time, which is the only time it was ever kept: adding the field to a table that already stores rows left every one of them empty, and ApplyUpdateAsync then filled them one at a time as records happened to be edited, so the column was silently part-filled instead of plainly empty.
     //
     // This is RecordIndexes.SyncAsync's counterpart. That reconciles the schema objects a field change implies; this reconciles the record data it implies. Both are called from the same places for the same reason, and neither is optional after a field is created or retyped.
     //
-    // A system id is filled only where it is missing, never replaced: it is the record's identity, and regenerating it is the bug ApplyUpdateAsync already guards against. A calculated or derived value is recomputed outright, because it is a pure function of the record and an edited expression makes every stored value stale.
-    public static async Task<int> ReconcileComputedAsync(AppDbContext db, TableDefinition table)
+    // A system id is filled only where it is missing, never replaced: it is the record's identity, and regenerating it is the bug ApplyUpdateAsync already guards against.
+    //
+    // `stale` names the fields whose stored values were never this field's to begin with, and for those the identity rule does not apply because there is no identity there to keep. A field retyped into a system id holds leftovers of the old type, and a newly created one holds whatever an earlier field of that name left behind, since deleting a field does not strip its data from the records. Retyping a Y/N column into a system id otherwise left every row reading "Y".
+    //
+    // A calculated or derived value is recomputed outright either way, because it is a pure function of the record and an edited expression makes every stored value stale in exactly the same sense.
+    public static async Task<int> ReconcileComputedAsync(AppDbContext db, TableDefinition table, IReadOnlyCollection<string>? stale = null)
     {
         var computed = table.Fields.Where(f => FieldTypes.Of(f).Computed).ToList();
         if (computed.Count == 0) return 0;
 
+        var staleNames = stale is null ? new HashSet<string>(StringComparer.Ordinal) : new HashSet<string>(stale, StringComparer.Ordinal);
         var records = await db.Records.Where(r => r.TableId == table.Id).ToListAsync();
         var changed = 0;
         foreach (var record in records)
@@ -264,7 +308,7 @@ public static class RecordEngine
             {
                 if (FieldValidation.NormalizeType(f.DataType) == "systemid")
                 {
-                    if (!IsMissing(obj, f.Name)) continue;
+                    if (!IsMissing(obj, f.Name) && !staleNames.Contains(f.Name)) continue;
                     obj[f.Name] = Ids.NewShortId();
                     touched = true;
                     continue;

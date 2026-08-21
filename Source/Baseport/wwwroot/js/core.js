@@ -185,8 +185,6 @@ function parseRoute() {
 // none of these are visible to the browser's own "leave site?" prompt since nothing was submitted
 function hasUnsavedChanges() {
     if (tableDirty || fieldsDirty) return true;
-    const draftName = document.getElementById('tableName');
-    if (draftName && draftName.value.trim()) return true;
     return typeof hasUnsavedFormChanges === 'function' && hasUnsavedFormChanges();
 }
 

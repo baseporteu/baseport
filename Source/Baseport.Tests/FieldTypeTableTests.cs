@@ -30,4 +30,22 @@ public class FieldTypeTableTests
         foreach (var type in FieldTypes.All.Where(t => t.Computed || t.Secret))
             Assert.False(type.Nestable, $"{type.Name} is computed or secret but marked nestable.");
     }
+
+    // The console greys Required and Identifier for a computed type off the payload's Computed flag, so that flag has to name exactly the types the validator refuses them on.
+    [Fact]
+    public void Every_computed_type_is_one_the_validator_refuses_required_and_identifier_on()
+    {
+        foreach (var t in FieldTypes.All.Where(t => t.Computed))
+        {
+            var required = FieldValidation.ValidateFieldDefinition(
+                new FieldDefinition { Name = "f", DataType = t.Name, Expression = "1", IsRequired = true },
+                new List<string>(), new List<string>(), _ => true);
+            Assert.Contains(required, e => e.Contains("cannot be required"));
+
+            var identifier = FieldValidation.ValidateFieldDefinition(
+                new FieldDefinition { Name = "f", DataType = t.Name, Expression = "1", IsIdentifier = true },
+                new List<string>(), new List<string>(), _ => true);
+            Assert.Contains(identifier, e => e.Contains("lookup identifier"));
+        }
+    }
 }

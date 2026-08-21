@@ -131,7 +131,7 @@ public static class ConsoleEndpoints
                     recordCounts.FirstOrDefault(r => r.TableId == t.Id)?.Count ?? 0)),
                 settings = new { settings.AppName, settings.Currency, settings.TimeZone },
                 // The field type picker paints from this, the console can never offer a type the server does not know.
-                fieldTypes = FieldTypes.All.Select(t => new { t.Name, t.Label, t.Group, t.Aliases, Shape = t.Shape.ToString().ToLowerInvariant(), t.Nestable }),
+                fieldTypes = FieldTypes.All.Select(t => new { t.Name, t.Label, t.Group, t.Aliases, Shape = t.Shape.ToString().ToLowerInvariant(), t.Nestable, t.Computed }),
                 fieldTypeGroups = FieldGroups.Order,
                 stats = new
                 {

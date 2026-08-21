@@ -114,8 +114,9 @@ public static class TableEndpoints
             table.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
             // A field change reconciles both kinds of derived state: the indexes it implies, and the computed values it implies.
+            // The new field's name is stale by definition: deleting a field leaves its data in the records, so a name reused here would inherit those values rather than be generated.
             await RecordIndexes.SyncAsync(db, table);
-            await RecordEngine.ReconcileComputedAsync(db, table);
+            await RecordEngine.ReconcileComputedAsync(db, table, new[] { field.Name });
             return Results.Ok(ApiDtos.FieldDto(field));
         });
 
@@ -148,6 +149,10 @@ public static class TableEndpoints
             var field = table.Fields.FirstOrDefault(f => f.Id == fpid);
             if (field == null) return Results.NotFound();
 
+            // What the field was, so the reconcile below can tell a value it already owned from a leftover of the type it used to be.
+            var wasType = FieldValidation.NormalizeType(field.DataType);
+            var wasName = field.Name;
+
             if (patch["name"] is JsonValue nv && nv.TryGetValue<string>(out var name)) field.Name = name;
             if (patch["label"] is JsonValue lv && lv.TryGetValue<string>(out var label)) field.Label = label;
             if (patch["helpText"] is JsonValue htv && htv.TryGetValue<string>(out var help)) field.HelpText = help;
@@ -172,9 +177,16 @@ public static class TableEndpoints
 
             table.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
+            // The records are keyed by field name, so a rename has to carry the values over before anything else reads them under the new name.
+            await RecordEngine.RenameFieldDataAsync(db, table, wasName, field.Name);
+
             // Retyping a field, or editing an expression, changes what the server owes every stored record just as creating one does.
+            // Only a retype makes the stored values stale: they are leftovers of the type the field used to be. A rename does not, because the value moved with the field and is still the one it generated.
+            var stale = FieldValidation.NormalizeType(field.DataType) != wasType
+                ? new[] { field.Name }
+                : Array.Empty<string>();
             await RecordIndexes.SyncAsync(db, table);
-            await RecordEngine.ReconcileComputedAsync(db, table);
+            await RecordEngine.ReconcileComputedAsync(db, table, stale);
             return Results.Ok(ApiDtos.FieldDto(field));
         });
 
@@ -221,7 +233,9 @@ public static class TableEndpoints
             db.Fields.Remove(field);
             table.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
+            // Both halves of the delete: the generated column, and the values themselves, which the confirmation promises are gone.
             await RecordIndexes.DropForAsync(db, new[] { field });
+            await RecordEngine.DropFieldDataAsync(db, table, field.Name);
             return Results.Ok(new { deleted = field.Id });
         });
 

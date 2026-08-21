@@ -286,14 +286,32 @@ const NESTABLE_TYPES = [];
 let fieldTypeRows = [];
 let fieldTypeGroups = [];
 
+// Which types the server fills in itself, from the bootstrap payload rather than a second copy of FieldTypes.cs.
+const COMPUTED_TYPES = [];
+
+// FieldValidation refuses a computed field that is required or a lookup identifier: a visitor never supplies the value, so neither can mean anything. The console greys them rather than letting the save come back 400.
+function syncComputedGuards(type) {
+    const computed = COMPUTED_TYPES.includes(type);
+    for (const id of ['feRequired', 'feIdentifier']) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        if (computed) el.checked = false;
+        el.disabled = computed;
+        const row = el.closest('.setting-row') || el.parentElement;
+        if (row) row.title = computed ? `The server fills a ${type} field in, so it cannot be required or a lookup identifier.` : '';
+    }
+}
+
 function setFieldTypes(types, groups) {
     TYPE_LABELS.clear();
     NESTABLE_TYPES.length = 0;
     fieldTypeRows = types || [];
     fieldTypeGroups = groups || [];
+    COMPUTED_TYPES.length = 0;
     for (const t of fieldTypeRows) {
         TYPE_LABELS.set(t.name, t.label);
         if (t.nestable) NESTABLE_TYPES.push(t.name);
+        if (t.computed) COMPUTED_TYPES.push(t.name);
     }
 }
 
@@ -917,6 +935,7 @@ function openFieldEditor(fieldId) {
 
     function syncFeConfig() {
         const t = typeSel.value;
+        syncComputedGuards(t);
         const row = document.getElementById('feCfgRow');
         row.innerHTML = '';
         if (t === 'calculated' || t === 'derived') {
