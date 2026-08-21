@@ -27,7 +27,7 @@ services:
     container_name: baseport
     restart: unless-stopped
     ports:
-      - "5263:5263"
+      - "5000:5000"
     volumes:
       - baseport-data:/data
 
@@ -38,9 +38,9 @@ volumes:
 
 Releases ship `linux-x64` and `win-x64` builds.
 
-The first start prints an admin username and a one-time password. You can use `baseport logs` to retrieve both the randomly generated username and password. Contineu to `http://localhost:5263/_/admin` and sign in. You'll be forced to set a new password.
+The first start prints an admin username and a one-time password. You can use `baseport logs` to retrieve both the randomly generated username and password. Contineu to `http://localhost:5000/_/admin` and sign in. You'll be forced to set a new password.
 
-`--urls http://localhost:5263` listens on loopback only, so nothing else on your network can reach it. Running on a server? Then you may want to reach from elsewhere, bind to every interface instead using `0.0.0.0` as your hostname.
+`--urls http://localhost:5000` listens on loopback only, so nothing else on your network can reach it. Running on a server? Then you may want to reach from elsewhere, bind to every interface instead using `0.0.0.0` as your hostname.
 
 Baseport speaks plain HTTP. For anything reachable beyond your own machine, put it behind a reverse proxy that terminates TLS. See [Going to production](/docs/going-to-production).
 

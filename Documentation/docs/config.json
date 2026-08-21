@@ -5,9 +5,9 @@
   "theme": "default",
   "brand": "Baseport",
   "brandImage": "/assets/baseporteu.png",
-  "favicon": "\ud83d\udedf",
+  "favicon": "🛟",
   "lastUpdated": true,
-  "footer": "\u00a9 {year} Baseport \u00b7 Licensed under [EUPL 1.2](https://github.com/baseporteu/baseport/blob/main/LICENSE). Built with [Bark](https://github.com/melosso/bark/).",
+  "footer": "© {year} Baseport · Licensed under [EUPL 1.2](https://github.com/baseporteu/baseport/blob/main/LICENSE). Built with [Bark](https://github.com/melosso/bark/).",
   "editLink": {
     "pattern": "https://github.com/baseporteu/baseport/edit/main/Documentation/docs/:path",
     "text": "Edit this page on GitHub"
@@ -85,6 +85,10 @@
       {
         "title": "Going to production",
         "path": "docs/going-to-production"
+      },
+      {
+        "title": "What is stable",
+        "path": "docs/compatibility"
       },
       {
         "title": "Web APIs reference",
