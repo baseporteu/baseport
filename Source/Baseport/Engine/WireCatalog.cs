@@ -7,13 +7,18 @@ namespace Baseport;
 public enum WireDialect { Postgres, Tds }
 
 // Records live as JSON in one shared _records table, so a sql client browsing this instance would otherwise see the storage schema and nothing an author actually built.
-// This projects the author's tables back out: a temp view per table turns its fields into real columns, and a snapshot catalog describes those views in the shape the client's dialect expects.
-//
-// ponytail: rebuilt per connection, and SqlEngine opens one connection per query, so a browse pays two metadata reads per statement. Cache per wire session if that ever shows up in a profile.
+// rebuilt per connection, and SqlEngine opens one connection per query, so a browse pays two metadata reads per statement. Cache per wire session if that ever shows up in a profile.
 public static class WireCatalog
 {
-    private sealed record CatalogColumn(string Name, string DataType, bool Required);
+    // RefTableId is set on a reference field, and is what the catalog reports as a foreign key.
+    private sealed record CatalogColumn(string Name, string DataType, bool Required, string? RefTableId = null);
     private sealed record CatalogTable(string Id, string Name, int Oid, long Rows, List<CatalogColumn> Columns, string ReadRule);
+
+    // One relationship: a reference column on Table pointing at the id of Target. Both ends are already in the catalog, so a client can draw the join.
+    private sealed record CatalogLink(CatalogTable Table, CatalogColumn Column, CatalogTable Target)
+    {
+        public string Name => $"fk_{Table.Name}_{Column.Name}";
+    }
 
     // userId is the account the wire session authenticated as. It scopes the row views to the same rows the REST api would return that account (pillar 15), so the wire is not a way around a table's read rule.
     public static void Apply(SqliteConnection conn, WireDialect dialect, string? userId)
@@ -45,14 +50,18 @@ public static class WireCatalog
             while (reader.Read()) counts[reader.GetString(0)] = reader.GetInt64(1);
 
         var columns = new Dictionary<string, List<CatalogColumn>>(StringComparer.Ordinal);
-        using (var reader = Query(conn, "SELECT TableId, Name, DataType, IsRequired FROM _fields ORDER BY TableId, Position, Id"))
+        using (var reader = Query(conn, "SELECT TableId, Name, DataType, IsRequired, OptionsJson FROM _fields ORDER BY TableId, Position, Id"))
             while (reader.Read())
             {
                 var name = reader.GetString(1);
                 // a name outside this set would have to be escaped into both a json path and an identifier; the authoring side already refuses them, so anything else is skipped rather than trusted
                 if (!IsPlainIdentifier(name)) continue;
+                var dataType = reader.IsDBNull(2) ? "text" : reader.GetString(2);
+                var refTableId = FieldValidation.NormalizeType(dataType) == "reference" && !reader.IsDBNull(4)
+                    ? FieldValidation.RefTableId(reader.GetString(4))
+                    : null;
                 if (!columns.TryGetValue(reader.GetString(0), out var list)) columns[reader.GetString(0)] = list = new List<CatalogColumn>();
-                list.Add(new CatalogColumn(name, reader.IsDBNull(2) ? "text" : reader.GetString(2), !reader.IsDBNull(3) && reader.GetInt64(3) != 0));
+                list.Add(new CatalogColumn(name, dataType, !reader.IsDBNull(3) && reader.GetInt64(3) != 0, refTableId));
             }
 
         var tables = new List<CatalogTable>();
@@ -70,6 +79,16 @@ public static class WireCatalog
                 oid += 16;
             }
         return tables;
+    }
+
+    // Every reference field whose target is also in the catalog. A target that is unpublished, proxied or deleted yields no link rather than a dangling one.
+    private static List<CatalogLink> Links(List<CatalogTable> tables)
+    {
+        var byId = tables.ToDictionary(t => t.Id, StringComparer.Ordinal);
+        return (from table in tables
+                from column in table.Columns
+                where column.RefTableId is not null && byId.ContainsKey(column.RefTableId)
+                select new CatalogLink(table, column, byId[column.RefTableId])).ToList();
     }
 
     // The view is what makes the catalog honest: every object it lists can actually be selected from.
@@ -173,10 +192,29 @@ public static class WireCatalog
             })));
 
         Empty(conn, "information_schema", "views", "table_catalog, table_schema, table_name, view_definition, check_option, is_updatable");
-        Empty(conn, "information_schema", "table_constraints", "constraint_catalog, constraint_schema, constraint_name, table_catalog, table_schema, table_name, constraint_type, is_deferrable, initially_deferred");
-        Empty(conn, "information_schema", "key_column_usage", "constraint_catalog, constraint_schema, constraint_name, table_catalog, table_schema, table_name, column_name, ordinal_position");
-        Empty(conn, "information_schema", "referential_constraints", "constraint_catalog, constraint_schema, constraint_name, unique_constraint_catalog, unique_constraint_schema, unique_constraint_name, match_option, update_rule, delete_rule");
-        Empty(conn, "information_schema", "constraint_column_usage", "table_catalog, table_schema, table_name, column_name, constraint_catalog, constraint_schema, constraint_name");
+
+        // Keys, so a client can draw the relationships instead of showing unrelated tables. Every table has a
+        // primary key on id, and every reference field is a foreign key to the id of the table it points at.
+        var links = Links(tables);
+
+        Fill(conn, "information_schema", "table_constraints",
+            "constraint_catalog, constraint_schema, constraint_name, table_catalog, table_schema, table_name, constraint_type, is_deferrable, initially_deferred",
+            tables.Select(t => $"'baseport', 'public', {Literal($"pk_{t.Name}")}, 'baseport', 'public', {Literal(t.Name)}, 'PRIMARY KEY', 'NO', 'NO'")
+                .Concat(links.Select(l => $"'baseport', 'public', {Literal(l.Name)}, 'baseport', 'public', {Literal(l.Table.Name)}, 'FOREIGN KEY', 'NO', 'NO'")));
+
+        Fill(conn, "information_schema", "key_column_usage",
+            "constraint_catalog, constraint_schema, constraint_name, table_catalog, table_schema, table_name, column_name, ordinal_position",
+            tables.Select(t => $"'baseport', 'public', {Literal($"pk_{t.Name}")}, 'baseport', 'public', {Literal(t.Name)}, 'id', 1")
+                .Concat(links.Select(l => $"'baseport', 'public', {Literal(l.Name)}, 'baseport', 'public', {Literal(l.Table.Name)}, {Literal(l.Column.Name)}, 1")));
+
+        // A reference is resolved by the API, not by SQLite, so nothing cascades: both rules are NO ACTION.
+        Fill(conn, "information_schema", "referential_constraints",
+            "constraint_catalog, constraint_schema, constraint_name, unique_constraint_catalog, unique_constraint_schema, unique_constraint_name, match_option, update_rule, delete_rule",
+            links.Select(l => $"'baseport', 'public', {Literal(l.Name)}, 'baseport', 'public', {Literal($"pk_{l.Target.Name}")}, 'NONE', 'NO ACTION', 'NO ACTION'"));
+
+        Fill(conn, "information_schema", "constraint_column_usage",
+            "table_catalog, table_schema, table_name, column_name, constraint_catalog, constraint_schema, constraint_name",
+            links.Select(l => $"'baseport', 'public', {Literal(l.Target.Name)}, 'id', 'baseport', 'public', {Literal(l.Name)}"));
         Empty(conn, "information_schema", "routines", "specific_catalog, specific_schema, specific_name, routine_catalog, routine_schema, routine_name, routine_type, data_type");
         Empty(conn, "information_schema", "sequences", "sequence_catalog, sequence_schema, sequence_name, data_type, start_value, minimum_value, maximum_value, increment");
     }
@@ -219,11 +257,34 @@ public static class WireCatalog
             "name, system_type_id, user_type_id, schema_id, principal_id, max_length, precision, scale, collation_name, is_nullable, is_user_defined, is_assembly_type, default_object_id, rule_object_id, is_table_type",
             TdsTypes.Select(t => $"{Literal(t.Name)}, {t.SystemTypeId}, {t.SystemTypeId}, 4, NULL, {t.MaxLength}, {t.Precision}, {t.Scale}, NULL, 1, 0, 0, 0, 0, 0"));
 
-        Empty(conn, "sys", "indexes", "object_id, name, index_id, type, type_desc, is_unique, data_space_id, ignore_dup_key, is_primary_key, is_unique_constraint, fill_factor, is_padded, is_disabled, is_hypothetical, allow_row_locks, allow_page_locks, has_filter, filter_definition");
-        Empty(conn, "sys", "index_columns", "object_id, index_id, index_column_id, column_id, key_ordinal, partition_ordinal, is_descending_key, is_included_column");
-        Empty(conn, "sys", "foreign_keys", "name, object_id, principal_id, schema_id, parent_object_id, type, type_desc, referenced_object_id, key_index_id, is_disabled, is_not_trusted, delete_referential_action, update_referential_action");
-        Empty(conn, "sys", "foreign_key_columns", "constraint_object_id, constraint_column_id, parent_object_id, parent_column_id, referenced_object_id, referenced_column_id");
-        Empty(conn, "sys", "key_constraints", "name, object_id, principal_id, schema_id, parent_object_id, type, type_desc, unique_index_id, is_system_named");
+        // Same relationships the Postgres catalog reports, in the shape a TDS client reads them. id is column 1
+        // of every table (SystemColumns), so a primary key names ordinal 1 and a foreign key names its own column.
+        var links = Links(tables);
+        var linkOid = 90000;
+        var linkRows = links.Select(l => (Link: l, Oid: linkOid += 16)).ToList();
+        int ColumnId(CatalogTable table, string name) =>
+            Attributes(table).ToList().FindIndex(c => c.Name == name) + 1;
+
+        Fill(conn, "sys", "indexes",
+            "object_id, name, index_id, type, type_desc, is_unique, data_space_id, ignore_dup_key, is_primary_key, is_unique_constraint, fill_factor, is_padded, is_disabled, is_hypothetical, allow_row_locks, allow_page_locks, has_filter, filter_definition",
+            tables.Select(t => $"{t.Oid}, {Literal($"pk_{t.Name}")}, 1, 1, 'CLUSTERED', 1, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, NULL"));
+
+        Fill(conn, "sys", "index_columns",
+            "object_id, index_id, index_column_id, column_id, key_ordinal, partition_ordinal, is_descending_key, is_included_column",
+            tables.Select(t => $"{t.Oid}, 1, 1, 1, 1, 0, 0, 0"));
+
+        // Nothing cascades: a reference is resolved by the API, not by the store. 0 is NO_ACTION.
+        Fill(conn, "sys", "foreign_keys",
+            "name, object_id, principal_id, schema_id, parent_object_id, type, type_desc, referenced_object_id, key_index_id, is_disabled, is_not_trusted, delete_referential_action, update_referential_action",
+            linkRows.Select(r => $"{Literal(r.Link.Name)}, {r.Oid}, 1, 1, {r.Link.Table.Oid}, 'F ', 'FOREIGN_KEY_CONSTRAINT', {r.Link.Target.Oid}, 1, 0, 0, 0, 0"));
+
+        Fill(conn, "sys", "foreign_key_columns",
+            "constraint_object_id, constraint_column_id, parent_object_id, parent_column_id, referenced_object_id, referenced_column_id",
+            linkRows.Select(r => $"{r.Oid}, 1, {r.Link.Table.Oid}, {ColumnId(r.Link.Table, r.Link.Column.Name)}, {r.Link.Target.Oid}, 1"));
+
+        Fill(conn, "sys", "key_constraints",
+            "name, object_id, principal_id, schema_id, parent_object_id, type, type_desc, unique_index_id, is_system_named",
+            tables.Select(t => $"{Literal($"pk_{t.Name}")}, {t.Oid + 8}, 1, 1, {t.Oid}, 'PK', 'PRIMARY_KEY_CONSTRAINT', 1, 0"));
         Empty(conn, "sys", "check_constraints", "name, object_id, schema_id, parent_object_id, type, type_desc, definition, is_disabled");
         Empty(conn, "sys", "default_constraints", "name, object_id, schema_id, parent_object_id, type, type_desc, parent_column_id, definition");
         Empty(conn, "sys", "extended_properties", "class, class_desc, major_id, minor_id, name, value");
@@ -256,8 +317,15 @@ public static class WireCatalog
             })));
 
         Empty(conn, "INFORMATION_SCHEMA", "VIEWS", "TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, VIEW_DEFINITION, CHECK_OPTION, IS_UPDATABLE");
-        Empty(conn, "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_CATALOG, CONSTRAINT_SCHEMA, CONSTRAINT_NAME, TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_TYPE, IS_DEFERRABLE, INITIALLY_DEFERRED");
-        Empty(conn, "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CONSTRAINT_CATALOG, CONSTRAINT_SCHEMA, CONSTRAINT_NAME, TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION");
+        Fill(conn, "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS",
+            "CONSTRAINT_CATALOG, CONSTRAINT_SCHEMA, CONSTRAINT_NAME, TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_TYPE, IS_DEFERRABLE, INITIALLY_DEFERRED",
+            tables.Select(t => $"'baseport', 'dbo', {Literal($"pk_{t.Name}")}, 'baseport', 'dbo', {Literal(t.Name)}, 'PRIMARY KEY', 'NO', 'NO'")
+                .Concat(links.Select(l => $"'baseport', 'dbo', {Literal(l.Name)}, 'baseport', 'dbo', {Literal(l.Table.Name)}, 'FOREIGN KEY', 'NO', 'NO'")));
+
+        Fill(conn, "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE",
+            "CONSTRAINT_CATALOG, CONSTRAINT_SCHEMA, CONSTRAINT_NAME, TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION",
+            tables.Select(t => $"'baseport', 'dbo', {Literal($"pk_{t.Name}")}, 'baseport', 'dbo', {Literal(t.Name)}, 'id', 1")
+                .Concat(links.Select(l => $"'baseport', 'dbo', {Literal(l.Name)}, 'baseport', 'dbo', {Literal(l.Table.Name)}, {Literal(l.Column.Name)}, 1")));
         Empty(conn, "INFORMATION_SCHEMA", "ROUTINES", "SPECIFIC_CATALOG, SPECIFIC_SCHEMA, SPECIFIC_NAME, ROUTINE_CATALOG, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DATA_TYPE");
     }
 
