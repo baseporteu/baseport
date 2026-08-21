@@ -62,6 +62,7 @@ chmod +x "$DIR/Baseport"
 mkdir -p "$BIN"
 cat > "$BIN/baseport" <<EOF
 #!/bin/sh
+# baseport wrapper
 DIR="$DIR"
 BIN="$BIN"
 REPO="$REPO"
@@ -96,6 +97,7 @@ service)
 Reinstall as root, which lands in /opt/baseport, and try again:
   curl -sSL $INSTALLER | sudo bash"
 
+  # A single-file build self-extracts before it runs, and the default base is a /var/tmp/.net owned by whoever ran it first, so pin it somewhere the service user owns.
   cat > "$UNIT" <<UNITFILE
 [Unit]
 Description=Baseport
@@ -104,6 +106,7 @@ After=network.target
 [Service]
 User=baseport
 WorkingDirectory=$DIR
+Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=$DIR/.net
 ExecStart=$DIR/Baseport $ARGS
 Restart=on-failure
 RestartSec=5
@@ -115,6 +118,11 @@ UNITFILE
   systemctl daemon-reload
   systemctl enable baseport >/dev/null 2>&1 || true
   systemctl restart baseport
+  sleep 1
+  systemctl is-active --quiet baseport || {
+    systemctl status baseport --no-pager -n 15 >&2 || true
+    die "baseport.service was written but is not running."
+  }
   echo "baseport.service running $DIR/Baseport $ARGS"
   ;;
 restart)
@@ -125,8 +133,13 @@ restart)
   ;;
 logs)
   cd "$DIR"
-  ls log/baseport-*.log >/dev/null 2>&1 || die "No log files in $DIR/log yet."
-  exec tail -n "${2:-200}" -f log/baseport-*.log
+  if ls log/baseport-*.log >/dev/null 2>&1; then
+    exec tail -n "${2:-200}" -f log/baseport-*.log
+  elif [ -e "$UNIT" ]; then
+    exec journalctl -u baseport -n "${2:-200}" -f
+  else
+    die "No log files in $DIR/log yet."
+  fi
   ;;
 help|-h|--help)
   exec "$DIR/Baseport" help
@@ -138,6 +151,21 @@ help|-h|--help)
 esac
 SHIM
 chmod +x "$BIN/baseport"
+
+# A wrapper from an earlier install keeps its own directory and can shadow this one on PATH, so drop the ones whose directory is gone.
+for OTHER in /usr/local/bin/baseport "$HOME/.local/bin/baseport"; do
+  if [ "$OTHER" = "$BIN/baseport" ] || [ ! -f "$OTHER" ]; then continue; fi
+  if [ "$(head -1 "$OTHER")" != "#!/bin/sh" ]; then continue; fi
+  # This wrapper keeps its directory in a DIR= line; the ones before it inlined the path into every exec.
+  OTHERDIR=$(sed -n 's/^DIR="\(.*\)"$/\1/p' "$OTHER" | head -1)
+  if [ -z "$OTHERDIR" ]; then
+    OTHERDIR=$(grep -o '"[^"]*/Baseport"' "$OTHER" | head -1 | tr -d '"' || true)
+    OTHERDIR=${OTHERDIR%/Baseport}
+  fi
+  if [ -z "$OTHERDIR" ] || [ -x "$OTHERDIR/Baseport" ]; then continue; fi
+  rm -f "$OTHER"
+  echo "Removed the wrapper at $OTHER, which pointed at the removed $OTHERDIR."
+done
 
 echo
 if [ "$UPDATE" = "yes" ]; then
