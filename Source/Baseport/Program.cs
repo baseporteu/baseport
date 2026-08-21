@@ -39,10 +39,10 @@ if (args.Length > 0 && CliHelp.WrapperCommands.Contains(args[0]))
     return 1;
 }
 
-// Every host option is a switch, so a bare first word is a mistyped verb rather than an argument for the server.
+// Every host option is a switch, a bare first word is a mistyped verb instead of an argument for the server.
 if (args.Length > 0 && !args[0].StartsWith('-')) return CliHelp.Invalid();
 
-// Logging is not up yet, so a failure here can only report itself.
+// Logging is not up yet, a failure here can only report itself.
 var logDirectory = Path.Combine(Directory.GetCurrentDirectory(), "log");
 try
 {
@@ -106,7 +106,7 @@ try
     var trustForwardedHeaders = config.GetValue("TrustForwardedHeaders", false);
     FileStore.Initialize(connectionString);
 
-    // A second listener for the console, so it can be bound to a private interface while the public API stays reachable.
+    // A second listener for the console, it can be bound to a private interface while the public API stays reachable.
     if (AdminSurface.Configure(config["AdminAddress"]) is { } adminUrl)
     {
         var configured = builder.Configuration["urls"] ?? "http://localhost:5000";
@@ -117,7 +117,7 @@ try
     builder.Services.AddDbContextPool<AppDbContext>(options =>
         AppDbContext.Configure(options, connectionString));
 
-    // The embed runs on customer domains, so the form routes must be callable cross-origin.
+    // The embed runs on customer domains, the form routes must be callable cross-origin.
     builder.Services.AddCors(options =>
         options.AddPolicy("embed", p => p
             .SetIsOriginAllowed(origin => AllowedOrigins.Allows(EmbedOrigins.Current, origin))
@@ -146,7 +146,7 @@ try
     var app = builder.Build();
     Ids.StartedAt = DateTime.UtcNow;
 
-    // Rate limiting keys on the client address, so behind a reverse proxy the forwarded headers must be honoured or every visitor shares one bucket.
+    // Rate limiting keys on the client address, behind a reverse proxy the forwarded headers must be honoured or every visitor shares one bucket.
     if (trustForwardedHeaders)
     {
         app.UseForwardedHeaders(new ForwardedHeadersOptions
@@ -173,7 +173,7 @@ try
         // A request ASP.NET could not parse is the caller's error and already includes the status that says so; flattening it to 500 reported a server fault for something like ?pageSize=2147483648, and logged it as one.
         var status = ex is BadHttpRequestException bad ? bad.StatusCode : StatusCodes.Status500InternalServerError;
         if (ex != null && status >= 500) Log.Error(ex, "Unhandled exception on {Path}", ctx.Request.Path);
-        // The OpenAPI document promises every non-2xx answer speaks the Error shape, so an unhandled exception must too, instead of ASP.NET's bare 500.
+        // The OpenAPI document promises every non-2xx answer speaks the Error shape, an unhandled exception must too, instead of ASP.NET's bare 500.
         ctx.Response.StatusCode = status;
         if (ctx.Request.Path.StartsWithSegments("/api"))
             await ctx.Response.WriteAsJsonAsync(new { errors = new[] { status >= 500 ? "Internal server error." : "The request could not be parsed." } });
@@ -185,13 +185,13 @@ try
     app.UseSecurityHeaders();
     app.UseResponseCompression();
 
-    // The console's assets carry no version in their URL, so a browser holding a stale ui.js after an upgrade runs it against fresh markup and the page breaks with something like "ui.themeChoice is not a function". no-cache still revalidates cheaply: the ETag answers 304 and nothing is downloaded twice.
+    // The console's assets carry no version in their URL, a browser holding a stale ui.js after an upgrade runs it against fresh markup and the page breaks with something like "ui.themeChoice is not a function". no-cache still revalidates cheaply: the ETag answers 304 and nothing is downloaded twice.
     app.UseStaticFiles(new StaticFileOptions
     {
         OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "no-cache"
     });
     
-    // Uploaded files: a file field stores an absolute URL, so it must be fetchable the same way any other URL in that field would be -- no session, no token.
+    // Uploaded files: a file field stores an absolute URL, it must be fetchable the same way any other URL in that field would be -- no session, no token.
     Directory.CreateDirectory(FileStore.Directory);
     app.UseStaticFiles(new StaticFileOptions
     {
@@ -234,7 +234,7 @@ try
         var addresses = app.Urls.Count > 0 ? string.Join(", ", app.Urls) : "the configured address";
         Log.Information("Baseport listening on {Addresses}/_/admin", addresses);
 
-        // the session cookie is only Secure over HTTPS, so plain HTTP on a reachable (non-loopback) address ships it in the clear
+        // the session cookie is only Secure over HTTPS, plain HTTP on a reachable (non-loopback) address ships it in the clear
         foreach (var url in app.Urls)
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || u.Scheme != "http" || u.IsLoopback) continue;

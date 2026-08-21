@@ -5,25 +5,14 @@
     <AssemblyDescription>A no-code data platform with a form, lookup and list builder.</AssemblyDescription>
     <RootNamespace>Baseport</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <!-- Nothing here is a Razor class library, Blazor asset or scoped CSS, and
-         static files are served by UseStaticFiles rather than MapStaticAssets,
-         so the static web assets pipeline only costs an endpoints manifest. It
-         also copies wwwroot with its own Copy task, outside the single-file
-         bundler, which is what kept wwwroot out of the executable. -->
     <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The Web SDK marks every default Content item ExcludeFromSingleFile, and
-         its globs are wwwroot\** and **\*.json, so both need saying. -->
     <Content Update="wwwroot\**" ExcludeFromSingleFile="false" />
     <Content Update="appsettings*.json" ExcludeFromSingleFile="false" />
   </ItemGroup>
 
-  <!-- Publish is one file: the runtime, wwwroot and appsettings.json all live
-       inside the apphost and extract to AppContext.BaseDirectory on start.
-       Scoped to publish so the test project, which is not self-contained, can
-       still reference this one (NETSDK1150). -->
   <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">linux-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>

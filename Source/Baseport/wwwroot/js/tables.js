@@ -2,11 +2,7 @@
 function selectTable(table) {
     currentTablePublicId = table.id;
     currentTableProxyUrl = table.proxyUrl || '';
-    document.getElementById('recordsTableName').innerText = table.name;
-    document.getElementById('detailTableName').innerText = table.name;
-    document.getElementById('page-sub').innerHTML = table.isProxy ?
-        `Building <strong>${table.name}</strong>, a proxy to <code>${table.proxyMethod || 'POST'} ${table.proxyUrl}</code>.` :
-        `Building <strong>${table.name}</strong>, configure fields, tune API exposure, and inspect submissions.`;
+    paintTableName(table);
     editingFieldId = null;
     fieldDraft = (table.fields || []).map(cloneField);
     fieldOriginal = {};
@@ -14,7 +10,7 @@ function selectTable(table) {
     fieldsDirty = false;
     tableDirty = false;
     document.getElementById('saveFieldsBtn').disabled = true;
-    document.getElementById('settingsTableName').innerText = table.name;
+    document.getElementById('tableName').value = table.name || '';
     document.getElementById('tableDescription').value = table.description || '';
     applyProxySettings(table);
     document.getElementById('tableFormsHint').innerText =
@@ -76,8 +72,22 @@ function normalizeApiName(input) {
     markTableDirty();
 }
 
+// Every place the table's name is shown, repainted together: a rename that only reached the settings card left the heading above it reading the old name.
+function paintTableName(table) {
+    const name = table.name || '';
+    document.getElementById('recordsTableName').innerText = name;
+    document.getElementById('detailTableName').innerText = name;
+    document.getElementById('settingsTableName').innerText = name;
+    // A table name is author-written and lands in innerHTML here, so it goes through ui.escape like every other interpolated value.
+    const safe = ui.escape(name);
+    document.getElementById('page-sub').innerHTML = table.isProxy ?
+        `Building <strong>${safe}</strong>, a proxy to <code>${ui.escape((table.proxyMethod || 'POST') + ' ' + (table.proxyUrl || ''))}</code>.` :
+        `Building <strong>${safe}</strong>, configure fields, tune API exposure, and inspect submissions.`;
+}
+
 function tableSettingsPayload() {
     const body = {
+        name: document.getElementById('tableName').value.trim(),
         description: document.getElementById('tableDescription').value,
     };
     const table = currentTables.find((t) => t.id === currentTablePublicId);
@@ -288,7 +298,7 @@ function setFieldTypes(types, groups) {
 }
 
 // Grouped in the server's order, with the group headings as unselectable rows. A typed query matches the
-// label, the stored name and the aliases, so searching "price" or "formula" still finds the type.
+// label, the stored name and the aliases, searching "price" or "formula" still finds the type.
 function fieldTypeOptions(query) {
     const q = (query || '').trim().toLowerCase();
     const matches = fieldTypeRows.filter((t) => !q ||
@@ -330,7 +340,7 @@ function initFieldTypeCombobox() {
     row.id = 'fieldTypeRow';
 }
 
-// one pictogram per type family, so 24 types stay scannable by shape instead of by reading each pill
+// one pictogram per type family, 24 types stay scannable by shape instead of by reading each pill
 const TYPE_ICON_FAMILY = {
     text: 'text', longtext: 'text', richtext: 'text', slug: 'text',
     number: 'hash', currency: 'hash',
@@ -399,7 +409,7 @@ function fieldLimits(f) {
     return '';
 }
 
-// Added to every record by the server, so they are listed but never editable.
+// Added to every record by the server, they are listed but never editable.
 const SYSTEM_COLUMNS = [
     ['Created', 'System column, set once when the record is written.', 'Date.now()'],
     ['Modified', 'System column, restamped on every change.', 'Date.now()'],
@@ -599,7 +609,7 @@ function closeModal() {
     ui.closeSheet();
 }
 
-// The select twin of fieldInputRow, so a row of fixed choices sits in the sheet exactly like a row of free text.
+// The select twin of fieldInputRow, a row of fixed choices sits in the sheet exactly like a row of free text.
 function fieldSelectRow(label, id, value, options) {
     const lab = document.createElement('label');
     lab.className = 'field-label';
@@ -628,7 +638,7 @@ function fieldInputRow(label, id, value, placeholder, mono, dataField) {
 }
 
 // The sub-schema of an object or array field, stored in OptionsJson the way select options are.
-// Members are fields in their own right, so the server validates them with the same rules.
+// Members are fields in their own right, the server validates them with the same rules.
 function subSchemaEditor(f, isList) {
     let cols = [];
     try {
@@ -925,7 +935,7 @@ function openFieldEditor(fieldId) {
             row.appendChild(hint);
             const inp = document.getElementById('feConfig');
             inp.addEventListener('input', debounceExprValidate);
-            // leaving the field must judge what it holds now, not wait out a debounce that tabbing away skips
+            // leaving the field must judge what it stores now, not wait out a debounce that tabbing away skips
             inp.addEventListener('blur', () => {
                 clearTimeout(debounceExprValidate._t);
                 validateExprLive();
@@ -1232,7 +1242,7 @@ async function saveFieldChanges() {
     markFieldsDirty();
 }
 
-// One payload shape for add and update, so a new field option is never saved on one path and silently dropped on the other.
+// One payload shape for add and update, a new field option is never saved on one path and silently dropped on the other.
 function fieldPayload(f) {
     return {
         name: f.name,
@@ -1389,10 +1399,3 @@ function closeDropdown() {
 }
 
 document.addEventListener('click', closeDropdown);
-
-function openImportDefinition() {
-    const body = ui.el('p', 'muted', { textContent: 'Paste a table definition (JSON) to import. This feature is coming soon.' });
-    const actions = ui.el('div', 'row');
-    actions.appendChild(ui.button('Cancel', ui.closeModal, { variant: 'btn-outline' }));
-    ui.modal('Import from definition', body, actions);
-}

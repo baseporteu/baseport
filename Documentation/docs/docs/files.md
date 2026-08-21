@@ -44,7 +44,7 @@ All three need a bearer token. A bucket name is 1 to 32 characters of lower-case
 
 ## How uploads are served
 
-`/uploads` is served as static files with no authentication. A `file` field stores an absolute URL, so the file has to be fetchable without a session or a token, the same as any other URL you would put in that field.
+`/uploads` is served as static files with no authentication. A `file` field stores an absolute URL, the file has to be fetchable without a session or a token, the same as any other URL you would put in that field.
 
 :::warning
 So the only thing protecting an upload is that its name is unguessable. Twenty-two characters is 132 bits, which is plenty, but anyone you give the URL to can pass it on. Do not upload files here that must not be readable by whoever ends up with the link.

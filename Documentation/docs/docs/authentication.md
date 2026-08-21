@@ -13,7 +13,7 @@ Authorization: Bearer <token or jwt>
 
 ## API tokens
 
-Create one under **Authentication** on the account that should have it, and pick an expiry date. You see the token once, when it is generated. Only a hash is stored, so it is never shown again.
+Create one under **Authentication** on the account that should have it, and pick an expiry date. You see the token once, when it is generated. Only a hash is stored, it is never shown again.
 
 The account's **API enabled** switch controls whether its token works at all, and returns `401` when it is off. A disabled account cannot sign in and its token is rejected.
 
@@ -42,7 +42,7 @@ curl -X POST http://localhost:5000/api/auth/v1/login \
 | `POST /api/auth/v1/delete` | Delete your own account |
 | `GET /api/auth/v1/jwks.json` | The public half of the signing key |
 
-The role is never taken from the token. Every request looks the account up again, so if you demote someone it takes effect on their next request rather than their next sign-in.
+The role is never taken from the token. Every request looks the account up again, if you demote someone it takes effect on their next request instead of their next sign-in.
 
 ## Anonymous accounts
 
@@ -54,7 +54,7 @@ curl -X POST http://localhost:5000/api/auth/v1/anonymous
 
 You get back the same pair of tokens a normal sign-in returns. Anything the visitor creates while using them belongs to that account.
 
-When they sign up, send the registration request with that token still attached. Registering **converts** the anonymous account rather than creating a second one, so everything they already created stays with them. All existing sessions on the account are revoked at that point, since the account now has a password.
+When they sign up, send the registration request with that token still attached. Registering **converts** the anonymous account instead of creating a second one, everything they already created stays with them. All existing sessions on the account are revoked at that point, since the account now has a password.
 
 The `anonymous-cleanup` job deletes abandoned anonymous accounts once all their sessions have expired and the retention window has passed.
 
@@ -68,14 +68,14 @@ Copy the redirect URL out of the sheet and register it at your provider:
 https://baseport.example.com/api/auth/oidc/{key}/callback
 ```
 
-Saving fetches and checks the discovery document immediately, so you find out about a wrong issuer URL there rather than from a button that does nothing on the sign-in screen. The flow uses PKCE and a nonce, and verifies the `id_token` against the provider's JWKS.
+Saving fetches and checks the discovery document immediately, you find out about a wrong issuer URL there instead of from a button that does nothing on the sign-in screen. The flow uses PKCE and a nonce, and verifies the `id_token` against the provider's JWKS.
 
 Choose where the provider appears: the console at `/_/auth`, your application's own sign-in at `/auth`, or both. If you enable a provider but do not show it on either, the save is rejected.
 
-Accounts are matched on the provider's subject id rather than on a name, so renaming someone in your directory does not lock them out. The first sign-in can attach an existing account by an exact username match, or by an email address the provider says it has verified. Turn **Create accounts on first sign-in** on if you want unknown users created automatically as plain users.
+Accounts are matched on the provider's subject id instead of on a name, renaming someone in your directory does not lock them out. The first sign-in can attach an existing account by an exact username match, or by an email address the provider says it has verified. Turn **Create accounts on first sign-in** on if you want unknown users created automatically as plain users.
 
 :::warning
-Admin accounts are never linked automatically, whatever the provider sends. Console access should not depend on a name in your directory, so no claim will ever match one.
+Admin accounts are never linked automatically, whatever the provider sends. Console access should not depend on a name in your directory, no claim will ever match one.
 :::
 
 To sign in to the console with your provider, link your account yourself. Go to **Settings > Authentication > Single sign-on**, press **Link my account** on the provider row and confirm your password. You sign in at the provider once, and the identity it returns is attached to the account you are already signed in as. Nothing the provider sends picks the account, because that was decided before you were redirected.

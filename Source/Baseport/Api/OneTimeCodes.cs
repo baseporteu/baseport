@@ -18,7 +18,7 @@ public static class OneTimeCodes
 
     private sealed record Issued(byte[] Hmac, DateTime ExpiresAt, DateTime IssuedAt);
 
-    // In process, so a restart invalidates outstanding codes. See "Single node, on purpose" in AGENTS.md.
+    // In process, a restart invalidates outstanding codes. See "Single node, on purpose" in AGENTS.md.
     private static readonly ConcurrentDictionary<string, Issued> Codes = new(StringComparer.OrdinalIgnoreCase);
 
     // A fresh key every process: codes cannot outlive the box that issued them, and nothing stored is verifiable without this process's key.
@@ -70,7 +70,7 @@ public static class OneTimeCodes
 
     public static TimeSpan CodeLifetime => Lifetime;
 
-    // A code is issued before the account is known to exist, so an unauthenticated caller decides how many keys land here.
+    // A code is issued before the account is known to exist, an unauthenticated caller decides how many keys land here.
     public static int PruneExpired(DateTime now)
     {
         var removed = 0;

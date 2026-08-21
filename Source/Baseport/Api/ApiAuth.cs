@@ -41,7 +41,7 @@ public static class ApiAuth
         var hash = HashToken(token);
         var account = await db.UserAccounts.FirstOrDefaultAsync(u => u.ApiTokenHash == hash);
         if (account is null || !account.ApiEnabled || account.IsDisabled) return null;
-        // An expired token is refused rather than renewed silently.
+        // An expired token is refused instead of renewed silently.
         if (account.ApiTokenExpiresAt is { } expiry && expiry <= DateTime.UtcNow) return null;
         return account;
     }

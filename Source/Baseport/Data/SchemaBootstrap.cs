@@ -89,7 +89,7 @@ public static class SchemaBootstrap
     // Applies any migration the file has not seen. A fresh file gets the whole schema; an existing one only what is new.
     private static async Task MigrateAsync(AppDbContext db)
     {
-        // A database built by EnsureCreated has the tables but no history row, so Migrate would try to create what is already there.
+        // A database built by EnsureCreated has the tables but no history row, Migrate would try to create what is already there.
         if (!(await db.Database.GetAppliedMigrationsAsync()).Any() && await HasTablesAsync(db))
             throw new InvalidOperationException(
                 "This database predates migrations and cannot be upgraded in place. " +

@@ -3,7 +3,7 @@ using Baseport;
 
 namespace Baseport.Tests;
 
-// The type table is data, and a typo in data fails at first use rather than at compile time.
+// The type table is data, and a typo in data fails at first use instead of at compile time.
 public class FieldTypeTableTests
 {
     [Fact]
@@ -23,7 +23,7 @@ public class FieldTypeTableTests
             Assert.Contains(type.Group, FieldGroups.Order);
     }
 
-    // A computed type is filled in server-side over a whole record, so it can never be a member of one.
+    // A computed type is filled in server-side over a whole record, it can never be a member of one.
     [Fact]
     public void No_computed_type_is_nestable()
     {

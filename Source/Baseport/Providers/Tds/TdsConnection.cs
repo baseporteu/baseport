@@ -71,7 +71,7 @@ public static class TdsConnection
         return await ApiAuth.ResolveByTokenAsync(db, token);
     }
 
-    // real clients (pytds, sqlcmd, ssms) send these on connect or per statement: use [db] to pick a database, set ... to configure session options; there is only one database and no session state to configure, so both are accepted as no-ops instead of tripping the read-only allowlist
+    // real clients (pytds, sqlcmd, ssms) send these on connect or per statement: use [db] to pick a database, set ... to configure session options; there is only one database and no session state to configure, both are accepted as no-ops instead of tripping the read-only allowlist
     private static readonly Regex NoOpStatement = new(@"^\s*(USE\b|SET\s+\w)", RegexOptions.IgnoreCase);
 
     private static readonly Regex CatalogQuery = new(@"\b(FROM|JOIN)\s+(sys\.|INFORMATION_SCHEMA\.)", RegexOptions.IgnoreCase);
@@ -97,7 +97,7 @@ public static class TdsConnection
         ["identity"] = "NULL",
     };
 
-    // sqlite's tokenizer rejects @ outright, so @@version cannot be a registered function the way DB_NAME() can; the reference is substituted before the statement is parsed
+    // sqlite's tokenizer rejects @ outright, @@version cannot be a registered function the way DB_NAME() can; the reference is substituted before the statement is parsed
     private static string RewriteServerVariables(string sql) =>
         sql.Contains("@@", StringComparison.Ordinal)
             ? ServerVariable.Replace(sql, m => ServerVariables.GetValueOrDefault(m.Groups["name"].Value, "NULL"))
@@ -170,7 +170,7 @@ public static class TdsConnection
             })
             : new SqlEngine.Result([], [], false, invalid);
 
-        // WireCatalog answers the catalog objects a browser reads; an unemulated sys.* object answers empty here rather than returning raw sqlite error text to the client
+        // WireCatalog answers the catalog objects a browser reads; an unemulated sys.* object answers empty here instead of returning raw sqlite error text to the client
         if (result.Error is not null && CatalogQuery.IsMatch(sql))
             result = new SqlEngine.Result([""], [], false, null);
 
@@ -221,7 +221,7 @@ public static class TdsConnection
         return Encoding.Unicode.GetString(buf, offset, charCount * 2);
     }
 
-    // tds obfuscates login7 passwords by swapping each byte's nibbles then xoring with 0xa5, so decoding undoes it in reverse: xor first, then swap back
+    // tds obfuscates login7 passwords by swapping each byte's nibbles then xoring with 0xa5, decoding undoes it in reverse: xor first, then swap back
     private static string DecodePassword(byte[] buf, int offset, int charCount)
     {
         if (charCount == 0 || offset < 0 || offset + charCount * 2 > buf.Length) return "";

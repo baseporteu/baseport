@@ -105,7 +105,7 @@ public class RecordAccessTests : IDisposable
             request: new JsonObject { ["owner"] = "bob" }));
     }
 
-    // A create rule has no row to read, so _ROW_ resolves to NULL rather than failing to compile.
+    // A create rule has no row to read, _ROW_ resolves to NULL instead of failing to compile.
     [Fact]
     public async Task A_create_rule_that_mentions_ROW_still_evaluates()
     {
@@ -115,7 +115,7 @@ public class RecordAccessTests : IDisposable
             request: new JsonObject { ["owner"] = "alice" }));
     }
 
-    // The subscription path has no row to query: a delete event's row is already gone, so the rule runs against the payload.
+    // The subscription path has no row to query: a delete event's row is already gone, the rule runs against the payload.
     [Fact]
     public async Task A_rule_can_be_evaluated_against_an_event_payload()
     {
@@ -127,7 +127,7 @@ public class RecordAccessTests : IDisposable
             row: new JsonObject { ["owner"] = "alice" }));
     }
 
-    // Listing filters instead of refusing, so a caller sees their own rows rather than a 403 (records/list_records.rs:251).
+    // Listing filters instead of refusing, a caller sees their own rows instead of a 403 (records/list_records.rs:251).
     [Fact]
     public async Task A_read_rule_filters_a_listing_rather_than_refusing_it()
     {
@@ -244,7 +244,7 @@ public class AdminSurfaceTests
         Assert.Equal(isAdmin, AdminSurface.IsAdminPath(path));
 }
 
-// The public surface and the console share one session, so the routes that delete or disable an account have to enforce the same floor. Dropping the role filter on /api/auth/v1 is what made this reachable.
+// The public surface and the console share one session, the routes that delete or disable an account have to enforce the same floor. Dropping the role filter on /api/auth/v1 is what made this reachable.
 public class PublicAccountGuardTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -269,7 +269,7 @@ public class PublicAccountGuardTests : IDisposable
         _db.UserAccounts.Add(new UserAccount { Id = "u9", Username = "jane", Role = AccountRoles.User });
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        // Another enabled account exists now, but it is not an admin, so the admin floor still holds.
+        // Another enabled account exists now, but it is not an admin, the admin floor still holds.
         Assert.Equal(1, await _db.UserAccounts.CountAsync(a => a.Id != admin.Id && !a.IsDisabled, TestContext.Current.CancellationToken));
         Assert.True(await AdminEndpoints.IsLastEnabledAdmin(_db, admin));
     }

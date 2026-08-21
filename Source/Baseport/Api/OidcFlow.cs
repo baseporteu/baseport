@@ -27,13 +27,13 @@ public static class OidcFlow
     // A code lives exactly as long as a human takes to sign in at the provider.
     public static readonly TimeSpan FlowLifetime = TimeSpan.FromMinutes(10);
 
-    // Per instance, not per node: Baseport is one process over one SQLite file, so a sign-in that starts here finishes here. Behind more than one instance this needs a shared store, or sticky sessions.
+    // Per instance, not per node: Baseport is one process over one SQLite file, a sign-in that starts here finishes here. Behind more than one instance this needs a shared store, or sticky sessions.
     private static readonly ConcurrentDictionary<string, PendingFlow> Pending = new(StringComparer.Ordinal);
 
-    // Keyed on the authority too, so editing a provider's URL drops the document cached for the old one instead of authenticating against it.
+    // Keyed on the authority too, editing a provider's URL drops the document cached for the old one instead of authenticating against it.
     private static readonly ConcurrentDictionary<string, ConfigurationManager<OpenIdConnectConfiguration>> Documents = new(StringComparer.Ordinal);
 
-    // LinkTo is empty for a sign-in. When it includes an account id the flow is that account binding a provider identity to itself, so the callback writes the subject it gets instead of matching on it. The account was chosen by a console session before the redirect, never by a claim coming back from the provider.
+    // LinkTo is empty for a sign-in. When it includes an account id the flow is that account binding a provider identity to itself, the callback writes the subject it gets instead of matching on it. The account was chosen by a console session before the redirect, never by a claim coming back from the provider.
     public sealed record PendingFlow(string ProviderId, string Verifier, string Nonce, string RedirectUri, string ReturnTo, bool Console, DateTime ExpiresAt, string LinkTo = "");
 
     public sealed record Start(string AuthorizeUrl, string State);
@@ -51,7 +51,7 @@ public static class OidcFlow
             new OpenIdConnectConfigurationRetriever(),
             new HttpDocumentRetriever { RequireHttps = !AllowsPlainHttp(provider.Authority) })).GetConfigurationAsync(token);
 
-    // Dropped when a provider is edited or deleted, so a rotated secret or a moved authority is not served from cache.
+    // Dropped when a provider is edited or deleted, a rotated secret or a moved authority is not served from cache.
     public static void Forget(string providerId)
     {
         foreach (var key in Documents.Keys)

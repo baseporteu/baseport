@@ -66,7 +66,7 @@ public static class ApiDtos
         f.IsReadOnly
     };
 
-    // a password field's hash never leaves the server. Links and expansions are the public API's, so the console passes neither.
+    // a password field's hash never leaves the server. Links and expansions are the public API's, the console passes neither.
     public static JsonObject RecordDto(Record r, IEnumerable<FieldDefinition> fields, JsonObject? links = null, JsonObject? expanded = null)
     {
         var data = (JsonNode.Parse(string.IsNullOrWhiteSpace(r.JsonData) ? "{}" : r.JsonData) as JsonObject) ?? new JsonObject();
@@ -106,7 +106,7 @@ public static class ApiDtos
     // Public form schema handed to the embed.
     public static object PublicFormSchema(FormConfig form, TableDefinition table, IEnumerable<FieldDefinition> visibleFields, string currency = "EUR", string timeZone = "UTC") => new
     {
-        // The embed formats subtotals, which belong to no single field, so the instance default travels with the schema.
+        // The embed formats subtotals, which belong to no single field, the instance default travels with the schema.
         Currency = currency,
         // Timestamps go out in UTC. A client that renders one has to be told which zone the instance reads its dates in, or every reader picks their own.
         TimeZone = timeZone,

@@ -5,7 +5,7 @@ namespace Baseport;
 // `baseport accounts ...`: the three operations the console deliberately refuses on an admin account. Whoever has the shell outranks whoever merely has console access.
 public static class AccountsCli
 {
-    // What to type to run this build, rather than "baseport", which is only a command once somebody has put it on their PATH. A single-file publish runs its own apphost, so the executable is the command; `dotnet Baseport.dll` runs the shared host, and the command has to name the dll.
+    // What to type to run this build, instead of "baseport", which is only a command once somebody has put it on their PATH. A single-file publish runs its own apphost, the executable is the command; `dotnet Baseport.dll` runs the shared host, and the command has to name the dll.
     public static string Invocation()
     {
         var dll = System.Reflection.Assembly.GetEntryAssembly()?.Location ?? "";
@@ -104,7 +104,7 @@ public static class AccountsCli
             return 0;
         }
 
-        // The console cannot demote at all, so the last admin has to be protected here or there is no way back in.
+        // The console cannot demote at all, the last admin has to be protected here or there is no way back in.
         if (role != AccountRoles.Admin && await AdminEndpoints.IsLastEnabledAdmin(db, account))
         {
             Console.Error.WriteLine($"{account.Username} is the last enabled admin. Promote another account first.");
@@ -141,7 +141,7 @@ public static class AccountsCli
         return 0;
     }
 
-    // The seeded admin username is random, so the operator has to be able to make it theirs; the console refuses every field on an admin.
+    // The seeded admin username is random, the operator has to be able to make it theirs; the console refuses every field on an admin.
     private static async Task<int> RenameAsync(AppDbContext db, string username, string next)
     {
         if (await FindAsync(db, username) is not { } account) return 1;
@@ -172,7 +172,7 @@ public static class AccountsCli
         return 0;
     }
 
-    // The deliberate half of pillar 17: an account is auto-linked on first sign-in, but never an admin, so the one identity that opens the console is bound here or not at all. The subject is printed by the refused sign-in that needs it.
+    // The deliberate half of pillar 17: an account is auto-linked on first sign-in, but never an admin, the one identity that opens the console is bound here or not at all. The subject is printed by the refused sign-in that needs it.
     private static async Task<int> LinkAsync(AppDbContext db, string username, string slug, string subject)
     {
         if (await FindAsync(db, username) is not { } account) return 1;
@@ -221,10 +221,10 @@ public static class AccountsCli
             return 0;
         }
 
-        // Refused rather than silently locking the account out: without a password there is no other way in.
+        // Refused instead of silently locking the account out: without a password there is no other way in.
         if (account.PasswordHash.Length == 0)
         {
-            Console.Error.WriteLine($"{account.Username} has no password, so unlinking would leave no way to sign in. " +
+            Console.Error.WriteLine($"{account.Username} has no password, unlinking would leave no way to sign in. " +
                 $"Set one first: {Invocation()} accounts password {account.Username} <password>");
             return 1;
         }
@@ -239,7 +239,7 @@ public static class AccountsCli
         return 0;
     }
 
-    // Takes a username or an e-mail: an account reached through a provider is often known by its address, and the refusal that sends an operator here prints one. The e-mail column is unique on write, but a database that predates that constraint is not, so an ambiguous handle is refused rather than resolved to whichever row came back first.
+    // Takes a username or an e-mail: an account reached through a provider is often known by its address, and the refusal that sends an operator here prints one. The e-mail column is unique on write, but a database that predates that constraint is not, an ambiguous handle is refused instead of resolved to whichever row came back first.
     private static async Task<UserAccount?> FindAsync(AppDbContext db, string handle)
     {
         var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Username == handle);

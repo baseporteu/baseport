@@ -66,7 +66,7 @@ public class BaseportClientTests
     }
 
     [Fact]
-    public async Task A_failed_call_carries_the_status_and_the_server_message()
+    public async Task A_failed_call_transports_the_status_and_the_server_message()
     {
         var (client, handler) = Build();
         handler.Reply(HttpStatusCode.Unauthorized, """{"errors":["Incorrect credentials."]}""");

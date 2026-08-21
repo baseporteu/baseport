@@ -45,7 +45,7 @@ public class BackupStoreTests : IDisposable
     {
         // VACUUM INTO writes a second full copy of the store. On a tight disk that is
         // how a backup fills the filesystem the instance is still running on, and the
-        // nightly job would do it unattended, so the guard sits in CreateAsync rather
+        // nightly job would do it unattended, the guard sits in CreateAsync rather
         // than in the button that calls it.
         var storePath = Path.Combine(_dir, "store.db");
         using var store = NewFileStore(storePath);

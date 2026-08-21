@@ -52,8 +52,8 @@
                     <input type='text' id='formDescription' class='input' placeholder='Description (optional)'>
 
                     <!-- Kind is chosen once, at creation. A form renders fields; a
-                         list renders rows. One cannot become the other, so the
-                         editor states it rather than offering it. -->
+                         list renders rows. One cannot become the other, the
+                         editor states it instead of offering it. -->
                     <div class='form-shape'>
                         <div class='segmented' id='formKinds'>
                             <button type='button' class='seg-btn active' data-kind='form' onclick='chooseKind("form")'>Form</button>
@@ -121,7 +121,7 @@
 
                     <!-- LOOKUP: match on an identifier, show chosen fields. A brand-new, unconfigured lookup
                          walks through the three settings one at a time (lookupOnboardStep); an already-
-                         configured one shows them flat, as before, so editing never re-triggers the wizard. -->
+                         configured one shows them flat, as before, editing never re-triggers the wizard. -->
                     <div id='kindLookup' class='hidden'>
                         <div class='lookup-onboard-nav hidden' id='lookupOnboardNav'>
                             <div class='segmented'>

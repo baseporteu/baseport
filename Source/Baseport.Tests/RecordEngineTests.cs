@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
-// The write path is the one place where a rule holding on the form but not on the REST API would be a data-integrity bug, so it gets the coverage.
+// The write path is the one place where a rule holding on the form but not on the REST API would be a data-integrity bug, it gets the coverage.
 public class RecordEngineTests : IDisposable
 {
     private readonly SqliteConnection _connection;

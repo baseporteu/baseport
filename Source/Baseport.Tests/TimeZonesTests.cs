@@ -3,7 +3,7 @@ using Baseport;
 
 namespace Baseport.Tests;
 
-// The instance time zone is handed to clients to render with, so what has to hold is that an IANA-speaking client would accept it.
+// The instance time zone is handed to clients to render with, what has to hold is that an IANA-speaking client would accept it.
 public class TimeZonesTests
 {
     [Theory]
@@ -24,7 +24,7 @@ public class TimeZonesTests
     [Fact]
     public void The_host_zone_is_one_a_client_could_render_with()
     {
-        // TimeZoneInfo.Local is a Windows name on Windows, which no browser accepts, so the default has to survive being handed straight to Intl.
+        // TimeZoneInfo.Local is a Windows name on Windows, which no browser accepts, the default has to survive being handed straight to Intl.
         Assert.True(TimeZones.IsValid(TimeZones.HostDefault));
         Assert.True(TimeZones.HostDefault == "UTC" || TimeZones.HostDefault.Contains('/'));
         Assert.Equal(TimeZones.HostDefault, new AppSettings().TimeZone);

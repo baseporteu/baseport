@@ -95,6 +95,6 @@ public static class FieldTypes
     public static FieldType? Find(string? name) =>
         name is not null && ByName.TryGetValue(name.Trim(), out var t) ? t : null;
 
-    // A stored field with an unknown type reads as text rather than crashing a listing.
+    // A stored field with an unknown type reads as text instead of crashing a listing.
     public static FieldType Of(FieldDefinition field) => Find(field.DataType) ?? Text;
 }

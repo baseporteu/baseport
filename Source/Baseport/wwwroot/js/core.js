@@ -91,7 +91,7 @@ function cloneField(f) {
     };
 }
 
-// Saved fields carry a server id; staged ones a local key, so a row is addressable either way.
+// Saved fields carry a server id; staged ones a local key, a row is addressable either way.
 function fieldKey(f) {
     return f.key || f.id;
 }
@@ -132,9 +132,9 @@ function applyView(v) {
     if (v === 'records') loadRecords();
 }
 
-/* Router: the URL is the single source of truth; every selection navigates and render() rebuilds from the path, so deep links work and back/forward behave. Paths: /, /tables/{id}, /tables/{id}/records, /forms, /forms/{id}, /sql, /sql/{id}, /settings/{page}, /schema, /auth, /logs. */
+/* Router: the URL is the single source of truth; every selection navigates and render() rebuilds from the path, deep links work and back/forward behave. Paths: /, /tables/{id}, /tables/{id}/records, /forms, /forms/{id}, /sql, /sql/{id}, /settings/{page}, /schema, /auth, /logs. */
 
-// The console is mounted under a prefix; parseRoute strips it and navigate puts it back, so every route above stays written as if the console owned the root.
+// The console is mounted under a prefix; parseRoute strips it and navigate puts it back, every route above stays written as if the console owned the root.
 const BASE = '/_/admin';
 
 function routePath() {

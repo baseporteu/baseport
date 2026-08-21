@@ -79,11 +79,11 @@ public static class QueryEngine
         var args = new List<object> { table.Id };
         var where = "r.\"TableId\" = {0}";
 
-        // Applied before anything the caller controls, so a filter or a search term can only narrow what the rule already allows.
+        // Applied before anything the caller controls, a filter or a search term can only narrow what the rule already allows.
         if (accessFields is not null && RecordAccess.ListClause(table, accessFields, "r", accessUserId, args) is { } clause)
             where += $" AND ({clause})";
 
-        // Author-defined filters are baked into the form and are not something a visitor can change, so they are applied before the search box narrows anything further.
+        // Author-defined filters are baked into the form and are not something a visitor can change, they are applied before the search box narrows anything further.
         foreach (var f in filters ?? Array.Empty<Filter>())
         {
             var slot = args.Count;
@@ -119,7 +119,7 @@ public static class QueryEngine
                 rankJoin = RecordSearch.RankJoin(slot);
             }
             else
-                // No index, or nothing in the term fts5 can tokenize: json_each walks every stored value, so a field added later is searchable without a schema change.
+                // No index, or nothing in the term fts5 can tokenize: json_each walks every stored value, a field added later is searchable without a schema change.
                 search = $" AND EXISTS (SELECT 1 FROM json_each(r.\"JsonData\") je WHERE je.value LIKE {{{slot}}} ESCAPE '\\')";
         }
 
@@ -165,13 +165,13 @@ public static class QueryEngine
         return result;
     }
 
-    // Prefers the indexed generated column RecordIndexes maintains for this field; falls back to json_extract for the types that get no column, which is the same scan as before rather than a wrong answer.
+    // Prefers the indexed generated column RecordIndexes maintains for this field; falls back to json_extract for the types that get no column, which is the same scan as before instead of a wrong answer.
     private static string Column(FieldDefinition field) =>
         RecordIndexes.ColumnFor(field) is { } column
             ? $"r.\"{column}\""
             : JsonPath(field.Name);
 
-    // Access rules read the JSON directly rather than the generated column: that column only exists once RecordIndexes has synced the field, and a rule that 500s on an unsynced table is worse than one that scans.
+    // Access rules read the JSON directly instead of the generated column: that column only exists once RecordIndexes has synced the field, and a rule that 500s on an unsynced table is worse than one that scans.
     internal static string JsonPathFor(string fieldName, string alias) => JsonPath(fieldName, alias);
 
     private static string JsonPath(string fieldName, string alias = "r") =>

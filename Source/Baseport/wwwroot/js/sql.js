@@ -160,7 +160,7 @@ async function saveSchedule() {
     if (saved) renderSchedule(saved);
 }
 
-// Proves the destination answers without waiting for the cron, so a wrong url is found here rather than in tomorrow's log.
+// Proves the destination answers without waiting for the cron, a wrong url is found here instead of in tomorrow's log.
 async function runScheduleNow() {
     if (!currentQueryId) return;
     const ran = await ui.send(`/api/_admin/queries/${currentQueryId}/run`, {

@@ -56,7 +56,7 @@ public static class AdminAuth
             if (user is not null) return Remember(ctx, user);
         }
 
-        // A cookie has a back-channel a bearer header does not, so a stale auth cookie is reminted here rather than answering 401.
+        // A cookie has a back-channel a bearer header does not, a stale auth cookie is reminted here instead of answering 401.
         var reauth = await UserTokens.ReauthAsync(db, ctx.Request.Cookies[RefreshCookie], now);
         if (reauth is null) return null;
 
@@ -92,7 +92,7 @@ public static class AdminAuth
         ctx.Response.Cookies.Append(name, value, new CookieOptions
         {
             HttpOnly = true,
-            // Lax, not Strict. A browser withholds a Strict cookie from any navigation whose redirect chain started cross-site, and an OpenID Connect return is exactly that: the provider redirects to the callback, the callback sets these and redirects to /_/admin, and that last hop arrives without them. The console then renders the sign-in screen for somebody who just signed in, until they reload by hand. Lax still withholds the cookie from every cross-site POST, PATCH, PUT and DELETE, and no GET route here mutates anything, so the CSRF protection this pays for is intact.
+            // Lax, not Strict. A browser withholds a Strict cookie from any navigation whose redirect chain started cross-site, and an OpenID Connect return is exactly that: the provider redirects to the callback, the callback sets these and redirects to /_/admin, and that last hop arrives without them. The console then renders the sign-in screen for somebody who just signed in, until they reload by hand. Lax still withholds the cookie from every cross-site POST, PATCH, PUT and DELETE, and no GET route here mutates anything, the CSRF protection this pays for is intact.
             SameSite = SameSiteMode.Lax,
             // Set only over HTTPS in production; a Secure cookie on plain http would never be sent back and would lock the console out locally.
             Secure = ctx.Request.IsHttps,
@@ -113,8 +113,8 @@ public static class AdminAuth
         admin.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        // The username is as much a credential as the password now, so it is printed with it: nothing else ever shows it.
-        // The rename command is built rather than templated: Serilog binds positionally, so a name repeated in the template shifts every value after it, and "baseport" is only a command once somebody has put it on their PATH.
+        // The username is as much a credential as the password now, it is printed with it: nothing else ever shows it.
+        // The rename command is built instead of templated: Serilog binds positionally, a name repeated in the template shifts every value after it, and "baseport" is only a command once somebody has put it on their PATH.
         var rename = $"{AccountsCli.Invocation()} accounts rename {admin.Username} <name>";
         Serilog.Log.Warning("Seeded a one-time admin account. Username: {Username}  Password: {Password}. " +
             "Sign in and change the password before exposing this instance; rename the account with: {Rename}",
@@ -122,7 +122,7 @@ public static class AdminAuth
     }
 }
 
-// a per-account brute-force lockout; trippable by a third party, so a DoS here only delays a sign-in.
+// a per-account brute-force lockout; trippable by a third party, a DoS here only delays a sign-in.
 public static class LoginGuard
 {
     private const int MaxFailures = 5;
@@ -154,7 +154,7 @@ public static class LoginGuard
                     : (Failures: entry.Failures + 1, LockedUntil: entry.LockedUntil, TouchedAt: now));
     }
 
-    // The key is whatever handle the caller submitted, so without this an unauthenticated flood grows the table forever. Dropping a quiet entry also decays its failure count, which is the behaviour a lockout window implies anyway.
+    // The key is whatever handle the caller submitted, without this an unauthenticated flood grows the table forever. Dropping a quiet entry also decays its failure count, which is the behaviour a lockout window implies anyway.
     public static int PruneExpired(DateTime now)
     {
         var removed = 0;

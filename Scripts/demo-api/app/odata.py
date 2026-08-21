@@ -4,7 +4,7 @@ also happens to speak $filter/$top -- some real REST APIs do.
 
 Deliberately not supported: $filter's `or` and parentheses, and cross-field
 `$expand`. Baseport itself only ever sends a single `eq`/`contains` condition and
-`$top`, so a full boolean-expression parser buys nothing a real caller here would
+`$top`, a full boolean-expression parser buys nothing a real caller here would
 use; adding one on spec alone is exactly the kind of speculative surface ponytail
 says to skip. `and`-chains of simple conditions cover everything realistic.
 """
@@ -73,7 +73,7 @@ def apply_orderby(records: list[dict], expr: str | None) -> list[dict]:
     if not expr:
         return records
     terms = [t.strip() for t in expr.split(",") if t.strip()]
-    # Stable sort applied least-significant term first, so the first term wins ties.
+    # Stable sort applied least-significant term first, the first term wins ties.
     for term in reversed(terms):
         parts = term.split()
         field = parts[0]

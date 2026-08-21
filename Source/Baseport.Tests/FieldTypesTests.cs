@@ -123,7 +123,7 @@ public class FieldValidationNewTypesTests
         Assert.Contains(errs, e => e.Contains("nested object or array"));
     }
 
-    // A nested member is a field, so it gets the whole validator rather than a shape check.
+    // A nested member is a field, it gets the whole validator instead of a shape check.
     [Fact]
     public void Object_members_are_validated_with_the_same_rules_as_top_level_fields()
     {
@@ -313,7 +313,7 @@ public class RecordEngineNewTypesTests : IDisposable
         Assert.Equal(3, ((JsonArray)obj["Tags"]!).Count);
     }
 
-    // PATCH used to replace a whole object, so touching one member silently dropped the rest.
+    // PATCH used to replace a whole object, touching one member silently dropped the rest.
     [Fact]
     public async Task Patching_one_member_of_an_object_field_keeps_the_others()
     {

@@ -11,13 +11,13 @@ function bootstrap() {
     }
 }
 
-// The console and the login card live on separate routes now, so the shell and every console script never load for a signed-out visitor.
+// The console and the login card live on separate routes now, the shell and every console script never load for a signed-out visitor.
 function isAuthPage() {
     return !document.getElementById('appShell');
 }
 
 async function boot() {
-    // Server-rendered on a full load, so the first paint costs no round trips.
+    // Server-rendered on a full load, the first render will costs no round trips.
     const me =
         bootstrap() ||
         (await fetch('/api/auth/me')
@@ -58,19 +58,19 @@ async function boot() {
     const menuName = document.getElementById('accountMenuName');
     if (menuName) menuName.textContent = username;
     const menuEmail = document.getElementById('accountMenuEmail');
-    // An account with no address says so, rather than leaving a blank line where one belongs.
+    // An account with no address says so, instead of leaving a blank line where one belongs.
     if (menuEmail) menuEmail.textContent = email || 'No email address set';
     markAppearance();
 
     if (me.user) currentAccount = me.user;
     if (me.tables) currentTables = me.tables;
-    // Server-rendered alongside the tables, so the overview's four numbers paint with them rather than reading "n/a" until something reloads.
+    // Server-rendered alongside the tables
     if (me.stats) summaryStats = me.stats;
     if (me.settings) settingsData = {
         ...(settingsData || {}),
         ...me.settings
     };
-    // Every timestamp the console prints reads this, so it is set before the first view renders rather than when the settings page happens to load.
+    // Every timestamp the console prints reads this, it is set before the first view renders instead of when the settings page happens to load.
     if (settingsData) ui.timeZone(settingsData.timeZone || 'UTC');
 
     if (me.fieldTypes && typeof setFieldTypes === 'function') setFieldTypes(me.fieldTypes, me.fieldTypeGroups);
@@ -81,7 +81,7 @@ async function boot() {
     await render();
 }
 
-// The panels the sign-in screen swaps between. Each includes its own heading, so only one may be on screen at a time, and the provider buttons belong to the first.
+// The panels the sign-in screen swaps between. Each includes its own heading, only one may be on screen at a time, and the provider buttons belong to the first.
 function showPanel(name) {
     document.getElementById('loginForm').hidden = name !== 'login';
     document.getElementById('forgotCard').hidden = name !== 'forgot';
@@ -194,11 +194,11 @@ async function changePassword(ev) {
     return false;
 }
 
-// True once a code has been requested, so the same button then signs in with it.
+// True once a code has been requested, the same button then signs in with it.
 let otpRequested = false;
 let otpExpiryTimer = null;
 
-// The server issues a code for one username and consumes it for that same username, so a field the operator can still edit only offers them a code that cannot work.
+// The server issues a code for one username and consumes it for that same username, a field the operator can still edit only offers them a code that cannot work.
 function lockUsername(locked) {
     const user = document.getElementById('loginUser');
     if (!user) return;
@@ -306,7 +306,7 @@ async function signIn(ev) {
         if (!(await ui.handle(res, {
                 failure: 'Sign-in failed.'
             }))) {
-            // A wrong or stale code is spent, so the next attempt needs a new one.
+            // A wrong or stale code is spent, the next attempt needs a new one.
             if (authMode() === 'otp') {
                 expireOtpFlow();
             }
@@ -314,7 +314,7 @@ async function signIn(ev) {
         }
         document.getElementById('loginPass').value = '';
         document.getElementById('otpCode').value = '';
-        // The login page was rendered for a signed-out visitor, so go to the console rather than re-running boot() against a stale payload.
+        // The login page was rendered for a signed-out visitor, go to the console instead of re-running boot() against a stale payload.
         location.replace('/_/admin');
         return false;
     } finally {

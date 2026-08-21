@@ -40,7 +40,7 @@ public sealed class AuditLogWriter : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        // base.StopAsync cancels the loop's token; flush before calling it. DrainAsync takes one batch, and the queue holds 4096 entries, so this loop is bounded.
+        // base.StopAsync cancels the loop's token; flush before calling it. DrainAsync takes one batch, and the queue stores 4096 entries, this loop is bounded.
         _queue.Writer.TryComplete();
         while (_queue.Reader.TryPeek(out _)) await DrainAsync();
         await base.StopAsync(cancellationToken);

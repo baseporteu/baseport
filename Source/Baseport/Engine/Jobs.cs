@@ -88,7 +88,7 @@ public static class Jobs
         return $"Removed {sessions} session(s), {OneTimeCodes.PruneExpired(now)} code(s), {LoginGuard.PruneExpired(now)} lockout entry(ies), {OidcFlow.Prune(now)} abandoned sign-in(s).";
     }
 
-    // An anonymous account is reachable only through the token pair it was handed, so once every session on it has expired nobody can ever sign back into it. Retention is the grace period after that, and rows it created keep a dead owner id: nothing here can find them, since a record is owned by a value in its own json.
+    // An anonymous account is reachable only through the token pair it was handed, once every session on it has expired nobody can ever sign back into it. Retention is the grace period after that, and rows it created keep a dead owner id: nothing here can find them, since a record is owned by a value in its own json.
     private static async Task<string> AnonymousCleanupAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)
     {
         var settings = await db.AppSettings.FirstOrDefaultAsync(ct) ?? new AppSettings();

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
-// The published name is the whole public contract, so the API is the thing that decides whether one is acceptable.
+// The published name is the whole public contract, the API is the thing that decides whether one is acceptable.
 public class TableApiNameTests : IDisposable
 {
     private readonly SqliteConnection _connection;

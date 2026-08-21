@@ -33,7 +33,7 @@ There is no TLS: keep the listeners on loopback.
 Read-only, one statement, 200 rows max. `SELECT`, `WITH`, `VALUES`, `EXPLAIN`,
 `PRAGMA`. Writes go through the REST API or the console.
 
-The engine underneath is SQLite, so `LIMIT` works everywhere and `SELECT TOP n`
+The engine underneath is SQLite, `LIMIT` works everywhere and `SELECT TOP n`
 is rewritten for you. Parameters work on the PostgreSQL side; on SQL Server they
 become RPC calls, which the listener does not implement yet.
 

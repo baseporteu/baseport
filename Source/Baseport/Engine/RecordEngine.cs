@@ -12,16 +12,37 @@ public static class RecordEngine
     // shared instance, Sanitize() is safe to call concurrently
     private static readonly HtmlSanitizer Sanitizer = new();
 
-    // A write path verdict: the messages to show a visitor and, alongside them, the storage names of every field that failed, so a form can paint exactly the offending inputs red instead of asking the visitor to guess.
+    // A write path verdict: the messages to show a visitor and, alongside them, the storage names of every field that failed, a form renders exactly the offending inputs red instead of asking the visitor to guess.
     public sealed record ValidationOutcome(List<string> Errors, List<string> InvalidFields)
     {
         public bool HasErrors => Errors.Count > 0;
     }
 
-    // Strips unknown keys, applies defaults, validates every field, enforces uniqueness, fills system ids and recomputes calculated/derived values server-side.
+    // Converts text to its target type, or leaves it unchanged for validation to fail.
+    public static JsonNode? CoerceText(string? type, string text) => FieldValidation.NormalizeType(type) switch
+    {
+        "number" or "currency" => double.TryParse(text, FieldValidation.Numeric, CultureInfo.InvariantCulture, out var n) ? JsonValue.Create(n) : JsonValue.Create(text),
+        "boolean" => text.Trim().ToLowerInvariant() switch
+        {
+            "true" or "1" or "on" or "yes" => JsonValue.Create(true),
+            "false" or "0" or "off" or "no" => JsonValue.Create(false),
+            _ => JsonValue.Create(text)
+        },
+        "multiselect" => new JsonArray(text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(v => (JsonNode)v).ToArray()),
+        "json" or "array" => TryParseNode(text) ?? JsonValue.Create(text),
+        _ => JsonValue.Create(text)
+    };
+
+    private static JsonNode? TryParseNode(string text)
+    {
+        try { return JsonNode.Parse(text); }
+        catch (JsonException) { return null; }
+    }
+
+    // Sanitizes, validates, default-populates, and calculates server-side record values.
     public static async Task<ValidationOutcome> PrepareAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, JsonObject obj, string? excludeRecordId = null)
     {
-        // Unknown keys are dropped rather than rejected: a stale embed sending a removed field should still submit, not hard-fail for the visitor.
+        // Unknown keys are dropped instead of rejected: a stale embed sending a removed field should still submit, not hard-fail for the visitor.
         foreach (var kv in obj.ToList())
             if (fields.All(f => f.Name != kv.Key)) obj.Remove(kv.Key);
 
@@ -101,7 +122,7 @@ public static class RecordEngine
         }
     }
 
-    // runs before validation, so a required slug with a source never fails required-ness
+    // runs before validation, a required slug with a source never fails required-ness
     private static void DeriveSlugs(List<FieldDefinition> fields, JsonObject obj)
     {
         foreach (var f in fields.Where(f => FieldValidation.NormalizeType(f.DataType) == "slug"))
@@ -152,10 +173,10 @@ public static class RecordEngine
         return new JsonArray(JsonValue.Create(raw));
     }
 
-    // Uniqueness lives here rather than in a SQL constraint: fields are rows in Fields, not columns, so there is no column to constrain.
+    // Uniqueness requires instead of a SQL constraint: fields are rows in Fields, not columns, there is no column to constrain.
     private static async Task CheckUniqueAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, JsonObject obj, string? excludeRecordId, List<string> errors, List<string> invalid)
     {
-        if (table.IsProxy) return; // nothing is stored locally, so there is nothing to collide with
+        if (table.IsProxy) return; // nothing is stored locally, there is nothing to collide with
 
         foreach (var f in fields.Where(f => f.IsUnique && !f.IsHidden))
         {
@@ -219,6 +240,64 @@ public static class RecordEngine
 
         return (merged, outcome);
     }
+
+    // Brings stored records back in line with the table's computed fields.
+    //
+    // A computed field is server owned: the server, not the writer, decides its value, so the promise is that every stored record has one. PrepareAsync keeps that promise at write time, which is the only time it was ever kept: adding the field to a table that already stores rows left every one of them empty, and ApplyUpdateAsync then filled them one at a time as records happened to be edited, so the column was silently part-filled instead of plainly empty.
+    //
+    // This is RecordIndexes.SyncAsync's counterpart. That reconciles the schema objects a field change implies; this reconciles the record data it implies. Both are called from the same places for the same reason, and neither is optional after a field is created or retyped.
+    //
+    // A system id is filled only where it is missing, never replaced: it is the record's identity, and regenerating it is the bug ApplyUpdateAsync already guards against. A calculated or derived value is recomputed outright, because it is a pure function of the record and an edited expression makes every stored value stale.
+    public static async Task<int> ReconcileComputedAsync(AppDbContext db, TableDefinition table)
+    {
+        var computed = table.Fields.Where(f => FieldTypes.Of(f).Computed).ToList();
+        if (computed.Count == 0) return 0;
+
+        var records = await db.Records.Where(r => r.TableId == table.Id).ToListAsync();
+        var changed = 0;
+        foreach (var record in records)
+        {
+            var obj = (JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject) ?? new JsonObject();
+            var touched = false;
+
+            foreach (var f in computed)
+            {
+                if (FieldValidation.NormalizeType(f.DataType) == "systemid")
+                {
+                    if (!IsMissing(obj, f.Name)) continue;
+                    obj[f.Name] = Ids.NewShortId();
+                    touched = true;
+                    continue;
+                }
+
+                // A bad expression is refused when the field is saved, so a failure here is a record the expression cannot read. Leave that one alone instead of failing the whole table.
+                if (!TryCompute(f, obj, out _, out var value)) continue;
+                var current = obj.TryGetPropertyValue(f.Name, out var existing) ? existing : null;
+                if (value is null)
+                {
+                    // A derived value that computes to nothing is not stored, the same as at write time.
+                    if (current is null) continue;
+                    obj.Remove(f.Name);
+                    touched = true;
+                    continue;
+                }
+                if (current is not null && JsonNode.DeepEquals(current, value)) continue;
+                obj[f.Name] = value;
+                touched = true;
+            }
+
+            if (!touched) continue;
+            record.JsonData = obj.ToJsonString();
+            changed++;
+        }
+
+        if (changed > 0) await db.SaveChangesAsync();
+        return changed;
+    }
+
+    private static bool IsMissing(JsonObject obj, string name) =>
+        !obj.TryGetPropertyValue(name, out var v) || v is null ||
+        (v is JsonValue jv && jv.GetValueKind() == JsonValueKind.String && string.IsNullOrWhiteSpace(jv.GetValue<string>()));
 
     // Objects merge, everything else is replaced whole.
     private static void MergeInto(JsonObject target, JsonObject source)

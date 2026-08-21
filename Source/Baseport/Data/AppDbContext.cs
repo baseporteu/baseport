@@ -6,7 +6,7 @@ public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-    // The one place that knows how a Baseport connection is set up. Options built by hand elsewhere miss the pragmas and the stamping-and-events interceptor, so their writes land unstamped and no subscriber hears them.
+    // The one place that knows how a Baseport connection is set up. Options built by hand elsewhere miss the pragmas and the stamping-and-events interceptor, their writes land unstamped and no subscriber hears them.
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options.UseSqlite(connectionString).AddInterceptors(new SqlitePragmas(), new RecordChangeInterceptor());
 
@@ -93,7 +93,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<UserAccount>().HasIndex(u => u.Username).IsUnique();
 
-        // Every API request looks a token up by its hash, so it is indexed.
+        // Every API request looks a token up by its hash, it is indexed.
         modelBuilder.Entity<UserAccount>()
             .HasIndex(u => u.ApiTokenHash)
             .IsUnique()

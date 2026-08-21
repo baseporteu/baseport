@@ -51,7 +51,7 @@ function settingsPage(page) {
     navigate(`/settings/${page}`);
 }
 
-// A link round trip comes back here rather than to a sign-in screen, so the console reports its own outcome. Taken out of the address bar so a reload does not repeat it.
+// A link round trip comes back here instead of to a sign-in screen, the console reports its own outcome. Taken out of the address bar so a reload does not repeat it.
 function reportLinkOutcome() {
     const code = new URLSearchParams(location.search).get('sso');
     if (!code) return;
@@ -94,7 +94,7 @@ async function loadSettings() {
     document.getElementById('settingsAppName').value = settingsData.appName || 'Baseport';
     document.getElementById('settingsSiteUrl').value = settingsData.siteUrl || '';
     document.getElementById('settingsLogRetention').value = settingsData.logRetentionSec ?? 0;
-    // The browser ships ISO 4217 and the IANA zone list, so neither is ours to carry or keep current.
+    // The browser ships ISO 4217 and the IANA zone list, neither is ours to carry or keep current.
     ui.fillOptions(document.getElementById('settingsCurrency'), ui.currencyOptions(), settingsData.currency || 'EUR');
     ui.fillOptions(document.getElementById('settingsTimeZone'), ui.timeZoneOptions(), settingsData.timeZone || 'UTC');
     ui.timeZone(settingsData.timeZone || 'UTC');
@@ -333,7 +333,7 @@ async function loadApiTables() {
     });
 }
 
-// refreshes currentTables too, so opening the table right after doesn't show stale data until a hard refresh
+// refreshes currentTables too, opening the table right after doesn't show stale data until a hard refresh
 async function toggleTableApi(pid, enabled) {
     const res = await fetch(`/api/_admin/tables/${pid}/api`, {
         method: 'PUT',
@@ -642,7 +642,7 @@ async function saveAllowedOrigins(btn) {
             ok: 'Allowed sites saved.',
         });
         if (!saved) return;
-        // Re-read rather than echo the textarea: the server normalises what was typed, and an author should see what is actually in force.
+        // Re-read instead of echo the textarea: the server normalises what was typed, and an author should see what is actually in force.
         document.getElementById('settingsAllowedOrigins').value = saved.allowedOrigins || '';
         renderAllowedOrigins(saved.allowedOrigins || '');
     });
@@ -681,7 +681,7 @@ async function loadOidcProviders() {
         const doors = document.createElement('td');
         doors.className = 'muted';
         const offered = [p.consoleEnabled && 'Console', p.publicEnabled && 'End users'].filter(Boolean);
-        // Switched off, the surfaces are remembered but nothing is offered; saying "Nowhere" would read as a misconfiguration rather than a parked provider.
+        // Switched off, the surfaces are remembered but nothing is offered; saying "Nowhere" would read as a misconfiguration instead of a parked provider.
         doors.textContent = !p.isEnabled ? 'Off' : offered.join(', ');
         tr.append(doors);
 
@@ -710,7 +710,7 @@ async function loadOidcProviders() {
     });
 }
 
-// Binds this provider's identity to the account already signed in here. The account is fixed by the session before the redirect, so nothing the provider sends chooses who gets linked.
+// Binds this provider's identity to the account already signed in here. The account is fixed by the session before the redirect, nothing the provider sends chooses who gets linked.
 async function linkMyAccount(p) {
     const password = await ui.ask({
         title: `Link my account to ${p.name}`,
@@ -757,7 +757,7 @@ function openOidcSheet(id) {
         placeholder: 'authelia',
         help: 'Appears in the callback URL below. Lowercase letters, digits and hyphens.',
     });
-    // Shaped as it is typed rather than policed on save, the way an API name is.
+    // Shaped as it is typed instead of policed on save, the way an API name is.
     slug.ctrl.addEventListener('input', () => {
         slug.ctrl.value = slug.ctrl.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
         redirect.ctrl.value = callbackFor(slug.ctrl.value);
@@ -767,7 +767,7 @@ function openOidcSheet(id) {
         id: 'oidcAuthority',
         value: p ? p.authority : '',
         placeholder: 'https://auth.example.com',
-        help: 'The discovery document is read from this address on save; a wrong URL is refused there rather than at sign-in.',
+        help: 'The discovery document is read from this address on save; a wrong URL is refused there instead of at sign-in.',
     });
 
     const redirect = ui.field('Redirect URL', {

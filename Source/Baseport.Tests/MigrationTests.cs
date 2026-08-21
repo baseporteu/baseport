@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
-// Migrations replaced "delete the file", so the thing worth pinning is that a fresh file gets the whole schema and a second start changes nothing.
+// Migrations replaced "delete the file", the thing worth pinning is that a fresh file gets the whole schema and a second start changes nothing.
 public class MigrationTests
 {
     private static AppDbContext Open(SqliteConnection conn) =>
@@ -22,7 +22,7 @@ public class MigrationTests
 
         Assert.NotEmpty(await db.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken));
         Assert.Empty(await db.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken));
-        // Columns added late in development, so their absence is what broke startup before migrations existed.
+        // Columns added late in development, their absence is what broke startup before migrations existed.
         Assert.NotNull(await db.AppSettings.Select(s => s.AllowedOrigins).FirstOrDefaultAsync(TestContext.Current.CancellationToken));
     }
 
@@ -31,7 +31,7 @@ public class MigrationTests
     {
         // "admin" gave away half of every credential-stuffing attempt, and it let
         // anyone trip LoginGuard's per-account lockout against a name they already
-        // knew, which is a lockout rather than the delay that guard intends.
+        // knew, which is a lockout instead of the delay that guard intends.
         using var first = new SqliteConnection("Filename=:memory:");
         using var second = new SqliteConnection("Filename=:memory:");
         first.Open();
@@ -49,7 +49,7 @@ public class MigrationTests
         Assert.NotEqual(one, two);
         // Still obviously the operator's account in a log line and an account list.
         Assert.StartsWith("admin-", one);
-        // And still a username the API would accept, so `rename` is the only thing that changes it.
+        // And still a username the API would accept, `rename` is the only thing that changes it.
         Assert.Empty(AccountValidation.Validate(one, ""));
     }
 

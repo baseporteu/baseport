@@ -5,7 +5,7 @@ namespace Baseport;
 
 public static class AuthEndpoints
 {
-    // Login is the one unauthenticated write, so it includes its own budget: without it the password is guessable at network speed.
+    // Login is the one unauthenticated write, it includes its own budget: without it the password is guessable at network speed.
 
     // Paid by every attempt, even when there is no real hash to verify.
     private static readonly string DummyHash = AdminAuth.HashPassword("constant-time-decoy");
@@ -31,7 +31,7 @@ public static class AuthEndpoints
             // Same message and the same work either way: a distinct "no such user" reply would confirm which usernames exist.
             var usable = user is not null && !user.IsDisabled;
 
-            // A one-time code is consumed whether or not it matches, so a leaked log line is worth exactly one attempt.
+            // A one-time code is consumed whether or not it matches, a leaked log line is worth exactly one attempt.
             var ok = otp.Length > 0
                 ? usable && OneTimeCodes.Consume(username, otp)
                 : usable && !string.IsNullOrEmpty(user!.PasswordHash)
@@ -43,7 +43,7 @@ public static class AuthEndpoints
             if (!ok)
             {
                 LoginGuard.Failed(username);
-                // The attempt has no session to name the caller by, so the handle that was tried is the only thing that makes the row worth reading. It is a caller's own text, cleaned and capped on the way in.
+                // The attempt has no session to name the caller by, the handle that was tried is the only thing that makes the row worth reading. It is a caller's own text, cleaned and capped on the way in.
                 AuditLogMiddleware.Note(ctx, $"Failed console sign-in as \"{username}\" with a {credential}");
                 return Results.Json(new { errors = new[] { otp.Length > 0 ? "That code is not valid or has expired." : "Incorrect username or password." } },
                     statusCode: StatusCodes.Status401Unauthorized);
@@ -64,7 +64,7 @@ public static class AuthEndpoints
         {
             var username = (body["username"]?.GetValue<string>() ?? "").Trim();
 
-            // The same answer whether or not the account exists, so this cannot be used to enumerate usernames.
+            // The same answer whether or not the account exists, this cannot be used to enumerate usernames.
             const string sent = "If that account exists, a code has been issued.";
 
             if (string.IsNullOrWhiteSpace(username))
@@ -87,7 +87,7 @@ public static class AuthEndpoints
             }
             else
             {
-                // Still consumed a slot, so the timing gives nothing away.
+                // Still consumed a slot, the timing gives nothing away.
                 Serilog.Log.Information("Sign-in code requested for an unknown or disabled account.");
             }
 
@@ -101,7 +101,7 @@ public static class AuthEndpoints
             return Results.Ok(new { signedOut = true });
         });
 
-        // The UI calls this on load to decide between the console and the login screen, so it must stay reachable while signed out.
+        // The UI calls this on load to decide between the console and the login screen, it must stay reachable while signed out.
         app.MapGet("/api/auth/me", async (AppDbContext db, HttpContext ctx) =>
         {
             var user = await AdminAuth.ResolveAsync(db, ctx);

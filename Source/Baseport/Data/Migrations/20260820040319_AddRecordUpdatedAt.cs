@@ -18,7 +18,7 @@ namespace Baseport.Data.Migrations
                 nullable: false,
                 defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
 
-            // A record written before this column existed has never been modified, so its creation time is the honest answer. The default would otherwise render as year 1.
+            // A record written before this column existed has never been modified, its creation time is the honest answer. The default would otherwise render as year 1.
             migrationBuilder.Sql("UPDATE \"_records\" SET \"UpdatedAt\" = \"CreatedAt\"");
         }
 

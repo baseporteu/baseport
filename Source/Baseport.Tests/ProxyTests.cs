@@ -113,7 +113,7 @@ public class ProxyTests
     [Fact]
     public void A_proxied_list_is_sorted_the_form_configures_it_to_be()
     {
-        // sortField/descending were computed for every list but only ever passed to the local (non-proxy) query path, so a proxied list's configured sort was silently dropped.
+        // sortField/descending were computed for every list but only ever passed to the local (non-proxy) query path, a proxied list's configured sort was silently dropped.
         var records = new List<JsonObject>
         {
             (JsonObject)JsonNode.Parse("""{"Name":"Charlie","Amount":"30"}""")!,
@@ -127,7 +127,7 @@ public class ProxyTests
                      ProxyQuery.Sorted(records, name, descending: false).Select(r => r["Name"]!.GetValue<string>()));
         Assert.Equal(new[] { "Charlie", "Bob", "Alice" },
                      ProxyQuery.Sorted(records, name, descending: true).Select(r => r["Name"]!.GetValue<string>()));
-        // Amount is stored as a string by the remote, so a text sort would put "10" < "20" < "30" wrong only for two-digit vs three-digit values; still worth locking in numeric comparison.
+        // Amount is stored as a string by the remote, a text sort would put "10" < "20" < "30" wrong only for two-digit vs three-digit values; still worth locking in numeric comparison.
         Assert.Equal(new[] { "10", "20", "30" },
                      ProxyQuery.Sorted(records, amount, descending: false).Select(r => r["Amount"]!.GetValue<string>()));
     }
@@ -143,7 +143,7 @@ public class ProxyTests
         Assert.Equal(new[] { "Charlie", "Alice" }, ProxyQuery.Sorted(records, null, false).Select(r => r["Name"]!.GetValue<string>()));
     }
 
-    // A proxy target is a url an operator types and the server fetches from inside its own network, so it is the one place an ssrf reaches cloud metadata or a neighbour's admin port.
+    // A proxy target is a url an operator types and the server fetches from inside its own network, it is the one place an ssrf reaches cloud metadata or a neighbour's admin port.
     [Theory]
     [InlineData("http://169.254.169.254/latest/meta-data/")]
     [InlineData("http://127.0.0.1:5000/api/openapi.json")]
@@ -168,7 +168,7 @@ public class ProxyTests
         Assert.Null(ProxyTarget.Problem("https://93.184.216.34/openapi.json"));
     }
 
-    // The intended target often is local (a Portway on the same host), so the block is a default an operator can lift, not a wall.
+    // The intended target often is local (a Portway on the same host), the block is a default an operator can lift, not a wall.
     [Fact]
     public void An_operator_can_open_private_targets()
     {

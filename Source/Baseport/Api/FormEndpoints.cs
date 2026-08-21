@@ -216,7 +216,7 @@ $$"""
 
         static async Task<IResult> LookupAsync(AppDbContext db, HttpClient http, HttpContext ctx, string fpid, string? q)
         {
-            // A lookup answers "does this identifier exist?", so it is the one endpoint an attacker can turn into an enumeration oracle.
+            // A lookup answers "does this identifier exist?", it is the one endpoint an attacker can turn into an enumeration oracle.
             var (form, table, fields) = await LoadAsync(db, fpid);
             if (form is null || table is null) return Results.NotFound();
             if (form.Kind != FormKinds.Form || !FormActions.Parse(form.Actions).Contains(FormActions.Lookup))
@@ -257,7 +257,7 @@ $$"""
             });
         }
 
-        // The embed is a script tag on somebody else's page, so nothing it draws is in the html a crawler reads. This is the same form at an address of its own, with its first page of rows already in the response: a link that can be shared, indexed, and read with scripting off. The embed then takes over and replaces it with the interactive version, renderers and actions included, which is why the server-rendered copy stays deliberately plain rather than growing into a second renderer that drifts from the first.
+        // The embed is a script tag on somebody else's page, nothing it draws is in the html a crawler reads. This is the same form at an address of its own, with its first page of rows already in the response: a link that can be shared, indexed, and read with scripting off. The embed then takes over and replaces it with the interactive version, renderers and actions included, which is why the server-rendered copy stays deliberately plain instead of growing into a second renderer that drifts from the first.
         app.MapGet("/f/{fpid}", PageAsync).RequireRateLimiting(RateLimit.List);
 
         static async Task<IResult> PageAsync(AppDbContext db, HttpContext ctx, string fpid, string? q, int? page)
@@ -337,7 +337,7 @@ $$"""
             var sortField = fields.FirstOrDefault(f => f.Name == sortName);
             var descending = !string.Equals(Str(config, "sortDir", "desc"), "asc", StringComparison.OrdinalIgnoreCase);
 
-            // The configured page size is the ceiling a visitor may request, so a crafted ?pageSize= can never turn a small list into a full export.
+            // The configured page size is the ceiling a visitor may request, a crafted ?pageSize= can never turn a small list into a full export.
             var filters = QueryEngine.ParseFilters(fields, config["filters"]);
             var configured = (int?)(config["pageSize"] as JsonValue)?.GetValue<double?>() ?? 25;
             var paged = configured > 0;

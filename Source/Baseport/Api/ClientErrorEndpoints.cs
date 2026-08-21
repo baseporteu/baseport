@@ -8,11 +8,11 @@ public static class ClientErrorEndpoints
 {
     public const string Route = "/api/client-errors";
 
-    // What an audit row shows is one line in a table, so the message is capped at one.
+    // What an audit row shows is one line in a table, the message is capped at one.
     private const int MessageMax = 500;
     private const int PageMax = 200;
 
-    // Not an HTTP exchange, so it includes no status. The logs view reads this to colour the row.
+    // Not an HTTP exchange, it includes no status. The logs view reads this to colour the row.
     public const string ClientMethod = "CLIENT";
 
     public static void MapClientErrorEndpoints(this WebApplication app)
@@ -52,7 +52,7 @@ public static class ClientErrorEndpoints
         {
             if (char.IsControl(c) || c == ' ')
             {
-                // Collapsed rather than dropped, or two words run together.
+                // Collapsed instead of dropped, or two words run together.
                 if (sb.Length > 0) space = true;
                 continue;
             }

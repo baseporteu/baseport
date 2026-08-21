@@ -81,7 +81,7 @@ public static class PublicApiEndpoints
         // Live changes for one table, as Server-Sent Events.
         app.MapGet("/api/v1/{apiName}/subscribe", async (IServiceScopeFactory scopes, HttpContext ctx, string apiName) =>
         {
-            // A stream outlives any one scope, so this one covers the handshake only and the stream opens its own per event.
+            // A stream outlives any one scope, this one covers the handshake only and the stream opens its own per event.
             using var scope = scopes.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
@@ -216,7 +216,7 @@ public static class PublicApiEndpoints
         // SPA admin routing, serve the builder UI for any non-API path so deep links like /tables/2 or /tables/2/records render without a server reload.
     }
 
-    // Every error the public API returns speaks one shape, {"errors": [...]}, so a client parses failures the same way across every status code.
+    // Every error the public API returns speaks one shape, {"errors": [...]}, a client parses failures the same way across every status code.
     private static async IAsyncEnumerable<object> Stream(
         IServiceScopeFactory scopes, string tableId, string? recordId, string userId,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
@@ -254,7 +254,7 @@ public static class PublicApiEndpoints
         if (table is null) return false;
         if (!RecordAccess.HasRule(table, Permission.Read)) return true;
 
-        // A stream must not leak what a read would have refused, and the row may already be gone, so the rule is evaluated against the event payload.
+        // A stream must not leak what a read would have refused, and the row may already be gone, the rule is evaluated against the event payload.
         var fields = await db.Fields.Where(f => f.TableId == tableId).ToListAsync(token);
         return await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, userId,
             row: e.Json is null ? null : JsonNode.Parse(e.Json) as JsonObject);

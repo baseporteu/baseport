@@ -1,16 +1,16 @@
 /* the identity-provider buttons on both sign-in screens, and the outcome the callback comes back with */
 
-// The callback only ever puts a code in the address bar, so nothing the provider wrote reaches the screen and the wording lives here.
+// The callback only ever puts a code in the address bar, nothing the provider wrote reaches the client
 const SSO_PROBLEMS = {
-    failed: 'Could not finish signing in with that provider. The server log has the reason.',
-    denied: 'That sign-in was cancelled at the provider.',
-    no_account: 'No account here is linked to that identity.',
-    disabled: 'That account is disabled.',
-    no_console: 'That account does not have console access.',
-    not_linked: 'That identity was not linked. It may already belong to another account, or the session that started the link is gone.',
+    failed: 'Sign-in failed. Please try again or check the server logs for details.',
+    denied: 'Sign-in was cancelled by the provider.',
+    no_account: 'No account found matching this login provider.',
+    disabled: 'This account has been disabled.',
+    no_console: 'Your account does not have access to the console.',
+    not_linked: 'Unable to link identity. It may already be connected to another account or the session expired.',
 };
 
-// Server-rendered into the page, so the buttons are there on the first paint instead of after a round trip.
+// Server-rendered into the page
 function ssoProviders() {
     const el = document.getElementById('bootstrap');
     if (!el) return [];
@@ -51,7 +51,7 @@ function ssoRender(surface) {
     }
 }
 
-// A failed round trip lands back here with ?sso=<code>; report it once and take it out of the address bar so a reload does not repeat it.
+// A failed round trip lands back here with ?sso=<code>;
 function ssoReportOutcome() {
     const code = new URLSearchParams(location.search).get('sso');
     if (!code) return;
@@ -63,7 +63,6 @@ function ssoReportOutcome() {
     ui.toast(SSO_PROBLEMS[code] || SSO_PROBLEMS.failed, 'error', 8000);
 }
 
-// The screen that hosts the buttons owns the surface name: it decides which door a provider was offered for.
 function ssoInit(surface) {
     ssoRender(surface);
     ssoReportOutcome();

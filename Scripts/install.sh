@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="${BASEPORT_REPO:-baseporteu/baseport}"
-# Root installs exist to be services, so they default where a service account can read: /root is 0700, /opt is not.
+# Root installs exist to be services, they default where a service account can read: /root is 0700, /opt is not.
 if [ "$(id -u)" = "0" ]; then
   DIR="${BASEPORT_DIR:-/opt/baseport}"
   BIN="${BASEPORT_BIN:-/usr/local/bin}"
@@ -93,11 +93,11 @@ service)
   [ -x "$NOLOGIN" ] || NOLOGIN=/sbin/nologin
   id baseport >/dev/null 2>&1 || useradd --system --home "$DIR" --shell "$NOLOGIN" baseport
   chown -R baseport:baseport "$DIR"
-  su -s /bin/sh baseport -c "test -r '$DIR/Baseport'" || die "The baseport user cannot read $DIR, so the service would not start.
+  su -s /bin/sh baseport -c "test -r '$DIR/Baseport'" || die "The baseport user cannot read $DIR, the service would not start.
 Reinstall as root, which lands in /opt/baseport, and try again:
   curl -sSL $INSTALLER | sudo bash"
 
-  # A single-file build self-extracts before it runs, and the default base is a /var/tmp/.net owned by whoever ran it first, so pin it somewhere the service user owns.
+  # A single-file build self-extracts before it runs, and the default base is a /var/tmp/.net owned by whoever ran it first, pin it somewhere the service user owns.
   cat > "$UNIT" <<UNITFILE
 [Unit]
 Description=Baseport
@@ -152,7 +152,7 @@ esac
 SHIM
 chmod +x "$BIN/baseport"
 
-# A wrapper from an earlier install keeps its own directory and can shadow this one on PATH, so drop the ones whose directory is gone.
+# A wrapper from an earlier install keeps its own directory and can shadow this one on PATH, drop the ones whose directory is gone.
 for OTHER in /usr/local/bin/baseport "$HOME/.local/bin/baseport"; do
   if [ "$OTHER" = "$BIN/baseport" ] || [ ! -f "$OTHER" ]; then continue; fi
   if [ "$(head -1 "$OTHER")" != "#!/bin/sh" ]; then continue; fi
@@ -174,13 +174,13 @@ else
   echo "Baseport $TAG installed in $DIR."
 fi
 
-# A home directory is 0700 on most distros, so a service account could not read the install there.
+# A home directory is 0700 on most distros, a service account could not read the install there.
 case "$DIR" in
   /root|/root/*|/home/*) SERVICE_OK=no ;;
   *) SERVICE_OK=yes ;;
 esac
 
-# An update leaves the service on the old binary until it restarts, so do it here rather than telling the user to.
+# An update leaves the service on the old binary until it restarts, do it here instead of telling the user to.
 if [ "$(id -u)" = "0" ] && [ -e /etc/systemd/system/baseport.service ]; then
   RUNDIR=$(systemctl show baseport.service -p WorkingDirectory --value 2>/dev/null || true)
   if [ "$RUNDIR" = "$DIR" ]; then

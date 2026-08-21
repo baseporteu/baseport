@@ -6,7 +6,7 @@ namespace Baseport.Tests;
 // The break-glass sign-in codes.
 public class OneTimeCodesTests
 {
-    // A code for a user with none outstanding; never null, so tests read plainly.
+    // A code for a user with none outstanding; never null, tests read plainly.
     private static string Fresh(string username)
     {
         var (code, _) = OneTimeCodes.Issue(username);

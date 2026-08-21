@@ -6,7 +6,7 @@ description: "Configuration, the reverse proxy, backups and the switches that ar
 # Going to production
 
 :::warning
-Baseport is pre-alpha. The database format and the API surface still move between commits. Treat this page as what deployment will look like rather than a promise that today's file opens tomorrow.
+Baseport is pre-alpha. The database format and the API surface still move between commits. Treat this page as what deployment will look like instead of a promise that today's file opens tomorrow.
 :::
 
 ## Configuration
@@ -28,15 +28,15 @@ Everything else you would change while running lives in the console under **Sett
 | Value | Reachable from |
 | --- | --- |
 | `http://localhost:5000` | The machine itself only |
-| `http://0.0.0.0:5000` | Any interface, so anything that can route to the host |
+| `http://0.0.0.0:5000` | Any interface, anything that can route to the host |
 
 `localhost` is the safe default and the one to keep if a reverse proxy on the same host is the only thing talking to Baseport. Use `0.0.0.0` when something on another machine connects directly.
 
-Baseport serves plain HTTP and does not terminate TLS itself, so binding `0.0.0.0` on anything public means unencrypted traffic. Put a proxy in front of it.
+Baseport serves plain HTTP and does not terminate TLS itself, binding `0.0.0.0` on anything public means unencrypted traffic. Put a proxy in front of it.
 
 ## Behind a reverse proxy
 
-Set `Baseport__TrustForwardedHeaders` to `true`. Rate limiting works off the client address, so without this every request looks like it came from the proxy and they all share one budget.
+Set `Baseport__TrustForwardedHeaders` to `true`. Rate limiting works off the client address, without this every request looks like it came from the proxy and they all share one budget.
 
 If you want the console off the public port altogether, give it its own address with `Baseport__AdminAddress` and only expose that port on loopback.
 
@@ -56,11 +56,11 @@ sudo /usr/local/bin/baseport service
 sudo /usr/local/bin/baseport service --urls http://0.0.0.0:5000
 ```
 
-Use the full path with `sudo`. Its `secure_path` does not include `~/.local/bin`, so a wrapper installed there will not resolve.
+Use the full path with `sudo`. Its `secure_path` does not include `~/.local/bin`, a wrapper installed there will not resolve.
 
-Run it again with different options and it rewrites the unit and restarts. It refuses rather than producing a unit that cannot start: no systemd, or a service account that cannot read the install directory, and it stops. That last one is why a root install defaults to `/opt` and not `~/.baseport`: `/root` is mode 0700, so a `User=baseport` service cannot read anything inside it.
+Run it again with different options and it rewrites the unit and restarts. It refuses instead of producing a unit that cannot start: no systemd, or a service account that cannot read the install directory, and it stops. That last one is why a root install defaults to `/opt` and not `~/.baseport`: `/root` is mode 0700, a `User=baseport` service cannot read anything inside it.
 
-`/opt/baseport` holds the binary and the data together, because Baseport writes `baseport.db`, `log/` and `uploads/` relative to `WorkingDirectory`. Splitting the binary into `/opt` and data into `/var/lib` would need a second path the application does not have a concept of.
+`/opt/baseport` stores the binary and the data together, because Baseport writes `baseport.db`, `log/` and `uploads/` relative to `WorkingDirectory`. Splitting the binary into `/opt` and data into `/var/lib` would need a second path the application does not have a concept of.
 
 `baseport update` restarts the service itself when the unit runs from the directory it updated. `sudo baseport restart` does it by hand.
 
@@ -79,7 +79,7 @@ Back up the directory Baseport runs in. What is in it:
 | `uploads/` | Uploaded files, which are not stored in the database |
 | `appsettings.json` | Your own configuration |
 
-The `backup` job copies the SQLite file into `backups/` at 03:00 by default and keeps the five most recent. That is a local copy, not an offsite backup, so copy the directory somewhere else as well.
+The `backup` job copies the SQLite file into `backups/` at 03:00 by default and keeps the five most recent. That is a local copy, not an offsite backup, copy the directory somewhere else as well.
 
 ## Jobs
 
@@ -91,7 +91,7 @@ You can also give a saved SQL query a cron expression and it will run on the sam
 {"query":"Daily revenue","ranAt":"2026-08-20T07:00:00Z","columns":["day","total"],"rows":[["2026-08-19","4210.50"]]}
 ```
 
-Leave the URL empty and the row count is recorded against the query instead, so you can read it in the console. **Run now** lets you check the URL works without waiting for the schedule. The cron expression and the URL are both validated when you save, and the URL is checked again at run time, since a hostname that pointed at a public address when you saved it might not later.
+Leave the URL empty and the row count is recorded against the query instead, you can read it in the console. **Run now** lets you check the URL works without waiting for the schedule. The cron expression and the URL are both validated when you save, and the URL is checked again at run time, since a hostname that pointed at a public address when you saved it might not later.
 
 ## Things that are off by default
 

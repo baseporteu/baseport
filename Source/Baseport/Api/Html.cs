@@ -33,7 +33,7 @@ public static class Html
         return sb.ToString();
     }
 
-    // A table row. Cells are raw HTML, so each must already be escaped.
+    // A table row. Cells are raw HTML, each must already be escaped.
     public static string Row(params string[] cells) => $"<tr>{string.Concat(cells)}</tr>";
 
     // A cell whose content is escaped for you.
@@ -108,7 +108,7 @@ public static class Html
     private static readonly System.Text.Json.JsonSerializerOptions BootstrapJson =
         new(System.Text.Json.JsonSerializerDefaults.Web) { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Default };
 
-    // A JSON script block, not a JS literal: the browser parses it as data, so nothing in it executes even if it reaches the DOM. Every server-rendered page that seeds its first paint uses this one.
+    // JSON script blocks serve as data containers parsed by the browser instead of executable code, making them a safe standard for seeding initial state during server-side rendering.
     public static string BootstrapScript(object payload)
     {
         var json = System.Text.Json.JsonSerializer.Serialize(payload, BootstrapJson);

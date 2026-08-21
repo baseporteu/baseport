@@ -461,7 +461,7 @@ body:has(.sheet.open) .toasts {
     transition: opacity .12s ease, color .12s ease;
 }
 
-/* Keyboard users never hover, so focus reveals it too. */
+/* Keyboard users never hover, focus reveals it too. */
 .copy-wrap:hover .copy-btn,
 .copy-btn:focus-visible {
     opacity: 1;
@@ -540,7 +540,7 @@ body:has(.sheet.open) .toasts {
     cursor: not-allowed;
 }
 
-/* switch with its own label, for a sheet rather than a settings row */
+/* switch with its own label, for a sheet instead of a settings row */
 .switch-row {
     display: flex;
     align-items: center;

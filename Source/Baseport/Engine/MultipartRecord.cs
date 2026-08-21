@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 
 namespace Baseport;
 
-// turns JSON or multipart/form-data into the JsonObject RecordEngine expects, so both reach the same one write path
+// turns JSON or multipart/form-data into the JsonObject RecordEngine expects, both reach the same one write path
 public static class MultipartRecord
 {
     public static async Task<(JsonObject Obj, List<string> Errors)> FromRequestAsync(HttpContext ctx, List<FieldDefinition> fields)
@@ -42,19 +42,11 @@ public static class MultipartRecord
 
             if (!form.TryGetValue(f.Name, out var values) || values.Count == 0) continue;
 
+            // A multiselect arrives as one form value per choice; every other type is a single value the write path coerces the same way it coerces an imported one.
             if (type == "multiselect")
                 obj[f.Name] = new JsonArray(values.Where(v => !string.IsNullOrEmpty(v)).Select(v => (JsonNode)v!).ToArray());
-            else if (type == "boolean")
-                obj[f.Name] = values[0] is "true" or "1" or "on";
-            else if (type is "number" or "currency" && double.TryParse(values[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var n))
-                obj[f.Name] = n;
-            else if (type is "json" or "array")
-            {
-                try { obj[f.Name] = JsonNode.Parse(values[0]!); }
-                catch (JsonException) { obj[f.Name] = values[0]; }
-            }
             else
-                obj[f.Name] = values[0];
+                obj[f.Name] = RecordEngine.CoerceText(type, values[0] ?? "");
         }
         return (obj, errors);
     }

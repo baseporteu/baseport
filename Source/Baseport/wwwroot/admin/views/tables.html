@@ -8,7 +8,7 @@
                         <div class='page-actions'>
                             <button class='btn btn-outline' onclick='loadTables().then(() => render())'>Refresh</button>
                             <div class='dropdown'>
-                                <button class='btn' onclick='toggleDropdown(event)'>New table</button>
+                                <button class='btn' onclick='toggleDropdown(event)'>New table<svg class='dropdown-caret' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='m6 9 6 6 6-6'/></svg></button>
                                 <div class='dropdown-menu hidden' id='newTableMenu'>
                                     <button onclick='closeDropdown(); newTable()'>Create new table</button>
                                     <button onclick='closeDropdown(); openProxySheet()'>Create new proxy</button>
@@ -88,8 +88,15 @@
                         <div class='card-header'>
                             <div>
                                 <h2>Table settings</h2>
-                                <p class='muted'>Description and API configuration for <strong id='settingsTableName'></strong>.</p>
+                                <p class='muted'>Name, description and API configuration for <strong id='settingsTableName'></strong>.</p>
                             </div>
+                        </div>
+                        <div class='setting-row'>
+                            <div class='setting-label'>
+                                <label for='tableName'>Name</label>
+                                <p class='muted'>What this table is called in the console. The published API name is set under API configuration and does not change with it.</p>
+                            </div>
+                            <input type='text' id='tableName' class='input' placeholder='Table name' oninput='markTableDirty()'>
                         </div>
                         <div class='setting-row'>
                             <div class='setting-label'>
@@ -156,7 +163,13 @@
                             <div class='page-actions'>
                                 <input type='search' id='recordSearch' class='input' placeholder='Search all values…' oninput='debouncedRecordSearch()'>
                                 <button class='btn btn-outline' onclick='loadRecords()'>Refresh</button>
-                                <button class='btn' onclick='openNewRecordModal()'>New record</button>
+                                <div class='dropdown'>
+                                    <button class='btn' onclick='toggleDropdown(event)'>New record<svg class='dropdown-caret' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='m6 9 6 6 6-6'/></svg></button>
+                                    <div class='dropdown-menu hidden' id='newRecordMenu'>
+                                        <button onclick='closeDropdown(); openNewRecordModal()'>Create new record</button>
+                                        <button onclick='closeDropdown(); openImportRecords()'>Import records</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div id='recordsProxyNote' class='muted empty-hint hidden'></div>

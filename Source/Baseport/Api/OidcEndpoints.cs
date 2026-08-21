@@ -36,7 +36,7 @@ public static class OidcEndpoints
             }
         }).RequireRateLimiting(RateLimit.Oidc);
 
-        // An account binding a provider identity to itself. Pillar 17 refuses to let a claim choose an account, and this does not: the account is fixed here, from a session that is already authenticated, before the redirect is built. What comes back from the provider is written, never matched, so `Linkable` and the admin rule behind it are untouched.
+        // An account binding a provider identity to itself. Pillar 17 refuses to let a claim choose an account, and this does not: the account is fixed here, from a session that is already authenticated, before the redirect is built. What comes back from the provider is written, never matched, `Linkable` and the admin rule behind it are untouched.
         // The password is asked for the same reason /api/auth/password asks: a borrowed session must not be able to bolt a second way in onto somebody else's account.
         app.MapPost($"{Base}/{{slug}}/link", async (AppDbContext db, HttpContext ctx, JsonObject body, string slug) =>
         {
@@ -78,9 +78,9 @@ public static class OidcEndpoints
         app.MapGet($"{Base}/{{slug}}/callback", async (AppDbContext db, HttpContext ctx, IHttpClientFactory clients,
             string slug, string? code, string? state, string? error) =>
         {
-            // The state is spent here whatever happens next, so a code cannot be presented twice.
+            // The state is spent here whatever happens next, a code cannot be presented twice.
             var flow = OidcFlow.Claim(state);
-            // Without a flow there is nothing that says which door this was, so the provider's own surfaces decide where a stale callback lands.
+            // Without a flow there is nothing that says which door this was, the provider's own surfaces decide where a stale callback lands.
             if (flow is null)
                 return Results.Redirect(Back(await db.OidcProviders.AnyAsync(p => p.Slug == slug && p.ConsoleEnabled), OidcFlow.Failed));
 
@@ -207,7 +207,7 @@ public static class OidcEndpoints
         RedirectUri = RedirectUri(ctx, settings, p.Slug)
     };
 
-    // Validated when saved rather than when called, the same way an access rule is: a provider that cannot be reached would otherwise be a failed sign-in with nothing on screen to explain it.
+    // Validated when saved instead of when called, the same way an access rule is: a provider that cannot be reached would otherwise be a failed sign-in with nothing on screen to explain it.
     internal static async Task<string?> ApplyAsync(AppDbContext db, OidcProvider provider, JsonObject body, CancellationToken token)
     {
         var slug = Text(body, "slug", provider.Slug).Trim().ToLowerInvariant();
@@ -231,7 +231,7 @@ public static class OidcEndpoints
         if (!scopes.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("openid"))
             return "The scopes must include openid, or the provider returns no id_token.";
 
-        // A provider that is on but offered on neither screen configures nothing and shows nothing, which reads as a broken save rather than a refused one. Switch it off to park it instead; the surfaces are remembered.
+        // A provider that is on but offered on neither screen configures nothing and shows nothing, which reads as a broken save instead of a refused one. Switch it off to park it instead; the surfaces are remembered.
         var enabled = Flag(body, "isEnabled", provider.IsEnabled);
         if (enabled && !Flag(body, "consoleEnabled", provider.ConsoleEnabled) && !Flag(body, "publicEnabled", provider.PublicEnabled))
             return "An enabled provider must be offered on at least one sign-in screen. Turn one on, or switch the provider off to park it.";
@@ -255,7 +255,7 @@ public static class OidcEndpoints
         provider.Authority = authority;
         provider.ClientId = clientId;
         provider.Scopes = scopes;
-        // An absent key leaves the stored secret alone, so an edit that does not retype it does not clear it; an empty string does clear it, which is how a confidential client becomes a public one.
+        // An absent key leaves the stored secret alone, an edit that does not retype it does not clear it; an empty string does clear it, which is how a confidential client becomes a public one.
         if (body["clientSecret"] is JsonValue sv && sv.TryGetValue<string>(out var secret))
             provider.ClientSecret = secret.Trim();
         provider.UsernameClaim = Text(body, "usernameClaim", provider.UsernameClaim).Trim() is { Length: > 0 } uc ? uc : "preferred_username";
@@ -278,7 +278,7 @@ public static class OidcEndpoints
 
     private static string Door(bool console) => console ? "Console" : "End-user";
 
-    // The providers a sign-in screen offers, rendered into its bootstrap payload rather than fetched: the screen paints without a round trip, and there is one place that decides what a surface may show.
+    // The providers a sign-in screen offers, rendered into its bootstrap payload instead of fetched: the screen paints without a round trip, and there is one place that decides what a surface may show.
     public static Task<List<OidcButton>> OfferedAsync(AppDbContext db, bool console) =>
         db.OidcProviders
             .Where(p => p.IsEnabled && (console ? p.ConsoleEnabled : p.PublicEnabled))
@@ -286,7 +286,7 @@ public static class OidcEndpoints
             .Select(p => new OidcButton(p.Slug, p.Name))
             .ToListAsync();
 
-    // Registered at the provider verbatim, so it is built from the configured site URL when there is one and never from a header a caller controls.
+    // Registered at the provider verbatim, it is built from the configured site URL when there is one and never from a header a caller controls.
     public static string RedirectUri(HttpContext ctx, AppSettings settings, string slug)
     {
         var origin = string.IsNullOrWhiteSpace(settings.SiteUrl)
@@ -299,7 +299,7 @@ public static class OidcEndpoints
         db.OidcProviders.FirstOrDefaultAsync(p =>
             p.Slug == slug && p.IsEnabled && (console ? p.ConsoleEnabled : p.PublicEnabled));
 
-    // Match on the subject, then link, then provision. A username is reassignable at the provider and a subject is not, so the subject is what a returning caller is found by; the other two only ever run once per account.
+    // Match on the subject, then link, then provision. A username is reassignable at the provider and a subject is not, the subject is what a returning caller is found by; the other two only ever run once per account.
     internal static async Task<(UserAccount? User, string Problem)> ResolveAccountAsync(AppDbContext db, OidcProvider provider, OidcIdentity identity)
     {
         var user = await db.UserAccounts.FirstOrDefaultAsync(u =>
@@ -327,7 +327,7 @@ public static class OidcEndpoints
 
             if (!provider.CreateAccounts)
             {
-                // The subject is the only handle `baseport accounts link` takes, and a refused sign-in is the one place it is ever seen. The command is built here rather than templated, so no property is repeated: Serilog binds positionally, and a name repeated in the template silently shifts every value after it.
+                // The subject is the only handle `baseport accounts link` takes, and a refused sign-in is the one place it is ever seen. The command is built here instead of templated, no property is repeated: Serilog binds positionally, and a name repeated in the template silently shifts every value after it.
                 var command = $"{AccountsCli.Invocation()} accounts link <username> {provider.Slug} {identity.Subject}";
                 Serilog.Log.Warning("{Provider} sign-in failed: Subject {Subject} ({PresentedAs}) is not linked to a Baseport account. " +
                     "Link it manually using: {Command}",
@@ -347,10 +347,10 @@ public static class OidcEndpoints
     internal static async Task<string> WhyNoEmailMatchAsync(AppDbContext db, OidcProvider provider, OidcIdentity identity)
     {
         if (identity.Email.Length == 0)
-            return $"{provider.Name} sent no {provider.EmailClaim} claim, so matching by e-mail was skipped.";
+            return $"{provider.Name} sent no {provider.EmailClaim} claim, matching by e-mail was skipped.";
 
         if (!identity.EmailVerified)
-            return $"{provider.Name} did not mark {identity.Email} as verified, so matching by e-mail was skipped. " +
+            return $"{provider.Name} did not mark {identity.Email} as verified, matching by e-mail was skipped. " +
                 "An unverified address is a claim to somebody else's account.";
 
         var holder = await db.UserAccounts.FirstOrDefaultAsync(u => u.Email == identity.Email && u.Email != "");
@@ -364,7 +364,7 @@ public static class OidcEndpoints
         return $"{holder.Username} includes {identity.Email} but is already linked to another provider identity. Unlink it first.";
     }
 
-    // Both claim paths run through `Linkable`, which filters admins out, so no claim will ever link an admin however it is spelled. The other two notes read as though fixing the claim or the e-mail would help, and for the operator bootstrapping their own console it never can. Only emitted where it applies: an instance whose admins are all linked already has nothing to explain.
+    // Both claim paths run through `Linkable`, which filters admins out, no claim will ever link an admin however it is spelled. The other two notes read as though fixing the claim or the e-mail would help, and for the operator bootstrapping their own console it never can. Only emitted where it applies: an instance whose admins are all linked already has nothing to explain.
     internal static async Task<string> AdminNeverLinksNoteAsync(AppDbContext db, OidcProvider provider, OidcIdentity identity)
     {
         if (!await db.UserAccounts.AnyAsync(u => u.Role == AccountRoles.Admin && u.OidcSubject == "")) return "";
@@ -381,11 +381,11 @@ public static class OidcEndpoints
         if (AccountValidation.Validate(identity.Username, "").Count == 0) return "";
 
         return $"{provider.Name} {provider.UsernameClaim} claim \"{identity.Username}\" is invalid for Baseport. " +
-            "Auto-matching skipped. Link manually, or update the provider's claim to a plain username that a non-admin account carries.";
+            "Auto-matching skipped. Link manually, or update the provider's claim to a plain username that a non-admin account transports.";
     }
 
     // An account already tied to another provider identity is not a candidate: linking it would move it.
-    // An admin is never a candidate either, whichever claim matched. Auto-linking hands an account to whoever the provider says holds that name, and for an admin that is console access granted by a username at somebody else's directory. Pillar 16 puts admin accounts out of reach of anything but the shell, so `baseport accounts link` is the only way one gets a provider identity.
+    // An admin is never a candidate either, whichever claim matched. Auto-linking hands an account to whoever the provider says stores that name, and for an admin that is console access granted by a username at somebody else's directory. Pillar 16 puts admin accounts out of reach of anything but the shell, `baseport accounts link` is the only way one gets a provider identity.
     private static Task<UserAccount?> Linkable(AppDbContext db, System.Linq.Expressions.Expression<Func<UserAccount, bool>> match) =>
         db.UserAccounts
             .Where(u => u.OidcSubject == "" && u.Role != AccountRoles.Admin)
@@ -435,7 +435,7 @@ public static class OidcEndpoints
     {
         if (flow.LinkTo.Length == 0) return "that flow was a sign-in, not a link";
         if (sessionUserId.Length == 0) return "there is no signed-in account to link";
-        if (sessionUserId != flow.LinkTo) return "the session no longer holds the account that started it";
+        if (sessionUserId != flow.LinkTo) return "the session no longer stores the account that started it";
 
         // One provider identity maps to at most one account, the same floor `baseport accounts link` keeps.
         return await db.UserAccounts.AnyAsync(a => a.OidcProviderId == provider.Id && a.OidcSubject == identity.Subject && a.Id != flow.LinkTo)
@@ -443,7 +443,7 @@ public static class OidcEndpoints
             : null;
     }
 
-    // The account is re-resolved from the session rather than trusted from the flow: a link that started in one operator's browser must not finish in another's. The subject is the only thing taken from the provider, and it is written to that account, never used to find one.
+    // The account is re-resolved from the session instead of trusted from the flow: a link that started in one operator's browser must not finish in another's. The subject is the only thing taken from the provider, and it is written to that account, never used to find one.
     private static async Task<IResult> CompleteLinkAsync(AppDbContext db, HttpContext ctx, OidcProvider provider, OidcFlow.PendingFlow flow, OidcIdentity identity)
     {
         var user = await AdminAuth.ResolveAsync(db, ctx);
@@ -467,7 +467,7 @@ public static class OidcEndpoints
             return Results.Redirect(Back(true, OidcFlow.NotLinked));
         }
 
-        // A second way into the account is a change of credentials, so every session opened before it is done with, exactly as the CLI does it. The one being used right now is reissued instead of dropped, the way a password change does, or linking would sign the operator out of the screen they did it from.
+        // A second way into the account is a change of credentials, every session opened before it is done with, exactly as the CLI does it. The one being used right now is reissued instead of dropped, the way a password change does, or linking would sign the operator out of the screen they did it from.
         await UserTokens.RevokeAllAsync(db, user.Id);
         AdminAuth.IssueCookies(ctx, await UserTokens.IssueAsync(db, user, DateTime.UtcNow));
 

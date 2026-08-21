@@ -28,7 +28,7 @@ public class UserAuthTests : IDisposable
     };
 
     [Fact]
-    public void A_minted_token_verifies_and_carries_its_claims()
+    public void A_minted_token_verifies_and_transports_its_claims()
     {
         var now = DateTime.UtcNow;
         var claims = UserTokens.Verify(UserTokens.Mint(Jane(), "session00001", now), now);
@@ -154,7 +154,7 @@ public class UserAuthTests : IDisposable
         Assert.Null(await UserTokens.ReauthAsync(_db, second.RefreshToken, DateTime.UtcNow));
     }
 
-    // A stateless access token cannot be recalled, so it names its session row and every resolution re-reads it: without that, signing out revoked the refresh token and left the access token good for its full lifetime.
+    // A stateless access token cannot be recalled, it names its session row and every resolution re-reads it: without that, signing out revoked the refresh token and left the access token good for its full lifetime.
     [Fact]
     public async Task Revoking_a_session_kills_the_access_token_it_issued()
     {
@@ -173,7 +173,7 @@ public class UserAuthTests : IDisposable
         Assert.Null(await UserTokens.AccountForAsync(_db, claims!, DateTime.UtcNow));
     }
 
-    // A token minted before the session claim existed names no session, and is refused rather than trusted.
+    // A token minted before the session claim existed names no session, and is refused instead of trusted.
     [Fact]
     public async Task An_access_token_without_a_session_claim_is_refused()
     {
@@ -200,7 +200,7 @@ public class UserAuthTests : IDisposable
         Assert.Null(await UserTokens.ReauthAsync(_db, issued.RefreshToken, DateTime.UtcNow));
     }
 
-    // The signing key forges an admin cookie, so it must not be a row anything with SQL can select. It lives beside the database instead, owner-readable only, and survives a restart so a running instance's tokens do not all die on a reboot.
+    // The signing key forges an admin cookie, it must not be a row anything with SQL can select. It lives beside the database instead, owner-readable only, and survives a restart so a running instance's tokens do not all die on a reboot.
     [Fact]
     public async Task The_signing_key_lives_in_a_file_beside_the_database_and_not_in_a_row()
     {
@@ -244,7 +244,7 @@ public class UserAuthTests : IDisposable
         }
     }
 
-    // An in-memory database dies with the process, so writing its key to the working directory would leave a real credential lying around after a test run.
+    // An in-memory database dies with the process, writing its key to the working directory would leave a real credential lying around after a test run.
     [Fact]
     public void An_in_memory_database_keeps_its_key_in_memory()
     {

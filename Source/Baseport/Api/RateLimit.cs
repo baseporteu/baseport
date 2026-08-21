@@ -22,7 +22,7 @@ public static class RateLimit
     public static string ClientKey(HttpContext ctx) =>
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
-    // one bucket per client per form, so one noisy visitor or abused form can't exhaust the others
+    // one bucket per client per form, one noisy visitor or abused form can't exhaust the others
     public static string PartitionKey(HttpContext ctx, string policy) =>
         $"{policy}:{ctx.Request.RouteValues["fpid"] ?? ""}:{ClientKey(ctx)}";
 

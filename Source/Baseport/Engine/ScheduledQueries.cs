@@ -14,7 +14,7 @@ public static class ScheduledQueries
             .Where(q => q.ScheduleEnabled && q.Schedule != "" && q.NextRunAt != null && q.NextRunAt <= now)
             .ToListAsync(ct);
 
-    // Records its own outcome on the query rather than throwing, so one broken report never stops the tick that follows it.
+    // Records its own outcome on the query instead of throwing, one broken report never stops the tick that follows it.
     public static async Task RunAsync(AppDbContext db, SavedQuery query, IHttpClientFactory http, DateTime now, CancellationToken ct)
     {
         query.NextRunAt = Jobs.NextRun(query.Schedule, now) ?? now.AddDays(1);
@@ -52,7 +52,7 @@ public static class ScheduledQueries
         {
             using var client = http.CreateClient();
             client.Timeout = TimeSpan.FromSeconds(30);
-            // Serialized up front rather than posted as an object, so the request includes a Content-Length. A JsonContent body has no known length and goes out chunked, which plenty of webhook receivers and proxies in front of them refuse.
+            // Serialized up front instead of posted as an object, the request includes a Content-Length. A JsonContent body has no known length and goes out chunked, which plenty of webhook receivers and proxies in front of them refuse.
             var payload = System.Text.Json.JsonSerializer.Serialize(new
             {
                 query = query.Name,

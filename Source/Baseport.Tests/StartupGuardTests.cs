@@ -82,7 +82,7 @@ public class StartupGuardTests : IDisposable
         Assert.Equal(AccountRoles.Admin, resolved!.Role);
     }
 
-    // The invariant the shared token format lives or dies on: the role comes from _users on every request, never from the claim, so a token minted while somebody was an admin stops opening the console the moment they are demoted. 
+    // The invariant the shared token format lives or dies on: the role comes from _users on every request, never from the claim, a token minted while somebody was an admin stops opening the console the moment they are demoted. 
     [Fact]
     public async Task ADemotedOperatorsTokenNoLongerReachesTheConsole()
     {
@@ -110,7 +110,7 @@ public class StartupGuardTests : IDisposable
         Assert.Null(await AdminAuth.ResolveAsync(_db, ctx));
     }
 
-    // A restart drops nothing: the session is a row, so the same cookies still resolve against a context that never saw the sign-in.
+    // A restart drops nothing: the session is a row, the same cookies still resolve against a context that never saw the sign-in.
     [Fact]
     public async Task ASessionSurvivesTheProcessThatIssuedIt()
     {
@@ -121,7 +121,7 @@ public class StartupGuardTests : IDisposable
         Assert.Equal(account.Id, (await AdminAuth.ResolveAsync(restarted, ctx))!.Id);
     }
 
-    // An expired auth cookie is reminted from the refresh cookie rather than answering 401, and the refresh token is not spent by the refresh it pays for.
+    // An expired auth cookie is reminted from the refresh cookie instead of answering 401, and the refresh token is not spent by the refresh it pays for.
     [Fact]
     public async Task AStaleAuthCookieIsRemintedFromTheRefreshCookie()
     {
@@ -135,7 +135,7 @@ public class StartupGuardTests : IDisposable
         Assert.Equal(account.Id, (await AdminAuth.ResolveAsync(_db, ctx))!.Id);
     }
 
-    // The two halves of the role: a consumer is kept out of the console, and the console keeps at least one account that can still get in, so demotion is refused where deletion is.
+    // The two halves of the role: a consumer is kept out of the console, and the console keeps at least one account that can still get in, demotion is refused where deletion is.
     [Fact]
     public async Task AConsumerIsRefusedTheConsoleAndTheLastAdminCannotBeDemoted()
     {

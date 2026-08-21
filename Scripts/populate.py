@@ -10,7 +10,7 @@ Tables, fields and forms go through the admin API so validation, ApiName rules
 and the generated-column DDL all run. Rows go straight into SQLite in batches,
 because a quarter million HTTP posts would outlast the rest of the seed.
 
-Deterministic: the RNG is seeded, so two runs produce the same database.
+Deterministic: the RNG is seeded, two runs produce the same database.
 
 Run through POPULATE.sh, which supplies the environment.
 """
@@ -47,13 +47,13 @@ CUSTOMERS_DOC = """The accounts that place orders.
 
 ## Finding an account
 
-`Email` is unique across the table and is what the customer knows, so it is the
+`Email` is unique across the table and is what the customer knows, it is the
 practical way to find someone. `Reference` is generated here and is safe to
 print on correspondence.
 
 ## Address and contact
 
-`Address` and `Contact` are objects with a published schema, so a generated
+`Address` and `Contact` are objects with a published schema, a generated
 client sees the real shape instead of a string, and every member is validated
 on write: `Address.Street` is required, `Address.Geo.Lat` has to be a number
 between -90 and 90, `Contact.Email` has to be an address.
@@ -61,14 +61,14 @@ between -90 and 90, `Contact.Email` has to be an address.
 `City` and `Country` stay top-level. They are what the reports group by, and
 only a top-level field is indexed.
 
-`PATCH` merges an object member by member, so sending
+`PATCH` merges an object member by member, sending
 `{"Contact": {"Phone": "+31 6 1234 5678"}}` changes the phone number and leaves
 the name, the address and the role alone.
 
 ## What you can do
 
 Read and create accounts, and patch the ones that exist. Accounts are never
-deleted through the API, so `DELETE` is switched off for this endpoint.
+deleted through the API, `DELETE` is switched off for this endpoint.
 """
 
 ORDERS_DOC = """Order headers taken through the portal.
@@ -89,13 +89,13 @@ themselves live in `order-lines` and reference this order.
 
 `ShipTo` is a copy of the account's address as it stood when the order was
 taken, not a lookup. An account that moves next year must not rewrite where
-last year's goods went. `PATCH` merges it member by member, so sending only
+last year's goods went. `PATCH` merges it member by member, sending only
 `{"ShipTo": {"City": "Breda"}}` leaves the street alone.
 
 ## What you can do
 
 Read and create orders, and patch the ones that exist. Orders are closed by
-setting `Status`, never deleted, so `DELETE` is switched off for this endpoint.
+setting `Status`, never deleted, `DELETE` is switched off for this endpoint.
 """
 
 LINES_DOC = """The individual lines of an order.
@@ -112,10 +112,10 @@ stay readable so historic order lines keep resolving.
 
 `Slug` auto-generates from `Name`. `Attributes` is a category-specific spec
 sheet (thread size, bore diameter, ...) that would otherwise need a column
-per possible attribute across every category, so it is deliberately free-form.
+per possible attribute across every category, it is deliberately free-form.
 
 `Packaging` is the opposite case: every article has a box quantity, a weight
-and outer dimensions, so it declares a schema and this document publishes it,
+and outer dimensions, it declares a schema and this document publishes it,
 down to `Packaging.Dimensions`.
 """
 
@@ -299,14 +299,14 @@ def short_id(length=12):
 
 
 def slugify(text):
-    """Mirrors FieldValidation.Slugify: bulk inserts bypass RecordEngine, so nothing else derives this."""
+    """Mirrors FieldValidation.Slugify: bulk inserts bypass RecordEngine, nothing else derives this."""
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
 class Bulk:
     """Rows straight into SQLite. _records is five stable columns; the generated
-    index columns are virtual, so SQLite derives them from JsonData on insert.
-    UpdatedAt is written explicitly: this path bypasses EF, so RecordChangeInterceptor
+    index columns are virtual, SQLite derives them from JsonData on insert.
+    UpdatedAt is written explicitly: this path bypasses EF, RecordChangeInterceptor
     never stamps it, and the column default is year 1."""
 
     SQL = 'INSERT INTO "_records" ("Id","TableId","JsonData","CreatedAt","UpdatedAt") VALUES (?,?,?,?,?)'
@@ -330,8 +330,8 @@ class Bulk:
 
     def add(self, table_id, data, created, record_id=None):
         """record_id is for a row whose id something else already handed out, an order header its
-        lines already point at. The tuple shape lives here only, so a column added to _records
-        is one edit rather than one per caller."""
+        lines already point at. The tuple shape lives here only, a column added to _records
+        is one edit instead of one per caller."""
         rid = record_id or short_id()
         self.batch.append((rid, table_id, json.dumps(data, separators=(",", ":")), created, created))
         if len(self.batch) >= BATCH:
@@ -415,10 +415,10 @@ def product_fields():
         {"name": "Active", "dataType": "boolean", "defaultValue": "true"},
         {"name": "Body", "label": "Description (long)", "dataType": "richtext",
          "helpText": "Storefront copy. Sanitized on save."},
-        # Left free-form on purpose: the attributes differ per category, so there is no one schema to declare.
+        # Left free-form on purpose: the attributes differ per category, there is no one schema to declare.
         {"name": "Attributes", "dataType": "json",
          "helpText": "Category-specific spec sheet, e.g. thread size or bore diameter."},
-        # Packaging is the same shape for every article, so it gets a schema and the API publishes it.
+        # Packaging is the same shape for every article, it gets a schema and the API publishes it.
         {"name": "Packaging", "dataType": "json", "optionsJson": json.dumps({"fields": [
             {"name": "UnitsPerBox", "label": "Units per box", "dataType": "number", "min": 1, "isRequired": True},
             {"name": "WeightKg", "label": "Weight (kg)", "dataType": "number", "min": 0},
@@ -510,7 +510,7 @@ def line_fields(orders, products):
 
 
 def product_forms(products):
-    # Slug is derived server-side from Name when left blank, so it has no place in a visitor-facing form.
+    # Slug is derived server-side from Name when left blank, it has no place in a visitor-facing form.
     # Attributes/Tags are structured PIM data, filled through the admin grid or an import, not typed by hand here.
     form(products, kind="form", actions=["submit"], title="Products - Create new",
          description="A new article for the catalogue.",
@@ -577,7 +577,7 @@ def order_forms(orders):
                      "renderers": {"Status": "'<strong>' + data.Status.toUpperCase() + '</strong>'"},
                      # Target is the /order-lines page bootstrap-sites.py serves on wms.site.com,
                      # which embeds "OrderLines - Overview" and answers a ?q= deep link on load.
-                     # LineNo is stamped "{OrderNo}-{n}" at seed time (see below), so a
+                     # LineNo is stamped "{OrderNo}-{n}" at seed time (see below), a
                      # substring search on OrderNo already narrows the list to this order's lines.
                      "actions": [{"label": "View lines",
                                   "hrefExpr": "'http://127.0.0.1:8082/order-lines?q=' + encodeURIComponent(data.OrderNo)"}],
@@ -603,30 +603,30 @@ def line_forms(lines, track_id=None):
     lines_cfg = {"columns": ["LineNo", "Quantity", "UnitPrice", "LineTotal"],
                  "searchFields": ["LineNo"],
                  # This is only ever embedded as a drill-down target (linked to from an
-                 # order's own row action, never browsed standalone), so an empty query
+                 # order's own row action, never browsed standalone), an empty query
                  # should not dump all quarter-million lines -- it should wait for one.
                  "requireQuery": True,
-                 # LineTotal is a calculated field, not a currency field, so it falls
+                 # LineTotal is a calculated field, not a currency field, it falls
                  # outside the built-in currency formatting UnitPrice gets automatically
                  # -- the engine's expression grammar has no object-literal syntax for
-                 # Intl options, so this rounds and lets toLocaleString's own thousands
+                 # Intl options, this rounds and lets toLocaleString's own thousands
                  # grouping do the rest (EU locale: '.' groups, ',' would be the decimal
                  # separator, moot here since whole euros have none).
                  "renderers": {"LineTotal": "'€ ' + Number(data.LineTotal.toFixed(0)).toLocaleString('nl-NL')"},
                  "sortField": "LineNo", "sortDir": "asc", "pageSize": 25}
     if track_id:
-        # The /order page embeds both Orders - Look up and this list, so this list should
+        # The /order page embeds both Orders - Look up and this list, this list should
         # re-filter live whenever a visitor submits a new order number up there.
         lines_cfg["followLookup"] = track_id
     form(lines, kind="list", title="OrderLines - Overview",
-         # LineNo is "{OrderNo}-{n}", so searching "SO-118153" also narrows to
+         # LineNo is "{OrderNo}-{n}", searching "SO-118153" also narrows to
          # every line on that one order -- no separate order field needed.
          description="Every line, by line number or order number.",
          configJson=lines_cfg)
 
 
 def fill(db_path, counts, products, customers, orders, lines):
-    random.seed(SEED)  # short_id draws from the same stream, so ids are stable too
+    random.seed(SEED)  # short_id draws from the same stream, ids are stable too
     started = time.perf_counter()
     print(f"  Records: generating {sum(counts.values()):,} rows", flush=True)
     bulk = Bulk(db_path)
@@ -742,7 +742,7 @@ def fill(db_path, counts, products, customers, orders, lines):
 
 def seed_queries():
     """Two worked examples for the SQL console: the same answer against the raw
-    record store and against the projected table views, so the pair shows what
+    record store and against the projected table views, the pair shows what
     the views save."""
     existing = {q["name"] for q in call("GET", "/api/_admin/queries")[0]}
     if "Revenue by country" in existing:
@@ -799,7 +799,7 @@ def seed_portway():
          description="Read live from the Portway demo API. Nothing is stored here.",
          configJson={"columns": ["sku", "name"], "searchFields": ["name"], "pageSize": 25})
     form(proxied, kind="form", actions=["lookup"], title="Portway Catalogue - Look up", isReadOnly=True,
-         description="Enter a SKU to see what Portway holds for it.",
+         description="Enter a SKU to see what Portway stores for it.",
          configJson={"matchFields": ["sku"], "resultFields": ["sku", "name"],
                      "notFoundText": "No product with that SKU."})
     form(proxied, kind="form", actions=["submit"], title="Portway Catalogue - Add",

@@ -17,7 +17,7 @@ public static class UserAuthEndpoints
         app.MapGet($"{ApiBase}/jwks.json", async (AppDbContext db) =>
             await EnabledAsync(db) ? Results.Json(UserTokens.Jwks()) : Results.NotFound());
 
-        // A visitor includes data before deciding to sign up. No credential is set, so this account cannot sign in again: the token pair it goes home with is the only way back to it, and register claims it when the visitor commits.
+        // A visitor includes data before deciding to sign up. No credential is set, this account cannot sign in again: the token pair it goes home with is the only way back to it, and register claims it when the visitor commits.
         app.MapPost($"{ApiBase}/anonymous", async (AppDbContext db, HttpContext ctx) =>
         {
             var settings = await db.SettingsAsync() ?? new AppSettings();
@@ -60,7 +60,7 @@ public static class UserAuthEndpoints
             if (AccountValidation.PasswordProblem(password) is { } problem) errors.Add(problem);
             if (errors.Count > 0) return Results.BadRequest(new { errors });
 
-            // Signing up while carrying an anonymous token claims that account rather than opening a second one, so the rows the visitor already created stay theirs. Any other caller registers as before.
+            // Signing up while carrying an anonymous token claims that account instead of opening a second one, the rows the visitor already created stay theirs. Any other caller registers as before.
             var claiming = await CurrentAsync(db, ctx) is { IsAnonymous: true } anonymous ? anonymous : null;
 
             if (await db.UserAccounts.AnyAsync(u => u.Username == username && u.Id != (claiming == null ? "" : claiming.Id)))
@@ -84,7 +84,7 @@ public static class UserAuthEndpoints
             if (claiming is null) db.UserAccounts.Add(user);
             await db.SaveChangesAsync();
 
-            // The anonymous token was a bearer credential for an account that now has a password, so it does not outlive the claim.
+            // The anonymous token was a bearer credential for an account that now has a password, it does not outlive the claim.
             if (claiming is not null)
             {
                 await UserTokens.RevokeAllAsync(db, user.Id);
@@ -148,7 +148,7 @@ public static class UserAuthEndpoints
             if (!await EnabledAsync(db)) return Results.NotFound();
 
             await UserTokens.RevokeAsync(db, Text(body, "refresh_token"));
-            // A cookie session signed in here too, so signing out has to reach it.
+            // A cookie session signed in here too, signing out has to reach it.
             await UserTokens.RevokeAsync(db, ctx.Request.Cookies[AdminAuth.RefreshCookie] ?? "");
             AdminAuth.ClearCookies(ctx);
             return Results.Ok(new { signed_out = true });
@@ -213,7 +213,7 @@ public static class UserAuthEndpoints
             var user = await CurrentAsync(db, ctx);
             if (user is null) return Error(401, "Sign in to continue.");
 
-            // Every role signs in here now, so this route reaches accounts the console refuses to delete. The same two guards apply, or an operator locks everybody out from the public surface.
+            // Every role signs in here now, this route reaches accounts the console refuses to delete. The same two guards apply, or an operator locks everybody out from the public surface.
             if (await db.UserAccounts.CountAsync(a => a.Id != user.Id && !a.IsDisabled) == 0)
                 return Error(409, "This is the last enabled account and cannot be deleted.");
             if (await AdminEndpoints.IsLastEnabledAdmin(db, user))

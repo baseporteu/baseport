@@ -28,7 +28,7 @@ public class JobsTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    // The sweep is the only thing that ever deletes an account without an operator asking, so what is pinned is which ones it will not touch.
+    // The sweep is the only thing that ever deletes an account without an operator asking, what is pinned is which ones it will not touch.
     [Fact]
     public async Task The_anonymous_sweep_takes_only_unreachable_anonymous_accounts()
     {

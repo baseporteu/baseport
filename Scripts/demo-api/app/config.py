@@ -1,4 +1,4 @@
-"""Runtime knobs, read from .env. Every field has a default, so the demo runs unconfigured."""
+"""Runtime knobs, read from .env. Every field has a default, the demo runs unconfigured."""
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 

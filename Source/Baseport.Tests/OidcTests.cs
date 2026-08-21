@@ -88,7 +88,7 @@ public class OidcTests : IDisposable
         // whose redirect chain started cross-site. The callback set the pair and
         // redirected to /_/admin, that hop arrived without them, and the console
         // showed the sign-in screen to somebody who had just signed in.
-        // Literal tokens, so nothing here touches the static signing key other test classes run against in parallel.
+        // Literal tokens, nothing here touches the static signing key other test classes run against in parallel.
         var ctx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
 
         AdminAuth.IssueCookies(ctx, new UserTokenPair("auth-token", "refresh-token", DateTime.UtcNow.AddHours(1)));
@@ -103,7 +103,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public void The_authorize_redirect_carries_pkce_a_state_and_a_nonce()
+    public void The_authorize_redirect_transports_pkce_a_state_and_a_nonce()
     {
         var start = OidcFlow.Begin(Document(), Provider(), "https://app.example.com/api/auth/oidc/authelia/callback", "/_/admin", console: true);
 
@@ -149,7 +149,7 @@ public class OidcTests : IDisposable
     {
         var provider = Provider();
         var linked = Account("jane", providerId: provider.Id, subject: "sub-1");
-        // Somebody else now holds the name the provider used to send.
+        // Somebody else now stores the name the provider used to send.
         Account("jane.doe");
 
         var (user, problem) = await OidcEndpoints.ResolveAccountAsync(_db, provider,
@@ -160,7 +160,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_first_sign_in_links_the_account_that_already_carries_the_username()
+    public async Task A_first_sign_in_links_the_account_that_already_transports_the_username()
     {
         var provider = Provider();
         var existing = Account("jane", role: AccountRoles.Consumer);
@@ -196,10 +196,10 @@ public class OidcTests : IDisposable
         Assert.Equal("", (await _db.UserAccounts.SingleAsync(TestContext.Current.CancellationToken)).OidcSubject);
     }
 
-    // Self-link is the one path that binds an identity without matching a claim, so what
+    // Self-link is the one path that binds an identity without matching a claim, what
     // is pinned is that the account is chosen before the redirect and re-checked after it.
     [Fact]
-    public void A_link_flow_carries_the_account_that_started_it_and_a_sign_in_carries_none()
+    public void A_link_flow_transports_the_account_that_started_it_and_a_sign_in_transports_none()
     {
         var provider = Provider();
         var link = OidcFlow.Begin(Document(), provider, "https://app.example.com/cb", "/_/admin/settings/auth", console: true, linkTo: "acct00000001");
@@ -221,7 +221,7 @@ public class OidcTests : IDisposable
 
         var refusal = await OidcEndpoints.LinkRefusalAsync(_db, provider, flow, new OidcIdentity("sub-1", "", "", false), other.Id);
 
-        Assert.Equal("the session no longer holds the account that started it", refusal);
+        Assert.Equal("the session no longer stores the account that started it", refusal);
         Assert.Equal("", (await _db.UserAccounts.SingleAsync(u => u.Id == other.Id, TestContext.Current.CancellationToken)).OidcSubject);
     }
 
@@ -269,7 +269,7 @@ public class OidcTests : IDisposable
         Assert.Null(await OidcEndpoints.LinkRefusalAsync(_db, provider, flow, new OidcIdentity("sub-1", "", "", false), alice.Id));
     }
 
-    // Both claim paths refuse an admin, so the refusal has to say so. The other two notes read as though fixing the claim would help, and for an admin it never can.
+    // Both claim paths refuse an admin, the refusal has to say so. The other two notes read as though fixing the claim would help, and for an admin it never can.
     [Fact]
     public async Task A_refusal_says_that_no_claim_will_ever_link_an_admin()
     {
@@ -309,7 +309,7 @@ public class OidcTests : IDisposable
     [Fact]
     public async Task A_provider_may_not_provision_its_way_around_the_admin_block()
     {
-        // With provisioning on, a claimed "admin" must get its own plain account, never the one that already holds the name.
+        // With provisioning on, a claimed "admin" must get its own plain account, never the one that already stores the name.
         var provider = Provider(createAccounts: true);
         var existing = Account("admin", role: AccountRoles.Admin);
 
@@ -392,7 +392,7 @@ public class OidcTests : IDisposable
     public async Task A_provisioned_account_never_takes_a_username_that_is_taken()
     {
         var provider = Provider(createAccounts: true);
-        // Not linkable: it belongs to another provider identity, so the name is spoken for.
+        // Not linkable: it belongs to another provider identity, the name is spoken for.
         Account("newcomer", providerId: "other0000001", subject: "sub-elsewhere");
 
         var (user, _) = await OidcEndpoints.ResolveAccountAsync(_db, provider,
@@ -459,7 +459,7 @@ public class OidcTests : IDisposable
 
     [Theory]
     // Pocket ID sending an address here is the common way in: it can never equal a
-    // Baseport username, so name matching silently did nothing and the operator was
+    // Baseport username, name matching silently did nothing and the operator was
     // left auditing their account list instead of their claim mapping.
     [InlineData("danny.nijenhuis@protonmail.com", true)]
     [InlineData("has spaces", true)]

@@ -52,7 +52,7 @@ function renderRecordPager(data) {
         el.innerHTML = '';
         return;
     }
-    // The count is capped, so past the ceiling the total is a floor and the page count with it.
+    // The count is capped, past the ceiling the total is a floor and the page count with it.
     const from = (data.page - 1) * data.pageSize + 1;
     const to = data.countExact ? Math.min(data.page * data.pageSize, data.total) : data.page * data.pageSize;
     const label = data.countExact ? `${data.total}` : `${data.total}+`;
@@ -105,7 +105,7 @@ function parseFieldOptions(json) {
     }
 }
 
-// The member names of an object or list field's sub-schema, so the editor can say what shape it wants.
+// The member names of an object or list field's sub-schema, the editor can say what shape it wants.
 function schemaMembers(f) {
     try {
         const o = JSON.parse(f.optionsJson || '{}');
@@ -399,7 +399,9 @@ async function saveTableSettings(btn) {
         if (!saved) return;
         tableDirty = false;
         await loadTables();
-        applyProxySettings(currentTables.find((t) => t.id === currentTablePublicId) || {});
+        const table = currentTables.find((t) => t.id === currentTablePublicId) || {};
+        applyProxySettings(table);
+        paintTableName(table);
     });
     // Outside the busy wrapper so it has the last word over ui.busy's own disabled-state restore.
     if (saved) updateSaveButtons();

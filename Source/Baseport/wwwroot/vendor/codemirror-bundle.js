@@ -1709,7 +1709,7 @@
     }
 
     // Finds the line to start with when starting a parse. Tries to
-    // find a line with a stateAfter, so that it can start with a
+    // find a line with a stateAfter, that it can start with a
     // valid state. If that fails, it returns the line with the
     // smallest indentation, which tends to need the least context to
     // parse correctly.
@@ -3822,7 +3822,7 @@
     function coordsBidiPartWrapped(cm, lineObj, _lineNo, preparedMeasure, order, x, y) {
         // In a wrapped line, rtl text on wrapping boundaries can do things
         // that don't correspond to the ordering in our `order` array at
-        // all, so a binary search doesn't work, and we want to return a
+        // all, a binary search doesn't work, and we want to return a
         // part that only spans one line so that the binary search in
         // coordsCharInner is safe. As such, we first find the extent of the
         // wrapped line, and then do a flat search in which we discard any
@@ -3842,7 +3842,7 @@
             }
             var ltr = p.level != 1;
             var endX = measureCharPrepared(cm, preparedMeasure, ltr ? Math.min(end, p.to) - 1 : Math.max(begin, p.from)).right;
-            // Weigh against spans ending before this, so that they are only
+            // Weigh against spans ending before this, that they are only
             // picked if nothing ends after
             var dist = endX < x ? x - endX + 1e9 : endX - x;
             if (!part || closestDist > dist) {
@@ -3913,7 +3913,7 @@
     }
 
     // Do a bulk-read of the DOM positions and sizes needed to draw the
-    // view, so that we don't interleave reading and writing to the DOM.
+    // view, that we don't interleave reading and writing to the DOM.
     function getDimensions(cm) {
         var d = cm.display,
             left = {},
@@ -4879,7 +4879,7 @@
             this.vert.style.display = "block";
             this.vert.style.bottom = needsH ? sWidth + "px" : "0";
             var totalHeight = measure.viewHeight - (needsH ? sWidth : 0);
-            // A bug in IE8 can cause this value to be negative, so guard it.
+            // A bug in IE8 can cause this value to be negative, guard it.
             this.vert.firstChild.style.height =
                 Math.max(0, measure.scrollHeight - measure.clientHeight + totalHeight) + "px";
         } else {
@@ -5803,7 +5803,7 @@
     }
 
     // The display handles the DOM integration, both for input reading
-    // and content drawing. It holds references to DOM nodes and
+    // and content drawing. It stores references to DOM nodes and
     // display-related state.
 
     function Display(place, doc, input, options) {
@@ -5879,7 +5879,7 @@
         // Information about the rendered lines.
         d.view = [];
         d.renderedView = null;
-        // Holds info about a single rendered line when it was rendered
+        // stores info about a single rendered line when it was rendered
         // for measurement, while not in view.
         d.externalMeasured = null;
         // Empty space (in pixels) above the view
@@ -7773,7 +7773,7 @@
     // Find the position of the marker in the document. Returns a {from,
     // to} object by default. Side can be passed to get a specific side
     // -- 0 (both), -1 (left), or 1 (right). When lineObj is true, the
-    // Pos objects returned contain a line object, rather than a line
+    // Pos objects returned contain a line object, instead of a line
     // number (used to prevent looking up the same line twice).
     TextMarker.prototype.find = function(side, lineObj) {
         if (side == null && this.type == "bookmark") {
@@ -7917,7 +7917,7 @@
                 curLine == to.line ? to.ch : null), doc.cm && doc.cm.curOp);
             ++curLine;
         });
-        // lineIsHidden depends on the presence of the spans, so needs a second pass
+        // lineIsHidden depends on the presence of the spans, needs a second pass
         if (marker.collapsed) {
             doc.iter(from.line, to.line + 1, function(line) {
                 if (lineIsHidden(doc, line)) {
@@ -8785,7 +8785,7 @@
         e.dataTransfer.effectAllowed = "copyMove";
 
         // Use dummy image instead of default browsers image.
-        // Recent Safari (~6.0.2) have a tendency to segfault when this happens, so we don't do it there.
+        // Recent Safari (~6.0.2) have a tendency to segfault when this happens, we don't do it there.
         if (e.dataTransfer.setDragImage && !safari) {
             var img = elt("img", null, null, "position: fixed; left: 0; top: 0;");
             img.src = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
@@ -9329,7 +9329,7 @@
             }
         }
 
-        // Case 3: Could not move within this bidi part in this visual line, so leave
+        // Case 3: Could not move within this bidi part in this visual line, leave
         // the current bidi part
 
         var searchInVisualLine = function(partPos, dir, wrappedLineExtent) {
@@ -9701,7 +9701,7 @@
                 return false
             }
         }
-        // Ensure previous input has been read, so that the handler sees a
+        // Ensure previous input has been read, that the handler sees a
         // consistent view of the document
         cm.display.input.ensurePolled();
         var prevShift = cm.display.shift,
@@ -10291,7 +10291,7 @@
             cm.state.selectingText = false;
             counter = Infinity;
             // If e is null or undefined we interpret this as someone trying
-            // to explicitly cancel the selection rather than the user
+            // to explicitly cancel the selection instead of the user
             // letting go of the mouse button.
             if (e) {
                 e_preventDefault(e);
@@ -11992,7 +11992,7 @@
             if (!belongsToInput(e) || signalDOMEvent(cm, e) || handlePaste(e, cm)) {
                 return
             }
-            // IE doesn't fire input events, so we schedule a read for the pasted content in this way
+            // IE doesn't fire input events, we schedule a read for the pasted content in this way
             if (ie_version <= 11) {
                 setTimeout(operation(cm, function() {
                     return this$1.updateFromDOM();

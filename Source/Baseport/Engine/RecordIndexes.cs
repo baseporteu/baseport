@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// a VIRTUAL generated column + index per indexable field, so json_extract queries against the shared _records blob can seek instead of scanning
+// a VIRTUAL generated column + index per indexable field, json_extract queries against the shared _records blob can seek instead of scanning
 // EF1002 disabled: this is DDL, every interpolated name/value is server-generated or escaped, never client-supplied
 #pragma warning disable EF1002
 public static class RecordIndexes
@@ -13,7 +13,7 @@ public static class RecordIndexes
     public static string? ColumnFor(FieldDefinition field) =>
         field.Id.Length > 0 && FieldTypes.Of(field).Indexable ? $"g_{field.Id}" : null;
 
-    // rough estimate, not a measurement: dbstat isn't compiled into this build, so there's no real per-index page count to read
+    // rough estimate, not a measurement: dbstat isn't compiled into this build, there's no real per-index page count to read
     private const double BytesPerIndexEntry = 24.0 / 0.75;
 
     public static long EstimateIndexBytes(TableDefinition table, long recordCount)
@@ -52,7 +52,7 @@ public static class RecordIndexes
         }
     }
 
-    // Called when a field or a whole table goes away, so a dropped field does not leave a column behind for the 2000-column ceiling to count.
+    // Called when a field or a whole table goes away, a dropped field does not leave a column behind for the 2000-column ceiling to count.
     public static async Task DropAsync(AppDbContext db, string column)
     {
         await db.Database.ExecuteSqlRawAsync($"""DROP INDEX IF EXISTS "ix_{column}" """);

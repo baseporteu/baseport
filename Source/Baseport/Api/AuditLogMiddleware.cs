@@ -17,7 +17,7 @@ public static class AuditLogMiddleware
 
             await next();
 
-            // Set by the endpoint while it ran, so one row includes both what was requested and what it meant. A sign-in that failed has no session to name the caller by, and an OpenID Connect return is a GET that would otherwise never be recorded at all.
+            // Set by the endpoint while it ran, one row includes both what was requested and what it meant. A sign-in that failed has no session to name the caller by, and an OpenID Connect return is a GET that would otherwise never be recorded at all.
             var note = context.Items[NoteKey] as string;
 
             if (method is "GET" or "HEAD" or "OPTIONS" && note is null) return;

@@ -4,7 +4,7 @@ using Baseport;
 
 namespace Baseport.Tests;
 
-// The OpenAPI document is a promise to every generated client, so the error contract it describes has to match the one the endpoints actually return: every operation documents the standard error set, and every error response references the one Error schema instead of inlining a private shape.
+// The OpenAPI document is a promise to every generated client, the error contract it describes has to match the one the endpoints actually return: every operation documents the standard error set, and every error response references the one Error schema instead of inlining a private shape.
 public class OpenApiSpecTests
 {
     private static TableDefinition Table() => new()
@@ -61,7 +61,7 @@ public class OpenApiSpecTests
     [Fact]
     public void A_proxy_table_publishes_no_stream()
     {
-        // It stores nothing locally, so there is nothing to emit a change for.
+        // It stores nothing locally, there is nothing to emit a change for.
         var t = Table();
         t.IsProxy = true;
         Assert.Null(Paths(t)["/api/v1/orders/subscribe"]);
@@ -160,7 +160,7 @@ public class OpenApiSpecTests
     [Fact]
     public void Only_the_published_name_reaches_the_document()
     {
-        // /docs renders this to anyone who asks, so the internal name and the internal id must not travel with it.
+        // /docs renders this to anyone who asks, the internal name and the internal id must not travel with it.
         var t = Detailed();
         var tables = new List<TableDefinition> { t };
         var json = new JsonObject
@@ -190,12 +190,12 @@ public class OpenApiSpecTests
     {
         var props = (OpenApiSpec.BuildSchemas(new List<TableDefinition> { Detailed() })["SalesOrders"]!["properties"] as JsonObject)!;
 
-        Assert.False(props.ContainsKey("Margin"), "a calculated field cannot be written, so it must not appear in the request schema");
+        Assert.False(props.ContainsKey("Margin"), "a calculated field cannot be written, it must not appear in the request schema");
         Assert.True(props.ContainsKey("OrderNo"));
     }
 
     [Fact]
-    public void A_field_carries_its_label_help_text_and_constraints()
+    public void A_field_transports_its_label_help_text_and_constraints()
     {
         // The point of publishing: a consumer should not have to ask what a column means or what it accepts.
         var schema = (OpenApiSpec.BuildSchemas(new List<TableDefinition> { Detailed() })["SalesOrders"] as JsonObject)!;
@@ -213,7 +213,7 @@ public class OpenApiSpecTests
     public void The_documented_record_shape_matches_what_the_api_returns()
     {
         var record = new Record { Id = Ids.NewShortId(12), TableId = "t", JsonData = "{}", CreatedAt = DateTime.UtcNow };
-        // The public API always includes links, and includes expanded whenever $expand asked for one, so the fullest shape is what the document has to describe.
+        // The public API always includes links, and includes expanded whenever $expand asked for one, the fullest shape is what the document has to describe.
         var returned = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(
             ApiDtos.RecordDto(record, new List<FieldDefinition>(), new JsonObject(), new JsonObject()),
             new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)))!.AsObject();
@@ -277,7 +277,7 @@ public class OpenApiSpecTests
 
         Assert.Equal("sales-orders", tag["name"]!.GetValue<string>());
         Assert.Equal("Sales orders", tag["x-displayName"]!.GetValue<string>());
-        // Operations reference the tag by name, so the two must not diverge.
+        // Operations reference the tag by name, the two must not diverge.
         var op = OpenApiSpec.BuildPaths(new List<TableDefinition> { t })["/api/v1/sales-orders/records"]!["get"]!;
         Assert.Contains((op["tags"] as JsonArray)!, n => n!.GetValue<string>() == "sales-orders");
         Assert.Contains("Sales orders", op["summary"]!.GetValue<string>());
@@ -308,7 +308,7 @@ public class OpenApiSpecTests
     [Fact]
     public void Namespaces_become_tag_groups_and_nothing_is_left_out_of_them()
     {
-        // The bug this guards: a renderer that honours tag groups hides every tag missing from them, so grouping one table would hide the others.
+        // The bug this guards: a renderer that honours tag groups hides every tag missing from them, grouping one table would hide the others.
         var grouped = Detailed();
         grouped.ApiNamespace = "Sales";
         var loose = Detailed();

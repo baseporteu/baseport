@@ -174,7 +174,7 @@ function applyFormShape(kind, actions) {
     const doesSubmit = formActions.includes('submit');
     const doesLookup = formActions.includes('lookup');
     // A form's layout is a property of the form, not of the submit toggle: it's built once and takes effect
-    // whenever submit is later turned on, so the builder stays visible (and its data stays saved, see
+    // whenever submit is later turned on, the builder stays visible (and its data stays saved, see
     // formSnapshot) regardless of which actions happen to be on right now.
     document.getElementById('kindSubmit').classList.toggle('hidden', formKind !== 'form');
     document.getElementById('kindLookup').classList.toggle('hidden', formKind !== 'form' || !doesLookup);
@@ -216,7 +216,7 @@ function onActionsChange() {
         applyFormShape(formKind, formActions);
         return;
     }
-    // Save the visible panels' state before switching, so a revealed panel arrives filled in.
+    // Save the visible panels' state before switching, a revealed panel arrives filled in.
     formConfigDraft = {
         ...formConfigDraft,
         ...collectConfig()
@@ -226,7 +226,7 @@ function onActionsChange() {
 }
 
 async function onFormTableChange() {
-    // Columns, actions, filters and the lookup result order name the previous table's fields, so they cannot survive the switch.
+    // Columns, actions, filters and the lookup result order name the previous table's fields, they cannot survive the switch.
     listColumns = [];
     listActions = [];
     lookupResultOrder = [];
@@ -246,7 +246,7 @@ async function loadTableFields(tableId) {
     applyProxyNotice(table);
 }
 
-// Proxy tables delegate ordering to the remote API, so sort/filters are dead controls there.
+// Proxy tables delegate ordering to the remote API, sort/filters are dead controls there.
 function applyProxyNotice(table) {
     const note = document.getElementById('formProxyNote');
     note.classList.toggle('hidden', !formTableIsProxy);
@@ -259,7 +259,7 @@ function applyProxyNotice(table) {
 
 /* kind-specific config */
 
-// Server-computed and hidden fields are absent from pickers: a visitor can neither type nor see them, so offering them builds a form the server refuses.
+// Server-computed and hidden fields are absent from pickers: a visitor can neither type nor see them, offering them builds a form the server refuses.
 function selectableFields() {
     return formTableFields.filter((f) => !f.isHidden && f.dataType !== 'derived');
 }
@@ -339,7 +339,7 @@ function applyKindConfig(cfg) {
     document.getElementById('formSuccessRedirect').value = cfg.onSuccessRedirect || '';
 
     // A brand-new lookup (nothing chosen yet) walks through Match on / Show / Not-found one at a time;
-    // an already-configured one shows them flat, so re-opening a working form never re-triggers the wizard.
+    // an already-configured one shows them flat, re-opening a working form never re-triggers the wizard.
     lookupOnboardStep = (cfg.matchFields || []).length === 0 && (cfg.resultFields || []).length === 0 ? 0 : -1;
     renderLookupOnboardNav();
 }
@@ -362,7 +362,7 @@ function renderLookupOnboardNav() {
     syncLookupOnboardNav();
 }
 
-// Gates Next on the current step actually having something in it, so onboarding can't complete an empty lookup.
+// Gates Next on the current step actually having something in it, onboarding can't complete an empty lookup.
 function syncLookupOnboardNav() {
     if (lookupOnboardStep < 0) return;
     const nextBtn = document.getElementById('lookupOnboardNext');
@@ -395,7 +395,7 @@ function lookupOnboardSkip() {
 }
 
 /* LOOKUP kind: "Show" field order. Same palette-and-canvas drag-reorder shape as the list column builder
-   below, kept as its own small copy rather than parameterizing that one: two call sites don't earn a
+   below, kept as its own small copy instead of parameterizing that one: two call sites don't earn a
    generalized abstraction, and the list builder's tests pin its exact functions. */
 
 let lookupResultOrder = []; // field names, in display order
@@ -610,7 +610,7 @@ function renderListBuilder() {
     listColumnsHistory.push();
 }
 
-// data.Id isn't a real field, so the placeholder names an actual field instead of implying it'd resolve
+// data.Id isn't a real field, the placeholder names an actual field instead of implying it'd resolve
 const LINK_EXPR_PLACEHOLDER = "'/view?ref=' + encodeURIComponent(data.YourIdentifierField)";
 
 // Per-row buttons (e.g. "View", "Approve"): a label and a URL built from that row's own data, not tied to one column.
@@ -803,7 +803,7 @@ function parseFieldOptions(field) {
     }
 }
 
-// Distinct stored values for a field, so a filter is picked rather than typed.
+// Distinct stored values for a field, a filter is picked instead of typed.
 async function loadFilterSuggestions(fieldName, datalist) {
     const table = document.getElementById('formTable').value;
     if (!table || !fieldName) return;
@@ -1143,7 +1143,7 @@ function rowFields(row) {
     } else if (row.t === 'button') {
         div.appendChild(labeledInput('Label', row, 'label', 'Submit'));
 
-        // Switching action reveals a different extra field, so this select re-renders the row instead of going through the generic dropdown().
+        // Switching action reveals a different extra field, this select re-renders the row instead of going through the generic dropdown().
         const actionLab = document.createElement('label');
         actionLab.className = 'brow-field-label';
         actionLab.innerText = 'Action';
@@ -1343,7 +1343,7 @@ function renderCanvas() {
 
 // Builds one block. `path` locates the row for column drag/move: [ri] at top level, [ri, nestedRi] for a row
 // nested inside a container - renderColumn appends its own column index to get a full column path.
-// `ownerArray` is the array `row` actually lives in (layout.rows, or a container's own row.rows), so move/
+// `ownerArray` is the array `row` actually lives in (layout.rows, or a container's own row.rows), move/
 // remove act on the right list regardless of nesting.
 function buildRowElement(row, index, ownerArray, path) {
     const el = document.createElement('div');
@@ -1469,7 +1469,7 @@ function setBuilderViewport(size, btn) {
 /* undo/redo: generic over any JSON-serializable piece of state, snapshotting at whatever single choke
    point already re-renders after every mutation - nothing else has to call into history bookkeeping
    directly. Three independent instances below (layout, list columns, lookup result order): each builder
-   panel owns its own state and is visible on its own schedule, so one shared history across all three
+   panel owns its own state and is visible on its own schedule, one shared history across all three
    would mean "undo" jumping into a panel the user isn't even looking at. */
 function createHistory(undoBtnId, redoBtnId) {
     let stack = [];
@@ -1590,7 +1590,7 @@ function renderColumn(row, path, col, ci) {
     colEl.style.flexGrow = col.w || 12;
 
     // Shared by every drop target in this column (each chip, and the column's own empty background): a chip
-    // drop inserts before that chip, so a same-column drop actually reorders instead of the no-op it used to
+    // drop inserts before that chip, a same-column drop actually reorders instead of the no-op it used to
     // be; the column background stays a plain append, for dropping past the last chip or into an empty column.
     function dropFieldAt(ev, targetIndex) {
         const field = ev.dataTransfer.getData('text/field');
@@ -1631,7 +1631,7 @@ function renderColumn(row, path, col, ci) {
     });
     colEl.addEventListener('dragleave', (ev) => {
         // dragleave fires the instant the pointer crosses onto a child element (a chip, even the chip's own
-        // × button) - relatedTarget is where the pointer actually went, so a still-inside move is not a real leave.
+        // × button) - relatedTarget is where the pointer actually went, a still-inside move is not a real leave.
         if (ev.relatedTarget && colEl.contains(ev.relatedTarget)) return;
         colEl.classList.remove('drop-hover');
     });
@@ -1655,7 +1655,7 @@ function renderColumn(row, path, col, ci) {
             }));
         });
         // Safety net: a drag that ends outside any valid target (cancelled, dropped off-canvas) still fires
-        // dragend on the chip being dragged, so this is the one place guaranteed to run and clear every marker.
+        // dragend on the chip being dragged, this is the one place guaranteed to run and clear every marker.
         chip.addEventListener('dragend', () => {
             document.querySelectorAll('.chip.drop-before').forEach((c) => c.classList.remove('drop-before'));
             document.querySelectorAll('.bcol.drop-hover').forEach((c) => c.classList.remove('drop-hover'));

@@ -41,7 +41,7 @@ public static class FragmentEndpoints
             var html = new StringBuilder();
             foreach (var t in ordered)
             {
-                // The API column already states exposure, so only proxy gets a badge.
+                // The API column already states exposure, only proxy gets a badge.
                 var badges = t.IsProxy ? Html.Badge("proxy") : "";
 
                 var name = $"<strong>{Html.Text(t.Name)}</strong> {badges}" +
@@ -51,12 +51,12 @@ public static class FragmentEndpoints
                     .Append(Html.RawCell(name))
                     .Append(Html.RawCell(Html.Num(t.Fields.Count)))
                     .Append(Html.RawCell(Html.Num(formCounts.FirstOrDefault(f => f.TableId == t.Id)?.Count ?? 0)))
-                    // A proxy table stores nothing here, so a count would be a lie.
+                    // A proxy table stores nothing here, a count would be a lie.
                     .Append(Html.RawCell(t.IsProxy ? Html.Muted("∞") : Html.Num(recordCounts.FirstOrDefault(r => r.TableId == t.Id)?.Count ?? 0)))
                     .Append(Html.RawCell(t.ApiEnabled ? Html.Text(t.ApiName) : Html.Muted("Off")))
                     .Append(Html.RawCell(t.IsProxy ? Html.Muted("-") : Html.BytesHtml(DataSize(t))))
                     .Append(Html.RawCell(t.IsProxy ? Html.Muted("-") :
-                        $"<span class=\"muted\" title=\"Estimated from row and index-column counts; SQLite's dbstat isn't compiled into this build, so this isn't an exact measurement.\">~{Html.BytesHtml(IndexSize(t))}</span>"))
+                        $"<span class=\"muted\" title=\"Estimated from row and index-column counts; SQLite's dbstat isn't compiled into this build, this isn't an exact measurement.\">~{Html.BytesHtml(IndexSize(t))}</span>"))
                     .Append(Html.RawCell($"<div class=\"field-row-actions\"><button class=\"btn btn-ghost btn-sm\" onclick=\"event.stopPropagation(); navigate('/tables/{Html.Text(Html.JsString(t.Id))}')\">Open</button></div>"))
                     .Append("</tr>");
             }
@@ -248,7 +248,7 @@ public static class FragmentEndpoints
                 if (saved is not null) sql = saved.Sql;
             }
 
-            // Validated here as well as in the JSON endpoint: this is a separate route to the same connection, so it cannot lean on that check.
+            // Validated here as well as in the JSON endpoint: this is a separate route to the same connection, it cannot lean on that check.
             var invalid = SqlEngine.Validate(sql);
             if (invalid is not null) return Results.BadRequest(new { errors = new[] { invalid } });
 
@@ -274,7 +274,7 @@ public static class FragmentEndpoints
             {
                 html.Append("<tr>");
                 foreach (var value in row)
-                    // NULL is shown as a value, not an empty cell, so it reads differently from a stored empty string.
+                    // NULL is shown as a value, not an empty cell, it reads differently from a stored empty string.
                     html.Append(value is null ? Html.RawCell(Html.Muted("NULL")) : Html.Cell(value));
                 html.Append("</tr>");
             }
@@ -290,7 +290,7 @@ public static class FragmentEndpoints
         ctx.Response.Headers["X-Page-Size"] = pageSize.ToString();
         ctx.Response.Headers["X-Total"] = total.ToString();
         ctx.Response.Headers["X-Total-Pages"] = totalPages.ToString();
-        // Past the count ceiling X-Total is a floor, so the pager needs a separate answer to "is there a next page" or it stops at the counted range.
+        // Past the count ceiling X-Total is a floor, the pager needs a separate answer to "is there a next page" or it stops at the counted range.
         ctx.Response.Headers["X-Has-More"] = hasMore ? "1" : "0";
         ctx.Response.Headers["X-Count-Exact"] = countExact ? "1" : "0";
     }

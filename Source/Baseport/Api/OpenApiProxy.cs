@@ -125,8 +125,8 @@ public static class OpenApiProxy
         return props;
     }
 
-    // Infers fields by reading one live record.
-    public static async Task<(List<FieldProp> Props, string? Error)> SampleFieldsAsync(HttpClient http, string url, string token, int limit = 1)
+    // Infers fields by reading live records. Sampling more than one on purpose: a column typed off a single record is typed off whatever that record happened to hold, and a null or an empty string there types the whole column as text.
+    public static async Task<(List<FieldProp> Props, string? Error)> SampleFieldsAsync(HttpClient http, string url, string token, int limit = 20)
     {
         if (ProxyTarget.Problem(url) is { } blocked) return (new(), blocked);
 
@@ -150,13 +150,9 @@ public static class OpenApiProxy
         catch (HttpRequestException ex) { return (new(), $"Could not reach the endpoint: {ex.Message}"); }
         catch (TaskCanceledException) { return (new(), "The endpoint timed out."); }
 
-        var sample = FirstRecord(body);
-        if (sample is null) return (new(), "The endpoint returned no records to infer fields from.");
-
-        var props = new List<FieldProp>();
-        foreach (var (name, value) in sample)
-            props.Add(new FieldProp(name, JsonTypeName(value), JsonFormatName(value), new List<string>(), false));
-        return (props, null);
+        var sampled = Records(body);
+        if (sampled.Count == 0) return (new(), "The endpoint returned no records to infer fields from.");
+        return (DefinitionImport.InferFields(sampled, detectChoices: false), null);
     }
 
     // Unwraps the collection envelopes real APIs use, then takes the first object.
@@ -187,25 +183,6 @@ public static class OpenApiProxy
 
     public const string BrowserUserAgent =
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-
-    private static string JsonTypeName(JsonNode? v) => v?.GetValueKind() switch
-    {
-        JsonValueKind.Number => "number",
-        JsonValueKind.True or JsonValueKind.False => "boolean",
-        JsonValueKind.Array => "array",
-        JsonValueKind.Object => "object",
-        _ => "string"
-    };
-
-    // A sampled string that parses as a date is almost always a date column; guessing it here saves the author retyping every timestamp field by hand.
-    private static string JsonFormatName(JsonNode? v)
-    {
-        if (v is not JsonValue jv || jv.GetValueKind() != JsonValueKind.String) return "";
-        var s = jv.GetValue<string>();
-        if (string.IsNullOrWhiteSpace(s)) return "";
-        if (!DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out _)) return "";
-        return s.Length <= 10 ? "date" : "date-time";
-    }
 
     public static string MapFieldType(FieldProp p)
     {

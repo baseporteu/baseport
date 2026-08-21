@@ -6,20 +6,20 @@ namespace Baseport;
 
 public enum WireDialect { Postgres, Tds }
 
-// Records reside as JSON in _records, hiding author schemas from SQL clients; rebuilt per-query connection (2 metadata reads per statement), so cache per session if profiling shows impact.
+// Records reside as JSON in _records, hiding author schemas from SQL clients; rebuilt per-query connection (2 metadata reads per statement), cache per session if profiling shows impact.
 public static class WireCatalog
 {
     // RefTableId is set on a reference field and reported as a foreign key.
     private sealed record CatalogColumn(string Name, string DataType, bool Required, string? RefTableId = null);
     private sealed record CatalogTable(string Id, string Name, int Oid, long Rows, List<CatalogColumn> Columns, string ReadRule);
 
-    // A reference column pointing at Target.id. Both ends are in the catalog, so a client can draw the join.
+    // A reference column pointing at Target.id. Both ends are in the catalog, a client can draw the join.
     private sealed record CatalogLink(CatalogTable Table, CatalogColumn Column, CatalogTable Target)
     {
         public string Name => $"fk_{Table.Name}_{Column.Name}";
     }
 
-    // userId is the account the wire session authenticated as. It scopes the row views to the same rows the REST api would return that account (pillar 15), so the wire is not a way around a table's read rule.
+    // userId is the account the wire session authenticated as. It scopes the row views to the same rows the REST api would return that account (pillar 15), the wire is not a way around a table's read rule.
     public static void Apply(SqliteConnection conn, WireDialect dialect, string? userId)
     {
         var tables = Read(conn, publishedOnly: true);
@@ -29,10 +29,10 @@ public static class WireCatalog
         else BuildTds(conn, tables);
     }
 
-    // The same row views for the admin sql console: every table rather than only the published ones, no read rule, and no dialect catalog, because the console already runs on an unrestricted handle that can read main._records directly.
+    // The same row views for the admin sql console: every table instead of only the published ones, no read rule, and no dialect catalog, because the console already runs on an unrestricted handle that can read main._records directly.
     public static void Views(SqliteConnection conn) => CreateRowViews(conn, Read(conn, publishedOnly: false), null, readRules: false);
 
-    // A wire client authenticates with an api token but must only ever see the projected author tables, never the storage schema behind them: _users holds password hashes and _settings holds the jwt signing key, so a raw SELECT there is a full-instance compromise. The temp views and the emulated pg_catalog/information_schema are the whole intended surface. This denies every direct read of the main schema (the system tables and the raw _records store) while leaving those views readable; a view's own read of main._records reports the view as the innermost object, so projected author data still resolves. Installed only on the untrusted wire connection, and cleared before that connection returns to the pool.
+    // A wire client authenticates with an api token but must only ever see the projected author tables, never the storage schema behind them: _users stores password hashes and _settings stores the jwt signing key, a raw SELECT there is a full-instance compromise. The temp views and the emulated pg_catalog/information_schema are the whole intended surface. This denies every direct read of the main schema (the system tables and the raw _records store) while leaving those views readable; a view's own read of main._records reports the view as the innermost object, projected author data still resolves. Installed only on the untrusted wire connection, and cleared before that connection returns to the pool.
     private static readonly delegate_authorizer DenyMainReads = (_, action, _, _, dbName, viaObject) =>
         action == raw.SQLITE_READ && dbName.utf8_to_string() == "main" && string.IsNullOrEmpty(viaObject.utf8_to_string())
             ? raw.SQLITE_DENY
@@ -53,7 +53,7 @@ public static class WireCatalog
             while (reader.Read())
             {
                 var name = reader.GetString(1);
-                // a name outside this set would have to be escaped into both a json path and an identifier; the authoring side already refuses them, so anything else is skipped rather than trusted
+                // a name outside this set would have to be escaped into both a json path and an identifier; the authoring side already refuses them, anything else is skipped instead of trusted
                 if (!IsPlainIdentifier(name)) continue;
                 var dataType = reader.IsDBNull(2) ? "text" : reader.GetString(2);
                 var refTableId = FieldValidation.NormalizeType(dataType) == "reference" && !reader.IsDBNull(4)
@@ -72,7 +72,7 @@ public static class WireCatalog
             {
                 var id = reader.GetString(0);
                 var name = reader.GetString(1);
-                // a leading underscore is the storage schema's own prefix, and a temp view takes precedence over main, so projecting one would shadow _records or _users out from under the console. sqlite_ is sqlite's own prefix and it refuses to create any object under it, so projecting one throws while the catalog is being built and every query on that connection answers that error instead of its own result
+                // a leading underscore is the storage schema's own prefix, and a temp view takes precedence over main, projecting one would shadow _records or _users out from under the console. sqlite_ is sqlite's own prefix and it refuses to create any object under it, projecting one throws while the catalog is being built and every query on that connection answers that error instead of its own result
                 if (!IsPlainIdentifier(name) || name[0] == '_' || name.StartsWith("sqlite_", StringComparison.OrdinalIgnoreCase)) continue;
                 var readRule = reader.IsDBNull(2) ? "" : reader.GetString(2);
                 tables.Add(new CatalogTable(id, name, oid, counts.GetValueOrDefault(id), columns.GetValueOrDefault(id) ?? new List<CatalogColumn>(), readRule));
@@ -81,7 +81,7 @@ public static class WireCatalog
         return tables;
     }
 
-    // An unpublished, proxied or deleted target yields no link rather than a dangling one.
+    // An unpublished, proxied or deleted target yields no link instead of a dangling one.
     private static List<CatalogLink> Links(List<CatalogTable> tables)
     {
         var byId = tables.ToDictionary(t => t.Id, StringComparer.Ordinal);
@@ -102,7 +102,7 @@ public static class WireCatalog
                 projection.Append($", json_extract(r.JsonData, '$.{column.Name}') AS {Quote(column.Name)}");
             projection.Append($" FROM main._records r WHERE r.TableId = {Literal(table.Id)}");
 
-            // A rule naming a field this catalog skipped rewrites to NULL, which reads as a refusal, so an unprojectable field closes the view rather than opening it.
+            // A rule naming a field this catalog skipped rewrites to NULL, which reads as a refusal, an unprojectable field closes the view instead of opening it.
             var fields = table.Columns.Select(c => new FieldDefinition { Name = c.Name }).ToList();
             if (readRules && RecordAccess.ReadClauseLiteral(table.ReadRule, fields, "r", userId) is { } clause)
                 projection.Append($" AND COALESCE(({clause}), 0)");
@@ -156,7 +156,7 @@ public static class WireCatalog
             "'TimeZone', 'UTC', 'Client Connection Defaults', 'Sets the time zone.', 'string', 'default'",
         ]);
 
-        // Emulated as empty rather than left missing: a browser that joins one of these gets no rows instead of a failed statement.
+        // Emulated as empty instead of left missing: a browser that joins one of these gets no rows instead of a failed statement.
         Empty(conn, "pg_catalog", "pg_views", "schemaname, viewname, viewowner, definition");
         Empty(conn, "pg_catalog", "pg_indexes", "schemaname, tablename, indexname, tablespace, indexdef");
         Empty(conn, "pg_catalog", "pg_index", "indexrelid, indrelid, indnatts, indisunique, indisprimary, indisexclusion, indimmediate, indisclustered, indisvalid, indkey");
@@ -190,7 +190,7 @@ public static class WireCatalog
 
         Empty(conn, "information_schema", "views", "table_catalog, table_schema, table_name, view_definition, check_option, is_updatable");
 
-        // Primary key on id per table, foreign key per reference field, so a client can draw the joins.
+        // Primary key on id per table, foreign key per reference field, a client can draw the joins.
         var links = Links(tables);
 
         Fill(conn, "information_schema", "table_constraints",
@@ -324,7 +324,7 @@ public static class WireCatalog
         Empty(conn, "INFORMATION_SCHEMA", "ROUTINES", "SPECIFIC_CATALOG, SPECIFIC_SCHEMA, SPECIFIC_NAME, ROUTINE_CATALOG, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DATA_TYPE");
     }
 
-    // id, created_at and updated_at are real columns of the view, so they belong in the catalog beside the author's fields.
+    // id, created_at and updated_at are real columns of the view, they belong in the catalog beside the author's fields.
     private static IEnumerable<CatalogColumn> Attributes(CatalogTable table) =>
         SystemColumns.Concat(table.Columns);
 

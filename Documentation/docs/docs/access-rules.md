@@ -23,7 +23,7 @@ Set them on the table's access panel: **create**, **read**, **update** and **del
 | `_ROW_.<field>` | A field on the stored record. `NULL` on create, because there is no row yet. |
 | `_REQ_.<field>` | A field in the incoming request body. |
 
-There is no custom expression language here. Baseport turns your references into `json_extract` calls with bound parameters and passes the whole thing to SQLite, so anything you can write in a SQLite `WHERE` clause works.
+There is no custom expression language here. Baseport turns your references into `json_extract` calls with bound parameters and passes the whole thing to SQLite, anything you can write in a SQLite `WHERE` clause works.
 
 ```sql
 _ROW_.status = 'open' AND _ROW_.owner = _USER_.id
@@ -35,11 +35,11 @@ _REQ_.total < 1000
 
 ## What happens when a rule fails
 
-A read rule **filters a list** instead of rejecting the request, so a caller gets their own records back rather than a `403`. Everywhere else, including reading one record by id, a rule that does not hold means the request is rejected.
+A read rule **filters a list** instead of rejecting the request, a caller gets their own records back instead of a `403`. Everywhere else, including reading one record by id, a rule that does not hold means the request is rejected.
 
 A rule that evaluates to `NULL`, or that refers to a record that no longer exists, counts as a rejection.
 
-Live updates are filtered the same way reads are. If a caller could not fetch a record, they do not get an event for it either. The rule is re-read for every event, so tightening a rule affects connections that are already open.
+Live updates are filtered the same way reads are. If a caller could not fetch a record, they do not get an event for it either. The rule is re-read for every event, tightening a rule affects connections that are already open.
 
 ## Rules are checked when you save
 
@@ -49,4 +49,4 @@ Rules are checked when you save the table, not when somebody calls it. An unknow
 
 The console at `/api/_admin/*` is never filtered. If you are signed in as an operator you see everything.
 
-The Postgres and TDS listeners are filtered like the API, not like the console. They authenticate with an API token, so they only see published tables, each one behind its read rule. A SQLite authorizer also blocks any direct read of the underlying schema, so `_users` and `_settings` are not reachable from them.
+The Postgres and TDS listeners are filtered like the API, not like the console. They authenticate with an API token, they only see published tables, each one behind its read rule. A SQLite authorizer also blocks any direct read of the underlying schema, `_users` and `_settings` are not reachable from them.

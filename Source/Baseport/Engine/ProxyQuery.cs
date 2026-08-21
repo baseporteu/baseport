@@ -19,7 +19,7 @@ public static class ProxyQuery
         var declared = DeclaredQuery(table);
         var query = new List<string>();
 
-        // One field can be pushed down as $filter; more than one would need an `or` chain the remote may not support, so those fall back to matching in memory over a wider fetch.
+        // One field can be pushed down as $filter; more than one would need an `or` chain the remote may not support, those fall back to matching in memory over a wider fetch.
         if (declared.Contains("$filter") && matchFields.Count == 1)
             query.Add("$filter=" + Uri.EscapeDataString($"{matchFields[0].Name} eq {ODataLiteral(term)}"));
         else if (declared.Contains("$top"))
@@ -44,7 +44,7 @@ public static class ProxyQuery
         var declared = DeclaredQuery(table);
         var query = new List<string>();
 
-        // The remote exposes a row cap but no offset, so paging is cap-and-slice here until one of them offers a cursor.
+        // The remote exposes a row cap but no offset, paging is cap-and-slice here until one of them offers a cursor.
         var wanted = Math.Min(page * pageSize, QueryEngine.MaxPageSize * 5);
         if (declared.Contains("$top")) query.Add("$top=" + wanted);
 
@@ -56,7 +56,7 @@ public static class ProxyQuery
 
         var records = OpenApiProxy.Records(body);
 
-        // Author filters scope the list and a visitor cannot widen them, so they are applied before anything else.
+        // Author filters scope the list and a visitor cannot widen them, they are applied before anything else.
         foreach (var f in filters ?? Array.Empty<QueryEngine.Filter>())
             records = records.Where(r => MatchesFilter(r[f.Field.Name], f)).ToList();
 
@@ -69,7 +69,7 @@ public static class ProxyQuery
                 .Any(n => Text(r[n]).Contains(term, StringComparison.OrdinalIgnoreCase))).ToList();
         }
 
-        // The remote is fetched once, cap-and-sliced, so sorting happens here rather than as a pushed-down query param: no OData $orderby dialect is universal enough to build blind.
+        // The remote is fetched once, cap-and-sliced, sorting happens here instead of as a pushed-down query param: no OData $orderby dialect is universal enough to build blind.
         records = Sorted(records, sortField, sortDescending);
 
         var total = records.Count;
@@ -77,7 +77,7 @@ public static class ProxyQuery
         return (new Page(slice, total, declared.Count > 0), null);
     }
 
-    // A visitor's search term ends up inside a single-quoted literal in somebody else's query language. Doubling the quote is the OData escape, and a control character is dropped rather than escaped: no legitimate lookup value includes one, and an upstream that parses loosely is the one place a stray newline could still break out of the literal. Both call sites re-match locally, so a term this narrows is still found.
+    // A visitor's search term ends up inside a single-quoted literal in somebody else's query language. Doubling the quote is the OData escape, and a control character is dropped instead of escaped: no legitimate lookup value includes one, and an upstream that parses loosely is the one place a stray newline could still break out of the literal. Both call sites re-match locally, a term this narrows is still found.
     private static string ODataLiteral(string value) =>
         $"'{new string(value.Where(c => !char.IsControl(c)).ToArray()).Replace("'", "''")}'";
 
@@ -138,7 +138,7 @@ public static class ProxyQuery
             case "contains": return text.Contains(filter.Value, StringComparison.OrdinalIgnoreCase);
             case "gt":
             case "lt":
-                // Compared as numbers, so 250 > 100 rather than sorting as text.
+                // Compared as numbers, 250 > 100 instead of sorting as text.
                 if (!double.TryParse(text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var left)) return false;
                 if (!double.TryParse(filter.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var right)) return false;
                 return filter.Operator == "gt" ? left > right : left < right;

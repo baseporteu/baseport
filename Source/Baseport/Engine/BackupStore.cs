@@ -26,7 +26,7 @@ public static class BackupStore
         return wal.Exists ? total + wal.Length : total;
     }
 
-    // Free bytes on whichever mount holds the directory, or null when the platform will not say.
+    // Free bytes on whichever mount stores the directory, or null when the platform will not say.
     public static long? FreeBytes(string dir)
     {
         try
@@ -44,7 +44,7 @@ public static class BackupStore
         }
     }
 
-    // A snapshot is a second full copy of the store, so on a tight disk a backup is how an instance fills its own filesystem. Checked here rather than in the endpoint: the nightly job writes through this same door, unattended.
+    // A snapshot is a second full copy of the store, on a tight disk a backup is how an instance fills its own filesystem. Checked here instead of in the endpoint: the nightly job writes through this same door, unattended.
     public static string? SpaceProblem(string dir, AppDbContext db, long? freeBytes = null)
     {
         var free = freeBytes ?? FreeBytes(dir);
@@ -68,7 +68,7 @@ public static class BackupStore
     {
         Directory.CreateDirectory(dir);
         if (SpaceProblem(dir, db) is { } problem) throw new IOException(problem);
-        // DataSource, not Database: the latter is SQLite's schema name and is always "main", so a connection built from it opened an empty database and the snapshot came out carrying nothing.
+        // DataSource, not Database: the latter is SQLite's schema name and is always "main", a connection built from it opened an empty database and the snapshot came out carrying nothing.
         var source = db.Database.GetDbConnection().DataSource;
         // The short id keeps two snapshots from colliding in the same millisecond.
         var target = Path.Combine(dir, $"baseport-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Ids.NewShortId(4)}.db");

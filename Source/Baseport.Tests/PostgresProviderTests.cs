@@ -93,7 +93,7 @@ public class PostgresProviderTests : IAsyncLifetime
         Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
     }
 
-    // The wire is an api-token surface, so it must reach only the projected author tables, never the storage schema behind them: _users holds password hashes and _settings the jwt signing key. A direct read of the main schema is refused by the connection authorizer.
+    // The wire is an api-token surface, it must reach only the projected author tables, never the storage schema behind them: _users stores password hashes and _settings the jwt signing key. A direct read of the main schema is refused by the connection authorizer.
     [Theory]
     [InlineData("SELECT authsigningkey FROM _settings")]
     [InlineData("SELECT passwordhash FROM _users")]
@@ -159,7 +159,7 @@ public class PostgresProviderTests : IAsyncLifetime
         Assert.Equal('Z', (await ReadMessageAsync(stream))!.Value.Type);
     }
 
-    // the author's tables are rows in _tables, not sqlite tables, so a browser only finds them if the catalog reports them
+    // the author's tables are rows in _tables, not sqlite tables, a browser only finds them if the catalog reports them
     [Theory]
     [InlineData("SELECT table_name FROM information_schema.tables")]
     [InlineData("SELECT relname FROM pg_catalog.pg_class WHERE relkind = 'r'")]
@@ -171,7 +171,7 @@ public class PostgresProviderTests : IAsyncLifetime
         Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
     }
 
-    // every record is a json blob in one shared table, so these are the columns a client is told about and the ones it can then select
+    // every record is a json blob in one shared table, these are the columns a client is told about and the ones it can then select
     [Fact]
     public async Task A_column_probe_reports_the_tables_fields()
     {
@@ -181,7 +181,7 @@ public class PostgresProviderTests : IAsyncLifetime
         Assert.Equal(new[] { "id", "created_at", "updated_at" }, rows.Select(r => r[0]));
     }
 
-    // dbeaver/jdbc probe objects the catalog does not emulate; those must still answer empty rather than aborting the connection with a raw "SQLite Error 1: no such table"
+    // dbeaver/jdbc probe objects the catalog does not emulate; those must still answer empty instead of aborting the connection with a raw "SQLite Error 1: no such table"
     [Theory]
     [InlineData("SELECT * FROM pg_stat_activity")]
     [InlineData("SELECT * FROM pg_catalog.pg_largeobject")]
@@ -206,7 +206,7 @@ public class PostgresProviderTests : IAsyncLifetime
         Assert.Equal(value, Assert.Single(Assert.Single(rows)));
     }
 
-    // pgjdbc sends these during connection setup: SHOW is neither a no-op nor on SqlEngine's allowlist, so it used to abort the connect with an error
+    // pgjdbc sends these during connection setup: SHOW is neither a no-op nor on SqlEngine's allowlist, it used to abort the connect with an error
     [Theory]
     [InlineData("SHOW search_path", "search_path", "public")]
     [InlineData("SHOW TRANSACTION ISOLATION LEVEL", "transaction_isolation", "read committed")]
@@ -219,7 +219,7 @@ public class PostgresProviderTests : IAsyncLifetime
         Assert.Equal(value, Assert.Single(Assert.Single(rows)));
     }
 
-    // The wire is an api-token surface and must show what the rest api shows: an unpublished table is not part of that, so it is neither catalogued nor selectable.
+    // The wire is an api-token surface and must show what the rest api shows: an unpublished table is not part of that, it is neither catalogued nor selectable.
     [Fact]
     public async Task An_unpublished_table_is_neither_listed_nor_selectable()
     {
@@ -234,7 +234,7 @@ public class PostgresProviderTests : IAsyncLifetime
         Assert.Equal('E', (await ReadMessageAsync(stream))!.Value.Type);
     }
 
-    // A read rule filters a listing over rest (pillar 15), so the wire has to filter identically or it is a way around the rule.
+    // A read rule filters a listing over rest (pillar 15), the wire has to filter identically or it is a way around the rule.
     [Fact]
     public async Task A_read_rule_filters_the_rows_to_the_caller()
     {

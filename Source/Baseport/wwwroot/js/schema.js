@@ -59,7 +59,7 @@ async function loadSchema() {
     const cols = Math.max(1, Math.ceil(Math.sqrt(tables.length)));
     const rows = Math.ceil(tables.length / cols);
     const heights = tables.map((t) => 48 + t.fields.length * 27 + 10);
-    // grid-row layout: a row's height is its tallest node, so a short node below a tall one never lands inside it
+    // grid-row layout: a row's height is its tallest node, a short node below a tall one never lands inside it
     const rowHeight = new Array(rows).fill(0);
     tables.forEach((t, i) => {
         const row = Math.floor(i / cols);

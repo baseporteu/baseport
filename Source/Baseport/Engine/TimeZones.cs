@@ -1,11 +1,11 @@
 namespace Baseport;
 
-// The instance time zone is a display default handed to clients, so what has to hold is that an IANA-speaking client would accept it.
+// The instance time zone is a display default handed to clients, what has to hold is that an IANA-speaking client would accept it.
 public static class TimeZones
 {
     private const int MaxLength = 64;
 
-    // What a fresh instance starts on: the host's own zone, which is the clock the operator reading the console is already keeping. Linux names it the way a browser does; a win-x64 build in invariant globalization mode says "W. Europe Standard Time", which no client can read, so UTC stands there.
+    // What a fresh instance starts on: the host's own zone, which is the clock the operator reading the console is already keeping. Linux names it the way a browser does; a win-x64 build in invariant globalization mode says "W. Europe Standard Time", which no client can read, UTC stands there.
     public static string HostDefault { get; } = Host();
 
     private static string Host()
@@ -17,7 +17,7 @@ public static class TimeZones
     public static bool IsValid(string zone)
     {
         if (string.IsNullOrEmpty(zone) || zone.Length > MaxLength) return false;
-        // Linux includes the tz database, so this settles it there. A win-x64 build in invariant globalization mode maps no IANA name at all, and refusing every zone but UTC on Windows would be worse than accepting a well-formed one.
+        // Linux includes the tz database, this settles it there. A win-x64 build in invariant globalization mode maps no IANA name at all, and refusing every zone but UTC on Windows would be worse than accepting a well-formed one.
         return TimeZoneInfo.TryFindSystemTimeZoneById(zone, out _) || WellFormed(zone);
     }
 

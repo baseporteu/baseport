@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
-// The fts5 index is maintained by triggers, so what matters is that it stays in step with every write and that a search that fts5 cannot answer still finds its rows.
+// The fts5 index is maintained by triggers, what matters is that it stays in step with every write and that a search that fts5 cannot answer still finds its rows.
 public class RecordSearchTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -108,7 +108,7 @@ public class RecordSearchTests : IDisposable
         Assert.Equal(new[] { record.Id }, await SearchAsync("!!!"));
     }
 
-    // fts5 scans the match expression as a c string, so a NUL inside a term ended it mid-token and left the opening quote unterminated: a valid bearer plus ?q=a%00b was a 500 on a public route.
+    // fts5 scans the match expression as a c string, a NUL inside a term ended it mid-token and left the opening quote unterminated: a valid bearer plus ?q=a%00b was a 500 on a public route.
     [Theory]
     [InlineData("a\0b", "ab")]
     [InlineData("one\0 two", "one")]

@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Baseport.Tests;
 
-// The two rewrites a jdbc client's metadata queries depend on. Both walk the statement, so the cases that matter are the ones where the pattern appears inside something that must not be touched.
+// The two rewrites a jdbc client's metadata queries depend on. Both walk the statement, the cases that matter are the ones where the pattern appears inside something that must not be touched.
 public class PostgresRewriteTests
 {
     [Theory]
@@ -17,7 +17,7 @@ public class PostgresRewriteTests
     public void A_cast_is_stripped(string sql, string expected) =>
         Assert.Equal(expected, PostgresConnection.StripCasts(sql));
 
-    // a value is not sql, so a :: inside one has to survive
+    // a value is not sql, a :: inside one has to survive
     [Theory]
     [InlineData("SELECT * FROM t WHERE name = 'a::b'")]
     [InlineData("SELECT \"a::b\" FROM t")]

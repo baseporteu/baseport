@@ -272,7 +272,7 @@ public static class JsExpr
                 if (call.Callee is IdN idc)
                 {
                     if (!Builtins.Contains(idc.Name)) { r.Errors.Add($"Unknown function '{idc.Name}'."); return; }
-                    // SUM iterates a line-items array field directly, so it takes the field itself, not data.Field, and a
+                    // SUM iterates a line-items array field directly, it takes the field itself, not data.Field, and a
                     // literal column name, not an expression - the same narrow shape every other JsExpr array access uses.
                     if (idc.Name == "SUM" && (call.Args.Count != 2 || call.Args[0] is not IdN || call.Args[1] is not StrN))
                     {
@@ -335,12 +335,13 @@ public static class JsExpr
         {
             switch (jv.GetValueKind())
             {
-                case JsonValueKind.Number: return jv.GetValue<double>();
+                // Through the shared reader: GetValue<double> throws on an int-backed node, and an expression must read a number the same way validation does or a value can pass one and fail the other.
+                case JsonValueKind.Number: return FieldValidation.TryNumber(jv, out var n) ? n : 0.0;
                 case JsonValueKind.True: return true;
                 case JsonValueKind.False: return false;
                 case JsonValueKind.String:
                     var s = jv.GetValue<string>();
-                    return double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : s;
+                    return FieldValidation.TryNumber(jv, out var d) ? d : s;
             }
         }
         return 0.0;

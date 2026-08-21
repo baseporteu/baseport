@@ -1,6 +1,6 @@
 namespace Baseport;
 
-// Closed by default: everything under /api needs a console session unless its prefix is listed here, so a new endpoint is protected the moment it is added.
+// Closed by default: everything under /api needs a console session unless its prefix is listed here, a new endpoint is protected the moment it is added.
 public static class AdminAuthMiddleware
 {
     public static IApplicationBuilder UseAdminAuth(this IApplicationBuilder app) =>

@@ -24,7 +24,7 @@ public static class ProxyTarget
         if (IPAddress.TryParse(uri.IdnHost, out var literal)) addresses = [literal];
         else
         {
-            // A name resolved here can resolve to something else when the request is made, so this narrows the surface rather than sealing it; the setting behind it is the real decision.
+            // A name resolved here can resolve to something else when the request is made, this narrows the surface instead of sealing it; the setting behind it is the real decision.
             try { addresses = Dns.GetHostAddresses(uri.IdnHost); }
             catch (SocketException) { return "The host could not be resolved."; }
             catch (ArgumentException) { return "The host could not be resolved."; }

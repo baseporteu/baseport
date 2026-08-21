@@ -62,7 +62,7 @@ public static class TableEndpoints
             if (patch["apiMethods"] is JsonArray methods)
                 table.ApiMethods = ApiMethods.Serialize(methods.Select(m => m?.GetValue<string>() ?? ""));
 
-            // Per-record access rules. Rejected here rather than at request time, where a bad rule is a 500 on every call to the table.
+            // Per-record access rules. Rejected here instead of at request time, where a bad rule is a 500 on every call to the table.
             foreach (var (key, permission) in RecordAccess.RuleKeys)
             {
                 if (patch[key] is not JsonValue rv || !rv.TryGetValue<string>(out var rule)) continue;
@@ -80,7 +80,7 @@ public static class TableEndpoints
                 if (patch["proxyUrl"] is JsonValue pu && pu.TryGetValue<string>(out var url)) table.ProxyUrl = url.Trim();
                 if (patch["proxyReadUrl"] is JsonValue pr && pr.TryGetValue<string>(out var readUrl)) table.ProxyReadUrl = readUrl.Trim();
                 if (patch["proxyMethod"] is JsonValue pm && pm.TryGetValue<string>(out var method)) table.ProxyMethod = method.Trim().ToUpperInvariant();
-                // An empty token means "leave it alone": the UI never receives the current one, so it cannot echo it back to preserve it.
+                // An empty token means "leave it alone": the UI never receives the current one, it cannot echo it back to preserve it.
                 if (patch["proxyToken"] is JsonValue pt && pt.TryGetValue<string>(out var token) && !string.IsNullOrWhiteSpace(token))
                     table.ProxyToken = token.Trim();
                 if (patch["clearProxyToken"] is JsonValue ct && ct.TryGetValue<bool>(out var clear) && clear)
@@ -89,7 +89,7 @@ public static class TableEndpoints
 
             var others = await db.Tables.Where(t => t.Id != publicId).Select(t => t.Name).ToListAsync();
             var errs = FieldValidation.ValidateTable(table, others);
-            // The published name identifies the table in every URL and generated client, so two tables cannot share one.
+            // The published name identifies the table in every URL and generated client, two tables cannot share one.
             if (!string.IsNullOrWhiteSpace(table.ApiName) &&
                 await db.Tables.AnyAsync(t => t.Id != publicId && t.ApiName == table.ApiName))
                 errs.Add($"Another table is already published as '{table.ApiName}'.");
@@ -113,7 +113,9 @@ public static class TableEndpoints
             db.Fields.Add(field);
             table.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
+            // A field change reconciles both kinds of derived state: the indexes it implies, and the computed values it implies.
             await RecordIndexes.SyncAsync(db, table);
+            await RecordEngine.ReconcileComputedAsync(db, table);
             return Results.Ok(ApiDtos.FieldDto(field));
         });
 
@@ -170,7 +172,9 @@ public static class TableEndpoints
 
             table.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
+            // Retyping a field, or editing an expression, changes what the server owes every stored record just as creating one does.
             await RecordIndexes.SyncAsync(db, table);
+            await RecordEngine.ReconcileComputedAsync(db, table);
             return Results.Ok(ApiDtos.FieldDto(field));
         });
 
@@ -323,6 +327,108 @@ public static class TableEndpoints
             });
         });
 
+        // Import a table from a file the author already has: the columns are typed from the file's own values, the fields are ordinary fields afterwards, and the rows go in through the one write path. preview=true parses and reports without writing anything, the client posts the same file twice instead of the server holding an upload between two calls.
+        app.MapPost("/api/_admin/tables/import", async (AppDbContext db, HttpContext ctx) =>
+        {
+            if (!ctx.Request.HasFormContentType) return Results.BadRequest(new { errors = new[] { "Upload the file as multipart/form-data." } });
+            var form = await ctx.Request.ReadFormAsync(ctx.RequestAborted);
+            var file = form.Files["file"];
+            if (file is null || file.Length == 0) return Results.BadRequest(new { errors = new[] { "Choose a file to import." } });
+
+            var (rows, parseError) = await ReadUploadAsync(file, ctx.RequestAborted);
+            if (parseError != null) return Results.BadRequest(new { errors = new[] { parseError } });
+
+            var props = DefinitionImport.InferFields(rows);
+            if (props.Count == 0) return Results.BadRequest(new { errors = new[] { "The file has no columns to import." } });
+
+            var name = form["name"].ToString().Trim();
+            if (string.IsNullOrWhiteSpace(name)) name = Path.GetFileNameWithoutExtension(file.FileName).Trim();
+            var withRecords = form["withRecords"].ToString() is "true" or "1";
+
+            var table = new TableDefinition { Id = Ids.NewShortId(12), Name = name, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            foreach (var field in DefinitionImport.ToFields(props))
+            {
+                field.Id = Ids.NewShortId(12);
+                field.TableId = table.Id;
+                table.Fields.Add(field);
+            }
+
+            var existing = await db.Tables.Select(t => t.Name).ToListAsync();
+            var tableErrors = FieldValidation.ValidateTable(table, existing);
+
+            if (form["preview"].ToString() is "true" or "1")
+                return Results.Ok(new
+                {
+                    Preview = true,
+                    table.Name,
+                    RowCount = rows.Count,
+                    Fields = table.Fields.OrderBy(f => f.Position).Select(f => new { f.Name, f.Label, f.DataType, f.IsRequired, f.OptionsJson }),
+                    Sample = rows.Take(5).Select(r => DefinitionImport.MapRow(r, table.Fields)),
+                    Errors = tableErrors
+                });
+
+            if (tableErrors.Count > 0) return Results.BadRequest(new { errors = tableErrors });
+
+            var records = new List<Record>();
+            if (withRecords)
+            {
+                var (prepared, rowErrors) = await DefinitionImport.PrepareRowsAsync(db, table, table.Fields.ToList(), rows);
+                if (rowErrors.Count > 0) return Results.BadRequest(new { errors = RowErrorText(rowErrors) });
+                records.AddRange(prepared.Select(obj => new Record
+                {
+                    TableId = table.Id,
+                    Id = Ids.NewShortId(12),
+                    JsonData = obj.ToJsonString(),
+                    CreatedAt = DateTime.UtcNow
+                }));
+            }
+
+            db.Tables.Add(table);
+            db.Records.AddRange(records);
+            await db.SaveChangesAsync();
+            await RecordIndexes.SyncAsync(db, table);
+            return Results.Ok(new { Table = ApiDtos.TableDto(table), FieldCount = table.Fields.Count, RecordCount = records.Count });
+        });
+
+        // Records for a table that already exists. Every row is validated before any row is stored: a partly loaded table with no record of what landed is worse than a refusal.
+        app.MapPost("/api/_admin/tables/{publicId}/records/import", async (AppDbContext db, HttpContext ctx, string publicId) =>
+        {
+            var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.Id == publicId);
+            if (table == null) return Results.NotFound();
+            if (table.IsProxy) return Results.BadRequest(new { errors = new[] { "Proxy tables store nothing locally and cannot be written to." } });
+            if (!ctx.Request.HasFormContentType) return Results.BadRequest(new { errors = new[] { "Upload the file as multipart/form-data." } });
+
+            var form = await ctx.Request.ReadFormAsync(ctx.RequestAborted);
+            var file = form.Files["file"];
+            if (file is null || file.Length == 0) return Results.BadRequest(new { errors = new[] { "Choose a file to import." } });
+
+            var (rows, parseError) = await ReadUploadAsync(file, ctx.RequestAborted);
+            if (parseError != null) return Results.BadRequest(new { errors = new[] { parseError } });
+
+            var fields = table.Fields.OrderBy(f => f.Position).ThenBy(f => f.Id).ToList();
+            // A file whose headers match nothing would otherwise import as that many empty rows.
+            var matched = DefinitionImport.ColumnMap.For(rows, fields.Where(f => !FieldTypes.Of(f).Computed).ToList()).MatchedFields;
+            if (matched.Count == 0)
+            {
+                var headers = rows[0].Select(kv => kv.Key).Take(8);
+                return Results.BadRequest(new { errors = new[] { $"None of the file's columns ({string.Join(", ", headers)}) match a field on this table." } });
+            }
+
+            var (prepared, rowErrors) = await DefinitionImport.PrepareRowsAsync(db, table, fields, rows);
+            if (rowErrors.Count > 0) return Results.BadRequest(new { errors = RowErrorText(rowErrors) });
+
+            var now = DateTime.UtcNow;
+            db.Records.AddRange(prepared.Select(obj => new Record
+            {
+                TableId = table.Id,
+                Id = Ids.NewShortId(12),
+                JsonData = obj.ToJsonString(),
+                CreatedAt = now
+            }));
+            await db.SaveChangesAsync();
+            return Results.Ok(new { Imported = prepared.Count, Fields = matched });
+        });
+
         app.MapPost("/api/_admin/validate-expression", async (AppDbContext db, JsonObject body) =>
         {
             if (body["expression"] is not JsonValue ev || !ev.TryGetValue<string>(out var expr))
@@ -440,12 +546,12 @@ public static class TableEndpoints
             return Results.Created($"/api/_admin/tables/{publicId}/records/{record.Id}", ApiDtos.RecordDto(record, fields));
         });
 
-        // Editing goes through the same write path as creation, so a rule can never hold on insert and lapse on update. JSON or multipart/form-data.
+        // Editing goes through the same write path as creation, a rule can never hold on insert and lapse on update. JSON or multipart/form-data.
         app.MapPatch("/api/_admin/tables/{publicId}/records/{rid}", async (AppDbContext db, HttpContext ctx, string publicId, string rid) =>
         {
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.Id == publicId);
             if (table == null) return Results.NotFound();
-            if (table.IsProxy) return Results.BadRequest(new { errors = new[] { "Proxy tables store nothing locally, so there is no record to edit." } });
+            if (table.IsProxy) return Results.BadRequest(new { errors = new[] { "Proxy tables store nothing locally, there is no record to edit." } });
 
             var record = await db.Records.FirstOrDefaultAsync(r => r.Id == rid && r.TableId == table.Id);
             if (record == null) return Results.NotFound();
@@ -471,5 +577,23 @@ public static class TableEndpoints
             await db.SaveChangesAsync();
             return Results.Ok(new { deleted = record.Id });
         });
+    }
+
+    // Reads an upload into memory under the import cap. A file this size is parsed whole either way, and refusing early keeps a large upload from being buffered before anything looks at it.
+    private static async Task<(List<System.Text.Json.Nodes.JsonObject> Rows, string? Error)> ReadUploadAsync(IFormFile file, CancellationToken ct)
+    {
+        if (file.Length > DefinitionImport.MaxBytes)
+            return (new(), $"The file is larger than {DefinitionImport.MaxBytes / (1024 * 1024)} MB. Split it and import the parts.");
+        using var buffer = new MemoryStream();
+        await using (var stream = file.OpenReadStream()) await stream.CopyToAsync(buffer, ct);
+        return DefinitionImport.Parse(buffer.ToArray(), file.FileName);
+    }
+
+    // Row failures ride in the ordinary errors array so the console surfaces them through ui.handle like every other rejection, instead of needing a second shape nothing else sends.
+    private static List<string> RowErrorText(List<DefinitionImport.RowError> rowErrors)
+    {
+        var lines = new List<string> { $"{rowErrors.Count} row(s) could not be imported, nothing was written." };
+        lines.AddRange(rowErrors.Select(e => $"Row {e.Row}: {string.Join(" ", e.Errors)}"));
+        return lines;
     }
 }

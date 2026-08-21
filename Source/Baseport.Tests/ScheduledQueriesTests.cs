@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
-// A scheduled query is the operator's own task. It runs unattended, so what is pinned is that every way it can go wrong is recorded rather than thrown, and that the tick after it still happens.
+// A scheduled query is the operator's own task. It runs unattended, what is pinned is that every way it can go wrong is recorded instead of thrown, and that the tick after it still happens.
 public class ScheduledQueriesTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -91,7 +91,7 @@ public class ScheduledQueriesTests : IDisposable
         Assert.Contains("\"7\"", stub.Bodies.Single());
     }
 
-    // The tick that follows must still happen, so a refused destination is a message on the query and not an exception out of the loop.
+    // The tick that follows must still happen, a refused destination is a message on the query and not an exception out of the loop.
     [Fact]
     public async Task A_destination_that_refuses_is_recorded_rather_than_thrown()
     {

@@ -46,7 +46,7 @@ const ui = (() => {
         el.appendChild(actions);
 
         host().appendChild(el);
-        // Errors linger, they carry a field name worth reading, but nothing outlives the ceiling. Equal delays fire in spawn order, so a stack clears top-down.
+        // Errors linger, they carry a field name worth reading, but nothing outlives the ceiling. Equal delays fire in spawn order, a stack clears top-down.
         setTimeout(() => dismiss(el), kind === 'error' || !timeout ? TOAST_MAX_MS : Math.min(timeout, TOAST_MAX_MS));
         return el;
     }
@@ -112,7 +112,7 @@ const ui = (() => {
         return track;
     }
 
-    // A checkbox rendered as a switch, with its label. Same markup the settings rows use, so both inherit one stylesheet.
+    // A checkbox rendered as a switch, with its label. Same markup the settings rows use, both inherit one stylesheet.
     function switchRow(label, {
         id,
         checked = false,
@@ -132,7 +132,7 @@ const ui = (() => {
         return row;
     }
 
-    // Wraps a block in a hover-revealed copy button. `text` may be a function, so a caller can copy something generated at click time.
+    // Wraps a block in a hover-revealed copy button. `text` may be a function, a caller can copy something generated at click time.
     function copyable(block, text) {
         const wrap = el('div', 'copy-wrap');
         const btn = el('button', 'copy-btn', {
@@ -216,7 +216,7 @@ const ui = (() => {
 
     function reportError(source, error) {
         const message = (error && (error.message || error)) || 'Unknown error';
-        // A rejection includes no filename, so the frame it threw from is the only thing that says where to look.
+        // A rejection includes no filename, the frame it threw from is the only thing that says where to look.
         const frame = (error && error.stack || '').split('\n')[1];
         const text = `${source}: ${message}` + (frame ? ` (${frame.trim()})` : '');
         // A loop that throws every frame must not bury the screen in toasts, or the server in rows.
@@ -231,7 +231,7 @@ const ui = (() => {
         sendError(text);
     }
 
-    // sendBeacon rather than fetch: it returns nothing to await, so a failure here cannot itself become an unhandled rejection and feed this function its own output. It also survives the page unload that a hard failure often triggers.
+    // sendBeacon instead of fetch: it returns nothing to await, a failure here cannot itself become an unhandled rejection and feed this function its own output. It also survives the page unload that a hard failure often triggers.
     function sendError(text) {
         if (!navigator.sendBeacon) return;
         try {
@@ -466,7 +466,7 @@ const ui = (() => {
         if (id) hidden.id = id;
 
         // a single chosen value renders as a removable chip, not editable text: this is a searchable select, one value at a
-        // time, so there is nothing to reselect until the current pick is explicitly cleared
+        // time, there is nothing to reselect until the current pick is explicitly cleared
         const chip = el('div', 'combobox-chip' + (value ? '' : ' hidden'));
         const chipLabel = el('span', 'combobox-chip-label', {
             textContent: valueLabel || value
@@ -514,7 +514,7 @@ const ui = (() => {
             search.classList.remove('hidden');
         }
 
-        // set while the chip is removed but nothing new has been picked yet, so an unpicked blur can put it back
+        // set while the chip is removed but nothing new has been picked yet, an unpicked blur can put it back
         let pendingValue = null;
         let pendingLabel = null;
 
@@ -552,7 +552,7 @@ const ui = (() => {
                 }));
             } else {
                 rows.forEach((r) => {
-                    // A heading row, not a choice. It includes no .combobox-option, so keyboard nav skips it.
+                    // A heading row, not a choice. It includes no .combobox-option, keyboard nav skips it.
                     if (r.group) {
                         list.append(el('li', 'combobox-group', {
                             textContent: r.label
@@ -562,7 +562,7 @@ const ui = (() => {
                     const li = el('li', 'combobox-option' + (String(r.id) === String(hidden.value) && hidden.value !== '' ? ' selected' : ''), {
                         textContent: r.label
                     });
-                    // mousedown, not click: it fires before the search input's blur, so the list is still open to read from.
+                    // mousedown, not click: it fires before the search input's blur, the list is still open to read from.
                     li.addEventListener('mousedown', (e) => {
                         e.preventDefault();
                         selectOption(r.id, r.label);
@@ -640,7 +640,7 @@ const ui = (() => {
         });
 
         search.addEventListener('blur', () => {
-            // delayed close: an option's mousedown fires before this blur, so it only closes an unpicked list
+            // delayed close: an option's mousedown fires before this blur, it only closes an unpicked list
             setTimeout(() => {
                 closeList();
                 if (!hidden.value && pendingValue) {
@@ -701,14 +701,14 @@ const ui = (() => {
 
     /* overlays */
 
-    // only one sheet is ever open at a time, so one dirty flag is enough
+    // only one sheet is ever open at a time, one dirty flag is enough
     let sheetDirty = false;
 
     function markSheetDirty() {
         sheetDirty = true;
     }
 
-    // overlay/×/escape route here instead of closeSheet directly, so a dirty sheet can't vanish by accident
+    // overlay/×/escape route here instead of closeSheet directly, a dirty sheet can't vanish by accident
     function attemptCloseSheet() {
         if (sheetDirty) {
             toast('You have unsaved changes. Use Cancel to discard them.', 'info');
@@ -751,7 +751,7 @@ const ui = (() => {
         }
         // Sibling of the overlay, not a child: a nested click would bubble to dismiss.
         document.body.append(overlay, panel);
-        // Next frame, so the browser has a start state to transition from.
+        // Next frame, the browser has a start state to transition from.
         requestAnimationFrame(() => {
             overlay.classList.add('open');
             panel.classList.add('open');
@@ -863,7 +863,7 @@ const ui = (() => {
         });
     }
 
-    // Timestamps travel as UTC and render in the instance zone, so two operators reading one row read the same clock. The zone is named only when it is not the reader's own, where an unlabelled time is a wrong one.
+    // Timestamps travel as UTC and render in the instance zone, two operators reading one row read the same clock. The zone is named only when it is not the reader's own, where an unlabelled time is a wrong one.
     let instanceZone = null;
     let whenFormat = null;
 
@@ -905,7 +905,7 @@ const ui = (() => {
         return isNaN(d) ? String(iso) : whenFormatter().format(d);
     }
 
-    // ISO 4217 and the IANA zone list both ship with the browser, so neither list is ours to carry or keep current.
+    // ISO 4217 and the IANA zone list both ship with the browser, neither list is ours to carry or keep current.
     function currencyOptions() {
         const codes = Intl.supportedValuesOf ? Intl.supportedValuesOf('currency') : [];
         let names = null;
@@ -937,7 +937,7 @@ const ui = (() => {
         select.value = value || (list[0] ? list[0][0] : '');
     }
 
-    // Confirmation. Resolves true when confirmed, false otherwise. Always a centered modal: a sheet closes whatever sheet is already open, so asking from inside one answered the question by destroying what it was about.
+    // Confirmation. Resolves true when confirmed, false otherwise. Always a centered modal: a sheet closes whatever sheet is already open, asking from inside one answered the question by destroying what it was about.
     function confirm({
         title,
         message,

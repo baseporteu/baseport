@@ -93,7 +93,7 @@ public class TdsProviderTests : IAsyncLifetime
         Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
     }
 
-    // The wire is an api-token surface, so it must reach only the projected author tables, never the storage schema behind them: _users holds password hashes and _settings the jwt signing key. A direct read of the main schema is refused by the connection authorizer.
+    // The wire is an api-token surface, it must reach only the projected author tables, never the storage schema behind them: _users stores password hashes and _settings the jwt signing key. A direct read of the main schema is refused by the connection authorizer.
     [Theory]
     [InlineData("SELECT authsigningkey FROM _settings")]
     [InlineData("SELECT passwordhash FROM _users")]
@@ -139,7 +139,7 @@ public class TdsProviderTests : IAsyncLifetime
         Assert.Single(rows);
     }
 
-    // the author's tables are rows in _tables, not sqlite tables, so a browser only finds them if the catalog reports them
+    // the author's tables are rows in _tables, not sqlite tables, a browser only finds them if the catalog reports them
     [Theory]
     [InlineData("SELECT name FROM sys.tables")]
     [InlineData("SELECT name FROM sys.objects WHERE type = 'U '")]
@@ -151,7 +151,7 @@ public class TdsProviderTests : IAsyncLifetime
         Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
     }
 
-    // sqlite's tokenizer rejects @, so these are substituted before the statement is parsed rather than registered as functions
+    // sqlite's tokenizer rejects @, these are substituted before the statement is parsed instead of registered as functions
     [Theory]
     [InlineData("SELECT @@version", "Microsoft SQL Server 2019 - 15.0.0 (Baseport)")]
     [InlineData("SELECT @@SERVERNAME", "baseport")]

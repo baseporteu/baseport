@@ -9,7 +9,7 @@ public sealed record RecordEvent(string Action, string TableId, string RecordId,
 // Broadcast to live subscribers.
 public static class RecordEvents
 {
-    // In process, so a subscriber only sees writes from its own instance. See "Single node, on purpose" in AGENTS.md.
+    // In process, a subscriber only sees writes from its own instance. See "Single node, on purpose" in AGENTS.md.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Channel<RecordEvent>, byte> Subscribers = new();
 
     // DropOldest, because one client on hotel wifi must not hold events for everyone.
@@ -38,7 +38,7 @@ public static class RecordEvents
 // The one choke point every record write passes through, whichever endpoint made it.
 public sealed class RecordChangeInterceptor : SaveChangesInterceptor
 {
-    // Keyed by context: the interceptor is a singleton shared by the whole DbContext pool, so a field would let two concurrent saves overwrite each other's pending list.
+    // Keyed by context: the interceptor is a singleton shared by the whole DbContext pool, a field would let two concurrent saves overwrite each other's pending list.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<DbContext, List<RecordEvent>> _pending = new();
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
@@ -91,7 +91,7 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor
             };
             if (action is null) continue;
 
-            // Stamped here rather than in an endpoint for the same reason the events are: this is the one place every write passes. Assigning through the entry marks the column modified, which a plain property set after change detection would not.
+            // Stamped here instead of in an endpoint for the same reason the events are: this is the one place every write passes. Assigning through the entry marks the column modified, which a plain property set after change detection would not.
             // An insert that never set CreatedAt would otherwise be stamped as year 1, which is worse than a timestamp a millisecond late.
             if (entry.State is EntityState.Added or EntityState.Modified)
                 entry.Property(r => r.UpdatedAt).CurrentValue =

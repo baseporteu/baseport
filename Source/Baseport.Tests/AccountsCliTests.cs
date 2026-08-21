@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
-// The three operations the console refuses on an admin account. They exist only behind shell access, so this is the only place they are reachable at all.
+// The three operations the console refuses on an admin account. They exist only behind shell access, this is the only place they are reachable at all.
 public class AccountsCliTests : IDisposable
 {
     private readonly string _directory;
@@ -59,7 +59,7 @@ public class AccountsCliTests : IDisposable
     [Fact]
     public async Task Demotion_removes_console_access_and_the_sessions_that_carried_it()
     {
-        // Two admins, so the demotion is about the role rather than about the last-admin floor.
+        // Two admins, the demotion is about the role instead of about the last-admin floor.
         await SeedAsync("root", AccountRoles.Admin);
         var jane = await SeedAsync("jane", AccountRoles.Admin);
         using (var db = Open())
@@ -77,7 +77,7 @@ public class AccountsCliTests : IDisposable
         Assert.Equal(0, await after.UserSessions.CountAsync(s => s.UserId == jane.Id, TestContext.Current.CancellationToken));
     }
 
-    // The console cannot demote at all, so if the CLI let the last admin go there would be no way back in.
+    // The console cannot demote at all, if the CLI let the last admin go there would be no way back in.
     [Fact]
     public async Task The_last_enabled_admin_cannot_be_demoted()
     {

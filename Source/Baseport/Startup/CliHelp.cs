@@ -2,7 +2,7 @@ using System.Reflection;
 
 namespace Baseport;
 
-// One shape for every command list the binary and its wrapper print, so a caller who mistypes gets the same answer wherever they were.
+// One shape for every command list the binary and its wrapper print, a caller who mistypes gets the same answer wherever they were.
 public static class CliHelp
 {
     public static string Version =>

@@ -9,15 +9,15 @@ Five steps to get a table you can read and write over HTTP. Everything else in t
 
 ## 1. Create a table
 
-Go to **Tables**, add a table and add some fields. Every field has a type, so dates are stored as dates and currency amounts as currency amounts. See [Tables and fields](/docs/tables-and-fields).
+Go to **Tables**, add a table and add some fields. Every field has a type, dates are stored as dates and currency amounts as currency amounts. See [Tables and fields](/docs/tables-and-fields).
 
 ## 2. Publish it
 
-Tables are private by default. On the table's API panel, set an **API name** and turn **API enabled** on. The API name is what appears in the URL. It is separate from the name you see in the console, so you can rename a table without breaking anything already calling it.
+Tables are private by default. On the table's API panel, set an **API name** and turn **API enabled** on. The API name is what appears in the URL. It is separate from the name you see in the console, you can rename a table without breaking anything already calling it.
 
 ## 3. Issue a token
 
-Go to **Authentication**, open an account and generate an API token, choosing an expiry date. You see the token once. Only a hash of it is stored, so there is no way to look it up later. Copy it somewhere safe.
+Go to **Authentication**, open an account and generate an API token, choosing an expiry date. You see the token once. Only a hash of it is stored, there is no way to look it up later. Copy it somewhere safe.
 
 Use a `consumer` account for this. It can hold an API token but cannot sign in to the console.
 

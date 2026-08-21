@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
-// The point of routing events through an interceptor is that no write path can skip them, so what gets pinned is that an ordinary save emits one.
+// The point of routing events through an interceptor is that no write path can skip them, what gets pinned is that an ordinary save emits one.
 public class RecordEventsTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -62,7 +62,7 @@ public class RecordEventsTests : IDisposable
         }
     }
 
-    // Modified is stamped by the same interceptor, so an endpoint that forgets it still gets it.
+    // Modified is stamped by the same interceptor, an endpoint that forgets it still gets it.
     [Fact]
     public async Task AWriteStampsModified()
     {
@@ -86,7 +86,7 @@ public class RecordEventsTests : IDisposable
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
         Assert.True(record.UpdatedAt > created);
 
-        // Read back, because a value the change tracker holds is not proof the column was written.
+        // Read back, because a value the change tracker stores is not proof the column was written.
         var stamped = record.UpdatedAt;
         _db.ChangeTracker.Clear();
         var reloaded = await _db.Records.SingleAsync(r => r.Id == record.Id, TestContext.Current.CancellationToken);
@@ -116,7 +116,7 @@ public class RecordEventsTests : IDisposable
         }
     }
 
-    // The CLIs build their own context rather than resolving one from the host, so what is pinned is that the shared factory includes the interceptor with it.
+    // The CLIs build their own context instead of resolving one from the host, what is pinned is that the shared factory includes the interceptor with it.
     [Fact]
     public async Task AContextOpenedByTheSharedFactoryStampsAndPublishes()
     {

@@ -129,7 +129,7 @@ function openAccountForm(pid) {
             checked: a.isDisabled,
             disabled: locked,
         }));
-        // Reachable for an admin too: the token routes have no admin guard, so hiding this would take away something the API still allows.
+        // Reachable for an admin too: the token routes have no admin guard, hiding this would take away something the API still allows.
         body.appendChild(apiTokenPanel(a));
     }
 
@@ -166,15 +166,15 @@ function randomPassword() {
     return [...bytes].map((b) => alphabet[b % alphabet.length]).join('').slice(0, 10 + (bytes[0] % 3));
 }
 
-// Says where the refused operations live, rather than leaving an operator to guess why those fields are dead.
+// Says where the refused operations live, instead of leaving an operator to guess why those fields are dead.
 function adminNotice(a) {
     const wrap = ui.el('div', 'token-panel');
     wrap.append(ui.el('p', 'muted', {
         // Names exactly what is greyed, and no more: the lock is on the fields that take an account over, not on the whole sheet.
-        textContent: 'This is an admin. Console access alone must not be enough to take over another operator\'s account, so the password, the role and the disabled switch are greyed out and deletion is refused; set the first two from the shell, with the commands below. The name, the address and the API token are not credentials, and are edited here as on any other account.',
+        textContent: 'This is an admin. Console access alone must not be enough to take over another operator\'s account, the password, the role and the disabled switch are greyed out and deletion is refused; set the first two from the shell, with the commands below. The name, the address and the API token are not credentials, and are edited here as on any other account.',
     }));
     const commands = ui.el('pre', 'code-block');
-    // Generated once per sheet, so the line copies as something runnable rather than a placeholder to fill in.
+    // Generated once per sheet, the line copies as something runnable instead of a placeholder to fill in.
     commands.textContent = [
         `baseport accounts password ${a.username} ${randomPassword()}`,
         `baseport accounts demote ${a.username}`,

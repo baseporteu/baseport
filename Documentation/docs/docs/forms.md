@@ -26,21 +26,21 @@ A form is either a **form** or a **list**.
 
 ## The hosted page
 
-A script tag does not put anything in the HTML a search engine sees, so every form also has its own page at `/f/{formId}`:
+A script tag does not put anything in the HTML a search engine sees, every form also has its own page at `/f/{formId}`:
 
 ```
 https://baseport.example.com/f/Kf3nQ8xR2vLm
 ```
 
-For a list, the first page of rows is included in the HTML, so you can share the link, search engines can index it, and it still works with JavaScript turned off. Once the embed loads it replaces that with the interactive version.
+For a list, the first page of rows is included in the HTML, you can share the link, search engines can index it, and it still works with JavaScript turned off. Once the embed loads it replaces that with the interactive version.
 
-The server-rendered version is intentionally basic. It shows the same columns the list is configured with, using the same code the JSON route uses, so it cannot expose a field the embed would have hidden. Custom renderers and row actions are JavaScript expressions and Baseport has no JavaScript engine, so they are left out rather than approximated.
+The server-rendered version is intentionally basic. It shows the same columns the list is configured with, using the same code the JSON route uses, it cannot expose a field the embed would have hidden. Custom renderers and row actions are JavaScript expressions and Baseport has no JavaScript engine, they are left out instead of approximated.
 
 For a submit form the page shows only the heading and description. Rendering a second set of inputs with nowhere to send them would just be a form that does nothing.
 
 ## Styling
 
-Override the CSS variables on `.baserow-embed` from your own stylesheet. The embed adds its styles once per page, so your rules only need to be more specific.
+Override the CSS variables on `.baserow-embed` from your own stylesheet. The embed adds its styles once per page, your rules only need to be more specific.
 
 ## Which sites may embed
 
@@ -55,7 +55,7 @@ Leave it empty and any site can embed them, which is usually what you want while
 
 ## Rate limits
 
-The public form routes are rate limited per client, per form, so one busy visitor does not use up everyone else's budget.
+The public form routes are rate limited per client, per form, one busy visitor does not use up everyone else's budget.
 
 | Route | Per minute |
 | --- | --- |

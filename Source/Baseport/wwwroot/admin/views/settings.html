@@ -104,7 +104,7 @@
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsPublicRegistrationEnabled'>Sign-up</label>
-                                        <p class='muted'>Allows new visitors to register accounts via <code>/auth/register</code>. This governs the password form only: a single sign-on provider with <em>Create accounts on first sign-in</em> turned on still provisions, because it trusts a directory you configured rather than the open internet.</p>
+                                        <p class='muted'>Allows new visitors to register accounts via <code>/auth/register</code>. This governs the password form only: a single sign-on provider with <em>Create accounts on first sign-in</em> turned on still provisions, because it trusts a directory you configured instead of the open internet.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsPublicRegistrationEnabled'>
@@ -115,7 +115,7 @@
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsAnonymousAuthEnabled'>Anonymous accounts</label>
-                                        <p class='muted'>Lets a visitor try your app before signing up. <code>POST /api/auth/v1/anonymous</code> returns a token pair for a throwaway account with no credential; signing up while carrying that token claims the account, so the rows already created stay theirs.</p>
+                                        <p class='muted'>Lets a visitor try your app before signing up. <code>POST /api/auth/v1/anonymous</code> returns a token pair for a throwaway account with no credential; signing up while carrying that token claims the account, the rows already created stay theirs.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsAnonymousAuthEnabled'>
@@ -250,7 +250,7 @@
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsProxyPrivateTargetsEnabled'>Allow private targets</label>
-                                        <p class='muted'>Off, a proxy may only reach public addresses. On, it may also reach localhost, your LAN and the cloud metadata endpoint, so only turn it on when the target really is on this network.</p>
+                                        <p class='muted'>Off, a proxy may only reach public addresses. On, it may also reach localhost, your LAN and the cloud metadata endpoint, only turn it on when the target really is on this network.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsProxyPrivateTargetsEnabled'>

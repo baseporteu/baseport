@@ -67,7 +67,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task A_record_carries_self_collection_and_a_link_per_reference()
+    public async Task A_record_transports_self_collection_and_a_link_per_reference()
     {
         var (orders, fields, _, customer) = await ShopAsync();
         var order = await RecordAsync(orders, new JsonObject { ["customer"] = customer.Id, ["total"] = 10 });

@@ -5,7 +5,7 @@ description: "Reference fields, modelling one to many and many to many, and expa
 
 # Relations
 
-A `reference` field holds the id of one record in another table. You pick the target table when you add the field, and the field stores that record's id as a string. That is the whole mechanism: one field, one id, one target record.
+A `reference` field stores the id of one record in another table. You pick the target table when you add the field, and the field stores that record's id as a string. That is the whole mechanism: one field, one id, one target record.
 
 Writing one means sending the id:
 
@@ -13,7 +13,7 @@ Writing one means sending the id:
 { "OrderNo": "SO-100000", "Customer": "T7mQ2xR9vLbK" }
 ```
 
-The id is checked on write. If no record with that id exists in the target table you get a `400` saying so, rather than a row pointing at nothing.
+The id is checked on write. If no record with that id exists in the target table you get a `400` saying so, instead of a row pointing at nothing.
 
 ## Modelling the usual shapes
 
@@ -51,7 +51,7 @@ A reference only appears in `links` if the target table is published and allows 
 
 ## Expanding a reference
 
-Follow the reference in the same request with `$expand`, so you do not need a second call:
+Follow the reference in the same request with `$expand`, you do not need a second call:
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
@@ -68,7 +68,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 }
 ```
 
-Separate several field names with commas. If you name something that is not an expandable reference field you get a `400`, so a typo is reported rather than silently ignored.
+Separate several field names with commas. If you name something that is not an expandable reference field you get a `400`, a typo is reported instead of silently ignored.
 
 Expansion goes one level deep. To follow a chain, expand at each step or read the next record directly. This works the same way when you read a single record.
 

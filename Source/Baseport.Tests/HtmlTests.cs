@@ -7,7 +7,7 @@ namespace Baseport.Tests;
 public class HtmlTests
 {
     [Fact]
-    public void A_delete_button_carries_the_identifier_alongside_the_id()
+    public void A_delete_button_transports_the_identifier_alongside_the_id()
     {
         var html = Html.Button("Delete", "deleteRecord", "abc123", "ACME-001");
 
@@ -19,7 +19,7 @@ public class HtmlTests
     {
         var html = Html.Button("Delete", "deleteRecord", "abc123", "'); alert(1); //");
 
-        // What the browser hands the JS parser once the entities are decoded: the injected quote is escaped, so the payload never leaves the string literal.
+        // What the browser hands the JS parser once the entities are decoded: the injected quote is escaped, the payload never leaves the string literal.
         var decoded = html.Replace("&#39;", "'").Replace("&quot;", "\"");
         Assert.Contains("""deleteRecord('abc123', '\'); alert(1); //')""", decoded);
     }

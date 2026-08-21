@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Baseport.Tests;
 
-// A request that enqueues looks identical whether the entry lands or not, so the landing is what gets pinned.
+// A request that enqueues looks identical whether the entry lands or not, the landing is what gets pinned.
 public class AuditLogWriterTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -42,7 +42,7 @@ public class AuditLogWriterTests : IDisposable
                 UserId = "user-1"
             });
 
-        // Shutdown is the interesting moment: the loop's token is cancelled here, so anything still queued is lost unless StopAsync drains it first.
+        // Shutdown is the interesting moment: the loop's token is cancelled here, anything still queued is lost unless StopAsync drains it first.
         await writer.StopAsync(TestContext.Current.CancellationToken);
 
         using var scope = _services.CreateScope();
@@ -58,7 +58,7 @@ public class AuditLogWriterTests : IDisposable
     {
         var writer = new AuditLogWriter(_services.GetRequiredService<IServiceScopeFactory>());
 
-        // Never started, so nothing drains the queue before StopAsync does, and 300 is past the 128 one drain pass takes.
+        // Never started, nothing drains the queue before StopAsync does, and 300 is past the 128 one drain pass takes.
         for (var i = 0; i < 300; i++)
             writer.Enqueue(new AuditLog
             {
@@ -82,7 +82,7 @@ public class AuditLogWriterTests : IDisposable
     {
         var writer = new AuditLogWriter(_services.GetRequiredService<IServiceScopeFactory>());
 
-        // Not started, so nothing drains: every write goes at the 4096 ceiling.
+        // Not started, nothing drains: every write goes at the 4096 ceiling.
         for (var i = 0; i < 5000; i++)
             writer.Enqueue(new AuditLog { Id = Ids.NewShortId(12), CreatedAt = DateTime.UtcNow, Method = "POST", Path = "/api/x", Status = 200 });
 

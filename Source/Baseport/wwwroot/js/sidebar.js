@@ -15,7 +15,7 @@ const OBJECT_ICONS = {
     table: SECTION_ICONS.tables,
     form: SECTION_ICONS.forms,
     // Deliberately not a bordered rect like the form icon: with a text badge gone, this is the only
-    // thing telling a form and a list apart at a glance, so it needs its own silhouette, not a near-twin.
+    // thing telling a form and a list apart at a glance, it needs its own silhouette, not a near-twin.
     list: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><circle cx='4' cy='6' r='1' fill='currentColor' stroke='none'/><circle cx='4' cy='12' r='1' fill='currentColor' stroke='none'/><circle cx='4' cy='18' r='1' fill='currentColor' stroke='none'/><path d='M9 6h11M9 12h11M9 18h11'/></svg>",
     query: SECTION_ICONS.sql,
 };
@@ -146,7 +146,7 @@ function renderSidebar(section) {
     const term = (subbarFilters[section] || '').trim().toLowerCase();
     const matching = term ? rest.filter((i) => i.label.toLowerCase().includes(term)) : rest;
 
-    // Every section that names a group is a list of objects an author accumulates, so all three get the same box rather than one of them growing it at eight items and the others never.
+    // Every section that names a group is a list of objects an author accumulates, all three get the same box instead of one of them growing it at eight items and the others never.
     if (spec.group && rest.length) bar.append(subbarFilter(section, spec.group));
 
     matching.forEach((item) => bar.append(sidebarItem(item)));
@@ -169,7 +169,7 @@ function subbarFilter(section, group) {
     input.oninput = () => {
         subbarFilters[section] = input.value;
         renderSidebar(section);
-        // Repainting the bar replaces the field, so the caret has to be put back.
+        // Repainting the bar replaces the field, the caret has to be put back.
         const next = document.querySelector('.subbar-filter input');
         if (next) {
             next.focus();

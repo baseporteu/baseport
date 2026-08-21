@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
-// The console's result grid is rendered on the server now, so ReadAsync is what both the JSON endpoint and the fragment endpoint answer from.
+// The console's result grid is rendered on the server now, ReadAsync is what both the JSON endpoint and the fragment endpoint answer from.
 public class SqlEngineTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -59,7 +59,7 @@ public class SqlEngineTests : IDisposable
         Assert.Equal("2", Assert.Single(storage.Rows)[0]);
     }
 
-    // A table name is not validated against sqlite's own reserved prefix, and sqlite refuses to create any object under it. Projecting one threw while the catalog was being built, so every console query answered "object name reserved for internal use" instead of its own result. The name is skipped like any other name the projection cannot carry.
+    // A table name is not validated against sqlite's own reserved prefix, and sqlite refuses to create any object under it. Projecting one threw while the catalog was being built, every console query answered "object name reserved for internal use" instead of its own result. The name is skipped like any other name the projection cannot carry.
     [Fact]
     public async Task A_table_named_after_sqlites_own_prefix_does_not_break_the_console()
     {
@@ -134,7 +134,7 @@ public class SqlEngineTests : IDisposable
         }
     }
 
-    // The fragment endpoint puts these values straight into markup the browser assigns with innerHTML, so a stored angle bracket must not survive as one.
+    // The fragment endpoint puts these values straight into markup the browser assigns with innerHTML, a stored angle bracket must not survive as one.
     [Fact]
     public void A_value_is_escaped_before_it_reaches_the_grid()
     {

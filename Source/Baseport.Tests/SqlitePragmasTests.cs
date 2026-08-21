@@ -23,7 +23,7 @@ public class SqlitePragmasTests
 
             // 1 is NORMAL.
             Assert.Equal(1L, await ReadAsync(db, "PRAGMA synchronous"));
-            // Without a timeout a second writer gets SQLITE_BUSY immediately rather than waiting, which is an error the caller sees.
+            // Without a timeout a second writer gets SQLITE_BUSY immediately instead of waiting, which is an error the caller sees.
             Assert.Equal(5000L, await ReadAsync(db, "PRAGMA busy_timeout"));
 
             await db.Database.CloseConnectionAsync();
@@ -46,7 +46,7 @@ public class SqlitePragmasTests
 
             await SchemaBootstrap.ApplyAsync(db);
 
-            // Recorded in the database header, so a fresh connection sees it too.
+            // Recorded in the database header, a fresh connection sees it too.
             await using var fresh = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
                 .UseSqlite($"Data Source={path}").Options);
             await fresh.Database.OpenConnectionAsync(TestContext.Current.CancellationToken);

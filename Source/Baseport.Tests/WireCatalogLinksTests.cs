@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
-// A reference field is a relationship. The catalog used to report none, so every client that reads keys (Power BI, Metabase, DBeaver) drew the tables side by side with nothing joining them.
+// A reference field is a relationship. The catalog used to report none, every client that reads keys (Power BI, Metabase, DBeaver) drew the tables side by side with nothing joining them.
 public class WireCatalogLinksTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -86,7 +86,7 @@ public class WireCatalogLinksTests : IDisposable
         Assert.Equal(new[] { "Orders", "Customer", "Customers" }, Assert.Single(result.Rows));
     }
 
-    // An unpublished target is not in the catalog, so a key pointing at it would name a table the client cannot select from.
+    // An unpublished target is not in the catalog, a key pointing at it would name a table the client cannot select from.
     [Fact]
     public async Task A_reference_to_an_unpublished_table_yields_no_key()
     {

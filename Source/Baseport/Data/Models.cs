@@ -202,7 +202,7 @@ public class UserAccount
     public bool MustChangePassword { get; set; } = false;
     public DateTime? LastLoginAt { get; set; }
 
-    // A throwaway account with no credential of any kind. It is claimed by setting one, and swept when it is abandoned. Stored rather than inferred from an empty PasswordHash, because an OIDC account and a half-created one have no password either and neither is disposable.
+    // A throwaway account with no credential of any kind. It is claimed by setting one, and swept when it is abandoned. Stored instead of inferred from an empty PasswordHash, because an OIDC account and a half-created one have no password either and neither is disposable.
     public bool IsAnonymous { get; set; } = false;
 
     // The identity provider this account signs in through, and the subject it claims there. The pair is what a sign-in matches on: a username is reassignable at the provider, a subject is not.
@@ -215,7 +215,7 @@ public class OidcProvider
 {
     public string Id { get; set; } = "";
 
-    // Url-safe key that appears in the callback path, so the redirect URI registered at the provider survives a rename of the display label.
+    // Url-safe key that appears in the callback path, the redirect URI registered at the provider survives a rename of the display label.
     public string Slug { get; set; } = "";
     public string Name { get; set; } = ""; // Button label on the sign-in screens.
     public string Authority { get; set; } = ""; // Issuer URL; discovery is read from {Authority}/.well-known/openid-configuration.
@@ -231,7 +231,7 @@ public class OidcProvider
     public bool ConsoleEnabled { get; set; } = false; // Offered at /_/auth.
     public bool PublicEnabled { get; set; } = false; // Offered at /auth/login.
 
-    // Off means an unknown subject is refused rather than provisioned: the instance is then no more open than its account list.
+    // Off means an unknown subject is refused instead of provisioned: the instance is then no more open than its account list.
     public bool CreateAccounts { get; set; } = false;
 
     public int Position { get; set; }
@@ -260,7 +260,7 @@ public class SavedQuery
     // A saved query that includes a cron expression is the operator's own scheduled task, run by the same scheduler as the maintenance jobs. Empty is a query somebody runs by hand.
     public string Schedule { get; set; } = "";
 
-    // Paused rather than unscheduled: the cron survives so the operator does not have to write it again.
+    // Paused instead of unscheduled: the cron survives so the operator does not have to write it again.
     public bool ScheduleEnabled { get; set; } = false;
 
     // Where the result is posted after a scheduled run. Empty records the row count on the query instead, which is a report an operator reads in the console.
@@ -292,10 +292,10 @@ public class AppSettings
     // Self sign-up at /auth/register. Off until an operator opens it; an admin can still create user accounts from the console.
     public bool PublicRegistrationEnabled { get; set; } = false;
 
-    // Throwaway accounts at /api/auth/v1/anonymous, so a visitor can carry data before deciding to sign up. Off by default: it lets an unauthenticated caller create rows in _users.
+    // Throwaway accounts at /api/auth/v1/anonymous, a visitor can carry data before deciding to sign up. Off by default: it lets an unauthenticated caller create rows in _users.
     public bool AnonymousAuthEnabled { get; set; } = false;
 
-    // Abandoned anonymous accounts are swept after this many days. Zero keeps them forever. Rows they created stay: a record is owned by a value in its own json, not by a foreign key, so nothing here can find them.
+    // Abandoned anonymous accounts are swept after this many days. Zero keeps them forever. Rows they created stay: a record is owned by a value in its own json, not by a foreign key, nothing here can find them.
     public int AnonymousRetentionDays { get; set; } = 30;
 
     // iss and aud on issued JWTs. Changing it invalidates every token already handed out.

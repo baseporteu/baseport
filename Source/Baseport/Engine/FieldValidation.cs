@@ -7,7 +7,7 @@ namespace Baseport;
 
 public static class FieldValidation
 {
-    // Author-written patterns run on an anonymous request path, so every match is bounded.
+    // Author-written patterns run on an anonymous request path, every match is bounded.
     private static readonly TimeSpan PatternTimeout = TimeSpan.FromMilliseconds(100);
     private const string PatternProbe = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!";
 
@@ -16,7 +16,7 @@ public static class FieldValidation
     private static readonly Regex SlugPattern = new(@"^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.Compiled);
 
     // A field name is a JSON key, a bare identifier in JsExpr expressions (data.Name / data["Name"]), and an OpenAPI property
-    // name all at once, so it is restricted the same way an identifier is, not left free-form like a label.
+    // name all at once, it is restricted the same way an identifier is, not left free-form like a label.
     private static readonly Regex FieldNamePattern = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
 
     // mirrors RefTableId's { "tableId": ... } shape
@@ -44,13 +44,19 @@ public static class FieldValidation
     }
 
     private static string Str(JsonNode? v) => v is JsonValue jv && jv.GetValueKind() == JsonValueKind.String ? jv.GetValue<string>() : "";
-    private static bool TryNum(JsonNode? v, out double d)
+    // Deliberately not NumberStyles.Any, which allows thousands separators: invariant parsing then reads the European "1234,56" as 123456 and "1.234,56" as 0, silently, on a value a person typed correctly. A separator is ambiguous without knowing the writer's locale, and this codebase never knows it, a value carrying one is refused by name instead of guessed at.
+    public const NumberStyles Numeric = NumberStyles.Float;
+
+    // How this codebase reads a number out of JSON, wherever one is read: validation and expression evaluation must agree on what a number is and on what counts as one.
+    public static bool TryNumber(JsonNode? v, out double d)
     {
         d = 0;
         if (v is JsonValue jv)
         {
-            if (jv.GetValueKind() == JsonValueKind.Number) { d = jv.GetValue<double>(); return true; }
-            if (jv.GetValueKind() == JsonValueKind.String) return double.TryParse(jv.GetValue<string>(), NumberStyles.Any, CultureInfo.InvariantCulture, out d);
+            // GetValue<double> throws on a node whose backing value is an int or a decimal rather than a double, and a validator at the trust boundary must return false, never throw, for a value it was handed.
+            if (jv.GetValueKind() == JsonValueKind.Number)
+                return jv.TryGetValue(out d) || double.TryParse(jv.ToJsonString(), Numeric, CultureInfo.InvariantCulture, out d);
+            if (jv.GetValueKind() == JsonValueKind.String) return double.TryParse(jv.GetValue<string>(), Numeric, CultureInfo.InvariantCulture, out d);
         }
         return false;
     }
@@ -131,7 +137,7 @@ public static class FieldValidation
         }
         if (type.Computed || f.IsHidden) return errs;
 
-        // Without this, Str()/TryNum() collapse an object or array to "" or 0 and every check below passes.
+        // Without this, Str()/TryNumber() collapse an object or array to "" or 0 and every check below passes.
         var shapeMatches = type.Shape switch
         {
             FieldShape.Object => v is JsonObject,
@@ -154,7 +160,7 @@ public static class FieldValidation
         {
             bool notChecked =
                 (v is JsonValue bj0 && bj0.GetValueKind() == JsonValueKind.False) ||
-                (TryNum(v, out var bdn) && bdn == 0) ||
+                (TryNumber(v, out var bdn) && bdn == 0) ||
                 Str(v).ToLowerInvariant() is "false";
             if (notChecked)
             {
@@ -167,14 +173,14 @@ public static class FieldValidation
         {
             case "number":
             case "currency":
-                if (!TryNum(v, out var nv)) errs.Add($"{f.Name} must be a number.");
+                if (!TryNumber(v, out var nv)) errs.Add($"{f.Name} must be a number.");
                 // Min/Max are bounds on the value for numerics, and on the length for text, the same two columns serve both so a field never needs four nullable limits.
                 else if (f.Min is { } lo && nv < lo) errs.Add($"{f.Name} must be at least {lo.ToString("0.##", CultureInfo.InvariantCulture)}.");
                 else if (f.Max is { } hi && nv > hi) errs.Add($"{f.Name} must be at most {hi.ToString("0.##", CultureInfo.InvariantCulture)}.");
                 break;
             case "boolean":
                 if (v is JsonValue bj && (bj.GetValueKind() == JsonValueKind.True || bj.GetValueKind() == JsonValueKind.False)) break;
-                if (TryNum(v, out var bd) && (bd == 0 || bd == 1)) break;
+                if (TryNumber(v, out var bd) && (bd == 0 || bd == 1)) break;
                 var bs = Str(v).ToLowerInvariant();
                 if (bs is not ("true" or "false")) errs.Add($"{f.Name} must be true or false.");
                 break;
@@ -276,7 +282,7 @@ public static class FieldValidation
             }
             catch (RegexMatchTimeoutException)
             {
-                // Anonymous visitors reach this, so an author's runaway pattern is a denial-of-service budget.
+                // Anonymous visitors reach this, an author's runaway pattern is a denial-of-service budget.
                 errs.Add($"{f.Name} could not be validated.");
             }
             catch (ArgumentException)
@@ -287,7 +293,7 @@ public static class FieldValidation
         return errs;
     }
 
-    // Members are fields, so they carry the same rules.
+    // Members are fields, they carry the same rules.
     private static List<string> ValidateMembers(
         FieldDefinition owner, IReadOnlyList<FieldDefinition> members, JsonObject obj,
         Func<FieldDefinition, string, bool> recordExists, int depth)
@@ -346,7 +352,7 @@ public static class FieldValidation
                 errs.Add("Currency must be a three-letter ISO 4217 code, for example EUR.");
         }
 
-        // A visitor never holds a server-computed value, so it can neither identify a record nor be enforced unique.
+        // A visitor never stores a server-computed value, it can neither identify a record nor be enforced unique.
         if (type.Computed || t == "file")
         {
             if (f.IsIdentifier) errs.Add($"A {t} field cannot be a lookup identifier.");
@@ -541,7 +547,7 @@ public static class FieldValidation
             }
             else if (t == "container")
             {
-                // Capped at one level: a container holds ordinary rows, not other containers or blocks.
+                // Capped at one level: a container stores ordinary rows, not other containers or blocks.
                 if (!row.TryGetProperty("rows", out var nested) || nested.ValueKind != JsonValueKind.Array || nested.GetArrayLength() == 0)
                 {
                     errs.Add($"Row {rowIdx + 1}: a container needs at least one nested row.");
@@ -598,7 +604,7 @@ public static class FieldValidation
         else if (table.Name.Length > 64) errs.Add("Table name is too long (max 64 characters).");
         if (table.Description.Length > 512) errs.Add("Table description is too long (max 512 characters).");
 
-        // The published name is part of a URL and of generated client code, so it is restricted to what is safe in both.
+        // The published name is part of a URL and of generated client code, it is restricted to what is safe in both.
         if (!string.IsNullOrWhiteSpace(table.ApiName))
         {
             table.ApiName = table.ApiName.Trim().ToLowerInvariant();
@@ -619,7 +625,7 @@ public static class FieldValidation
         if (table.ApiNamespace.Length > 64) errs.Add("The namespace is too long (max 64 characters).");
         if (table.ApiDocumentation.Length > 8000) errs.Add("The documentation is too long (max 8000 characters).");
 
-        // Normalized rather than rejected: the console sends switches, and an unknown method can only come from a hand-written request.
+        // Normalized instead of rejected: the console sends switches, and an unknown method can only come from a hand-written request.
         table.ApiMethods = ApiMethods.Serialize(ApiMethods.Parse(table.ApiMethods));
         if (table.ApiEnabled && table.ApiMethods.Length == 0)
             errs.Add("A published table needs at least one HTTP method enabled.");
@@ -766,7 +772,7 @@ public static class FieldValidation
                         errs.Add($"List page size must be a whole number between 0 and {QueryEngine.MaxPageSize}.");
                 }
 
-                // Column renderers are JS expressions evaluated by the same engine as calculated fields, so they are validated the same way and never reach the browser unchecked.
+                // Column renderers are JS expressions evaluated by the same engine as calculated fields, they are validated the same way and never reach the browser unchecked.
                 if (config.TryGetProperty("renderers", out var rend) && rend.ValueKind == JsonValueKind.Object)
                     foreach (var r in rend.EnumerateObject())
                     {

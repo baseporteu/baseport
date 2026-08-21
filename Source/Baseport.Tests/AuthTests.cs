@@ -265,7 +265,7 @@ public class AuthTests
     [InlineData("plain text", "plain text")]
     public void Fragment_values_are_escaped_before_they_reach_the_dom(string raw, string expected)
     {
-        // These fragments are assigned with innerHTML, so anything unescaped here is stored XSS: a table name and a record value are both supplied by someone other than the developer.
+        // These fragments are assigned with innerHTML, anything unescaped here is stored XSS: a table name and a record value are both supplied by someone other than the developer.
         Assert.Equal(expected, Html.Text(raw));
     }
 
@@ -276,7 +276,7 @@ public class AuthTests
     [InlineData("line\nbreak", "line\\nbreak")]
     public void Ids_embedded_in_an_onclick_are_escaped_for_a_js_string(string raw, string expected)
     {
-        // An id lands inside both an attribute and a JS string literal, so it has to survive both without terminating either.
+        // An id lands inside both an attribute and a JS string literal, it has to survive both without terminating either.
         Assert.Equal(expected, Html.JsString(raw));
     }
 

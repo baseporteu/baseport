@@ -6,7 +6,7 @@ namespace Baseport;
 // Trust-boundary validation for admin accounts.
 public static class AccountValidation
 {
-    // Deliberately narrow: a username appears in logs and audit paths, so it is restricted to characters that cannot be confused or used to forge a line.
+    // Deliberately narrow: a username appears in logs and audit paths, it is restricted to characters that cannot be confused or used to forge a line.
     private static readonly Regex UsernamePattern = new(@"^[A-Za-z0-9._-]+$", RegexOptions.Compiled);
 
     public const int UsernameMin = 3;
@@ -43,7 +43,7 @@ public static class AccountValidation
         return errors;
     }
 
-    // MailAddress is the framework's own parser, so it is right about the cases a hand-rolled regex gets wrong.
+    // MailAddress is the framework's own parser, it is right about the cases a hand-rolled regex gets wrong.
     public static bool IsEmail(string value)
     {
         if (value.Any(char.IsWhiteSpace)) return false;

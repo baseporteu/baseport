@@ -8,7 +8,7 @@ description: "What Baseport is, and what you get once it is running"
 Baseport is a single-executable backend powered by an embedded SQLite database. It eliminates the need for a separate database server. You define tables through the admin console, and every published table automatically receives a REST API, real-time updates via Server-Sent Events (SSE), and optional public forms.
 
 :::warning
-Baseport is pre-alpha. The database format and the API surface both still move between commits, so keep production data out of it for now.
+Baseport is pre-alpha. The database format and the API surface both still move between commits, keep production data out of it for now.
 :::
 
 ## Install and start it
@@ -40,7 +40,7 @@ Releases ship `linux-x64` and `win-x64` builds.
 
 The first start prints an admin username and a one-time password. You can use `baseport logs` to retrieve both the randomly generated username and password. Contineu to `http://localhost:5000/_/admin` and sign in. You'll be forced to set a new password.
 
-`--urls http://localhost:5000` listens on loopback only, so nothing else on your network can reach it. Running on a server? Then you may want to reach from elsewhere, bind to every interface instead using `0.0.0.0` as your hostname.
+`--urls http://localhost:5000` listens on loopback only, nothing else on your network can reach it. Running on a server? Then you may want to reach from elsewhere, bind to every interface instead using `0.0.0.0` as your hostname.
 
 Baseport speaks plain HTTP. For anything reachable beyond your own machine, put it behind a reverse proxy that terminates TLS. See [Going to production](/docs/going-to-production).
 
@@ -69,7 +69,7 @@ BASEPORT_DIR=/srv/baseport BASEPORT_BIN=/usr/local/bin \
   curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.sh | sudo bash
 ```
 
-The wrapper remembers that directory, so `baseport update` returns to it rather than falling back to the default.
+The wrapper remembers that directory, `baseport update` returns to it instead of falling back to the default.
 
 For Docker environments, define a shell function in your `~/.bashrc` or `~/.zshrc` to route commands directly to your container setup:
 

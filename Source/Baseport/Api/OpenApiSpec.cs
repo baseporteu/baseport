@@ -4,7 +4,7 @@ namespace Baseport;
 
 public static class OpenApiSpec
 {
-    // One tag per exposed table, so the document is navigable in any spec viewer.
+    // One tag per exposed table, the document is navigable in any spec viewer.
     public static JsonArray BuildTags(List<TableDefinition> tables) =>
         new(tables.Select(t =>
         {
@@ -72,7 +72,7 @@ public static class OpenApiSpec
         {
             var name = DisplayName(t);
             var allowed = ApiMethods.Parse(t.ApiMethods);
-            // A JsonNode may have only one parent, and this schema is referenced by create, update and replace, so each use needs its own instance.
+            // A JsonNode may have only one parent, and this schema is referenced by create, update and replace, each use needs its own instance.
             JsonObject TableRef() => new() { ["$ref"] = $"#/components/schemas/{SchemaName(t)}" };
 
             var list = new JsonObject();
@@ -123,7 +123,7 @@ public static class OpenApiSpec
             if (list.Count > 0) paths[$"/api/v1/{t.ApiName}/records"] = list;
             if (item.Count > 0) paths[$"/api/v1/{t.ApiName}/records/{{recordId}}"] = item;
 
-            // The stream is a read, so it rides on the GET switch.
+            // The stream is a read, it rides on the GET switch.
             if (allowed.Contains("GET") && !t.IsProxy)
             {
                 paths[$"/api/v1/{t.ApiName}/subscribe"] = new JsonObject
@@ -164,11 +164,11 @@ public static class OpenApiSpec
                 ["required"] = required
             };
         }
-        // Every non-2xx response the API returns speaks this one shape, so one registered schema keeps the error contract consistent and referenceable.
+        // Every non-2xx response the API returns speaks this one shape, one registered schema keeps the error contract consistent and referenceable.
         schemas["Error"] = new JsonObject
         {
             ["type"] = "object",
-            ["description"] = "Every error response, whatever its status code. On a 400 validation failure, `invalid` names the storage field each error belongs to, so a client can paint exactly the offending inputs.",
+            ["description"] = "Applies to all error responses regardless of status code. On a 400 validation error, the `invalid` field maps each specific issue to its target form field.",
             ["properties"] = new JsonObject
             {
                 ["errors"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
@@ -325,7 +325,7 @@ public static class OpenApiSpec
         return responses;
     }
 
-    // OpenAPI 3.2's itemSchema: the response is an unbounded text/event-stream, so what is described is one event, not the body.
+    // OpenAPI 3.2's itemSchema: the response is an unbounded text/event-stream, what is described is one event, not the body.
     private static JsonObject SseResp() => new()
     {
         ["description"] = "An open stream. One event per record change until the client disconnects.",

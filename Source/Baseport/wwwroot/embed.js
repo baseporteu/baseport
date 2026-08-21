@@ -190,7 +190,7 @@
     container.className = 'baserow-embed';
     script.parentNode.insertBefore(container, script.nextSibling);
 
-    // Feedback is a toast here too, so a host page's layout is never disturbed by a message box appearing inside the form.
+    // Feedback is a toast here too, a host page's layout is never disturbed by a message box appearing inside the form.
     function toastHost() {
         let host = document.querySelector('.baserow-toasts');
         if (!host) {
@@ -208,7 +208,7 @@
         const text = Array.isArray(message) ? message.join(' ') : String(message || '');
         if (!text.trim()) return;
         const host = toastHost();
-        // The oldest sits at the top, so trimming the first child keeps the freshest eight.
+        // The oldest sits at the top, trimming the first child keeps the freshest eight.
         while (host.children.length >= 8) host.firstChild.remove();
         const el = document.createElement('div');
         el.className = 'baserow-toast baserow-toast-' + (kind || 'info');
@@ -219,7 +219,7 @@
         setTimeout(() => el.remove(), kind === 'error' ? 8000 : 4500);
     }
 
-    // navigator.clipboard is only offered on secure contexts, so a plain-http host falls back to a hidden textarea and execCommand, which still works there.
+    // navigator.clipboard is only offered on secure contexts, a plain-http host falls back to a hidden textarea and execCommand, which still works there.
     function copyToast(el, text) {
         const flash = () => {
             const original = el.textContent;
@@ -262,7 +262,7 @@
             tableSchema = data.table;
             formIsReadOnly = !!data.form.isReadOnly;
             formCurrency = data.currency || 'EUR';
-            // One script tag, three behaviours; the server decides the kind, and both actions may be on, so both render: one RMA form can look an existing case up and raise a new one.
+            // One script tag, three behaviours; the server decides the kind, and both actions may be on, both render: one RMA form can look an existing case up and raise a new one.
             if (data.form.kind === 'list') {
                 renderList(data.form, data.table, container);
             } else {
@@ -568,7 +568,7 @@
                 data.columns.forEach((c) => {
                     const td = document.createElement('td');
                     const raw = row.data ? row.data[c.name] : null;
-                    // A render expression emits markup on purpose, so it cannot be text. It is author-written, and this runs on the customer's page.
+                    // A render expression emits markup on purpose, it cannot be text. It is author-written, and this runs on the customer's page.
                     if (c.render) setSafeHtml(td, renderCell(c.render, row.data));
                     else if (c.dataType === 'currency' && raw !== null && raw !== undefined && raw !== '') td.innerText = fmtCurrency(raw, c.currency);
                     else td.innerText = displayValue(raw);
@@ -757,7 +757,7 @@
                         formEl.reset();
                         triggerReactiveUpdate();
                     } else {
-                        // The server names every field that failed alongside its message, so the same inputs that errored on submit are painted red immediately.
+                        // The server names every field that failed alongside its message, the same inputs that errored on submit are painted red immediately.
                         markInvalid(res.invalid || []);
                         toast(res && res.errors && res.errors.length ? res.errors : ['Submit failed. Please try again.'], 'error');
                     }
@@ -1193,7 +1193,7 @@
         hidden.type = 'hidden';
         hidden.dataset.name = field.name;
 
-        // a single chosen value renders as a removable chip, not editable text: there is only ever one reference, so there
+        // a single chosen value renders as a removable chip, not editable text: there is only ever one reference, there
         // is nothing to reselect until the current pick is explicitly cleared
         const chip = document.createElement('div');
         chip.className = 'baserow-combobox-chip';
@@ -1266,7 +1266,7 @@
                 rows.forEach((r) => {
                     const li = document.createElement('li');
                     li.innerText = r.label;
-                    // mousedown, not click: it fires before the search input's blur, so the list is still open to read from.
+                    // mousedown, not click: it fires before the search input's blur, the list is still open to read from.
                     li.addEventListener('mousedown', (e) => {
                         e.preventDefault();
                         selectOption(r.id, r.label);
@@ -1404,7 +1404,7 @@
         }
     }
 
-    // Intl places the symbol where locale and currency demand, so amounts read correctly.
+    // Intl places the symbol where locale and currency demand, amounts read correctly.
     function fmtCurrency(n, code) {
         const num = Number(n);
         if (isNaN(num)) return '';
@@ -1436,7 +1436,7 @@
         });
     }
 
-    // The validation result pairs each message with the storage name of the field it belongs to, so a failing field can be painted red, not just complained about.
+    // The validation result pairs each message with the storage name of the field it belongs to, a failing field can be painted red, not just complained about.
     function markInvalid(names) {
         (names || []).forEach((name) => {
             formEl.querySelectorAll('input, select, textarea').forEach((el) => {

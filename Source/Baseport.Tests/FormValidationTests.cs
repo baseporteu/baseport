@@ -167,7 +167,7 @@ public class FormValidationTests
     [Fact]
     public void A_catastrophic_pattern_is_refused_at_save_time()
     {
-        // (a+)+$ compiles fine and then pegs a core on every anonymous submit, so the author has to hear about it, not the visitor.
+        // (a+)+$ compiles fine and then pegs a core on every anonymous submit, the author has to hear about it, not the visitor.
         var field = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Code", DataType = "text", Pattern = "(a+)+$" };
         var errors = FieldValidation.ValidateFieldDefinition(field, Array.Empty<string>(), new[] { "Code" }, _ => true);
         Assert.Contains(errors, e => e.Contains("too long to evaluate"));
@@ -179,7 +179,7 @@ public class FormValidationTests
     [Fact]
     public void A_list_keeps_its_column_order()
     {
-        // The builder is drag-ordered, so the stored order is the display order.
+        // The builder is drag-ordered, the stored order is the display order.
         var config = @"{""columns"":[""Total"",""OrderNo"",""Customer""]}";
         var form = Form(FormKinds.List, config, title: "Ordered");
         Assert.Empty(FieldValidation.ValidateForm(form, Fields));

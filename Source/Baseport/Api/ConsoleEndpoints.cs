@@ -2,10 +2,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// Serves the admin console. Two jobs, both about doing work here rather than in the browser: 1.
+// Serves the admin console. Two jobs, both about doing work here instead of in the browser: 1.
 public static class ConsoleEndpoints
 {
-    // The console owns a prefix, not the site root, so hosted forms and embeds have somewhere to live and "is this admin?" is a path test.
+    // The console owns a prefix, not the site root, hosted forms and embeds have somewhere to live and "is this admin?" is a path test.
     private const string Base = "/_/admin";
 
     // The login card lives on its own page so a signed-out visitor never loads the shell, the sidebar or any console script.
@@ -69,7 +69,7 @@ public static class ConsoleEndpoints
         }
 
         ctx.Response.ContentType = "text/html; charset=utf-8";
-        // The payload is per-session, so a shared cache must never serve one user's bootstrap to another.
+        // The payload is per-session, a shared cache must never serve one user's bootstrap to another.
         ctx.Response.Headers.CacheControl = "no-store";
 
         var token = ctx.RequestAborted;
@@ -103,7 +103,7 @@ public static class ConsoleEndpoints
 
         if (user is null)
         {
-            // The sign-in screen paints its provider buttons from this, so it never waits on a round trip to find out whether there are any.
+            // The sign-in screen paints its provider buttons from this, it never waits on a round trip to find out whether there are any.
             payload = new { authenticated = false, providers = authPage ? await OidcEndpoints.OfferedAsync(db, console: true) : new List<OidcButton>() };
         }
         else if (authPage)
@@ -130,7 +130,7 @@ public static class ConsoleEndpoints
                     formCounts.FirstOrDefault(f => f.TableId == t.Id)?.Count ?? 0,
                     recordCounts.FirstOrDefault(r => r.TableId == t.Id)?.Count ?? 0)),
                 settings = new { settings.AppName, settings.Currency, settings.TimeZone },
-                // The field type picker paints from this, so the console can never offer a type the server does not know.
+                // The field type picker paints from this, the console can never offer a type the server does not know.
                 fieldTypes = FieldTypes.All.Select(t => new { t.Name, t.Label, t.Group, t.Aliases, Shape = t.Shape.ToString().ToLowerInvariant(), t.Nestable }),
                 fieldTypeGroups = FieldGroups.Order,
                 stats = new

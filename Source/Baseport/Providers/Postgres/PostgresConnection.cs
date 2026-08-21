@@ -7,7 +7,7 @@ using Baseport.Providers;
 namespace Baseport.Providers.Postgres;
 
 // one postgres wire-protocol (v3) session: startup, cleartext-password auth against an api token, then simple-query and extended-query (parse/bind/describe/execute/sync) messages answered from SqlEngine.ReadAsync
-// ponytail: no ssl, catalog emulated from WireCatalog rather than real (an object it does not cover answers empty), bound parameters inlined as literals and only in text format, results always sent in text format even if a client asks for binary
+// ponytail: no ssl, catalog emulated from WireCatalog instead of real (an object it does not cover answers empty), bound parameters inlined as literals and only in text format, results always sent in text format even if a client asks for binary
 public static class PostgresConnection
 {
     public static async Task HandleAsync(Socket socket, IServiceScopeFactory scopes, CancellationToken ct)
@@ -108,7 +108,7 @@ public static class PostgresConnection
         return await ApiAuth.ResolveByTokenAsync(db, token);
     }
 
-    // every real driver (pg8000, psycopg2, jdbc, dbeaver) wraps queries in begin/commit by default, and most also send session-configuration statements (set/reset) on connect or per query; there is nothing to commit, roll back, or configure against a read-only, always-autocommit, session-less engine, so these are accepted as no-ops instead of tripping the read-only allowlist
+    // every real driver (pg8000, psycopg2, jdbc, dbeaver) wraps queries in begin/commit by default, and most also send session-configuration statements (set/reset) on connect or per query; there is nothing to commit, roll back, or configure against a read-only, always-autocommit, session-less engine, these are accepted as no-ops instead of tripping the read-only allowlist
     private static readonly (Regex Pattern, string Tag)[] NoOpStatements =
     [
         (new Regex(@"^\s*(BEGIN|START\s+TRANSACTION)\b", RegexOptions.IgnoreCase), "BEGIN"),
@@ -119,10 +119,10 @@ public static class PostgresConnection
 
     private static string? NoOpTag(string sql) => NoOpStatements.FirstOrDefault(x => x.Pattern.IsMatch(sql)).Tag;
 
-    // WireCatalog answers the catalog objects a browser actually reads; this is the net under it, so an unemulated pg_* object still answers empty instead of aborting the client with a sqlite error
+    // WireCatalog answers the catalog objects a browser actually reads; this is the net under it, an unemulated pg_* object still answers empty instead of aborting the client with a sqlite error
     private static readonly Regex CatalogQuery = new(@"\b(FROM|JOIN)\s+(pg_catalog\.|information_schema\.|pg_\w+\b)", RegexOptions.IgnoreCase);
 
-    // pgjdbc asks for these during connection setup, before a client ever browses anything; SHOW is neither a no-op nor on SqlEngine's allowlist, so it used to come back as an error and abort dbeaver's connect
+    // pgjdbc asks for these during connection setup, before a client ever browses anything; SHOW is neither a no-op nor on SqlEngine's allowlist, it used to come back as an error and abort dbeaver's connect
     private static readonly Regex ShowStatement = new(@"^\s*SHOW\s+(?<name>[A-Za-z_][A-Za-z0-9_\s]*?)\s*;?\s*$", RegexOptions.IgnoreCase);
 
     private static readonly Dictionary<string, (string Column, string Value)> Settings = new(StringComparer.OrdinalIgnoreCase)
@@ -144,7 +144,7 @@ public static class PostgresConnection
         if (!match.Success) return null;
 
         var name = Regex.Replace(match.Groups["name"].Value.Trim(), @"\s+", " ");
-        // an unknown setting answers empty rather than erroring: a client probing one it can live without must not lose the connection over it
+        // an unknown setting answers empty instead of erroring: a client probing one it can live without must not lose the connection over it
         return Settings.TryGetValue(name, out var setting)
             ? new SqlEngine.Result([setting.Column], [[setting.Value]], false, null)
             : new SqlEngine.Result([name], [[""]], false, null);
@@ -161,7 +161,7 @@ public static class PostgresConnection
         conn.CreateFunction("pg_backend_pid", () => 0);
     }
 
-    // sqlite names a result column after the expression that produced it, so version() comes back as "version()"; postgres calls it "version", and a client reading that column by name finds nothing otherwise
+    // sqlite names a result column after the expression that produced it, version() comes back as "version()"; postgres calls it "version", and a client reading that column by name finds nothing otherwise
     private static readonly Regex ZeroArgumentCall = new(@"^(?<name>[A-Za-z_][A-Za-z0-9_]*)\(\)$");
 
     private static SqlEngine.Result NameColumnsLikePostgres(SqlEngine.Result result) =>
@@ -190,7 +190,7 @@ public static class PostgresConnection
             WireCatalog.Apply(conn, WireDialect.Postgres, userId);
         });
 
-        // the catalog covers what a browser reads; anything else under pg_catalog still answers empty rather than handing back a sqlite error
+        // the catalog covers what a browser reads; anything else under pg_catalog still answers empty instead of handing back a sqlite error
         return result.Error is not null && CatalogQuery.IsMatch(sql)
             ? new SqlEngine.Result(["?column?"], [], false, null)
             : NameColumnsLikePostgres(result);
@@ -293,7 +293,7 @@ public static class PostgresConnection
         _ => null,
     };
 
-    // The engine takes one finished statement, so a bound value becomes a literal in it. Everything here is read-only and already allowlisted, and the value is escaped on the way in.
+    // The engine takes one finished statement, a bound value becomes a literal in it. Everything here is read-only and already allowlisted, and the value is escaped on the way in.
     internal static string Inline(string sql, List<string?> values)
     {
         if (values.Count == 0) return sql;
@@ -306,7 +306,7 @@ public static class PostgresConnection
 
             var value = values[index];
             if (value is null) return "NULL";
-            // sqlite compares a number to a text column as unequal, and the catalog's oids are numbers, so a numeric parameter must not arrive quoted
+            // sqlite compares a number to a text column as unequal, and the catalog's oids are numbers, a numeric parameter must not arrive quoted
             return long.TryParse(value, out _) || double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)
                 ? value
                 : $"'{value.Replace("'", "''")}'";
@@ -316,7 +316,7 @@ public static class PostgresConnection
     // dbeaver casts all over its metadata queries ('pg_namespace'::regclass, nspname::text); sqlite has no :: operator, and the cast is noise once the value is already the right shape
     internal static string StripCasts(string sql) => Rewrite(sql, token => token.StartsWith("::", StringComparison.Ordinal) ? "" : null);
 
-    // Walks the statement outside string literals, quoted identifiers and comments, so a value that happens to contain :: or $1 is left alone.
+    // Walks the statement outside string literals, quoted identifiers and comments, a value that happens to contain :: or $1 is left alone.
     private static string Rewrite(string sql, Func<string, string?> replace)
     {
         var output = new StringBuilder(sql.Length);
@@ -458,7 +458,7 @@ public static class PostgresConnection
         if (target == 'S') statements.Remove(name); else portals.Remove(name);
     }
 
-    // reads (or, for a no-op statement, tags) the portal's outcome the first time it's touched by describe or execute, so either can come first
+    // reads (or, for a no-op statement, tags) the portal's outcome the first time it's touched by describe or execute, either can come first
     private static async Task EnsureExecutedAsync(Portal portal, IServiceScopeFactory scopes, string userId, CancellationToken ct)
     {
         if (portal.Executed) return;

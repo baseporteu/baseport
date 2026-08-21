@@ -100,7 +100,7 @@ async function bpRegister(event) {
     return false;
 }
 
-// /auth redirects here unconditionally, so a signed-in visitor would otherwise be asked to sign in again. The session may be a cookie rather than stored tokens, which is what a console sign-in leaves behind, so the server is asked when there is nothing local.
+// /auth redirects here unconditionally, a signed-in visitor would otherwise be asked to sign in again. The session may be a cookie instead of stored tokens, which is what a console sign-in leaves behind, the server is asked when there is nothing local.
 async function bpGuestOnly() {
     if (bpAuth.signedIn()) {
         location.replace('/auth/profile');

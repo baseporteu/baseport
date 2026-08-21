@@ -72,7 +72,7 @@ public static class AdminEndpoints
         {
             var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Id == pid);
             if (account == null) return Results.NotFound();
-            // Console access alone must never be enough to take another operator's account over, so on an admin the console may not touch what would: the password, the role, the disabled switch, and deletion. The name and the address are neither. Baseport sends no mail, so there is no reset path behind an address, and pillar 17 already refuses to auto-link an admin by either.
+            // Console access alone must never be enough to take another operator's account over, on an admin the console may not touch what would: the password, the role, the disabled switch, and deletion. The name and the address are neither. Baseport sends no mail, there is no reset path behind an address, and pillar 17 already refuses to auto-link an admin by either.
             var locked = account.Role == AccountRoles.Admin;
             // Validate the resulting account, not just the supplied keys: a PATCH that sets only an e-mail must still be checked against the rules.
             var nextUsername = body["username"] is JsonValue uv && uv.TryGetValue<string>(out var uname) ? uname.Trim() : account.Username;
@@ -184,7 +184,7 @@ public static class AdminEndpoints
             return Results.Ok(new { deleted = account.Id });
         });
 
-        // Rotating a token is per account: the credential belongs to the caller that uses it, so revoking one must not revoke everyone else's.
+        // Rotating a token is per account: the credential belongs to the caller that uses it, revoking one must not revoke everyone else's.
         app.MapPost("/api/_admin/accounts/{pid}/token", async (AppDbContext db, string pid, JsonObject body) =>
         {
             var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Id == pid);
@@ -204,12 +204,12 @@ public static class AdminEndpoints
             var token = Ids.NewShortId(48);
             account.ApiTokenHash = ApiAuth.HashToken(token);
             account.ApiEnabled = true;
-            // Stored to the end of the chosen day, so a token picked for "today" is not already dead.
+            // Stored to the end of the chosen day, a token picked for "today" is not already dead.
             account.ApiTokenExpiresAt = expiresAt.TimeOfDay == TimeSpan.Zero ? expiresAt.AddDays(1).AddSeconds(-1) : expiresAt;
             account.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
 
-            // The only moment the token is ever returned: only its hash is kept, so nothing can read it back afterwards.
+            // The only moment the token is ever returned: only its hash is kept, nothing can read it back afterwards.
             return Results.Ok(new { apiToken = token, expiresAt = account.ApiTokenExpiresAt });
         });
 
@@ -328,7 +328,7 @@ public static class AdminEndpoints
         {
             var settings = await db.SettingsAsync() ?? new AppSettings();
             string created;
-            // A full disk is the expected failure here, and it says what is wrong rather than arriving as a 500.
+            // A full disk is the expected failure here, and it says what is wrong instead of arriving as a 500.
             try { created = await BackupStore.CreateAsync(BackupStore.Dir(db), db, settings.BackupRetention); }
             catch (IOException ex) { return Results.BadRequest(new { errors = new[] { ex.Message } }); }
             return Results.Ok(new { created, backups = BackupStore.List(BackupStore.Dir(db)) });
@@ -428,7 +428,7 @@ public static class AdminEndpoints
             }
             if (body["allowedOrigins"] is JsonValue ov && ov.TryGetValue<string>(out var origins))
             {
-                // Stored normalised, so what an author typed and what a browser sends are compared as the same thing.
+                // Stored normalised, what an author typed and what a browser sends are compared as the same thing.
                 var parsed = AllowedOrigins.Parse(origins);
                 s.AllowedOrigins = AllowedOrigins.Serialize(parsed);
                 EmbedOrigins.Set(s.AllowedOrigins);
@@ -442,7 +442,7 @@ public static class AdminEndpoints
                 s.Currency = code;
             }
 
-            // Storage stays UTC; this is the zone clients render in, so it only has to be one an IANA-speaking client would accept.
+            // Storage stays UTC; this is the zone clients render in, it only has to be one an IANA-speaking client would accept.
             if (body["timeZone"] is JsonValue tzv && tzv.TryGetValue<string>(out var timeZone))
             {
                 var zone = (timeZone ?? "").Trim();
@@ -612,7 +612,7 @@ public static class AdminEndpoints
             return Results.Ok(new { columns = run.Columns, rows = run.Rows, truncated = run.Truncated, rowCount = run.Rows.Count });
         });
 
-        // Runs a scheduled query the way the tick would, webhook included, so an operator can prove the destination works without waiting for the cron.
+        // Runs a scheduled query the way the tick would, webhook included, an operator can prove the destination works without waiting for the cron.
         app.MapPost("/api/_admin/queries/{pid}/run", async (AppDbContext db, IHttpClientFactory http, string pid) =>
         {
             var query = await db.SavedQueries.FirstOrDefaultAsync(q => q.Id == pid);
@@ -633,7 +633,7 @@ public static class AdminEndpoints
         q.Schedule, q.ScheduleEnabled, q.WebhookUrl, q.NextRunAt, q.LastResult
     };
 
-    // Returns the message to hand back, or null. The cron and the destination are checked when the query is saved rather than when the tick reaches it, the same way an access rule is: a typo is a message in the sheet, not a failure nobody sees until tomorrow morning.
+    // Returns the message to hand back, or null. The cron and the destination are checked when the query is saved instead of when the tick reaches it, the same way an access rule is: a typo is a message in the sheet, not a failure nobody sees until tomorrow morning.
     private static string? ApplySchedule(JsonObject body, SavedQuery query, DateTime now)
     {
         if (body["schedule"] is JsonValue cv && cv.TryGetValue<string>(out var cron))
@@ -697,7 +697,7 @@ public static class AdminEndpoints
         return invalid;
     }
 
-    // An admin account is changed, deleted and demoted only with shell access, so console access alone cannot take another operator over.
+    // An admin account is changed, deleted and demoted only with shell access, console access alone cannot take another operator over.
     public const string AdminOnlyByCli = "An admin's password, role and disabled state are set with the CLI, and an admin cannot be deleted here: baseport accounts --help. The name and the address are editable.";
 
     // Nobody reaches the console once the last admin who can sign in is gone, and there is no way back in.
