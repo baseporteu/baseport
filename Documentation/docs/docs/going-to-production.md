@@ -62,7 +62,13 @@ Run it again with different options and it rewrites the unit and restarts. It re
 
 `/opt/baseport` stores the binary and the data together, because Baseport writes `baseport.db`, `log/` and `uploads/` relative to `WorkingDirectory`. Splitting the binary into `/opt` and data into `/var/lib` would need a second path the application does not have a concept of.
 
+`sudo baseport start`, `sudo baseport stop` and `sudo baseport restart` control that unit once it exists. Without sudo they ask for it themselves rather than telling you to retype the command.
+
 `baseport update` restarts the service itself when the unit runs from the directory it updated. `sudo baseport restart` does it by hand.
+
+`baseport status` prints what systemd thinks. `baseport doctor` goes wider: version, PATH, database, unit state, whether the unit runs from the directory the wrapper updates, and whether anything answers on its address.
+
+`sudo baseport uninstall` disables and removes the unit, removes the program files and the wrapper, and leaves the data. Add `--purge` to delete the directory and the `baseport` system user with it.
 
 :::warning
 `baseport update` only updates the directory the wrapper was installed with. If you installed as yourself into `~/.baseport` but your service runs from `/opt/baseport`, you will update a copy nothing is running. The installer says so when it detects this, and you can point it at the right place with `BASEPORT_DIR`.

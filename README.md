@@ -29,7 +29,7 @@ curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/ins
 iwr https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.ps1 | iex
 ```
 
-Both put a `baseport` command on your PATH, allowing you to spawn baseport with `baseport --urls http://localhost:5000` starts it, `baseport logs` follows the log, and `baseport update` upgrades it in place. Releases ship `linux-x64` and `win-x64`.
+Both put a `baseport` command on your PATH. `baseport --urls http://localhost:5000` starts it, `baseport status` says whether it is running, `baseport logs` follows the log, `baseport doctor` tells you what is wrong, `baseport update` upgrades it in place, and `baseport uninstall` removes it and keeps your data. `baseport help` lists the rest. Releases ship `linux-x64` and `win-x64`.
 
 **Docker**
 

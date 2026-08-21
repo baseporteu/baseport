@@ -52,15 +52,26 @@ The installer installs a lightweight `baseport` wrapper utility on your system P
 baseport help             # Display available CLI subcommands
 baseport accounts list    # List administrative accounts
 baseport providers status # Check active authentication provider configurations
+baseport status           # Say whether Baseport is running, and where
+baseport doctor           # Check the install and name what is wrong
 baseport logs             # View rolling log output
 baseport update           # Upgrade binary to the latest release
-sudo baseport service     # Configure or inspect the system daemon
-sudo baseport restart     # Restart the background service
+sudo baseport service     # Install the systemd service
+sudo baseport start       # Start that service
+sudo baseport stop        # Stop it
+sudo baseport restart     # Restart it
+baseport uninstall        # Remove Baseport, keeping your data
 ```
+
+Anything that needs root asks sudo for you instead of telling you to retype the command.
 
 `baseport logs` follows the rolling log files in the install directory, 200 lines back by default. Pass a number for more or less: `baseport logs 50`. Under systemd, `journalctl -u baseport` shows the same output.
 
 `baseport update` downloads the current release and replaces the binary, leaving your data alone.
+
+`baseport doctor` is the first thing to run when something is off. It prints one line per check: the version and where it lives, whether the wrapper on your PATH is this one, whether the database is there, what the service is doing, and whether anything answers on the address the service listens on. Every `warn` and `FAIL` line names the command that fixes it.
+
+`baseport uninstall` removes the service, the program files and the `baseport` command, and leaves `baseport.db`, `baseport.key`, `appsettings.json`, `uploads/`, `backups/` and `log/` where they are. `baseport uninstall --purge` deletes those too, and asks first.
 
 The installer ignores the directory you run it from. Run as yourself it installs into `~/.baseport` with the wrapper in `~/.local/bin`; run as root it uses `/opt/baseport` and `/usr/local/bin`, which is what a service needs. It prints both before downloading anything. To choose somewhere else:
 

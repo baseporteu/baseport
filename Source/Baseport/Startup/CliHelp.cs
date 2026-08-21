@@ -10,18 +10,24 @@ public static class CliHelp
          ?? "unknown").Split('+')[0];
 
     // Handled by the wrapper script the installer writes, never by the binary; listed here so both print one menu.
-    public static readonly string[] WrapperCommands = { "logs", "update", "service", "restart" };
+    public static readonly string[] WrapperCommands =
+    {
+        "logs", "update", "service", "start", "stop", "restart", "status", "doctor", "uninstall"
+    };
 
     public static readonly string[] Commands =
     {
-        "accounts",
-        "providers",
-        "logs",
-        "update",
-        "service",
-        "restart",
-        "version",
-        "help"
+        "accounts                      list, promote and repair admin accounts",
+        "providers                     turn the Postgres and TDS endpoints on or off",
+        "status                        say whether Baseport is running, and where",
+        "doctor                        check this install and name what is wrong",
+        "logs [lines]                  follow the log files",
+        "service [--urls URL]          install the systemd service (Linux, root)",
+        "start | stop | restart        control that service (Linux, root)",
+        "update                        replace this install with the latest release",
+        "uninstall [--purge]           remove Baseport, --purge deletes the data too",
+        "version                       print the version",
+        "help                          this list"
     };
 
     public static int List(string what, IEnumerable<string> commands, string? error = null)

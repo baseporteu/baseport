@@ -22,6 +22,23 @@ case "$(uname -m)" in
   *) fail "There is no Baseport build for $(uname -m). Releases ship linux-x64 and win-x64." ;;
 esac
 
+for CMD in curl tar sha256sum; do
+  command -v "$CMD" >/dev/null 2>&1 || fail "This installer needs $CMD, which is not on this machine."
+done
+
+# The install fails halfway through without this, once the download is already done and the user is already waiting.
+writable() {
+  local P="$1"
+  while [ ! -e "$P" ]; do P=$(dirname "$P"); done
+  [ -w "$P" ]
+}
+writable "$DIR" || fail "You cannot write to $DIR. Install as root, or somewhere you own:
+  curl -sSL $INSTALLER | sudo bash
+  BASEPORT_DIR=\"\$HOME/.baseport\" BASEPORT_BIN=\"\$HOME/.local/bin\" curl -sSL $INSTALLER | bash"
+writable "$BIN" || fail "You cannot write to $BIN. Install as root, or pick another directory with BASEPORT_BIN:
+  curl -sSL $INSTALLER | sudo bash
+  BASEPORT_BIN=\"\$HOME/.local/bin\" curl -sSL $INSTALLER | bash"
+
 TAG="${BASEPORT_VERSION:-}"
 if [ -z "$TAG" ]; then
   TAG=$(curl -fsSL "$API/latest" 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
@@ -65,6 +82,7 @@ cat > "$BIN/baseport" <<EOF
 # baseport wrapper
 DIR="$DIR"
 BIN="$BIN"
+SELF="$BIN/baseport"
 REPO="$REPO"
 INSTALLER="$INSTALLER"
 EOF
@@ -73,10 +91,35 @@ set -eu
 UNIT=/etc/systemd/system/baseport.service
 
 die() { echo "$*" >&2; exit 1; }
-need_root() { [ "$(id -u)" = "0" ] || die "That needs root. Try: sudo $0 $*"; }
 
-[ -x "$DIR/Baseport" ] || die "No Baseport in $DIR. Reinstall it:
-  curl -sSL $INSTALLER | bash"
+# Telling someone to retype a command with sudo in front of it is a step a script can take itself.
+need_root() {
+  if [ "$(id -u)" = "0" ]; then return 0; fi
+  command -v sudo >/dev/null 2>&1 || die "That needs root and there is no sudo here. Run it as root."
+  echo "This needs root, running it again through sudo." >&2
+  exec sudo -- "$SELF" "$@"
+}
+
+need_service() {
+  command -v systemctl >/dev/null 2>&1 || die "No systemd on this machine, so there is no service to control."
+  [ -e "$UNIT" ] || die "There is no baseport.service yet. Create one: sudo $SELF service"
+}
+
+service_url() {
+  URL=""
+  if [ -e "$UNIT" ]; then
+    URL=$(sed -n 's/.*--urls[= ]*\([^ ]*\).*/\1/p' "$UNIT" | head -1)
+  fi
+  [ -n "$URL" ] || URL="http://localhost:5000"
+  URL=${URL%%;*}
+  echo "$URL" | sed 's|//0\.0\.0\.0|//localhost|; s|//\[::\]|//localhost|; s|//\*|//localhost|'
+}
+
+case "${1:-}" in
+uninstall|doctor) ;;
+*) [ -x "$DIR/Baseport" ] || die "No Baseport in $DIR. Reinstall it:
+  curl -sSL $INSTALLER | bash" ;;
+esac
 
 case "${1:-}" in
 update)
@@ -125,11 +168,146 @@ UNITFILE
   }
   echo "baseport.service running $DIR/Baseport $ARGS"
   ;;
+start)
+  need_service
+  need_root start
+  systemctl start baseport
+  systemctl is-active --quiet baseport || {
+    systemctl status baseport --no-pager -n 15 >&2 || true
+    die "baseport.service did not start."
+  }
+  echo "baseport.service started on $(service_url)."
+  ;;
+stop)
+  need_service
+  need_root stop
+  systemctl stop baseport
+  echo "baseport.service stopped. It comes back on the next boot until you run: sudo $SELF uninstall"
+  ;;
 restart)
+  need_service
   need_root restart
-  [ -e "$UNIT" ] || die "No baseport.service yet. Create it: sudo $0 service"
   systemctl restart baseport
   echo "baseport.service restarted."
+  ;;
+status)
+  if command -v systemctl >/dev/null 2>&1 && [ -e "$UNIT" ]; then
+    exec systemctl status baseport --no-pager -n 10
+  fi
+  PID=""
+  if command -v pgrep >/dev/null 2>&1; then PID=$(pgrep -f "$DIR/Baseport" | head -1 || true); fi
+  if [ -n "$PID" ]; then
+    echo "Baseport is running in the foreground as pid $PID, on $(service_url)."
+  else
+    echo "Baseport is not running. Start it with: baseport"
+    echo "Or install it as a service: sudo $SELF service"
+  fi
+  ;;
+doctor)
+  RC=0
+  ok() { echo "ok    $*"; }
+  warn() { echo "warn  $*"; }
+  bad() { echo "FAIL  $*"; RC=1; }
+
+  if VERSION=$("$DIR/Baseport" version 2>/dev/null); then
+    ok "Baseport $VERSION in $DIR"
+  else
+    bad "$DIR/Baseport is missing or will not run. Reinstall: curl -sSL $INSTALLER | bash"
+  fi
+
+  FOUND=$(command -v baseport 2>/dev/null || true)
+  if [ -z "$FOUND" ]; then
+    warn "$BIN is not on your PATH. Add it: echo 'export PATH=\"$BIN:\$PATH\"' >> ~/.bashrc"
+  elif [ "$FOUND" != "$SELF" ]; then
+    warn "PATH finds $FOUND before $SELF, so you are running another install."
+  else
+    ok "the baseport command is $SELF"
+  fi
+
+  if [ ! -d "$DIR" ]; then
+    bad "$DIR is gone. Reinstall: curl -sSL $INSTALLER | bash"
+  elif [ -w "$DIR" ]; then
+    ok "$DIR is writable by $(id -un)"
+  else
+    warn "$DIR is not writable by $(id -un), which is normal when the service owns it."
+  fi
+
+  if [ -f "$DIR/baseport.db" ]; then
+    ok "database $DIR/baseport.db, $(du -h "$DIR/baseport.db" | cut -f1)"
+  else
+    warn "no database yet, the first start creates one and prints a one-time admin login."
+  fi
+
+  if [ -e "$UNIT" ]; then
+    if systemctl is-active --quiet baseport 2>/dev/null; then
+      ok "baseport.service is active"
+    else
+      bad "baseport.service exists but is not active. Look at: journalctl -u baseport -n 50"
+    fi
+    RUNDIR=$(systemctl show baseport.service -p WorkingDirectory --value 2>/dev/null || true)
+    if [ -n "$RUNDIR" ] && [ "$RUNDIR" != "$DIR" ]; then
+      warn "baseport.service runs from $RUNDIR, not $DIR, so \"baseport update\" updates a copy nothing runs."
+    fi
+  else
+    warn "no baseport.service, Baseport only runs while your terminal does. Install one: sudo $SELF service"
+  fi
+
+  URL=$(service_url)
+  if curl -fsS -o /dev/null --max-time 3 "$URL" 2>/dev/null; then
+    ok "answering on $URL, console at $URL/_/admin"
+  else
+    warn "nothing answered on $URL."
+  fi
+
+  if [ -d "$DIR" ]; then
+    echo "disk  $(df -h "$DIR" 2>/dev/null | tail -1 | awk '{print $4" free on "$6}')"
+  fi
+  exit $RC
+  ;;
+uninstall)
+  shift
+  PURGE=no
+  if [ "${1:-}" = "--purge" ]; then PURGE=yes; fi
+
+  if [ -e "$UNIT" ] || [ ! -w "$DIR" ] || [ ! -w "$BIN" ]; then
+    if [ "$PURGE" = "yes" ]; then need_root uninstall --purge; else need_root uninstall; fi
+  fi
+
+  if [ "$PURGE" = "yes" ] && [ -t 0 ]; then
+    printf "Delete %s with its database, uploads and backups? This cannot be undone. [y/N] " "$DIR"
+    read -r ANSWER
+    case "$ANSWER" in
+      y|Y|yes|YES) ;;
+      *) die "Cancelled, nothing was removed." ;;
+    esac
+  fi
+
+  if [ -e "$UNIT" ]; then
+    systemctl disable --now baseport >/dev/null 2>&1 || true
+    rm -f "$UNIT"
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    echo "Removed baseport.service."
+  fi
+
+  if [ "$PURGE" = "yes" ]; then
+    rm -rf "$DIR"
+    if id baseport >/dev/null 2>&1; then userdel baseport >/dev/null 2>&1 || true; fi
+    echo "Removed $DIR and everything in it."
+  else
+    for F in "$DIR"/* "$DIR"/.[!.]*; do
+      [ -e "$F" ] || continue
+      case "${F##*/}" in
+        baseport.db|baseport.db-shm|baseport.db-wal|baseport.key|uploads|backups|log|appsettings.json) continue ;;
+      esac
+      rm -rf "$F"
+    done
+    echo "Removed the Baseport program files from $DIR."
+    echo "Your data stayed: baseport.db, baseport.key, appsettings.json, uploads, backups, log."
+    echo "Delete that as well with: rm -rf $DIR"
+  fi
+
+  rm -f "$SELF"
+  echo "Removed the baseport command at $SELF."
   ;;
 logs)
   cd "$DIR"
@@ -196,9 +374,13 @@ echo "  baseport                             start on http://localhost:5000"
 echo "  baseport --urls http://0.0.0.0:5000  start on every interface"
 if [ "$SERVICE_OK" = "yes" ]; then
   echo "  sudo baseport service [--urls URL]   run it as a systemd service"
-  echo "  sudo baseport restart                restart that service"
+  echo "  sudo baseport start|stop|restart     control that service"
 fi
+echo "  baseport status                      is it running, and where"
 echo "  baseport logs                        follow the log files"
+echo "  baseport doctor                      check this install"
+echo "  baseport update                      pull the latest release"
+echo "  baseport uninstall [--purge]         remove it, --purge deletes the data too"
 echo "  baseport help                        everything else"
 echo
 echo "Console http://localhost:5000/_/admin, first start prints a one-time admin login."
