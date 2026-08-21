@@ -105,6 +105,16 @@ function parseFieldOptions(json) {
     }
 }
 
+// The member names of an object or list field's sub-schema, so the editor can say what shape it wants.
+function schemaMembers(f) {
+    try {
+        const o = JSON.parse(f.optionsJson || '{}');
+        return Array.isArray(o.fields) ? o.fields.map((m) => m.name).filter(Boolean) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
 function refTableId(json) {
     try {
         const o = JSON.parse(json || '{}');
@@ -218,19 +228,9 @@ function openNewRecordModal() {
             type: 'email',
             help: f.helpText
         });
-        else if (type === 'phone') row = ui.field(label, {
-            id,
-            type: 'tel',
-            help: f.helpText
-        });
         else if (type === 'url') row = ui.field(label, {
             id,
             type: 'url',
-            help: f.helpText
-        });
-        else if (type === 'color') row = ui.field(label, {
-            id,
-            type: 'color',
             help: f.helpText
         });
         else if (type === 'time') row = ui.field(label, {
@@ -243,17 +243,7 @@ function openNewRecordModal() {
             type: 'password',
             help: f.helpText
         });
-        else if (type === 'rating') {
-            row = ui.field(label, {
-                id,
-                type: 'number',
-                placeholder: `${f.min ?? 1}-${f.max ?? 5}`,
-                help: f.helpText
-            });
-            row.ctrl.min = f.min ?? 1;
-            row.ctrl.max = f.max ?? 5;
-            row.ctrl.step = 1;
-        } else if (type === 'slug') {
+        else if (type === 'slug') {
             row = ui.field(label, {
                 id,
                 type: 'text',
@@ -267,18 +257,22 @@ function openNewRecordModal() {
                 help: ((f.helpText ? f.helpText + ' ' : '') + 'HTML is sanitized on save.').trim()
             });
         } else if (type === 'json') {
+            const members = schemaMembers(f);
             row = ui.field(label, {
                 id,
                 type: 'textarea',
-                placeholder: '{ }',
-                help: ((f.helpText ? f.helpText + ' ' : '') + 'Raw JSON object.').trim()
+                placeholder: members.length ? `{ "${members[0]}": ... }` : '{ }',
+                help: ((f.helpText ? f.helpText + ' ' : '') +
+                    (members.length ? `Members: ${members.join(', ')}.` : 'Raw JSON object.')).trim()
             });
         } else if (type === 'array') {
+            const members = schemaMembers(f);
             row = ui.field(label, {
                 id,
                 type: 'textarea',
-                placeholder: '["a", "b"]',
-                help: ((f.helpText ? f.helpText + ' ' : '') + 'JSON array of text/number/boolean values.').trim()
+                placeholder: members.length ? `[{ "${members[0]}": ... }]` : '["a", "b"]',
+                help: ((f.helpText ? f.helpText + ' ' : '') +
+                    (members.length ? `Rows of: ${members.join(', ')}.` : 'JSON array of text/number/boolean values.')).trim()
             });
         } else {
             row = ui.field(label, {
@@ -356,7 +350,7 @@ async function submitNewRecord(inputs) {
             }
             const raw = ctrl.value;
             if (raw === '' || raw === null || raw === undefined) continue;
-            if (type === 'number' || type === 'currency' || type === 'rating') payload[name] = Number(raw);
+            if (type === 'number' || type === 'currency') payload[name] = Number(raw);
             else if (type === 'multiselect') payload[name] = splitOptions(raw);
             else if (type === 'json' || type === 'array') {
                 try {

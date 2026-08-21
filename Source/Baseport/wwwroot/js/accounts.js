@@ -89,7 +89,7 @@ async function renderAccounts() {
 
 function openAccountForm(pid) {
     const a = pid ? accountsData.find((x) => x.id === pid) : null;
-    // An existing admin opens the same sheet as anyone else, the way TrailBase does it. What the API refuses is greyed out rather than hidden: the token panel below still works, because the token routes accept an admin.
+    // An existing admin opens the same sheet as anyone else
     const locked = !!a && a.role === 'admin';
     const body = document.createElement('div');
     body.appendChild(fieldInputRow('Username', 'accUsername', a ? a.username : '', 'e.g. jane', false, 'username'));

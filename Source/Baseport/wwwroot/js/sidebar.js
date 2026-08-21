@@ -65,7 +65,7 @@ const SIDEBARS = {
                 onSelect: () => navigate('/forms'),
             }].concat(forms.map((f) => ({
                 label: f.title || 'Untitled form',
-                // The icon alone carries form-vs-list now; a text tag saying the same thing next to it was redundant.
+                // The icon alone includes form-vs-list now; a text tag saying the same thing next to it was redundant.
                 icon: f.kind === 'list' ? OBJECT_ICONS.list : OBJECT_ICONS.form,
                 active: f.id === formEditingId,
                 onSelect: () => navigate(`/forms/${f.id}`),

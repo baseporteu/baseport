@@ -11,7 +11,7 @@ public static class RecordSearch
 {
     private const string Index = "_records_fts";
 
-    // Scope carries the owning table so a search stays inside one table without a second index per table: fts5 intersects the scope's posting list with the term's, which is the same narrowing a per-table index would buy for three triggers instead of three per table.
+    // Scope includes the owning table so a search stays inside one table without a second index per table: fts5 intersects the scope's posting list with the term's, which is the same narrowing a per-table index would buy for three triggers instead of three per table.
     // It is hex rather than the id itself because the tokenizer splits on the '-' and '_' that Ids.NewShortId emits, and two different ids can split into the same tokens.
     private const string Create = $"""CREATE VIRTUAL TABLE "{Index}" USING fts5("Scope", "Body")""";
 

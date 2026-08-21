@@ -101,7 +101,6 @@
             .baserow-embed input[type='url'],
             .baserow-embed input[type='email'],
             .baserow-embed input[type='tel'],
-            .baserow-embed input[type='color'],
             .baserow-embed input[type='time'],
             .baserow-embed input[type='password'],
             .baserow-embed select,
@@ -255,7 +254,7 @@
     let formCurrency = 'EUR';
     let readOnlyData = null;
 
-    const TEXT_LENGTH_TYPES = new Set(['text', 'longtext', 'richtext', 'slug', 'email', 'phone', 'url', 'color', 'password']);
+    const TEXT_LENGTH_TYPES = new Set(['text', 'longtext', 'richtext', 'slug', 'email', 'url', 'password']);
 
     fetch(`${apiBase}/api/forms/${formId}/schema`)
         .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
@@ -807,11 +806,11 @@
         return btn;
     }
 
-    // Columns configured on an array field (line-items sub-schema); null means a plain scalar-list array field.
+    // The sub-schema of an array field; null means a plain scalar-list array field.
     function arrayColumns(field) {
         try {
             const o = JSON.parse(field.optionsJson || '{}');
-            return Array.isArray(o.columns) && o.columns.length ? o.columns : null;
+            return Array.isArray(o.fields) && o.fields.length ? o.fields : null;
         } catch (e) {
             return null;
         }
@@ -1128,28 +1127,15 @@
         } else if (type === 'email') {
             el = document.createElement('input');
             el.type = 'email';
-        } else if (type === 'phone') {
-            el = document.createElement('input');
-            el.type = 'tel';
         } else if (type === 'url') {
             el = document.createElement('input');
             el.type = 'url';
-        } else if (type === 'color') {
-            el = document.createElement('input');
-            el.type = 'color';
         } else if (type === 'time') {
             el = document.createElement('input');
             el.type = 'time';
         } else if (type === 'password') {
             el = document.createElement('input');
             el.type = 'password';
-        } else if (type === 'rating') {
-            el = document.createElement('input');
-            el.type = 'number';
-            el.step = 1;
-            el.min = field.min ?? 1;
-            el.max = field.max ?? 5;
-            el.dataset.kind = 'num';
         } else if (type === 'slug') {
             el = document.createElement('input');
             el.type = 'text';

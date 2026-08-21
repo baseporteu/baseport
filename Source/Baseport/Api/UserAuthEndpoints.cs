@@ -17,7 +17,7 @@ public static class UserAuthEndpoints
         app.MapGet($"{ApiBase}/jwks.json", async (AppDbContext db) =>
             await EnabledAsync(db) ? Results.Json(UserTokens.Jwks()) : Results.NotFound());
 
-        // A visitor carries data before deciding to sign up. No credential is set, so this account cannot sign in again: the token pair it goes home with is the only way back to it, and register claims it when the visitor commits.
+        // A visitor includes data before deciding to sign up. No credential is set, so this account cannot sign in again: the token pair it goes home with is the only way back to it, and register claims it when the visitor commits.
         app.MapPost($"{ApiBase}/anonymous", async (AppDbContext db, HttpContext ctx) =>
         {
             var settings = await db.SettingsAsync() ?? new AppSettings();
@@ -108,7 +108,7 @@ public static class UserAuthEndpoints
                 return Error(429, "Too many sign-in attempts. Wait a few minutes and try again.");
             }
 
-            // Every role signs in here, the way TrailBase does it: what a caller may then do is decided per request by re-reading the account, never by which door they came through.
+            // Every role signs in here, what a caller may then do is decided per request by re-reading the account, never by which door they came through.
             var user = await db.UserAccounts.FirstOrDefaultAsync(u =>
                 u.Username == handle || (u.Email == handle && handle != ""));
 
@@ -280,7 +280,7 @@ public static class UserAuthEndpoints
             return claims is null ? null : await UserTokens.AccountForAsync(db, claims, now);
         }
 
-        // Headers take priority, cookies are the fallback: one sign-in on this origin is a sign-in on both surfaces. Same precedence as TrailBase's extract_tokens_from_request_parts, and the same reason a cookie can be reminted here where a header cannot.
+        // Headers take priority, cookies are the fallback: one sign-in on this origin is a sign-in on both surfaces. 
         return await AdminAuth.ResolveAsync(db, ctx);
     }
 

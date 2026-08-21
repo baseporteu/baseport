@@ -15,16 +15,28 @@ Every field has a type. The type decides how the value is validated and how it a
 
 | Group | Types |
 | --- | --- |
-| Text | `text`, `longtext`, `richtext`, `slug`, `email`, `phone`, `url`, `password` |
-| Numbers | `number`, `currency`, `rating` |
+| Text | `text`, `longtext`, `richtext`, `slug`, `email`, `url`, `password` |
+| Numbers | `number`, `currency` |
 | Time | `date`, `datetime`, `time` |
-| Choice | `boolean`, `select`, `multiselect`, `color` |
+| Choice | `boolean`, `select`, `multiselect` |
 | Structured | `json`, `array`, `file`, `reference` |
 | Server owned | `calculated`, `derived`, `systemid` |
 
 A `password` field is hashed when written and never included in an API response.
 
 A `currency` field picks its own ISO 4217 code, or leaves it empty to follow the instance default. `date` and `datetime` values are stored in UTC and rendered in the instance time zone. Both defaults live in **Settings > Host**, and both travel with the published form schema, so a form renders the same amounts and the same clock wherever it is embedded.
+
+## Objects and lists
+
+A `json` field holds an object and an `array` field holds a list. Leave either one alone and it takes whatever you send it, which is fine for a blob you only ever read back whole.
+
+Give it a schema instead and the members become real fields. Add members in the field editor, each with its own name, type and required switch, and everything a top-level field can do works there too: required, `Min` and `Max`, `Pattern`, select options, references to other tables. Objects can hold objects, three levels deep.
+
+A schema also travels into the OpenAPI document, so a generated client sees the actual shape rather than a string. And `PATCH` merges an object member by member, so sending one member does not wipe the others. `PUT` still replaces the record.
+
+Three things do not work inside an object: a member cannot be `calculated`, `derived`, `systemid`, `slug` or `password`, cannot be unique, and cannot be the identifier a lookup form matches on. All of those are computed or enforced over a whole record, and there is no record at that level. Sorting and filtering also stay at the top level: nested members are not indexed.
+
+One difference from top-level fields: a key the schema does not declare is rejected rather than ignored. The schema and the object are authored together, so an unexpected member is a mistake worth hearing about.
 
 ## Constraints
 

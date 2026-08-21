@@ -380,7 +380,7 @@ public class FormValidationTests
     private static readonly FieldDefinition LineItemsField = new()
     {
         Id = Ids.NewShortId(12), Name = "Lines", DataType = "array",
-        OptionsJson = """{"columns":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}"""
+        OptionsJson = """{"fields":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}"""
     };
 
     [Fact]
@@ -475,21 +475,21 @@ public class FormValidationTests
     [Fact]
     public void Line_item_columns_are_validated_like_field_names()
     {
-        var goodCols = """{"columns":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}""";
+        var goodCols = """{"fields":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}""";
         var good = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Lines", DataType = "array", OptionsJson = goodCols };
         Assert.Empty(FieldValidation.ValidateFieldDefinition(good, Array.Empty<string>(), new[] { "Lines" }, _ => true));
 
-        var dupCols = """{"columns":[{"name":"Qty","dataType":"number"},{"name":"Qty","dataType":"text"}]}""";
+        var dupCols = """{"fields":[{"name":"Qty","dataType":"number"},{"name":"Qty","dataType":"text"}]}""";
         var dup = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Lines", DataType = "array", OptionsJson = dupCols };
         Assert.Contains(FieldValidation.ValidateFieldDefinition(dup, Array.Empty<string>(), new[] { "Lines" }, _ => true),
-            e => e.Contains("used more than once"));
+            e => e.Contains("more than once"));
 
-        var badType = """{"columns":[{"name":"Notes","dataType":"richtext"}]}""";
+        var badType = """{"fields":[{"name":"Notes","dataType":"nonsense"}]}""";
         var bad = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Lines", DataType = "array", OptionsJson = badType };
         Assert.Contains(FieldValidation.ValidateFieldDefinition(bad, Array.Empty<string>(), new[] { "Lines" }, _ => true),
-            e => e.Contains("unsupported type"));
+            e => e.Contains("Unknown field type"));
 
-        // A plain array field (no "columns" key) is untouched - today's scalar-list behavior.
+        // A plain array field (no sub-schema) is untouched: a list of scalars.
         var plain = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Tags", DataType = "array" };
         Assert.Empty(FieldValidation.ValidateFieldDefinition(plain, Array.Empty<string>(), new[] { "Tags" }, _ => true));
     }

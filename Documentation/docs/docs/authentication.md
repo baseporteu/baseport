@@ -22,7 +22,7 @@ The account's **API enabled** switch controls whether its token works at all, an
 Your application's own users sign in at `/auth`, or call `/api/auth/v1` directly. Both are off until you turn **Public authentication** on in Settings, and letting people sign themselves up is a separate switch.
 
 ```bash
-curl -X POST http://localhost:5263/api/auth/v1/login \
+curl -X POST http://localhost:5000/api/auth/v1/login \
   -H 'Content-Type: application/json' \
   -d '{"email_or_username":"ada","password":"..."}'
 ```
@@ -49,7 +49,7 @@ The role is never taken from the token. Every request looks the account up again
 Useful if you want people to try your app before signing up. Turn **Anonymous accounts** on, then ask for one:
 
 ```bash
-curl -X POST http://localhost:5263/api/auth/v1/anonymous
+curl -X POST http://localhost:5000/api/auth/v1/anonymous
 ```
 
 You get back the same pair of tokens a normal sign-in returns. Anything the visitor creates while using them belongs to that account.

@@ -87,7 +87,7 @@ service)
   need_root service "$@"
   command -v systemctl >/dev/null 2>&1 || die "No systemd on this machine."
   ARGS="$*"
-  [ -n "$ARGS" ] || ARGS="--urls http://localhost:5263"
+  [ -n "$ARGS" ] || ARGS="--urls http://localhost:5000"
 
   NOLOGIN=/usr/sbin/nologin
   [ -x "$NOLOGIN" ] || NOLOGIN=/sbin/nologin
@@ -192,8 +192,8 @@ if [ "$(id -u)" = "0" ] && [ -e /etc/systemd/system/baseport.service ]; then
 fi
 
 echo
-echo "  baseport                             start on http://localhost:5263"
-echo "  baseport --urls http://0.0.0.0:5263  start on every interface"
+echo "  baseport                             start on http://localhost:5000"
+echo "  baseport --urls http://0.0.0.0:5000  start on every interface"
 if [ "$SERVICE_OK" = "yes" ]; then
   echo "  sudo baseport service [--urls URL]   run it as a systemd service"
   echo "  sudo baseport restart                restart that service"
@@ -201,7 +201,7 @@ fi
 echo "  baseport logs                        follow the log files"
 echo "  baseport help                        everything else"
 echo
-echo "Console http://localhost:5263/_/admin, first start prints a one-time admin login."
+echo "Console http://localhost:5000/_/admin, first start prints a one-time admin login."
 
 case ":$PATH:" in
   *":$BIN:"*) ;;

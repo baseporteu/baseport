@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// `baseport accounts ...`: the three operations the console deliberately refuses on an admin account. Whoever has the shell outranks whoever merely has console access, which is the same split TrailBase draws (crates/core/src/auth/cli.rs).
+// `baseport accounts ...`: the three operations the console deliberately refuses on an admin account. Whoever has the shell outranks whoever merely has console access.
 public static class AccountsCli
 {
     // What to type to run this build, rather than "baseport", which is only a command once somebody has put it on their PATH. A single-file publish runs its own apphost, so the executable is the command; `dotnet Baseport.dll` runs the shared host, and the command has to name the dll.

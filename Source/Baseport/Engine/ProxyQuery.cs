@@ -77,7 +77,7 @@ public static class ProxyQuery
         return (new Page(slice, total, declared.Count > 0), null);
     }
 
-    // A visitor's search term ends up inside a single-quoted literal in somebody else's query language. Doubling the quote is the OData escape, and a control character is dropped rather than escaped: no legitimate lookup value carries one, and an upstream that parses loosely is the one place a stray newline could still break out of the literal. Both call sites re-match locally, so a term this narrows is still found.
+    // A visitor's search term ends up inside a single-quoted literal in somebody else's query language. Doubling the quote is the OData escape, and a control character is dropped rather than escaped: no legitimate lookup value includes one, and an upstream that parses loosely is the one place a stray newline could still break out of the literal. Both call sites re-match locally, so a term this narrows is still found.
     private static string ODataLiteral(string value) =>
         $"'{new string(value.Where(c => !char.IsControl(c)).ToArray()).Replace("'", "''")}'";
 

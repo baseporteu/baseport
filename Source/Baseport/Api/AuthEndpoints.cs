@@ -5,7 +5,7 @@ namespace Baseport;
 
 public static class AuthEndpoints
 {
-    // Login is the one unauthenticated write, so it carries its own budget: without it the password is guessable at network speed.
+    // Login is the one unauthenticated write, so it includes its own budget: without it the password is guessable at network speed.
 
     // Paid by every attempt, even when there is no real hash to verify.
     private static readonly string DummyHash = AdminAuth.HashPassword("constant-time-decoy");

@@ -17,7 +17,7 @@ public static class TimeZones
     public static bool IsValid(string zone)
     {
         if (string.IsNullOrEmpty(zone) || zone.Length > MaxLength) return false;
-        // Linux carries the tz database, so this settles it there. A win-x64 build in invariant globalization mode maps no IANA name at all, and refusing every zone but UTC on Windows would be worse than accepting a well-formed one.
+        // Linux includes the tz database, so this settles it there. A win-x64 build in invariant globalization mode maps no IANA name at all, and refusing every zone but UTC on Windows would be worse than accepting a well-formed one.
         return TimeZoneInfo.TryFindSystemTimeZoneById(zone, out _) || WellFormed(zone);
     }
 

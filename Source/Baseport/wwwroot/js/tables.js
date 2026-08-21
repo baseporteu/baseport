@@ -126,7 +126,12 @@ function openEndpointSheet(id) {
 
     const body = ui.el('div', 'sheet-form');
 
-    const exposed = settingSwitch('sheetApiEnabled', !!table.apiEnabled, 'Expose', "Makes this table's records readable and writable at /api/v1.");
+    const exposed = settingSwitch(
+        'sheetApiEnabled',
+        Boolean(table.apiEnabled),
+        'Expose',
+        'Enables read/write access from the API.'
+    );
 
     const apiName = ui.field('Endpoint name', {
         id: 'sheetApiName',
@@ -154,8 +159,12 @@ function openEndpointSheet(id) {
     });
     exposed.ctrl.addEventListener('change', refreshEndpointSaveState);
 
-    const docsEnabled = settingSwitch('sheetApiDocsEnabled', table.apiDocsEnabled !== false, 'Show in API docs', "Off keeps the endpoint live but out of the OpenAPI document -- for an integration you don't want advertised.");
-
+    const docsEnabled = settingSwitch(
+        'sheetApiDocsEnabled',
+        table.apiDocsEnabled !== false,
+        'Show in API docs',
+        'Hides endpoint from OpenAPI docs without disabling it.'
+    );
     const displayName = ui.field('Name', {
         value: table.apiDisplayName || '',
         placeholder: table.apiName || 'Sales orders',
@@ -261,43 +270,40 @@ async function renderTablesOverview() {
     document.getElementById('tablesEmpty').classList.toggle('hidden', currentTables.length > 0);
 }
 
-const TYPE_LABELS = new Map([
-    ['text', 'Short Text'],
-    ['longtext', 'Long Text / Markdown'],
-    ['number', 'Number'],
-    ['currency', 'Currency / Price'],
-    ['boolean', 'Boolean'],
-    ['date', 'Date'],
-    ['datetime', 'Date / Timestamp'],
-    ['time', 'Time'],
-    ['select', 'Select (single)'],
-    ['multiselect', 'Multi-select'],
-    ['file', 'Media / File URL'],
-    ['reference', 'Reference / Relation'],
-    ['calculated', 'Calculated / Formula'],
-    ['derived', 'Derived (hidden, computed at submit)'],
-    ['systemid', 'System ID'],
-    ['email', 'Email'],
-    ['phone', 'Phone'],
-    ['url', 'URL'],
-    ['color', 'Color'],
-    ['rating', 'Rating'],
-    ['slug', 'Slug'],
-    ['richtext', 'Rich Text / HTML'],
-    ['json', 'JSON / Object'],
-    ['array', 'Array / List'],
-    ['password', 'Password / Encrypted'],
-]);
+// Filled from the console bootstrap, which reads the server's field type table. Nothing here decides what a type is.
+const TYPE_LABELS = new Map();
+const NESTABLE_TYPES = [];
+let fieldTypeRows = [];
+let fieldTypeGroups = [];
 
-// local search, nothing to ask the server for
+function setFieldTypes(types, groups) {
+    TYPE_LABELS.clear();
+    NESTABLE_TYPES.length = 0;
+    fieldTypeRows = types || [];
+    fieldTypeGroups = groups || [];
+    for (const t of fieldTypeRows) {
+        TYPE_LABELS.set(t.name, t.label);
+        if (t.nestable) NESTABLE_TYPES.push(t.name);
+    }
+}
+
+// Grouped in the server's order, with the group headings as unselectable rows. A typed query matches the
+// label, the stored name and the aliases, so searching "price" or "formula" still finds the type.
 function fieldTypeOptions(query) {
     const q = (query || '').trim().toLowerCase();
-    const rows = [...TYPE_LABELS].map(([v, l]) => ({
-        id: v,
-        label: l
-    }));
-    if (!q) return rows;
-    return rows.filter((r) => r.label.toLowerCase().includes(q) || r.id.includes(q));
+    const matches = fieldTypeRows.filter((t) => !q ||
+        t.label.toLowerCase().includes(q) ||
+        t.name.includes(q) ||
+        (t.aliases || []).some((a) => a.toLowerCase().includes(q)));
+
+    const rows = [];
+    for (const group of fieldTypeGroups) {
+        const inGroup = matches.filter((t) => t.group === group);
+        if (!inGroup.length) continue;
+        rows.push({ group: true, label: group });
+        for (const t of inGroup) rows.push({ id: t.name, label: t.label });
+    }
+    return rows;
 }
 
 // sets both the hidden value and the visible search text
@@ -327,7 +333,7 @@ function initFieldTypeCombobox() {
 // one pictogram per type family, so 24 types stay scannable by shape instead of by reading each pill
 const TYPE_ICON_FAMILY = {
     text: 'text', longtext: 'text', richtext: 'text', slug: 'text',
-    number: 'hash', currency: 'hash', rating: 'hash',
+    number: 'hash', currency: 'hash',
     boolean: 'toggle',
     date: 'calendar', datetime: 'calendar',
     time: 'clock',
@@ -337,9 +343,7 @@ const TYPE_ICON_FAMILY = {
     calculated: 'fx', derived: 'fx',
     systemid: 'key',
     email: 'at',
-    phone: 'phone',
     url: 'link',
-    color: 'swatch',
     json: 'braces',
     array: 'brackets',
     password: 'lock',
@@ -357,9 +361,7 @@ const TYPE_ICON_PATHS = {
     fx: '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 12h7"/>',
     key: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
     at: '<circle cx="12" cy="12" r="4"/><path d="M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-4 7.5"/>',
-    phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z"/>',
     link: '<path d="M9 15 15 9M11 6l1-1a4 4 0 0 1 6 6l-1 1M13 18l-1 1a4 4 0 0 1-6-6l1-1"/>',
-    swatch: '<path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11Z"/>',
     braces: '<path d="M8 4C6 4 5 5 5 7v3c0 1-.5 2-2 2 1.5 0 2 1 2 2v3c0 2 1 3 3 3M16 4c2 0 3 1 3 3v3c0 1 .5 2 2 2-1.5 0-2 1-2 2v3c0 2-1 3-3 3"/>',
     brackets: '<path d="M8 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h2M16 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2"/>',
     lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
@@ -373,7 +375,7 @@ function typeIcon(dataType) {
 const HIDDEN_ICON =
     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></svg>';
 
-// type carries the icon+label; required/unique/hidden stay as small muted text instead of competing pills; identifier reuses the key glyph systemid already uses.
+// type includes the icon+label; required/unique/hidden stay as small muted text instead of competing pills; identifier reuses the key glyph systemid already uses.
 function fieldBadges(f) {
     const isFn = f.dataType === 'calculated' || f.dataType === 'derived';
     const label = escapeHtml(TYPE_LABELS.get(f.dataType) || f.dataType);
@@ -386,7 +388,7 @@ function fieldBadges(f) {
     return cell;
 }
 
-const TEXT_LENGTH_TYPES = new Set(['text', 'longtext', 'richtext', 'slug', 'email', 'phone', 'url', 'color', 'password']);
+const TEXT_LENGTH_TYPES = new Set(['text', 'longtext', 'richtext', 'slug', 'email', 'url', 'password']);
 
 // Bounds mean value for numbers and length for text; the summary picks the reading.
 function fieldLimits(f) {
@@ -625,23 +627,22 @@ function fieldInputRow(label, id, value, placeholder, mono, dataField) {
     return lab;
 }
 
-// Turns an array field into a line-items block: a sub-schema of columns (name/label/type) stored in
-// OptionsJson the same way select options are, so a submit form can render an editable repeating table
-// bound to this field instead of treating it as an opaque JSON blob. Empty columns = today's plain array field.
-const ARRAY_COLUMN_TYPES = ['text', 'number', 'currency', 'select', 'date', 'boolean'];
-
-function arrayColumnsEditor(f) {
+// The sub-schema of an object or array field, stored in OptionsJson the way select options are.
+// Members are fields in their own right, so the server validates them with the same rules.
+function subSchemaEditor(f, isList) {
     let cols = [];
     try {
         const o = JSON.parse(f.optionsJson || '{}');
-        if (Array.isArray(o.columns)) cols = o.columns.map((c) => ({ name: c.name || '', label: c.label || '', dataType: c.dataType || 'text' }));
+        if (Array.isArray(o.fields)) cols = o.fields.map((c) => ({ name: c.name || '', label: c.label || '', dataType: c.dataType || 'text', isRequired: !!c.isRequired }));
     } catch (e) {}
 
     const wrap = document.createElement('div');
 
     const hint = document.createElement('p');
     hint.className = 'sheet-note';
-    hint.innerText = 'Leave empty for a plain list field. Add columns to turn this into line items a submit form can render as an add/remove-row table.';
+    hint.innerText = isList
+        ? 'Leave empty for a plain list of values. Add members to turn this into line items a submit form can render as an add/remove-row table.'
+        : 'Leave empty to store any object. Add members to give the object a schema the API publishes and validates.';
     wrap.appendChild(hint);
 
     const hidden = document.createElement('input');
@@ -655,15 +656,15 @@ function arrayColumnsEditor(f) {
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'btn btn-outline btn-sm';
-    addBtn.innerText = '+ Add column';
+    addBtn.innerText = isList ? '+ Add column' : '+ Add member';
     addBtn.onclick = () => {
-        cols.push({ name: '', label: '', dataType: 'text' });
+        cols.push({ name: '', label: '', dataType: 'text', isRequired: false });
         render();
     };
     wrap.appendChild(addBtn);
 
     function sync() {
-        hidden.value = cols.length ? JSON.stringify({ columns: cols }) : '[]';
+        hidden.value = cols.length ? JSON.stringify({ fields: cols }) : '[]';
     }
 
     function render() {
@@ -674,7 +675,7 @@ function arrayColumnsEditor(f) {
 
             const nameInp = document.createElement('input');
             nameInp.className = 'input input-sm';
-            nameInp.placeholder = 'Column name, e.g. Qty';
+            nameInp.placeholder = isList ? 'Column name, e.g. Qty' : 'Member name, e.g. Street';
             nameInp.value = c.name;
             nameInp.onchange = () => { c.name = nameInp.value.trim(); sync(); };
 
@@ -686,17 +687,20 @@ function arrayColumnsEditor(f) {
 
             const typeSel = document.createElement('select');
             typeSel.className = 'input input-sm';
-            typeSel.innerHTML = ARRAY_COLUMN_TYPES.map((t) => `<option value="${t}" ${c.dataType === t ? 'selected' : ''}>${t}</option>`).join('');
+            typeSel.innerHTML = NESTABLE_TYPES.map((t) => `<option value="${t}" ${c.dataType === t ? 'selected' : ''}>${TYPE_LABELS.get(t) || t}</option>`).join('');
             typeSel.onchange = () => { c.dataType = typeSel.value; sync(); };
+
+            const req = ui.switchRow('Required', { checked: !!c.isRequired });
+            req.ctrl.onchange = () => { c.isRequired = req.ctrl.checked; sync(); };
 
             const rm = document.createElement('button');
             rm.type = 'button';
             rm.className = 'btn btn-ghost btn-sm';
             rm.innerText = '✕';
-            rm.title = 'Remove column';
+            rm.title = isList ? 'Remove column' : 'Remove member';
             rm.onclick = () => { cols.splice(i, 1); sync(); render(); };
 
-            line.append(nameInp, labelInp, typeSel, rm);
+            line.append(nameInp, labelInp, typeSel, req, rm);
             list.appendChild(line);
         });
         sync();
@@ -890,7 +894,7 @@ function openFieldEditor(fieldId) {
         if (!hint) return;
         // matches the Min/Max cases FieldValidation.cs actually checks -- everything else silently ignores them
         hint.innerText =
-            t === 'number' || t === 'currency' || t === 'rating' ?
+            t === 'number' || t === 'currency' ?
             'Smallest and largest accepted value. Leave blank for no bound.' :
             t === 'text' || t === 'longtext' || t === 'richtext' ?
             'Shortest and longest accepted length in characters. Leave blank for no bound.' :
@@ -990,13 +994,12 @@ function openFieldEditor(fieldId) {
             lab.innerText = 'Auto-generate from field (optional)';
             lab.appendChild(sel);
             row.appendChild(lab);
-        } else if (t === 'array') {
-            row.appendChild(arrayColumnsEditor(f));
+        } else if (t === 'array' || t === 'json') {
+            row.appendChild(subSchemaEditor(f, t === 'array'));
         } else {
             const hint = document.createElement('p');
             hint.className = 'sheet-note';
-            // json has no expression or options, but Maximum below still caps it
-            hint.innerText = t === 'json' ? 'No expression needed; use Maximum below to cap the serialized size.' : 'No additional configuration needed for this type.';
+            hint.innerText = 'No additional configuration needed for this type.';
             row.appendChild(hint);
         }
     }

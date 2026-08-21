@@ -10,7 +10,7 @@ baseport.db (no admin login needed).
     wms.site.com         the ops-facing site: the open-orders worklist
 
     python3 Scripts/bootstrap-sites.py
-    python3 Scripts/bootstrap-sites.py --baseport-url http://localhost:5263
+    python3 Scripts/bootstrap-sites.py --baseport-url http://localhost:5000
 """
 
 import argparse
@@ -361,7 +361,7 @@ def make_handler(hostname: str, spec: dict, baseport_url: str, db_path: Path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="baseport.db to read form ids from")
-    parser.add_argument("--baseport-url", default="http://localhost:5263", help="where Baseport itself is running")
+    parser.add_argument("--baseport-url", default="http://localhost:5000", help="where Baseport itself is running")
     args = parser.parse_args()
 
     servers = []

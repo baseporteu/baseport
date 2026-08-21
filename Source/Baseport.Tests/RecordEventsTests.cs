@@ -53,7 +53,7 @@ public class RecordEventsTests : IDisposable
 
             Assert.Equal(new[] { "create", "update", "delete" }, seen.Select(e => e.Action));
             Assert.All(seen, e => Assert.Equal("table-1", e.TableId));
-            // A delete carries no body: the row it described is gone.
+            // A delete includes no body: the row it described is gone.
             Assert.Null(seen[2].Json);
         }
         finally
@@ -116,7 +116,7 @@ public class RecordEventsTests : IDisposable
         }
     }
 
-    // The CLIs build their own context rather than resolving one from the host, so what is pinned is that the shared factory carries the interceptor with it.
+    // The CLIs build their own context rather than resolving one from the host, so what is pinned is that the shared factory includes the interceptor with it.
     [Fact]
     public async Task AContextOpenedByTheSharedFactoryStampsAndPublishes()
     {

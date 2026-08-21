@@ -178,7 +178,7 @@ public class OidcTests : IDisposable
     [Theory]
     // The escalation this closes: a provider enabled only for end users hands console
     // access to whoever the directory says is called "admin", because the seeded
-    // account carries that name and the link grants its role.
+    // account includes that name and the link grants its role.
     [InlineData("admin", "", false)]
     // And the same through the address, which a directory is just as free to reassign.
     [InlineData("", "admin@example.com", true)]
@@ -447,7 +447,7 @@ public class OidcTests : IDisposable
         Assert.Contains("did not mark",
             await OidcEndpoints.WhyNoEmailMatchAsync(_db, provider, new OidcIdentity("s", "n", "a@b.com", false)));
 
-        Assert.Contains("No Baseport account carries",
+        Assert.Contains("No Baseport account includes",
             await OidcEndpoints.WhyNoEmailMatchAsync(_db, provider, new OidcIdentity("s", "n", "a@b.com", true)));
 
         // The one that actually bit: the address is there, on the one account the rule excludes.
@@ -478,7 +478,7 @@ public class OidcTests : IDisposable
     // The flow is the sign-in surface, reachable precisely because there is no session yet.
     [InlineData("/api/auth/oidc/authelia/start", true)]
     [InlineData("/api/auth/oidc/authelia/callback", true)]
-    // Managing providers is console surface, like every other /api/_admin route.
+    // Managing providers represents the console surface, like every other /api/_admin route.
     [InlineData("/api/_admin/oidc-providers", false)]
     public void The_flow_is_anonymous_and_its_management_is_not(string path, bool anonymous) =>
         Assert.Equal(anonymous, AdminAuthMiddleware.IsPublicPath(path));

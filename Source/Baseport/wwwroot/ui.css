@@ -231,6 +231,20 @@ body:has(.sheet.open) .toasts {
     color: hsl(var(--muted-foreground));
 }
 
+.combobox-group {
+    padding: .5rem .5rem .25rem;
+    font-size: .6875rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+}
+
+.combobox-group:not(:first-child) {
+    border-top: 1px solid hsl(var(--border));
+    margin-top: .25rem;
+}
+
 .combobox-chip {
     display: flex;
     align-items: center;

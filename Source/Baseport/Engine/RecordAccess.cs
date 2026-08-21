@@ -6,9 +6,7 @@ namespace Baseport;
 
 public enum Permission { Create, Read, Update, Delete }
 
-// Per-record access rules, in the shape TrailBase uses: an author writes a SQLite boolean expression over _USER_, _ROW_ and _REQ_, and SQLite evaluates it. There is no expression language here, and deliberately so.
-//
-// TrailBase exposes _ROW_ by aliasing the table (crates/core/templates/list_record_query.sql). Baseport keeps records as JSON in one shared table, so a real alias would have to be a lateral join, which SQLite has no support for. The references are rewritten into json_extract against the same row instead, which leaves the author writing exactly the same rule.
+// Per-record access rules, an author writes a SQLite boolean expression over _USER_, _ROW_ and _REQ_, and SQLite evaluates it. There is no expression language here, and deliberately so.
 public static partial class RecordAccess
 {
     public static string RuleFor(TableDefinition table, Permission permission) => permission switch
@@ -143,12 +141,12 @@ public static partial class RecordAccess
             sql = $"""SELECT COALESCE(CAST(({expression}) AS INTEGER), 0) AS "Value" """;
         }
 
-        // A missing row yields no result at all, which is a refusal rather than an error: the same answer TrailBase gives.
+        // A missing row yields no result at all, which is a refusal rather than an errorr:
         var results = await db.Database.SqlQueryRaw<int>(sql, args.Select(a => a ?? DBNull.Value).ToArray()).ToListAsync();
         return results.Count > 0 && results[0] != 0;
     }
 
-    // The read rule filters a listing rather than refusing it, so a caller sees the rows they may see instead of a 403. TrailBase makes the same choice (records/list_records.rs:251).
+    // The read rule filters a listing rather than refusing it, so a caller sees the rows they may see instead of a 403. 
     public static string? ListClause(TableDefinition table, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId, List<object> args)
     {
         if (!HasRule(table, Permission.Read)) return null;
@@ -162,7 +160,7 @@ public static partial class RecordAccess
         return SlotToken().Replace(expression, m => $"{{{int.Parse(m.Groups["n"].Value) + offset}}}");
     }
 
-    // The read rule as a self-contained boolean with its values inlined as SQL literals, for a context that cannot bind parameters: the wire providers build one static temp view per table. A read rule carries only _USER_.id, a system-issued short id, and it is escaped as a literal regardless. Returns null when the table has no read rule, so the caller leaves the view unfiltered.
+    // The read rule as a self-contained boolean with its values inlined as SQL literals, for a context that cannot bind parameters: the wire providers build one static temp view per table. A read rule includes only _USER_.id, a system-issued short id, and it is escaped as a literal regardless. Returns null when the table has no read rule, so the caller leaves the view unfiltered.
     public static string? ReadClauseLiteral(string readRule, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId)
     {
         if (string.IsNullOrWhiteSpace(readRule)) return null;

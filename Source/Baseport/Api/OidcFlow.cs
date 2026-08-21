@@ -33,7 +33,7 @@ public static class OidcFlow
     // Keyed on the authority too, so editing a provider's URL drops the document cached for the old one instead of authenticating against it.
     private static readonly ConcurrentDictionary<string, ConfigurationManager<OpenIdConnectConfiguration>> Documents = new(StringComparer.Ordinal);
 
-    // LinkTo is empty for a sign-in. When it carries an account id the flow is that account binding a provider identity to itself, so the callback writes the subject it gets instead of matching on it. The account was chosen by a console session before the redirect, never by a claim coming back from the provider.
+    // LinkTo is empty for a sign-in. When it includes an account id the flow is that account binding a provider identity to itself, so the callback writes the subject it gets instead of matching on it. The account was chosen by a console session before the redirect, never by a claim coming back from the provider.
     public sealed record PendingFlow(string ProviderId, string Verifier, string Nonce, string RedirectUri, string ReturnTo, bool Console, DateTime ExpiresAt, string LinkTo = "");
 
     public sealed record Start(string AuthorizeUrl, string State);
@@ -119,7 +119,7 @@ public static class OidcFlow
 
         if (!response.IsSuccessStatusCode)
         {
-            // The body carries the provider's own error code, which is the only thing that distinguishes a misconfigured client from a stale code.
+            // The body includes the provider's own error code, which is the only thing that distinguishes a misconfigured client from a stale code.
             Serilog.Log.Warning("Token exchange with {Provider} failed with {Status}: {Body}", provider.Slug, (int)response.StatusCode, Truncate(payload));
             return null;
         }

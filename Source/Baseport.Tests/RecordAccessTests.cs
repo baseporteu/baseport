@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 
 namespace Baseport.Tests;
 
-// Per-record access rules, in TrailBase's shape: the author writes a SQLite boolean expression over _USER_, _ROW_ and _REQ_ and SQLite decides.
+// Per-record access rules, the author writes a SQLite boolean expression over _USER_, _ROW_ and _REQ_ and SQLite decides.
 public class RecordAccessTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -85,7 +85,7 @@ public class RecordAccessTests : IDisposable
         Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, null, id));
     }
 
-    // A missing row is a refusal, not an error, which is also what TrailBase does when its access query returns no result.
+    // A missing row is a refusal, not an error
     [Fact]
     public async Task A_rule_over_a_record_that_is_gone_refuses()
     {

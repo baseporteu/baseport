@@ -9,16 +9,10 @@ public static class RecordIndexes
 {
     private const string Table = "_records";
 
-    // Types worth an index.
-    private static readonly HashSet<string> Indexable =
-        new() { "text", "number", "currency", "boolean", "date", "datetime", "select", "reference", "systemid",
-                 "email", "phone", "url", "color", "time", "rating", "slug" };
-
     // Named after the field id, which never changes, so a rename rewrites the expression rather than orphaning a column.
+    // A nested member has no id and gets no column: it is not reachable by a top-level json_extract path anyway.
     public static string? ColumnFor(FieldDefinition field) =>
-        field.Id.Length > 0 && Indexable.Contains(FieldValidation.NormalizeType(field.DataType) ?? "")
-            ? $"g_{field.Id}"
-            : null;
+        field.Id.Length > 0 && FieldTypes.Of(field).Indexable ? $"g_{field.Id}" : null;
 
     // rough estimate, not a measurement: dbstat isn't compiled into this build, so there's no real per-index page count to read
     private const double BytesPerIndexEntry = 24.0 / 0.75;

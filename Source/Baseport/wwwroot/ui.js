@@ -216,7 +216,7 @@ const ui = (() => {
 
     function reportError(source, error) {
         const message = (error && (error.message || error)) || 'Unknown error';
-        // A rejection carries no filename, so the frame it threw from is the only thing that says where to look.
+        // A rejection includes no filename, so the frame it threw from is the only thing that says where to look.
         const frame = (error && error.stack || '').split('\n')[1];
         const text = `${source}: ${message}` + (frame ? ` (${frame.trim()})` : '');
         // A loop that throws every frame must not bury the screen in toasts, or the server in rows.
@@ -237,7 +237,7 @@ const ui = (() => {
         try {
             navigator.sendBeacon('/api/client-errors', new Blob([JSON.stringify({
                 message: text,
-                // The path only: a preview or reset link carries a token in its query, and that must not reach a log.
+                // The path only: a preview or reset link includes a token in its query, and that must not reach a log.
                 page: location.pathname,
             })], {
                 type: 'application/json'
@@ -552,6 +552,13 @@ const ui = (() => {
                 }));
             } else {
                 rows.forEach((r) => {
+                    // A heading row, not a choice. It includes no .combobox-option, so keyboard nav skips it.
+                    if (r.group) {
+                        list.append(el('li', 'combobox-group', {
+                            textContent: r.label
+                        }));
+                        return;
+                    }
                     const li = el('li', 'combobox-option' + (String(r.id) === String(hidden.value) && hidden.value !== '' ? ' selected' : ''), {
                         textContent: r.label
                     });

@@ -36,8 +36,6 @@ public static class ConsoleEndpoints
         app.MapGet($"{Base}/{{**rest}}", (AppDbContext db, HttpContext ctx) => RenderAsync(db, ctx, webRoot, authPage: false));
         app.MapGet(Auth, (AppDbContext db, HttpContext ctx) => RenderAsync(db, ctx, webRoot, authPage: true));
 
-        // Root answers 404, like TrailBase: the console owns /_/admin and nothing else, so a scan of "/" reveals neither the console nor a login form.
-
         // anonymous for the same reason as the document it renders
         app.MapGet("/docs", () => Results.File(Path.Combine(webRoot, "docs.html"), "text/html; charset=utf-8"));
 
@@ -132,6 +130,9 @@ public static class ConsoleEndpoints
                     formCounts.FirstOrDefault(f => f.TableId == t.Id)?.Count ?? 0,
                     recordCounts.FirstOrDefault(r => r.TableId == t.Id)?.Count ?? 0)),
                 settings = new { settings.AppName, settings.Currency, settings.TimeZone },
+                // The field type picker paints from this, so the console can never offer a type the server does not know.
+                fieldTypes = FieldTypes.All.Select(t => new { t.Name, t.Label, t.Group, t.Aliases, Shape = t.Shape.ToString().ToLowerInvariant(), t.Nestable }),
+                fieldTypeGroups = FieldGroups.Order,
                 stats = new
                 {
                     dbSizeBytes = ApiDtos.DatabaseBytes(db),

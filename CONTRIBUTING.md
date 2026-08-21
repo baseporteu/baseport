@@ -6,7 +6,7 @@ Thanks for helping out. Keep pull requests small and focused, reuse patterns alr
 
 ```bash
 cd Source
-dotnet run --project Baseport --urls http://localhost:5263
+dotnet run --project Baseport --urls http://localhost:5000
 ```
 
 Your one-time admin password is printed to the console on first start. Use it to seed some demo data:

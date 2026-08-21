@@ -6,14 +6,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
-// field types from GAP-TRAILBASE.md §12, plus the nested-json validation bug
 public class FieldValidationNewTypesTests
 {
     private static FieldDefinition Field(string type, double? min = null, double? max = null, string optionsJson = "{}") =>
         new() { Id = Ids.NewShortId(12), Name = "F", DataType = type, Min = min, Max = max, OptionsJson = optionsJson };
 
     private static List<string> Validate(FieldDefinition f, JsonNode? value) =>
-        FieldValidation.ValidateFieldValue(f, value, _ => true);
+        FieldValidation.ValidateFieldValue(f, value, (_, _) => true);
 
     [Theory]
     [InlineData("a@b.com", true)]
@@ -22,15 +21,6 @@ public class FieldValidationNewTypesTests
     public void Email_validates_address_shape(string value, bool valid)
     {
         var errs = Validate(Field("email"), JsonValue.Create(value));
-        Assert.Equal(valid, errs.Count == 0);
-    }
-
-    [Theory]
-    [InlineData("+31 6 1234 5678", true)]
-    [InlineData("call me", false)]
-    public void Phone_validates_loose_shape(string value, bool valid)
-    {
-        var errs = Validate(Field("phone"), JsonValue.Create(value));
         Assert.Equal(valid, errs.Count == 0);
     }
 
@@ -45,18 +35,6 @@ public class FieldValidationNewTypesTests
     }
 
     [Theory]
-    [InlineData("#fff", true)]
-    [InlineData("#a1b2c3", true)]
-    [InlineData("rgb(10, 20, 30)", true)]
-    [InlineData("hsl(120, 50%, 50%)", true)]
-    [InlineData("chartreuse", false)]
-    public void Color_accepts_hex_rgb_and_hsl(string value, bool valid)
-    {
-        var errs = Validate(Field("color"), JsonValue.Create(value));
-        Assert.Equal(valid, errs.Count == 0);
-    }
-
-    [Theory]
     [InlineData("14:30:00", true)]
     [InlineData("14:30", true)]
     [InlineData("not a time", false)]
@@ -64,25 +42,6 @@ public class FieldValidationNewTypesTests
     {
         var errs = Validate(Field("time"), JsonValue.Create(value));
         Assert.Equal(valid, errs.Count == 0);
-    }
-
-    [Fact]
-    public void Rating_behaves_like_a_bounded_number()
-    {
-        var f = Field("rating", min: 1, max: 5);
-        Assert.Empty(Validate(f, JsonValue.Create(3.0)));
-        Assert.Contains(Validate(f, JsonValue.Create(9.0)), e => e.Contains("at most 5"));
-        Assert.Contains(Validate(f, JsonValue.Create("not a number")), e => e.Contains("must be a number"));
-    }
-
-    [Fact]
-    public void Rating_definition_defaults_to_one_to_five_when_unset()
-    {
-        var f = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Stars", DataType = "rating" };
-        var errs = FieldValidation.ValidateFieldDefinition(f, new List<string>(), new List<string> { "Stars" }, _ => true);
-        Assert.Empty(errs);
-        Assert.Equal(1, f.Min);
-        Assert.Equal(5, f.Max);
     }
 
     [Theory]
@@ -129,14 +88,14 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Array_field_with_columns_validates_line_item_rows()
+    public void Array_field_with_a_sub_schema_validates_line_item_rows()
     {
-        var f = Field("array", optionsJson: """{"columns":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}""");
+        var f = Field("array", optionsJson: """{"fields":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}""");
 
         Assert.Empty(Validate(f, JsonNode.Parse("""[{"Qty":2,"Price":9.5},{"Qty":1,"Price":3}]""")));
         Assert.Contains(Validate(f, JsonNode.Parse("""[{"Qty":"not a number","Price":1}]""")), e => e.Contains("Qty must be a number"));
-        Assert.Contains(Validate(f, JsonNode.Parse("""[{"Qty":1,"Sku":"ABC"}]""")), e => e.Contains("unknown column 'Sku'"));
-        Assert.Contains(Validate(f, JsonNode.Parse("""["not an object"]""")), e => e.Contains("must contain line-item rows"));
+        Assert.Contains(Validate(f, JsonNode.Parse("""[{"Qty":1,"Sku":"ABC"}]""")), e => e.Contains("unknown member 'Sku'"));
+        Assert.Contains(Validate(f, JsonNode.Parse("""["not an object"]""")), e => e.Contains("must contain rows"));
     }
 
     [Fact]
@@ -162,6 +121,55 @@ public class FieldValidationNewTypesTests
         var f = Field(type, optionsJson: """["red","blue"]""");
         var errs = Validate(f, JsonNode.Parse("""{"injected":"object"}"""));
         Assert.Contains(errs, e => e.Contains("nested object or array"));
+    }
+
+    // A nested member is a field, so it gets the whole validator rather than a shape check.
+    [Fact]
+    public void Object_members_are_validated_with_the_same_rules_as_top_level_fields()
+    {
+        var f = Field("json", optionsJson: """
+            {"fields":[
+                {"name":"Street","dataType":"text","isRequired":true},
+                {"name":"Email","dataType":"email"},
+                {"name":"Country","dataType":"select","optionsJson":"[\"NL\",\"BE\"]"}
+            ]}
+            """);
+
+        Assert.Empty(Validate(f, JsonNode.Parse("""{"Street":"Dorpsstraat 1","Email":"a@b.com","Country":"NL"}""")));
+        Assert.Contains(Validate(f, JsonNode.Parse("""{"Email":"a@b.com"}""")), e => e.Contains("Street is required"));
+        Assert.Contains(Validate(f, JsonNode.Parse("""{"Street":"x","Email":"nope"}""")), e => e.Contains("valid email"));
+        Assert.Contains(Validate(f, JsonNode.Parse("""{"Street":"x","Country":"FR"}""")), e => e.Contains("invalid selection"));
+    }
+
+    [Fact]
+    public void Object_members_nest_further_and_stop_at_the_depth_cap()
+    {
+        var deep = Field("json", optionsJson: """
+            {"fields":[{"name":"A","dataType":"json","optionsJson":"{\"fields\":[{\"name\":\"B\",\"dataType\":\"json\",\"optionsJson\":\"{\\\"fields\\\":[{\\\"name\\\":\\\"C\\\",\\\"dataType\\\":\\\"number\\\"}]}\"}]}"}]}
+            """);
+
+        Assert.Empty(Validate(deep, JsonNode.Parse("""{"A":{"B":{"C":1}}}""")));
+        Assert.Contains(Validate(deep, JsonNode.Parse("""{"A":{"B":{"C":"not a number"}}}""")), e => e.Contains("must be a number"));
+    }
+
+    [Fact]
+    public void An_object_without_a_sub_schema_stays_free_form()
+    {
+        Assert.Empty(Validate(Field("json"), JsonNode.Parse("""{"anything":{"goes":[1,2]}}""")));
+    }
+
+    [Fact]
+    public void A_nested_member_cannot_be_a_type_that_is_computed_over_a_whole_record()
+    {
+        var f = new FieldDefinition
+        {
+            Id = Ids.NewShortId(12),
+            Name = "Meta",
+            DataType = "json",
+            OptionsJson = """{"fields":[{"name":"Secret","dataType":"password"}]}"""
+        };
+        var errs = FieldValidation.ValidateFieldDefinition(f, new List<string>(), new List<string> { "Meta" }, _ => true);
+        Assert.Contains(errs, e => e.Contains("cannot be a member of a nested object"));
     }
 
     [Fact]
@@ -303,5 +311,53 @@ public class RecordEngineNewTypesTests : IDisposable
         Assert.Empty(outcome.Errors);
         Assert.Equal("import", obj["Meta"]!["source"]!.GetValue<string>());
         Assert.Equal(3, ((JsonArray)obj["Tags"]!).Count);
+    }
+
+    // PATCH used to replace a whole object, so touching one member silently dropped the rest.
+    [Fact]
+    public async Task Patching_one_member_of_an_object_field_keeps_the_others()
+    {
+        var table = Seed(new FieldDefinition
+        {
+            Id = Ids.NewShortId(12),
+            Name = "Address",
+            DataType = "json",
+            OptionsJson = """{"fields":[{"name":"Street","dataType":"text"},{"name":"City","dataType":"text"},{"name":"Geo","dataType":"json","optionsJson":"{\"fields\":[{\"name\":\"Lat\",\"dataType\":\"number\"},{\"name\":\"Lon\",\"dataType\":\"number\"}]}"}]}"""
+        });
+
+        var stored = Json("""{ "Address": { "Street": "Dorpsstraat 1", "City": "Utrecht", "Geo": { "Lat": 52.0, "Lon": 5.1 } } }""");
+        var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = stored.ToJsonString(), CreatedAt = DateTime.UtcNow };
+        _db.Records.Add(record);
+        _db.SaveChanges();
+
+        var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(
+            _db, table, table.Fields, record, Json("""{ "Address": { "City": "Amsterdam", "Geo": { "Lon": 4.9 } } }"""), replace: false);
+
+        Assert.Empty(outcome.Errors);
+        Assert.Equal("Dorpsstraat 1", merged["Address"]!["Street"]!.GetValue<string>());
+        Assert.Equal("Amsterdam", merged["Address"]!["City"]!.GetValue<string>());
+        Assert.Equal(52.0, merged["Address"]!["Geo"]!["Lat"]!.GetValue<double>());
+        Assert.Equal(4.9, merged["Address"]!["Geo"]!["Lon"]!.GetValue<double>());
+    }
+
+    [Fact]
+    public async Task Replacing_a_record_still_replaces_the_whole_object()
+    {
+        var table = Seed(new FieldDefinition
+        {
+            Id = Ids.NewShortId(12), Name = "Address", DataType = "json",
+            OptionsJson = """{"fields":[{"name":"Street","dataType":"text"},{"name":"City","dataType":"text"}]}"""
+        });
+
+        var stored = Json("""{ "Address": { "Street": "Dorpsstraat 1", "City": "Utrecht" } }""");
+        var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = stored.ToJsonString(), CreatedAt = DateTime.UtcNow };
+        _db.Records.Add(record);
+        _db.SaveChanges();
+
+        var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(
+            _db, table, table.Fields, record, Json("""{ "Address": { "City": "Amsterdam" } }"""), replace: true);
+
+        Assert.Empty(outcome.Errors);
+        Assert.Null(merged["Address"]!["Street"]);
     }
 }

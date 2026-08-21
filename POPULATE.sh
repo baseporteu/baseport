@@ -22,7 +22,7 @@ for arg in "$@"; do
     esac
 done
 
-BASE_URL="${BASE_URL:-http://localhost:5263}"
+BASE_URL="${BASE_URL:-http://localhost:5000}"
 ADMIN_USER="${ADMIN_USER:-}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 ADMIN_NEW_PASSWORD="${ADMIN_NEW_PASSWORD:-baseport-dev-password}"

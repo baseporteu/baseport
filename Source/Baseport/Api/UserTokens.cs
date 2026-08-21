@@ -191,7 +191,7 @@ public static class UserTokens
         return (user, new UserTokenPair(Mint(user, session.Id, now), refreshToken, now.Add(AuthTokenLifetime)));
     }
 
-    // An access token is stateless and cannot be recalled, so it names the session row that issued it and every resolution re-reads that row. Sign-out, a password an operator resets and an expiry all delete the row, and the outstanding access token dies with it instead of outliving the sign-out by its full lifetime. A token minted before this claim existed carries no sid and is refused.
+    // An access token is stateless and cannot be recalled, so it names the session row that issued it and every resolution re-reads that row. Sign-out, a password an operator resets and an expiry all delete the row, and the outstanding access token dies with it instead of outliving the sign-out by its full lifetime. A token minted before this claim existed includes no sid and is refused.
     public static async Task<UserAccount?> AccountForAsync(AppDbContext db, UserClaims claims, DateTime now)
     {
         if (string.IsNullOrEmpty(claims.SessionId)) return null;

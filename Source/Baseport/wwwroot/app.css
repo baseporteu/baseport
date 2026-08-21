@@ -2231,6 +2231,11 @@ li.CodeMirror-hint-active {
     border-bottom: none;
 }
 
+/* A field has no top margin of its own, so one following a row would sit on that row's bottom border. */
+.setting-row + .field {
+    margin-top: .875rem;
+}
+
 .setting-row:has(> .switch) {
     grid-template-columns: minmax(0, 1fr) auto;
 }

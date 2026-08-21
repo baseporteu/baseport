@@ -11,47 +11,9 @@ public static class FieldValidation
     private static readonly TimeSpan PatternTimeout = TimeSpan.FromMilliseconds(100);
     private const string PatternProbe = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!";
 
-    public static readonly HashSet<string> KnownTypes = new()
-        {
-            "text", "longtext", "number", "currency", "boolean", "date", "datetime", "select", "multiselect",
-            "file", "reference", "calculated", "derived", "systemid",
-            "email", "phone", "url", "color", "time", "rating", "slug", "richtext", "json", "array", "password"
-        };
+    // The canonical name for an author-supplied type, or null when there is no such type.
+    public static string? NormalizeType(string? t) => FieldTypes.Find(t)?.Name;
 
-    public static string? NormalizeType(string? t) => (t ?? "").ToLowerInvariant() switch
-    {
-        "text" => "text",
-        "longtext" or "markdown" => "longtext",
-        "number" => "number",
-        "currency" or "price" => "currency",
-        "boolean" or "checkbox" => "boolean",
-        "date" => "date",
-        "datetime" or "timestamp" => "datetime",
-        "select" => "select",
-        "multiselect" or "tags" => "multiselect",
-        "file" or "media" => "file",
-        "reference" or "relation" => "reference",
-        "calculated" or "formula" => "calculated",
-        "derived" or "internal" => "derived",
-        "systemid" or "system_id" => "systemid",
-        "email" => "email",
-        "phone" or "tel" => "phone",
-        "url" or "link" => "url",
-        "color" => "color",
-        "time" => "time",
-        "rating" => "rating",
-        "slug" => "slug",
-        "richtext" or "html" => "richtext",
-        "json" or "object" => "json",
-        "array" or "list" => "array",
-        "password" or "encrypted" => "password",
-        _ => null
-    };
-
-    private static readonly Regex PhonePattern = new(@"^\+?[0-9()\-.\s]{6,20}$", RegexOptions.Compiled);
-    private static readonly Regex ColorPattern = new(
-        @"^(#(?:[0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})|rgba?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(,\s*[\d.]+\s*)?\)|hsla?\(\s*[\d.]+\s*,\s*[\d.]+%\s*,\s*[\d.]+%\s*(,\s*[\d.]+\s*)?\))$",
-        RegexOptions.Compiled);
     private static readonly Regex SlugPattern = new(@"^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.Compiled);
 
     // A field name is a JSON key, a bare identifier in JsExpr expressions (data.Name / data["Name"]), and an OpenAPI property
@@ -133,41 +95,34 @@ public static class FieldValidation
         return null;
     }
 
-    // One column of a line-items row (an array field's sub-schema). Kept deliberately small: no nested
-    // arrays/objects, no per-column Min/Max/Pattern — a line-item cell is validated on shape, not on every
-    // rule a top-level field can carry.
-    public sealed record ArrayColumn(string Name, string Label, string DataType);
+    // How deep an object may nest below a top-level field.
+    public const int MaxNestingDepth = 3;
 
-    public static readonly HashSet<string> ArrayColumnTypes = new() { "text", "number", "currency", "select", "date", "boolean" };
+    private static readonly JsonSerializerOptions NestedSchemaJson = new() { PropertyNameCaseInsensitive = true };
 
-    // mirrors RefTableId's shape: { "columns": [{ "name","label","dataType" }, ...] }. Null means "plain
-    // scalar-list array field" (today's behavior), not "array field with zero columns".
-    public static List<ArrayColumn>? ArrayColumns(string optionsJson)
+    // The sub-schema of an object or array field: { "fields": [ ... ] }, each member the shape a field has on the wire.
+    // Empty means free-form: an opaque object, or a list of bare scalars.
+    public static IReadOnlyList<FieldDefinition> NestedFields(string optionsJson)
     {
         try
         {
             var o = JsonSerializer.Deserialize<JsonElement>(string.IsNullOrWhiteSpace(optionsJson) ? "{}" : optionsJson);
-            if (o.ValueKind != JsonValueKind.Object || !o.TryGetProperty("columns", out var cols) || cols.ValueKind != JsonValueKind.Array)
-                return null;
-
-            var list = new List<ArrayColumn>();
-            foreach (var c in cols.EnumerateArray())
-            {
-                if (c.ValueKind != JsonValueKind.Object) continue;
-                var name = c.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? "" : "";
-                var label = c.TryGetProperty("label", out var l) && l.ValueKind == JsonValueKind.String ? l.GetString() ?? "" : "";
-                var dt = c.TryGetProperty("dataType", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() ?? "text" : "text";
-                list.Add(new ArrayColumn(name, label, dt));
-            }
-            return list.Count > 0 ? list : null;
+            if (o.ValueKind != JsonValueKind.Object || !o.TryGetProperty("fields", out var fields) || fields.ValueKind != JsonValueKind.Array)
+                return [];
+            return fields.Deserialize<List<FieldDefinition>>(NestedSchemaJson) ?? [];
         }
-        catch { return null; }
+        catch (JsonException) { return []; }
     }
 
-    public static List<string> ValidateFieldValue(FieldDefinition f, JsonNode? v, Func<string, bool> recordExists)
+    // The reference check takes the field it is checking: a nested member configures its own target table.
+    public static List<string> ValidateFieldValue(FieldDefinition f, JsonNode? v, Func<FieldDefinition, string, bool> recordExists) =>
+        ValidateFieldValue(f, v, recordExists, 0);
+
+    private static List<string> ValidateFieldValue(FieldDefinition f, JsonNode? v, Func<FieldDefinition, string, bool> recordExists, int depth)
     {
         var errs = new List<string>();
-        var t = NormalizeType(f.DataType) ?? "text";
+        var type = FieldTypes.Of(f);
+        var t = type.Name;
 
         bool empty = v is null ||
                      (v is JsonValue jv && (jv.GetValueKind() == JsonValueKind.Null ||
@@ -177,12 +132,23 @@ public static class FieldValidation
             if (f.IsRequired) errs.Add($"{f.Name} is required.");
             return errs;
         }
-        if (t is "calculated" or "systemid" or "derived" || f.IsHidden) return errs;
+        if (type.Computed || f.IsHidden) return errs;
 
-        // without this, Str()/TryNum() collapse a JsonObject/JsonArray to "" or 0 and every check below passes
-        if (t is not ("json" or "array" or "multiselect") && v is not JsonValue)
+        // Without this, Str()/TryNum() collapse a JsonObject/JsonArray to "" or 0 and every check below passes.
+        var shapeMatches = type.Shape switch
         {
-            errs.Add($"{f.Name} must be a value, not a nested object or array.");
+            FieldShape.Object => v is JsonObject,
+            FieldShape.Array => v is JsonArray,
+            _ => v is JsonValue
+        };
+        if (!shapeMatches)
+        {
+            errs.Add(type.Shape switch
+            {
+                FieldShape.Object => $"{f.Name} must be a JSON object.",
+                FieldShape.Array => $"{f.Name} must be a list of values.",
+                _ => $"{f.Name} must be a value, not a nested object or array."
+            });
             return errs;
         }
 
@@ -204,7 +170,6 @@ public static class FieldValidation
         {
             case "number":
             case "currency":
-            case "rating":
                 if (!TryNum(v, out var nv)) errs.Add($"{f.Name} must be a number.");
                 // Min/Max are bounds on the value for numerics, and on the length for text, the same two columns serve both so a field never needs four nullable limits.
                 else if (f.Min is { } lo && nv < lo) errs.Add($"{f.Name} must be at least {lo.ToString("0.##", CultureInfo.InvariantCulture)}.");
@@ -227,7 +192,7 @@ public static class FieldValidation
                 if (!opts.Contains(Str(v))) errs.Add($"{f.Name} has an invalid selection.");
                 break;
             case "multiselect":
-                if (v is not JsonArray arr) { errs.Add($"{f.Name} must be a list of options."); break; }
+                var arr = (JsonArray)v!;
                 var mopts = ParseOptions(f.OptionsJson);
                 foreach (var item in arr)
                 {
@@ -243,7 +208,7 @@ public static class FieldValidation
             case "reference":
                 var tpid = RefTableId(f.OptionsJson);
                 if (tpid is null) errs.Add($"{f.Name} has no reference target configured.");
-                else if (!recordExists(Str(v))) errs.Add($"{f.Name} references a record that doesn't exist.");
+                else if (!recordExists(f, Str(v))) errs.Add($"{f.Name} references a record that doesn't exist.");
                 break;
             case "text":
             case "longtext":
@@ -256,14 +221,8 @@ public static class FieldValidation
             case "email":
                 if (!AccountValidation.IsEmail(Str(v))) errs.Add($"{f.Name} is not a valid email address.");
                 break;
-            case "phone":
-                if (!PhonePattern.IsMatch(Str(v))) errs.Add($"{f.Name} is not a valid phone number.");
-                break;
             case "url":
                 if (!IsHttpUrl(Str(v))) errs.Add($"{f.Name} must be a valid http(s) URL.");
-                break;
-            case "color":
-                if (!ColorPattern.IsMatch(Str(v))) errs.Add($"{f.Name} must be a hex, rgb() or hsl() color.");
                 break;
             case "time":
                 if (!TimeOnly.TryParse(Str(v), CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) errs.Add($"{f.Name} must be a valid time (HH:mm:ss).");
@@ -283,33 +242,29 @@ public static class FieldValidation
                 else if (f.Min is { } pwMin && pw.Length < pwMin) errs.Add($"{f.Name} must be at least {(int)pwMin} characters.");
                 break;
             case "json":
-                if (v is not JsonObject jobj) { errs.Add($"{f.Name} must be a JSON object."); break; }
+                var jobj = (JsonObject)v!;
                 var jsonCap = (int)(f.Max ?? 20000);
-                if (jobj.ToJsonString().Length > jsonCap) errs.Add($"{f.Name} is too large (max {jsonCap} characters serialized).");
+                if (jobj.ToJsonString().Length > jsonCap) { errs.Add($"{f.Name} is too large (max {jsonCap} characters serialized)."); break; }
+                errs.AddRange(ValidateMembers(f, NestedFields(f.OptionsJson), jobj, recordExists, depth));
                 break;
             case "array":
-                if (v is not JsonArray jarr) { errs.Add($"{f.Name} must be a list of values."); break; }
+                var jarr = (JsonArray)v!;
                 var itemCap = (int)(f.Max ?? 1000);
                 if (jarr.Count > itemCap) { errs.Add($"{f.Name} must have at most {itemCap} items."); break; }
 
-                var lineCols = ArrayColumns(f.OptionsJson);
-                if (lineCols is null)
+                // No sub-schema means a plain list of scalars, which is what an array field was before it could carry one.
+                var members = NestedFields(f.OptionsJson);
+                if (members.Count == 0)
                 {
                     if (jarr.Any(item => item is not JsonValue))
                         errs.Add($"{f.Name} must contain only text, number or boolean values, not nested objects or arrays.");
                     break;
                 }
 
-                var colByName = lineCols.ToDictionary(c => c.Name);
                 foreach (var row in jarr)
                 {
-                    if (row is not JsonObject rowObj) { errs.Add($"{f.Name} must contain line-item rows."); continue; }
-                    foreach (var cell in rowObj)
-                    {
-                        if (!colByName.TryGetValue(cell.Key, out var col)) { errs.Add($"{f.Name} row has unknown column '{cell.Key}'."); continue; }
-                        if (cell.Value is null) continue;
-                        errs.AddRange(ValidateArrayCell(col, cell.Value));
-                    }
+                    if (row is not JsonObject rowObj) { errs.Add($"{f.Name} must contain rows, not bare values."); continue; }
+                    errs.AddRange(ValidateMembers(f, members, rowObj, recordExists, depth));
                 }
                 break;
         }
@@ -335,30 +290,36 @@ public static class FieldValidation
         return errs;
     }
 
-    // A line-item cell checks shape only (right type), the same narrow scope its column definition carries -
-    // no Min/Max/Pattern/uniqueness, those live on top-level fields, not on a row of one.
-    private static List<string> ValidateArrayCell(ArrayColumn col, JsonNode v)
+    // Members are validated as fields in their own right, so they carry the same rules a top-level field does.
+    private static List<string> ValidateMembers(
+        FieldDefinition owner, IReadOnlyList<FieldDefinition> members, JsonObject obj,
+        Func<FieldDefinition, string, bool> recordExists, int depth)
     {
         var errs = new List<string>();
-        switch (NormalizeType(col.DataType) ?? "text")
+        if (members.Count == 0) return errs;
+        if (depth >= MaxNestingDepth)
         {
-            case "number":
-            case "currency":
-                if (!TryNum(v, out _)) errs.Add($"{col.Name} must be a number.");
-                break;
-            case "boolean":
-                if (v is not JsonValue bj || (bj.GetValueKind() != JsonValueKind.True && bj.GetValueKind() != JsonValueKind.False))
-                    errs.Add($"{col.Name} must be true or false.");
-                break;
-            case "date":
-                if (!DateTime.TryParse(Str(v), CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) errs.Add($"{col.Name} must be a valid date.");
-                break;
-            // text/select: any string is accepted at this scope.
+            errs.Add($"{owner.Name} nests deeper than {MaxNestingDepth} levels.");
+            return errs;
+        }
+
+        // Refused rather than dropped: a sub-schema ships with the object that declares it, so an extra key is a mistake, not a stale form.
+        var declared = members.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var kv in obj)
+            if (!declared.Contains(kv.Key)) errs.Add($"{owner.Name} has an unknown member '{kv.Key}'.");
+
+        foreach (var m in members)
+        {
+            obj.TryGetPropertyValue(m.Name, out var value);
+            errs.AddRange(ValidateFieldValue(m, value, recordExists, depth + 1).Select(e => $"{owner.Name}.{e}"));
         }
         return errs;
     }
 
-    public static List<string> ValidateFieldDefinition(FieldDefinition f, IReadOnlyCollection<string> otherNames, IReadOnlyCollection<string> allNames, Func<string, bool> tableExists)
+    public static List<string> ValidateFieldDefinition(FieldDefinition f, IReadOnlyCollection<string> otherNames, IReadOnlyCollection<string> allNames, Func<string, bool> tableExists) =>
+        ValidateFieldDefinition(f, otherNames, allNames, tableExists, 0);
+
+    private static List<string> ValidateFieldDefinition(FieldDefinition f, IReadOnlyCollection<string> otherNames, IReadOnlyCollection<string> allNames, Func<string, bool> tableExists, int depth)
     {
         var errs = new List<string>();
         if (string.IsNullOrWhiteSpace(f.Name)) errs.Add("Field name is required.");
@@ -370,11 +331,13 @@ public static class FieldValidation
         if (f.Label.Length > 128) errs.Add("Field label is too long (max 128 characters).");
         if (f.HelpText.Length > 512) errs.Add("Field help text is too long (max 512 characters).");
 
-        var t = NormalizeType(f.DataType);
-        if (t == null) { errs.Add($"Unknown field type '{f.DataType}'."); return errs; }
+        var type = FieldTypes.Find(f.DataType);
+        if (type == null) { errs.Add($"Unknown field type '{f.DataType}'."); return errs; }
+        var t = type.Name;
         f.DataType = t;
 
-        if (t == "rating" && f.Min is null && f.Max is null) { f.Min = 1; f.Max = 5; }
+        if (depth > 0 && !type.Nestable) errs.Add($"A {t} field is computed over a whole record and cannot be a member of a nested object.");
+        if (depth > 0 && (f.IsUnique || f.IsIdentifier)) errs.Add($"A nested member cannot be unique or a lookup identifier: '{f.Name}'.");
 
         if (f.Min is { } lo && f.Max is { } hi && lo > hi) errs.Add("Minimum cannot be greater than maximum.");
 
@@ -386,15 +349,15 @@ public static class FieldValidation
                 errs.Add("Currency must be a three-letter ISO 4217 code, for example EUR.");
         }
 
-        // A server-computed or hidden field is never something the visitor holds, so it can neither be a lookup identifier nor be uniquely enforced against values the visitor never supplied.
-        if (t is "calculated" or "derived" or "systemid" or "file")
+        // A visitor never holds a server-computed value, so it can neither identify a record nor be enforced unique.
+        if (type.Computed || t == "file")
         {
             if (f.IsIdentifier) errs.Add($"A {t} field cannot be a lookup identifier.");
             if (f.IsRequired && t != "file") errs.Add($"A {t} field is filled in by the server and cannot be required.");
         }
-        if (t is "json" or "array" or "password" && f.IsIdentifier) errs.Add($"A {t} field cannot be a lookup identifier.");
+        if ((type.Shape != FieldShape.Scalar || type.Secret) && f.IsIdentifier) errs.Add($"A {t} field cannot be a lookup identifier.");
         if (f.IsIdentifier && f.IsHidden) errs.Add("A hidden field cannot be a lookup identifier.");
-        if (f.IsUnique && t is "multiselect" or "boolean" or "json" or "array" or "password") errs.Add($"A {t} field cannot be unique.");
+        if (f.IsUnique && (type.Shape != FieldShape.Scalar || type.Secret || t == "boolean")) errs.Add($"A {t} field cannot be unique.");
 
         if (!string.IsNullOrWhiteSpace(f.Pattern))
         {
@@ -435,19 +398,31 @@ public static class FieldValidation
                     errs.Add($"Slug source field '{srcField}' does not exist.");
                 break;
             case "array":
-                var arrCols = ArrayColumns(f.OptionsJson);
-                if (arrCols is not null)
-                {
-                    var colNames = new HashSet<string>();
-                    foreach (var c in arrCols)
-                    {
-                        if (string.IsNullOrWhiteSpace(c.Name)) errs.Add("Every line-item column needs a name.");
-                        else if (!FieldNamePattern.IsMatch(c.Name)) errs.Add($"Line-item column name '{c.Name}' must start with a letter or underscore, and contain only letters, digits and underscores.");
-                        else if (!colNames.Add(c.Name)) errs.Add($"Line-item column name '{c.Name}' is used more than once.");
-                        if (!ArrayColumnTypes.Contains(NormalizeType(c.DataType) ?? "")) errs.Add($"Line-item column '{c.Name}' has an unsupported type '{c.DataType}'.");
-                    }
-                }
+            case "json":
+                errs.AddRange(ValidateNestedSchema(f, tableExists, depth));
                 break;
+        }
+        return errs;
+    }
+
+    // A sub-schema is a list of fields, so it is checked by the same validator, one level down.
+    private static List<string> ValidateNestedSchema(FieldDefinition owner, Func<string, bool> tableExists, int depth)
+    {
+        var errs = new List<string>();
+        var members = NestedFields(owner.OptionsJson);
+        if (members.Count == 0) return errs;
+        if (depth >= MaxNestingDepth)
+        {
+            errs.Add($"'{owner.Name}' nests deeper than {MaxNestingDepth} levels.");
+            return errs;
+        }
+
+        var names = members.Select(m => m.Name).ToList();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var m in members)
+        {
+            if (!seen.Add(m.Name)) errs.Add($"'{owner.Name}' declares '{m.Name}' more than once.");
+            errs.AddRange(ValidateFieldDefinition(m, [], names, tableExists, depth + 1).Select(e => $"{owner.Name}: {e}"));
         }
         return errs;
     }
@@ -592,7 +567,7 @@ public static class FieldValidation
                 var field = fields.FirstOrDefault(f => f.Name == fieldName);
                 if (field is null) errs.Add($"Row {rowIdx + 1}: line items references unknown field '{fieldName}'.");
                 else if (NormalizeType(field.DataType) != "array") errs.Add($"Row {rowIdx + 1}: line items must point at an array field.");
-                else if (ArrayColumns(field.OptionsJson) is null) errs.Add($"Row {rowIdx + 1}: '{DisplayName(field)}' has no line-item columns configured.");
+                else if (NestedFields(field.OptionsJson).Count == 0) errs.Add($"Row {rowIdx + 1}: '{DisplayName(field)}' has no line-item columns configured.");
                 else if (!seen.Add(fieldName)) errs.Add($"Field '{fieldName}' appears more than once in the layout.");
             }
             else if (t == "button_bar")

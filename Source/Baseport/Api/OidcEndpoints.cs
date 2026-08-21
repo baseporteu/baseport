@@ -355,13 +355,13 @@ public static class OidcEndpoints
 
         var holder = await db.UserAccounts.FirstOrDefaultAsync(u => u.Email == identity.Email && u.Email != "");
         if (holder is null)
-            return $"No Baseport account carries the e-mail {identity.Email}. Put it on the non-admin account you want matched, and the next sign-in links itself.";
+            return $"No Baseport account includes the e-mail {identity.Email}. Put it on the non-admin account you want matched, and the next sign-in links itself.";
 
         if (holder.Role == AccountRoles.Admin)
-            return $"{holder.Username} carries {identity.Email} but is an admin, and an admin is never linked automatically: " +
+            return $"{holder.Username} includes {identity.Email} but is an admin, and an admin is never linked automatically: " +
                 "console access must not follow from a name in somebody else's directory. Link it by hand, once.";
 
-        return $"{holder.Username} carries {identity.Email} but is already linked to another provider identity. Unlink it first.";
+        return $"{holder.Username} includes {identity.Email} but is already linked to another provider identity. Unlink it first.";
     }
 
     // Both claim paths run through `Linkable`, which filters admins out, so no claim will ever link an admin however it is spelled. The other two notes read as though fixing the claim or the e-mail would help, and for the operator bootstrapping their own console it never can. Only emitted where it applies: an instance whose admins are all linked already has nothing to explain.

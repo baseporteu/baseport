@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -66,9 +67,9 @@ public class FieldDefinition
     public string Name { get; set; } = string.Empty; // Stable storage key.
     public string Label { get; set; } = ""; // Display name (falls back to Name).
     public string HelpText { get; set; } = ""; // Form input hint.
-    public string DataType { get; set; } = "text"; // text|longtext|number|currency|boolean|date|datetime|select|multiselect|file|reference|calculated|derived|systemid|email|phone|url|color|time|rating|slug|richtext|json|array|password
+    public string DataType { get; set; } = "text"; // A name in the FieldTypes table, which is the only thing that says what a type means.
     public string Expression { get; set; } = string.Empty; // JS expression for calculated/derived fields.
-    public string OptionsJson { get; set; } = "[]"; // Select options or reference config.
+    public string OptionsJson { get; set; } = "[]"; // Select options, reference config, or the sub-schema of an object or list field.
     public string Pattern { get; set; } = string.Empty; // Validation regex.
     public string DefaultValue { get; set; } = ""; // Fallback for omitted fields.
     public string Currency { get; set; } = ""; // ISO 4217 code (falls back to app default).
@@ -180,6 +181,12 @@ public class Record
     public string JsonData { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    // RecordChangeInterceptor stamps UpdatedAt on every write that goes through EF, but a bulk import writing
+    // raw SQL never reaches it and leaves the column on its default. Never modified reads as the creation time,
+    // the same answer AddRecordUpdatedAt backfilled, rather than as year 1.
+    [NotMapped]
+    public DateTime Modified => UpdatedAt == default ? CreatedAt : UpdatedAt;
 }
 
 public class UserAccount
@@ -223,7 +230,7 @@ public class OidcProvider
     public string ClientSecret { get; set; } = ""; // Write-only: never returned, exposed as HasClientSecret.
     public string Scopes { get; set; } = "openid profile email";
 
-    // Which claim carries the username and which the email. Authelia and Authentik send preferred_username; Pocket ID does too.
+    // Which claim includes the username and which the email. Authelia and Authentik send preferred_username; Pocket ID does too.
     public string UsernameClaim { get; set; } = "preferred_username";
     public string EmailClaim { get; set; } = "email";
 
@@ -257,7 +264,7 @@ public class SavedQuery
     public DateTime UpdatedAt { get; set; }
     public DateTime? LastExecutedAt { get; set; }
 
-    // A saved query that carries a cron expression is the operator's own scheduled task, run by the same scheduler as the maintenance jobs. Empty is a query somebody runs by hand.
+    // A saved query that includes a cron expression is the operator's own scheduled task, run by the same scheduler as the maintenance jobs. Empty is a query somebody runs by hand.
     public string Schedule { get; set; } = "";
 
     // Paused rather than unscheduled: the cron survives so the operator does not have to write it again.

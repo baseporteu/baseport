@@ -181,39 +181,70 @@ public static class OpenApiSpec
 
     private static JsonObject FieldSchema(FieldDefinition f)
     {
-        var t = FieldValidation.NormalizeType(f.DataType);
-        JsonObject schema = t switch
-        {
-            "number" or "currency" => new JsonObject { ["type"] = "number" },
-            "boolean" => new JsonObject { ["type"] = "boolean" },
-            _ => new JsonObject { ["type"] = "string" }
-        };
-        if (t is "select" or "multiselect")
-        {
-            var opts = FieldValidation.ParseOptions(f.OptionsJson);
-            if (opts.Count > 0) schema["enum"] = new JsonArray(opts.Select(o => (JsonNode)JsonValue.Create(o)!).ToArray());
-        }
+        var type = FieldTypes.Of(f);
+        var schema = new JsonObject { ["type"] = type.JsonType };
+        if (type.JsonFormat is { } fmt) schema["format"] = fmt;
+
+        var options = FieldValidation.ParseOptions(f.OptionsJson);
+        var enums = options.Count > 0 && type.Name is "select" or "multiselect"
+            ? new JsonArray(options.Select(o => (JsonNode)JsonValue.Create(o)!).ToArray())
+            : null;
+
+        if (type.Shape == FieldShape.Object) schema = ObjectSchema(f, schema);
+        else if (type.Shape == FieldShape.Array) schema["items"] = ItemSchema(f, enums);
+        else if (enums is not null) schema["enum"] = enums;
+
         if (!string.IsNullOrWhiteSpace(f.Pattern)) schema["pattern"] = f.Pattern;
         if (!string.IsNullOrWhiteSpace(f.Label)) schema["title"] = f.Label;
         if (!string.IsNullOrWhiteSpace(f.HelpText)) schema["description"] = f.HelpText;
 
-        // Min/Max are value bounds on numerics and length bounds on text, the same two columns, so map them to whichever JSON Schema keyword applies.
-        if (t is "number" or "currency")
+        // Min and Max are one pair of columns: value bounds on a number, length bounds on a string, item counts on a list.
+        if (type.JsonType == "number")
         {
             if (f.Min is { } lo) schema["minimum"] = lo;
             if (f.Max is { } hi) schema["maximum"] = hi;
         }
-        else if (t is "text" or "longtext")
+        else if (type.JsonType == "string" && type.Name is "text" or "longtext")
         {
             if (f.Min is { } lo) schema["minLength"] = (int)lo;
             if (f.Max is { } hi) schema["maxLength"] = (int)hi;
         }
-        else if (t is "date") schema["format"] = "date";
-        else if (t is "datetime") schema["format"] = "date-time";
-        else if (t is "file") schema["format"] = "uri";
+        else if (type.Name == "array" && f.Max is { } max) schema["maxItems"] = (int)max;
 
         if (!string.IsNullOrEmpty(f.DefaultValue)) schema["default"] = JsonValue.Create(f.DefaultValue);
         return schema;
+    }
+
+    // A sub-schema publishes its members. Without one the field is a free-form object, which is all we can promise.
+    private static JsonObject ObjectSchema(FieldDefinition f, JsonObject schema)
+    {
+        var members = FieldValidation.NestedFields(f.OptionsJson);
+        if (members.Count == 0)
+        {
+            schema["additionalProperties"] = true;
+            return schema;
+        }
+
+        var properties = new JsonObject();
+        var required = new JsonArray();
+        foreach (var m in members)
+        {
+            properties[m.Name] = FieldSchema(m);
+            if (m.IsRequired) required.Add((JsonNode)m.Name);
+        }
+        schema["properties"] = properties;
+        if (required.Count > 0) schema["required"] = required;
+        schema["additionalProperties"] = false;
+        return schema;
+    }
+
+    private static JsonNode ItemSchema(FieldDefinition f, JsonArray? enums)
+    {
+        if (enums is not null) return new JsonObject { ["type"] = "string", ["enum"] = enums };
+
+        var members = FieldValidation.NestedFields(f.OptionsJson);
+        if (members.Count == 0) return new JsonObject();
+        return ObjectSchema(f, new JsonObject { ["type"] = "object" });
     }
 
     // Query parameters the paged list operation accepts.

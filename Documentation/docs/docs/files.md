@@ -10,7 +10,7 @@ Add a `file` field to a table and you get a file input in forms and in the conso
 ## Uploading
 
 ```bash
-curl -X POST http://localhost:5263/api/v1/files/invoices \
+curl -X POST http://localhost:5000/api/v1/files/invoices \
   -H "Authorization: Bearer $TOKEN" \
   -F file=@invoice.pdf
 ```
@@ -20,7 +20,7 @@ curl -X POST http://localhost:5263/api/v1/files/invoices \
   "id": "invoices/Kf3nQ8xR2vLmA9dTbW.pdf",
   "bucket": "invoices",
   "name": "Kf3nQ8xR2vLmA9dTbW.pdf",
-  "url": "http://localhost:5263/uploads/invoices/Kf3nQ8xR2vLmA9dTbW.pdf",
+  "url": "http://localhost:5000/uploads/invoices/Kf3nQ8xR2vLmA9dTbW.pdf",
   "size": 184320,
   "content_type": "application/pdf"
 }

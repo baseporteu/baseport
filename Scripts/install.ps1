@@ -108,12 +108,12 @@ if ($update) {
     Write-Host "Baseport $tag installed in $dir."
 }
 Write-Host ""
-Write-Host "  baseport                             start on http://localhost:5263"
-Write-Host "  baseport --urls http://0.0.0.0:5263  start on every interface"
+Write-Host "  baseport                             start on http://localhost:5000"
+Write-Host "  baseport --urls http://0.0.0.0:5000  start on every interface"
 Write-Host "  baseport logs                        follow the log files"
 Write-Host "  baseport help                        everything else"
 Write-Host ""
-Write-Host "Console http://localhost:5263/_/admin, first start prints a one-time admin login."
+Write-Host "Console http://localhost:5000/_/admin, first start prints a one-time admin login."
 
 $here = (Get-Location).Path
 if ((Test-Path (Join-Path $here 'Baseport.exe')) -and ($here -ne $dir)) {

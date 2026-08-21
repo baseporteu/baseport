@@ -305,7 +305,7 @@ public static class AdminEndpoints
             var now = DateTime.UtcNow;
             job.LastRunAt = now;
             job.NextRunAt = Jobs.NextRun(job.Schedule, now) ?? now.AddHours(1);
-            // The ambient Serilog logger, not a bound parameter: a minimal API lambda treats a Serilog.ILogger parameter as a JSON body value and 500s on every request that carries one.
+            // The ambient Serilog logger, not a bound parameter: a minimal API lambda treats a Serilog.ILogger parameter as a JSON body value and 500s on every request that includes one.
             var log = Serilog.Log.Logger;
             try
             {
@@ -697,7 +697,7 @@ public static class AdminEndpoints
         return invalid;
     }
 
-    // An admin account is changed, deleted and demoted only with shell access, so console access alone cannot take another operator over. TrailBase draws the same line (crates/core/src/admin/user/update_user.rs:38).
+    // An admin account is changed, deleted and demoted only with shell access, so console access alone cannot take another operator over.
     public const string AdminOnlyByCli = "An admin's password, role and disabled state are set with the CLI, and an admin cannot be deleted here: baseport accounts --help. The name and the address are editable.";
 
     // Nobody reaches the console once the last admin who can sign in is gone, and there is no way back in.

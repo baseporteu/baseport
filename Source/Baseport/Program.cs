@@ -170,7 +170,7 @@ try
     app.UseExceptionHandler(errorApp => errorApp.Run(async ctx =>
     {
         var ex = ctx.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
-        // A request ASP.NET could not parse is the caller's error and already carries the status that says so; flattening it to 500 reported a server fault for something like ?pageSize=2147483648, and logged it as one.
+        // A request ASP.NET could not parse is the caller's error and already includes the status that says so; flattening it to 500 reported a server fault for something like ?pageSize=2147483648, and logged it as one.
         var status = ex is BadHttpRequestException bad ? bad.StatusCode : StatusCodes.Status500InternalServerError;
         if (ex != null && status >= 500) Log.Error(ex, "Unhandled exception on {Path}", ctx.Request.Path);
         // The OpenAPI document promises every non-2xx answer speaks the Error shape, so an unhandled exception must too, instead of ASP.NET's bare 500.

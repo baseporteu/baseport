@@ -77,7 +77,11 @@ public static class WireCatalog
     {
         foreach (var table in tables)
         {
-            var projection = new StringBuilder($"SELECT r.Id AS {Quote("id")}, r.CreatedAt AS {Quote("created_at")}, r.UpdatedAt AS {Quote("updated_at")}");
+            // Same fallback Record.Modified applies: a row written outside EF keeps the column default, and a
+            // SQL client must not be told it was modified in year 1.
+            var projection = new StringBuilder(
+                $"SELECT r.Id AS {Quote("id")}, r.CreatedAt AS {Quote("created_at")}, " +
+                $"IIF(r.UpdatedAt IS NULL OR r.UpdatedAt <= '0001-01-01 00:00:00', r.CreatedAt, r.UpdatedAt) AS {Quote("updated_at")}");
             foreach (var column in table.Columns)
                 projection.Append($", json_extract(r.JsonData, '$.{column.Name}') AS {Quote(column.Name)}");
             projection.Append($" FROM main._records r WHERE r.TableId = {Literal(table.Id)}");
@@ -272,45 +276,19 @@ public static class WireCatalog
         ("varchar", 1043, "S"), ("date", 1082, "D"), ("time", 1083, "D"), ("timestamp", 1114, "D"), ("json", 114, "U"),
     ];
 
-    private static string PostgresTypeName(string dataType) => dataType.ToLowerInvariant() switch
-    {
-        "boolean" => "boolean",
-        "number" or "rating" => "numeric",
-        "currency" => "numeric",
-        "date" => "date",
-        "time" => "time",
-        "datetime" => "timestamp without time zone",
-        "json" or "array" or "multiselect" => "json",
-        _ => "text",
-    };
+    private static FieldType Type(string dataType) => FieldTypes.Find(dataType) ?? FieldTypes.Text;
 
-    private static int PostgresTypeOid(string dataType) => dataType.ToLowerInvariant() switch
-    {
-        "boolean" => 16,
-        "number" or "rating" or "currency" => 1700,
-        "date" => 1082,
-        "time" => 1083,
-        "datetime" => 1114,
-        "json" or "array" or "multiselect" => 114,
-        _ => 25,
-    };
+    private static string PostgresTypeName(string dataType) => Type(dataType).PostgresType;
 
-    private static readonly (string Name, int SystemTypeId, int MaxLength, int Precision, int Scale)[] TdsTypes =
+    private static int PostgresTypeOid(string dataType) => Type(dataType).PostgresOid;
+
+    private static readonly TdsColumnType[] TdsTypes =
     [
-        ("nvarchar", 231, 8000, 0, 0), ("bit", 104, 1, 1, 0), ("decimal", 106, 17, 18, 6),
-        ("date", 40, 3, 10, 0), ("time", 41, 5, 16, 7), ("datetime2", 42, 8, 27, 7),
+        TdsColumnType.NVarChar, TdsColumnType.Bit, TdsColumnType.Decimal,
+        TdsColumnType.Date, TdsColumnType.Time, TdsColumnType.DateTime2,
     ];
 
-    private static (string Name, int SystemTypeId, int MaxLength, int Precision, int Scale) TdsType(string dataType) => dataType.ToLowerInvariant() switch
-    {
-        "boolean" => ("bit", 104, 1, 1, 0),
-        "number" or "rating" or "currency" => ("decimal", 106, 17, 18, 6),
-        "date" => ("date", 40, 3, 10, 0),
-        "time" => ("time", 41, 5, 16, 7),
-        "datetime" => ("datetime2", 42, 8, 27, 7),
-        "longtext" or "richtext" or "json" or "array" or "multiselect" => ("nvarchar", 231, -1, 0, 0),
-        _ => ("nvarchar", 231, 8000, 0, 0),
-    };
+    private static TdsColumnType TdsType(string dataType) => Type(dataType).Tds;
 
     private static void Attach(SqliteConnection conn, string schema)
     {

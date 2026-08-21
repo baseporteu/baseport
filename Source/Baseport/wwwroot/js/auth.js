@@ -73,13 +73,15 @@ async function boot() {
     // Every timestamp the console prints reads this, so it is set before the first view renders rather than when the settings page happens to load.
     if (settingsData) ui.timeZone(settingsData.timeZone || 'UTC');
 
+    if (me.fieldTypes && typeof setFieldTypes === 'function') setFieldTypes(me.fieldTypes, me.fieldTypeGroups);
+
     greet(username);
     applySidebarState();
     if (typeof initFieldTypeCombobox === 'function') initFieldTypeCombobox();
     await render();
 }
 
-// The panels the sign-in screen swaps between. Each carries its own heading, so only one may be on screen at a time, and the provider buttons belong to the first.
+// The panels the sign-in screen swaps between. Each includes its own heading, so only one may be on screen at a time, and the provider buttons belong to the first.
 function showPanel(name) {
     document.getElementById('loginForm').hidden = name !== 'login';
     document.getElementById('forgotCard').hidden = name !== 'forgot';
@@ -347,7 +349,7 @@ window.fetch = async (...args) => {
     return res;
 };
 
-// The sign-in screen only: the console page carries none of these controls.
+// The sign-in screen only: the console page includes none of these controls.
 if (document.getElementById('loginForm')) {
     ssoInit('console');
     switchAuthMode('password');

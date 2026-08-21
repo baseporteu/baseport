@@ -21,11 +21,11 @@ public class AuthTests
     [InlineData("/api/auth/v1/login", true)]
     [InlineData("/api/auth/v1/register", true)]
     [InlineData("/api/auth/v1/jwks.json", true)]
-    // Storage carries the same bearer token the record routes do.
+    // Storage includes the same bearer token the record routes do.
     [InlineData("/api/v1/files/avatars", true)]
     [InlineData("/api/v1/tables/abc/records", true)]
     [InlineData("/api/openapi.json", true)]
-    // Everything else is console surface, and all of it lives under /api/_admin.
+    // Everything else represents the console surface, and all of it is hosted beneath /api/_admin.
     [InlineData("/api/_admin/forms", false)]
     [InlineData("/api/_admin/forms/abc123", false)]
     [InlineData("/api/_admin/forms/abc123/preview-token", false)]

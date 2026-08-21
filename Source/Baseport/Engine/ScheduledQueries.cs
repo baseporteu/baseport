@@ -52,7 +52,7 @@ public static class ScheduledQueries
         {
             using var client = http.CreateClient();
             client.Timeout = TimeSpan.FromSeconds(30);
-            // Serialized up front rather than posted as an object, so the request carries a Content-Length. A JsonContent body has no known length and goes out chunked, which plenty of webhook receivers and proxies in front of them refuse.
+            // Serialized up front rather than posted as an object, so the request includes a Content-Length. A JsonContent body has no known length and goes out chunked, which plenty of webhook receivers and proxies in front of them refuse.
             var payload = System.Text.Json.JsonSerializer.Serialize(new
             {
                 query = query.Name,

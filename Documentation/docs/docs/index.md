@@ -5,7 +5,7 @@ description: "What Baseport is, and what you get once it is running"
 
 # Introduction
 
-Baseport is a backend that runs as one executable against one SQLite file. There is no separate database server to install. You define your tables in the admin console, and any table you publish gets a REST API, live updates over Server-Sent Events, and optionally a public form.
+Baseport is a single-executable backend powered by an embedded SQLite database. It eliminates the need for a separate database server. You define tables through the admin console, and every published table automatically receives a REST API, real-time updates via Server-Sent Events (SSE), and optional public forms.
 
 :::warning
 Baseport is pre-alpha. The database format and the API surface both still move between commits, so keep production data out of it for now.
@@ -16,11 +16,9 @@ Baseport is pre-alpha. The database format and the API surface both still move b
 ::: code-group
 ```sh [Linux]
 curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.sh | bash
-baseport --urls http://localhost:5263
 ```
 ```powershell [Windows]
 iwr https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.ps1 | iex
-baseport --urls http://localhost:5263
 ```
 ```yaml [Docker]
 services:
@@ -40,9 +38,7 @@ volumes:
 
 Releases ship `linux-x64` and `win-x64` builds.
 
-The first start prints an admin username and a one-time password. On Docker, read it with `docker compose logs baseport`. The username is `admin-` followed by eight random characters, not plain `admin`, so it cannot be guessed.
-
-Open `http://localhost:5263/_/admin` and sign in.
+The first start prints an admin username and a one-time password. You can use `baseport logs` to retrieve both the randomly generated username and password. Contineu to `http://localhost:5263/_/admin` and sign in. You'll be forced to set a new password.
 
 `--urls http://localhost:5263` listens on loopback only, so nothing else on your network can reach it. Running on a server? Then you may want to reach from elsewhere, bind to every interface instead using `0.0.0.0` as your hostname.
 
@@ -50,16 +46,16 @@ Baseport speaks plain HTTP. For anything reachable beyond your own machine, put 
 
 ## The baseport command
 
-The installer puts a small `baseport` wrapper on your PATH. It always runs the binary from its own directory, so the database, logs and uploads stay in one place no matter where you call it from:
+The installer installs a lightweight `baseport` wrapper utility on your system PATH. The wrapper guarantees that application binaries execute within their designated root directory, ensuring databases, logs, and upload files remain consolidated regardless of where the command is issued.
 
 ```bash
-baseport help
-baseport accounts list
-baseport providers status
-baseport logs
-baseport update
-sudo baseport service
-sudo baseport restart
+baseport help             # Display available CLI subcommands
+baseport accounts list    # List administrative accounts
+baseport providers status # Check active authentication provider configurations
+baseport logs             # View rolling log output
+baseport update           # Upgrade binary to the latest release
+sudo baseport service     # Configure or inspect the system daemon
+sudo baseport restart     # Restart the background service
 ```
 
 `baseport logs` follows the rolling log files in the install directory, 200 lines back by default. Pass a number for more or less: `baseport logs 50`. Under systemd, `journalctl -u baseport` shows the same output.
@@ -75,7 +71,7 @@ BASEPORT_DIR=/srv/baseport BASEPORT_BIN=/usr/local/bin \
 
 The wrapper remembers that directory, so `baseport update` returns to it rather than falling back to the default.
 
-On Docker there is no wrapper to install, so define the same command as a shell function. Point it at wherever you keep the compose file:
+For Docker environments, define a shell function in your `~/.bashrc` or `~/.zshrc` to route commands directly to your container setup:
 
 ```bash
 baseport() {
@@ -86,9 +82,10 @@ baseport() {
     $compose exec baseport /app/Baseport "$@"
   fi
 }
+
 ```
 
-Put that in your `~/.bashrc` or `~/.zshrc` and `baseport accounts list` and `baseport update` work the same as they do on a binary install.
+This mirror function allows commands like `baseport accounts list` and `baseport update` to operate identically to binary installations.
 
 ## Addresses
 
@@ -100,12 +97,21 @@ Put that in your `~/.bashrc` or `~/.zshrc` and `baseport accounts list` and `bas
 | Forms | `/f/{formId}` and `/embed.js` | Anyone, per published form |
 | OpenAPI document | `/api/openapi.json` | Anyone you give the URL to |
 
-## Files on disk
+## File Layout & Data Management
 
-Baseport writes `baseport.db`, `baseport.key`, `log/`, `uploads/` and `backups/` into whatever directory you run it from. Give it a directory of its own, and back up that directory.
+Baseport writes operational files directly to its execution directory. Ensure your backup procedures capture this entire path:
 
-`baseport.key` holds the ES256 key used to sign auth tokens. It is created readable only by the owner. If you lose it, every token you have already issued stops working.
+* `baseport.db` — Main SQLite database storing schemas, user records, and application state.
+* `baseport.key` — Private ES256 key used to sign JWT authentication tokens (restricted to owner-only permissions).
+* `log/` — Rolling log file storage.
+* `uploads/` — Binary assets uploaded via published forms or APIs.
+* `backups/` — Snapshot backups of the SQLite database.
 
-## Next
+::: danger
+If `baseport.key` is lost or deleted, all previously issued authentication tokens will immediately become invalid.
+:::
 
-Read [How to use Baseport](/docs/how-to-use) to get something working, then [Tables and fields](/docs/tables-and-fields).
+## Next Steps
+
+* Complete the onboarding guide in [How to use Baseport](https://www.google.com/search?q=/docs/how-to-use).
+* Learn schema modeling in [Tables and fields](https://www.google.com/search?q=/docs/tables-and-fields).

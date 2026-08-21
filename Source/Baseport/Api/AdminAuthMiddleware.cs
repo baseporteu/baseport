@@ -45,7 +45,7 @@ public static class AdminAuthMiddleware
     internal static bool IsPublicPath(string path) =>
         // Sign-in surface, reachable precisely because there is no session yet.
         path.StartsWith("/api/auth/", StringComparison.OrdinalIgnoreCase)
-        // Carries its own bearer token and its own per-table switches.
+        // includes its own bearer token and its own per-table switches.
         || path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase)
         // Anonymous form traffic. Management lives under /api/_admin/forms.
         || path.StartsWith("/api/forms/", StringComparison.OrdinalIgnoreCase)

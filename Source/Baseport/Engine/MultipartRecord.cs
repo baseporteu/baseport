@@ -46,7 +46,7 @@ public static class MultipartRecord
                 obj[f.Name] = new JsonArray(values.Where(v => !string.IsNullOrEmpty(v)).Select(v => (JsonNode)v!).ToArray());
             else if (type == "boolean")
                 obj[f.Name] = values[0] is "true" or "1" or "on";
-            else if (type is "number" or "currency" or "rating" && double.TryParse(values[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var n))
+            else if (type is "number" or "currency" && double.TryParse(values[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var n))
                 obj[f.Name] = n;
             else if (type is "json" or "array")
             {

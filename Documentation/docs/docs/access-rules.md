@@ -5,9 +5,9 @@ description: "Per record create, read, update and delete rules, evaluated by SQL
 
 # Access rules
 
-Once you publish a table, every caller who gets past the two API switches can see all of it. Access rules narrow that down to individual records.
+Once a table is published, any caller who bypasses the two API switches has visibility into the entire dataset, though access rules restrict this down to specific individual records.
 
-Each table carries four rules, and each one is a SQLite boolean expression:
+Every table includes four distinct rules, each defined as a SQLite boolean expression:
 
 ```sql
 _ROW_.owner = _USER_.id

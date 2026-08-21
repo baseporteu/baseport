@@ -214,11 +214,14 @@ public static class OpenApiProxy
         {
             "date" => "date",
             "date-time" => "datetime",
+            "email" => "email",
+            "uri" or "url" => "url",
             _ => p.Type switch
             {
                 "integer" or "number" => "number",
                 "boolean" => "boolean",
-                "object" or "array" => "longtext",
+                "object" => "json",
+                "array" => "array",
                 _ => "text"
             }
         };

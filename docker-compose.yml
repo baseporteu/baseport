@@ -9,7 +9,7 @@ services:
       Baseport__ConnectionString: "Data Source=/data/baseport.db"
       Baseport__TrustForwardedHeaders: "${BASEPORT_TRUST_FORWARDED_HEADERS:-false}"
     ports:
-      - "${BASEPORT_PORT:-5263}:5263"
+      - "${BASEPORT_PORT:-5000}:5000"
     volumes:
       - baseport-data:/data
 

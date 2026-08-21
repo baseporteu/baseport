@@ -213,7 +213,7 @@ public class OpenApiSpecTests
     public void The_documented_record_shape_matches_what_the_api_returns()
     {
         var record = new Record { Id = Ids.NewShortId(12), TableId = "t", JsonData = "{}", CreatedAt = DateTime.UtcNow };
-        // The public API always carries links, and carries expanded whenever $expand asked for one, so the fullest shape is what the document has to describe.
+        // The public API always includes links, and includes expanded whenever $expand asked for one, so the fullest shape is what the document has to describe.
         var returned = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(
             ApiDtos.RecordDto(record, new List<FieldDefinition>(), new JsonObject(), new JsonObject()),
             new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)))!.AsObject();
@@ -287,7 +287,7 @@ public class OpenApiSpecTests
     public void Author_markdown_becomes_the_tag_description()
     {
         var t = Detailed();
-        t.ApiDocumentation = "## Identifiers\n\nEvery order carries an `OrderNo`.";
+        t.ApiDocumentation = "## Identifiers\n\nEvery order includes an `OrderNo`.";
 
         var tag = (OpenApiSpec.BuildTags(new List<TableDefinition> { t })[0] as JsonObject)!;
 
@@ -329,5 +329,52 @@ public class OpenApiSpecTests
         t.ApiNamespace = "";
 
         Assert.Null(OpenApiSpec.BuildTagGroups(new List<TableDefinition> { t }));
+    }
+
+    // The published schema is the contract: an object field that collapsed to "type":"string" was a promise no client could keep.
+    [Fact]
+    public void A_nested_object_field_publishes_its_members_not_a_string()
+    {
+        var table = Table();
+        table.Fields.Add(new FieldDefinition
+        {
+            Id = Ids.NewShortId(12),
+            TableId = "x",
+            Name = "address",
+            DataType = "json",
+            OptionsJson = """{"fields":[{"name":"street","dataType":"text","isRequired":true},{"name":"email","dataType":"email"}]}"""
+        });
+
+        var schema = (OpenApiSpec.BuildSchemas(new List<TableDefinition> { table })["Orders"] as JsonObject)!;
+        var address = (schema["properties"]!["address"] as JsonObject)!;
+
+        Assert.Equal("object", address["type"]!.GetValue<string>());
+        Assert.Equal("string", address["properties"]!["street"]!["type"]!.GetValue<string>());
+        Assert.Equal("email", address["properties"]!["email"]!["format"]!.GetValue<string>());
+        Assert.Equal(new[] { "street" }, (address["required"] as JsonArray)!.Select(v => v!.GetValue<string>()));
+        Assert.False(address["additionalProperties"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void A_list_field_publishes_its_item_schema()
+    {
+        var table = Table();
+        table.Fields.Add(new FieldDefinition
+        {
+            Id = Ids.NewShortId(12), TableId = "x", Name = "lines", DataType = "array",
+            OptionsJson = """{"fields":[{"name":"qty","dataType":"number"}]}"""
+        });
+        table.Fields.Add(new FieldDefinition
+        {
+            Id = Ids.NewShortId(12), TableId = "x", Name = "tags", DataType = "multiselect",
+            OptionsJson = """["a","b"]"""
+        });
+
+        var props = (OpenApiSpec.BuildSchemas(new List<TableDefinition> { table })["Orders"]!["properties"] as JsonObject)!;
+
+        Assert.Equal("array", props["lines"]!["type"]!.GetValue<string>());
+        Assert.Equal("number", props["lines"]!["items"]!["properties"]!["qty"]!["type"]!.GetValue<string>());
+        Assert.Equal("array", props["tags"]!["type"]!.GetValue<string>());
+        Assert.Equal(new[] { "a", "b" }, (props["tags"]!["items"]!["enum"] as JsonArray)!.Select(v => v!.GetValue<string>()));
     }
 }

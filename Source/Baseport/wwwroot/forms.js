@@ -1210,11 +1210,11 @@ function rowFields(row) {
     return div;
 }
 
-// Columns configured on an array field (line-items sub-schema), same shape FieldValidation.ArrayColumns parses server-side.
+// The sub-schema of an array field, the same shape FieldValidation.NestedFields parses server-side.
 function clientArrayColumns(optionsJson) {
     try {
         const o = JSON.parse(optionsJson || '{}');
-        return Array.isArray(o.columns) && o.columns.length ? o.columns : null;
+        return Array.isArray(o.fields) && o.fields.length ? o.fields : null;
     } catch (e) {
         return null;
     }
@@ -1596,7 +1596,7 @@ function renderColumn(row, path, col, ci) {
         const field = ev.dataTransfer.getData('text/field');
         if (!field) return;
 
-        // A chip dragged from another column (or the same one) carries its origin path.
+        // A chip dragged from another column (or the same one) includes its origin path.
         let moved = null;
         try {
             moved = JSON.parse(ev.dataTransfer.getData('text/movefield') || 'null');

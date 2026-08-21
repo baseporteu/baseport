@@ -27,7 +27,7 @@ import urllib.error
 import urllib.request
 from datetime import date
 
-BASE = os.environ.get("BASE_URL", "http://localhost:5263").rstrip("/")
+BASE = os.environ.get("BASE_URL", "http://localhost:5000").rstrip("/")
 USER = os.environ.get("ADMIN_USER", "")
 PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 NEW_PASSWORD = os.environ.get("ADMIN_NEW_PASSWORD", "baseport-dev-password")
@@ -51,6 +51,20 @@ CUSTOMERS_DOC = """The accounts that place orders.
 practical way to find someone. `Reference` is generated here and is safe to
 print on correspondence.
 
+## Address and contact
+
+`Address` and `Contact` are objects with a published schema, so a generated
+client sees the real shape instead of a string, and every member is validated
+on write: `Address.Street` is required, `Address.Geo.Lat` has to be a number
+between -90 and 90, `Contact.Email` has to be an address.
+
+`City` and `Country` stay top-level. They are what the reports group by, and
+only a top-level field is indexed.
+
+`PATCH` merges an object member by member, so sending
+`{"Contact": {"Phone": "+31 6 1234 5678"}}` changes the phone number and leaves
+the name, the address and the role alone.
+
 ## What you can do
 
 Read and create accounts, and patch the ones that exist. Accounts are never
@@ -67,8 +81,16 @@ unguessable and stable, and it is what the single-record routes take.
 
 ## Totals
 
-`Total` is the sum of the order's lines at the moment it was taken. The lines
+`Total` is the sum of the order's lines at the moment it was taken, and
+`Amounts` includes the same figure split into net, VAT and gross. The lines
 themselves live in `order-lines` and reference this order.
+
+## Ship-to
+
+`ShipTo` is a copy of the account's address as it stood when the order was
+taken, not a lookup. An account that moves next year must not rewrite where
+last year's goods went. `PATCH` merges it member by member, so sending only
+`{"ShipTo": {"City": "Breda"}}` leaves the street alone.
 
 ## What you can do
 
@@ -90,7 +112,11 @@ stay readable so historic order lines keep resolving.
 
 `Slug` auto-generates from `Name`. `Attributes` is a category-specific spec
 sheet (thread size, bore diameter, ...) that would otherwise need a column
-per possible attribute across every category.
+per possible attribute across every category, so it is deliberately free-form.
+
+`Packaging` is the opposite case: every article has a box quantity, a weight
+and outer dimensions, so it declares a schema and this document publishes it,
+down to `Packaging.Dimensions`.
 """
 
 FIRST = ["Anna", "Bram", "Chloe", "Daan", "Eva", "Femke", "Gijs", "Hanna", "Ivo", "Julia",
@@ -132,9 +158,32 @@ CATEGORY_ATTRS = {
                         "size": random.choice(["S", "M", "L", "XL"])},
 }
 PRODUCT_TAGS = ["bestseller", "new", "clearance", "eco", "heavy-duty", "premium"]
-# Common finish colors on hardware, not decorative -- what black oxide/zinc/anodizing actually look like.
-FINISHES = ["#1c1c1c", "#c9c9c9", "#b5a642", "#dbe4e6", "#8a3324", "#2e5cb0"]
+CONTACT_ROLES = ["Purchasing", "Warehouse", "Finance", "Owner"]
+STREETS = {
+    "Netherlands": ["Dorpsstraat", "Industrieweg", "Havenkade", "Stationsplein", "Molenweg"],
+    "Belgium": ["Nijverheidslaan", "Handelskade", "Vaartstraat", "Bergstraat", "Kerkstraat"],
+    "Germany": ["Industriestrasse", "Bahnhofstrasse", "Hafenweg", "Lagerstrasse", "Gewerbering"],
+    "France": ["Rue de l'Industrie", "Avenue du Port", "Rue des Entrepots", "Boulevard Gambetta"],
+}
+# Rough city centres, enough for a map pin in a demo.
+CITY_GEO = {"Amsterdam": (52.37, 4.90), "Rotterdam": (51.92, 4.48), "Utrecht": (52.09, 5.12),
+            "Eindhoven": (51.44, 5.48), "Groningen": (53.22, 6.57), "Breda": (51.59, 4.78),
+            "Tilburg": (51.56, 5.09), "Brussels": (50.85, 4.35), "Antwerp": (51.22, 4.40),
+            "Ghent": (51.05, 3.72), "Bruges": (51.21, 3.22), "Leuven": (50.88, 4.70),
+            "Berlin": (52.52, 13.40), "Hamburg": (53.55, 9.99), "Munich": (48.14, 11.58),
+            "Cologne": (50.94, 6.96), "Frankfurt": (50.11, 8.68), "Stuttgart": (48.78, 9.18),
+            "Paris": (48.86, 2.35), "Lyon": (45.76, 4.84), "Marseille": (43.30, 5.37),
+            "Lille": (50.63, 3.06), "Toulouse": (43.60, 1.44)}
 COUNTRY_DIAL = {"Netherlands": "31", "Belgium": "32", "Germany": "49", "France": "33"}
+# 1234 AB in the Netherlands, four digits in Belgium, five everywhere else.
+POSTCODE = {
+    "Netherlands": lambda: f"{random.randint(1000, 9999)} {random.choice('ABCDEGHJKLMNPRSTVWXZ')}{random.choice('ABCDEGHJKLMNPRSTVWXZ')}",
+    "Belgium": lambda: str(random.randint(1000, 9999)),
+    "Germany": lambda: f"{random.randint(10000, 99999)}",
+    "France": lambda: f"{random.randint(10000, 95999)}",
+}
+# What the tax office would charge on a shipment to each country.
+VAT_RATE = {"Netherlands": 0.21, "Belgium": 0.21, "Germany": 0.19, "France": 0.20}
 STATUSES = ["open", "picking", "shipped", "closed", "cancelled"]
 STATUS_WEIGHTS = [12, 8, 20, 55, 5]
 CHANNELS = ["web", "phone", "edi", "counter"]
@@ -255,10 +304,12 @@ def slugify(text):
 
 
 class Bulk:
-    """Rows straight into SQLite. _records is four stable columns; the generated
-    index columns are virtual, so SQLite derives them from JsonData on insert."""
+    """Rows straight into SQLite. _records is five stable columns; the generated
+    index columns are virtual, so SQLite derives them from JsonData on insert.
+    UpdatedAt is written explicitly: this path bypasses EF, so RecordChangeInterceptor
+    never stamps it, and the column default is year 1."""
 
-    SQL = 'INSERT INTO "_records" ("Id","TableId","JsonData","CreatedAt") VALUES (?,?,?,?)'
+    SQL = 'INSERT INTO "_records" ("Id","TableId","JsonData","CreatedAt","UpdatedAt") VALUES (?,?,?,?,?)'
 
     def __init__(self, path):
         if not os.path.exists(path):
@@ -277,9 +328,12 @@ class Bulk:
         for name, _ in self.indexes:
             self.conn.execute(f'DROP INDEX "{name}"')
 
-    def add(self, table_id, data, created):
-        rid = short_id()
-        self.batch.append((rid, table_id, json.dumps(data, separators=(",", ":")), created))
+    def add(self, table_id, data, created, record_id=None):
+        """record_id is for a row whose id something else already handed out, an order header its
+        lines already point at. The tuple shape lives here only, so a column added to _records
+        is one edit rather than one per caller."""
+        rid = record_id or short_id()
+        self.batch.append((rid, table_id, json.dumps(data, separators=(",", ":")), created, created))
         if len(self.batch) >= BATCH:
             self.flush()
         return rid
@@ -361,11 +415,20 @@ def product_fields():
         {"name": "Active", "dataType": "boolean", "defaultValue": "true"},
         {"name": "Body", "label": "Description (long)", "dataType": "richtext",
          "helpText": "Storefront copy. Sanitized on save."},
+        # Left free-form on purpose: the attributes differ per category, so there is no one schema to declare.
         {"name": "Attributes", "dataType": "json",
          "helpText": "Category-specific spec sheet, e.g. thread size or bore diameter."},
+        # Packaging is the same shape for every article, so it gets a schema and the API publishes it.
+        {"name": "Packaging", "dataType": "json", "optionsJson": json.dumps({"fields": [
+            {"name": "UnitsPerBox", "label": "Units per box", "dataType": "number", "min": 1, "isRequired": True},
+            {"name": "WeightKg", "label": "Weight (kg)", "dataType": "number", "min": 0},
+            {"name": "Dimensions", "dataType": "json", "optionsJson": json.dumps({"fields": [
+                {"name": "LengthMm", "dataType": "number", "min": 0},
+                {"name": "WidthMm", "dataType": "number", "min": 0},
+                {"name": "HeightMm", "dataType": "number", "min": 0},
+            ]})},
+        ]}), "helpText": "Box quantity, weight and outer dimensions."},
         {"name": "Tags", "dataType": "array", "helpText": "Merchandising tags."},
-        {"name": "Rating", "dataType": "rating", "helpText": "Average customer rating."},
-        {"name": "Finish", "dataType": "color", "helpText": "Swatch shown on the product card."},
         {"name": "Datasheet", "dataType": "url", "helpText": "Link to the PDF spec sheet."},
     ]
 
@@ -376,11 +439,26 @@ def customer_fields():
         {"name": "Email", "label": "Email address", "dataType": "email",
          "isRequired": True, "isUnique": True, "isIdentifier": True,
          "helpText": "We use this to find your account."},
-        {"name": "Phone", "dataType": "phone"},
         {"name": "Name", "label": "Account name", "dataType": "text", "isRequired": True},
+        # City and Country stay top-level: they are reporting dimensions, they drive the list views,
+        # and only a top-level field gets an index. The rest of the address is one object.
         {"name": "City", "dataType": "text"},
         {"name": "Country", "dataType": "select", "optionsJson": json.dumps(COUNTRIES),
          "defaultValue": "Netherlands"},
+        {"name": "Address", "label": "Postal address", "dataType": "json", "optionsJson": json.dumps({"fields": [
+            {"name": "Street", "dataType": "text", "isRequired": True},
+            {"name": "PostalCode", "label": "Postal code", "dataType": "text", "max": 12},
+            {"name": "Geo", "label": "Coordinates", "dataType": "json", "optionsJson": json.dumps({"fields": [
+                {"name": "Lat", "dataType": "number", "min": -90, "max": 90},
+                {"name": "Lon", "dataType": "number", "min": -180, "max": 180},
+            ]})},
+        ]}), "helpText": "Where the goods go."},
+        {"name": "Contact", "label": "Primary contact", "dataType": "json", "optionsJson": json.dumps({"fields": [
+            {"name": "Name", "dataType": "text", "isRequired": True},
+            {"name": "Email", "dataType": "email"},
+            {"name": "Phone", "dataType": "text", "pattern": r"^\+?[0-9 ()-]{6,20}$"},
+            {"name": "Role", "dataType": "select", "optionsJson": json.dumps(CONTACT_ROLES)},
+        ]}), "helpText": "Who to call about an order."},
         {"name": "SignedUp", "label": "Signed up", "dataType": "date"},
         {"name": "Reference", "dataType": "systemid"},
     ]
@@ -399,6 +477,19 @@ def order_fields(customers):
         {"name": "Status", "dataType": "select", "optionsJson": json.dumps(STATUSES),
          "defaultValue": "open"},
         {"name": "Total", "label": "Order total", "dataType": "currency", "min": 0},
+        # Copied off the account when the order is taken, not looked up later: an address that
+        # changes next year must not rewrite what shipped last year.
+        {"name": "ShipTo", "label": "Ship to", "dataType": "json", "optionsJson": json.dumps({"fields": [
+            {"name": "Street", "dataType": "text", "isRequired": True},
+            {"name": "PostalCode", "label": "Postal code", "dataType": "text", "max": 12},
+            {"name": "City", "dataType": "text"},
+            {"name": "Country", "dataType": "select", "optionsJson": json.dumps(COUNTRIES)},
+        ]})},
+        {"name": "Amounts", "dataType": "json", "optionsJson": json.dumps({"fields": [
+            {"name": "Net", "dataType": "currency", "min": 0},
+            {"name": "Vat", "label": "VAT", "dataType": "currency", "min": 0},
+            {"name": "Gross", "dataType": "currency", "min": 0},
+        ]}), "helpText": "Net, VAT and gross at the moment the order was taken."},
         {"name": "Notes", "label": "Internal notes", "dataType": "longtext", "isHidden": True},
     ]
 
@@ -424,14 +515,14 @@ def product_forms(products):
     form(products, kind="form", actions=["submit"], title="Products - Create new",
          description="A new article for the catalogue.",
          layoutJson=layout(["Sku", "Name"], ["Category", "UnitPrice", "Active"],
-                            ["Body"], ["Finish", "Datasheet"]))
+                            ["Body"], ["Datasheet"]))
     form(products, kind="form", actions=["lookup"], title="Products - Look up", isReadOnly=True,
          description="Enter a SKU.",
-         configJson={"matchFields": ["Sku"], "resultFields": ["Sku", "Name", "Category", "UnitPrice", "Rating"],
+         configJson={"matchFields": ["Sku"], "resultFields": ["Sku", "Name", "Category", "UnitPrice", "Active"],
                      "notFoundText": "No product with that SKU."})
     form(products, kind="list", title="Products - Catalogue",
          description="Every article, by description.",
-         configJson={"columns": ["Sku", "Name", "Category", "UnitPrice", "Rating"],
+         configJson={"columns": ["Sku", "Name", "Category", "UnitPrice", "Active"],
                      "searchFields": ["Sku", "Name"],
                      "sortField": "Name", "sortDir": "asc", "pageSize": 25})
 
@@ -558,28 +649,49 @@ def fill(db_path, counts, products, customers, orders, lines):
             "Body": f"<p>{material} {article.lower()}, {size} &mdash; engineered for {category.lower()} applications.</p>"
                     f"<ul><li>Corrosion-resistant finish</li><li>ISO-compliant dimensions</li></ul>",
             "Attributes": CATEGORY_ATTRS[category](),
+            "Packaging": {
+                "UnitsPerBox": random.choice([1, 10, 25, 50, 100, 250]),
+                "WeightKg": round(random.uniform(0.01, 12.0), 3),
+                "Dimensions": {
+                    "LengthMm": random.choice([20, 40, 80, 120, 200, 400]),
+                    "WidthMm": random.choice([20, 40, 80, 120, 200]),
+                    "HeightMm": random.choice([10, 20, 40, 80, 150]),
+                },
+            },
             "Tags": random.sample(PRODUCT_TAGS, k=random.randint(0, 3)),
-            "Finish": random.choice(FINISHES),
             "Datasheet": f"https://cdn.example.test/datasheets/P-{i:05d}.pdf",
         }
-        if random.random() > 0.15:  # some products have no reviews yet
-            data["Rating"] = round(random.uniform(2.5, 5.0), 1)
         catalogue.append((bulk.add(products, data, stamp(START)), price))
 
     accounts = []
     for i in range(counts["customers"]):
         country = random.choice(COUNTRIES)
+        city = random.choice(CITIES[country])
         signed = random.randint(START, END - 30)
+        lat, lon = CITY_GEO[city]
+        contact = f"{random.choice(FIRST)} {random.choice(LAST)}"
         data = {
             "Email": f"{random.choice(FIRST)}.{random.choice(LAST)}{i}@{random.choice(['acme', 'nova', 'delta', 'orion', 'vertex'])}.test".lower().replace(" ", ""),
-            "Phone": f"+{COUNTRY_DIAL[country]} {random.randint(100, 999)} {random.randint(100000, 999999)}",
             "Name": f"{random.choice(LAST)} {random.choice(SUFFIX)}",
-            "City": random.choice(CITIES[country]),
+            "City": city,
             "Country": country,
+            "Address": {
+                "Street": f"{random.choice(STREETS[country])} {random.randint(1, 240)}",
+                "PostalCode": POSTCODE[country](),
+                # Jittered off the city centre so a map of the demo data is not one pin per city.
+                "Geo": {"Lat": round(lat + random.uniform(-0.06, 0.06), 4),
+                         "Lon": round(lon + random.uniform(-0.06, 0.06), 4)},
+            },
+            "Contact": {
+                "Name": contact,
+                "Email": f"{contact.split()[0]}.{contact.split()[-1]}@example.test".lower().replace(" ", ""),
+                "Phone": f"+{COUNTRY_DIAL[country]} {random.randint(100, 999)} {random.randint(100000, 999999)}",
+                "Role": random.choice(CONTACT_ROLES),
+            },
             "SignedUp": str(date.fromordinal(signed)),
             "Reference": short_id(10),
         }
-        accounts.append((bulk.add(customers, data, stamp(signed)), signed))
+        accounts.append((bulk.add(customers, data, stamp(signed)), signed, country, city, data["Address"]))
 
     # Every order gets one line, then the remainder is scattered so the fan-out varies.
     per_order = [1] * counts["orders"]
@@ -587,7 +699,7 @@ def fill(db_path, counts, products, customers, orders, lines):
         per_order[random.randrange(counts["orders"])] += 1
 
     for i, line_count in enumerate(per_order):
-        account, signed = accounts[random.randrange(len(accounts))]
+        account, signed, country, city, address = accounts[random.randrange(len(accounts))]
         day = random.randint(signed, END)
         order_no = f"SO-{100000 + i}"
         order_id = short_id()
@@ -608,16 +720,19 @@ def fill(db_path, counts, products, customers, orders, lines):
             }, stamp(day))
 
         # Written last so the id chosen for the lines is the id the header lands on.
-        bulk.batch.append((order_id, orders, json.dumps({
+        net = round(total, 2)
+        vat = round(net * VAT_RATE[country], 2)
+        bulk.add(orders, {
             "OrderNo": order_no,
             "Customer": account,
             "OrderDate": str(date.fromordinal(day)),
             "Channel": random.choices(CHANNELS, CHANNEL_WEIGHTS)[0],
             "Status": random.choices(STATUSES, STATUS_WEIGHTS)[0],
-            "Total": round(total, 2),
-        }, separators=(",", ":")), stamp(day)))
-        if len(bulk.batch) >= BATCH:
-            bulk.flush()
+            "Total": net,
+            "ShipTo": {"Street": address["Street"], "PostalCode": address["PostalCode"],
+                        "City": city, "Country": country},
+            "Amounts": {"Net": net, "Vat": vat, "Gross": round(net + vat, 2)},
+        }, stamp(day), record_id=order_id)
 
     bulk.close()
     print(f"  Records: {counts['products']} products, {counts['customers']} customers, "

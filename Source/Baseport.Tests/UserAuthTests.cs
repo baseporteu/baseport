@@ -91,7 +91,7 @@ public class UserAuthTests : IDisposable
         UserTokens.Configure(new AppSettings());
     }
 
-    // Not rotated, deliberately, the way TrailBase does it: two clients refreshing the same session at once would otherwise leave one of them holding a token that has already been spent.
+    // Not rotated, deliberately, two clients refreshing the same session at once would otherwise leave one of them holding a token that has already been spent.
     [Fact]
     public async Task A_refresh_token_survives_the_refresh_it_pays_for()
     {

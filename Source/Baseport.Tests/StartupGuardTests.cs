@@ -82,7 +82,7 @@ public class StartupGuardTests : IDisposable
         Assert.Equal(AccountRoles.Admin, resolved!.Role);
     }
 
-    // The invariant the shared token format lives or dies on: the role comes from _users on every request, never from the claim, so a token minted while somebody was an admin stops opening the console the moment they are demoted. Same reason TrailBase re-queries the admin bit (crates/core/src/server/mod.rs:525).
+    // The invariant the shared token format lives or dies on: the role comes from _users on every request, never from the claim, so a token minted while somebody was an admin stops opening the console the moment they are demoted. 
     [Fact]
     public async Task ADemotedOperatorsTokenNoLongerReachesTheConsole()
     {

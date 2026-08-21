@@ -71,13 +71,13 @@ public static class ApiDtos
     {
         var data = (JsonNode.Parse(string.IsNullOrWhiteSpace(r.JsonData) ? "{}" : r.JsonData) as JsonObject) ?? new JsonObject();
         foreach (var f in fields)
-            if (FieldValidation.NormalizeType(f.DataType) == "password") data.Remove(f.Name);
+            if (FieldTypes.Of(f).Secret) data.Remove(f.Name);
 
         var dto = new JsonObject
         {
             ["id"] = r.Id,
             ["createdAt"] = JsonValue.Create(r.CreatedAt),
-            ["updatedAt"] = JsonValue.Create(r.UpdatedAt),
+            ["updatedAt"] = JsonValue.Create(r.Modified),
             ["data"] = data
         };
         if (links is not null) dto["links"] = links;

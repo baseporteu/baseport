@@ -49,7 +49,7 @@ public static class StartupFailure
             yield return e;
     }
 
-    // Kestrel puts the address in its message ("Failed to bind to address http://127.0.0.1:5263: ..."), which is the only place it survives to.
+    // Kestrel puts the address in its message ("Failed to bind to address http://127.0.0.1:5000: ..."), which is the only place it survives to.
     private static string Address(Exception ex)
     {
         foreach (var e in Unwrap(ex))
@@ -58,7 +58,7 @@ public static class StartupFailure
             var start = e.Message.IndexOf(marker, StringComparison.Ordinal);
             if (start < 0) continue;
 
-            // "Failed to bind to address http://127.0.0.1:5263: address already in use." The address runs to the first space; Kestrel's trailing colon separates it from the reason and is not part of it.
+            // "Failed to bind to address http://127.0.0.1:5000: address already in use." The address runs to the first space; Kestrel's trailing colon separates it from the reason and is not part of it.
             var rest = e.Message[(start + marker.Length)..];
             var end = rest.IndexOf(' ');
             return (end > 0 ? rest[..end] : rest).Trim().TrimEnd(':', '.');

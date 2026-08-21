@@ -5,7 +5,7 @@ namespace Baseport.Client;
 
 public sealed class BaseportOptions
 {
-    public string BaseUrl { get; set; } = "http://localhost:5263";
+    public string BaseUrl { get; set; } = "http://localhost:5000";
     public string? ApiToken { get; set; }
 }
 

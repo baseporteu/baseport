@@ -12,7 +12,7 @@ public static class ClientErrorEndpoints
     private const int MessageMax = 500;
     private const int PageMax = 200;
 
-    // Not an HTTP exchange, so it carries no status. The logs view reads this to colour the row.
+    // Not an HTTP exchange, so it includes no status. The logs view reads this to colour the row.
     public const string ClientMethod = "CLIENT";
 
     public static void MapClientErrorEndpoints(this WebApplication app)

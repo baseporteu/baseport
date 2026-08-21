@@ -1,6 +1,6 @@
 namespace Baseport;
 
-// Moves the operator surface onto a second port so it can be bound to a private interface, the way TrailBase's --admin-address does. Unset means one port and no filtering, which is the default.
+// Moves the operator surface onto a second port so it can be bound to a private interface,. Unset means one port and no filtering, which is the default.
 public static class AdminSurface
 {
     public static int? Port { get; private set; }

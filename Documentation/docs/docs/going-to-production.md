@@ -27,8 +27,8 @@ Everything else you would change while running lives in the console under **Sett
 
 | Value | Reachable from |
 | --- | --- |
-| `http://localhost:5263` | The machine itself only |
-| `http://0.0.0.0:5263` | Any interface, so anything that can route to the host |
+| `http://localhost:5000` | The machine itself only |
+| `http://0.0.0.0:5000` | Any interface, so anything that can route to the host |
 
 `localhost` is the safe default and the one to keep if a reverse proxy on the same host is the only thing talking to Baseport. Use `0.0.0.0` when something on another machine connects directly.
 
@@ -53,7 +53,7 @@ sudo /usr/local/bin/baseport service
 `service` needs root: it creates a `baseport` system user and writes the unit. Pass any host options you want in `ExecStart`:
 
 ```bash
-sudo /usr/local/bin/baseport service --urls http://0.0.0.0:5263
+sudo /usr/local/bin/baseport service --urls http://0.0.0.0:5000
 ```
 
 Use the full path with `sudo`. Its `secure_path` does not include `~/.local/bin`, so a wrapper installed there will not resolve.

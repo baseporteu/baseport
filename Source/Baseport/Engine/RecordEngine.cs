@@ -32,12 +32,11 @@ public static class RecordEngine
         var invalid = new List<string>();
         foreach (var f in fields)
         {
-            var t = FieldValidation.NormalizeType(f.DataType);
-            if (t is "calculated" or "systemid" or "derived" || f.IsHidden) continue;
+            if (FieldTypes.Of(f).Computed || f.IsHidden) continue;
             obj.TryGetPropertyValue(f.Name, out var val);
-            var fieldErrors = FieldValidation.ValidateFieldValue(f, val, pid =>
+            var fieldErrors = FieldValidation.ValidateFieldValue(f, val, (rf, pid) =>
             {
-                var tpid = FieldValidation.RefTableId(f.OptionsJson);
+                var tpid = FieldValidation.RefTableId(rf.OptionsJson);
                 if (tpid == null) return false;
                 var target = db.Tables.FirstOrDefault(t2 => t2.Id == tpid);
                 return target != null && db.Records.Any(r => r.TableId == target.Id && r.Id == pid);
@@ -85,7 +84,7 @@ public static class RecordEngine
         foreach (var f in fields)
         {
             if (string.IsNullOrEmpty(f.DefaultValue)) continue;
-            if (FieldValidation.NormalizeType(f.DataType) is "calculated" or "derived" or "systemid") continue;
+            if (FieldTypes.Of(f).Computed) continue;
 
             var present = obj.TryGetPropertyValue(f.Name, out var existing)
                           && existing is not null
@@ -134,7 +133,7 @@ public static class RecordEngine
     // idempotent: pbkdf2$ is not a password anyone typed
     private static void HashPasswords(List<FieldDefinition> fields, JsonObject obj)
     {
-        foreach (var f in fields.Where(f => FieldValidation.NormalizeType(f.DataType) == "password"))
+        foreach (var f in fields.Where(f => FieldTypes.Of(f).Secret))
         {
             if (!obj.TryGetPropertyValue(f.Name, out var pv) || pv is not JsonValue pjv || pjv.GetValueKind() != JsonValueKind.String) continue;
             var raw = pjv.GetValue<string>();
@@ -197,7 +196,13 @@ public static class RecordEngine
         else
         {
             merged = (JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject) ?? new JsonObject();
-            foreach (var kv in patch) merged[kv.Key] = kv.Value?.DeepClone();
+            foreach (var kv in patch)
+            {
+                // An object field merges member by member, so patching one member does not drop the rest.
+                var nested = fields.FirstOrDefault(f => f.Name == kv.Key) is { } f2 && FieldTypes.Of(f2).Shape == FieldShape.Object;
+                if (nested && merged[kv.Key] is JsonObject target && kv.Value is JsonObject source) MergeInto(target, source);
+                else merged[kv.Key] = kv.Value?.DeepClone();
+            }
         }
 
         // System ids are regenerated on every write, which would hand a record a new identity on each edit.
@@ -213,6 +218,16 @@ public static class RecordEngine
             if (value is not null) merged[name] = value;
 
         return (merged, outcome);
+    }
+
+    // Objects merge, everything else is replaced whole. A null still writes null, the same as at the top level.
+    private static void MergeInto(JsonObject target, JsonObject source)
+    {
+        foreach (var kv in source)
+        {
+            if (target[kv.Key] is JsonObject child && kv.Value is JsonObject next) MergeInto(child, next);
+            else target[kv.Key] = kv.Value?.DeepClone();
+        }
     }
 
     private static bool TryCompute(FieldDefinition f, JsonObject obj, out string? error, out JsonNode? jv)

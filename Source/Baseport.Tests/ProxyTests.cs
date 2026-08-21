@@ -49,8 +49,10 @@ public class ProxyTests
     [InlineData("string", "", "text")]
     [InlineData("string", "date", "date")]
     [InlineData("string", "date-time", "datetime")]
-    [InlineData("object", "", "longtext")]
-    [InlineData("array", "", "longtext")]
+    [InlineData("object", "", "json")]
+    [InlineData("array", "", "array")]
+    [InlineData("string", "email", "email")]
+    [InlineData("string", "uri", "url")]
     public void Sampled_json_types_map_to_field_types(string type, string format, string expected)
     {
         var prop = new OpenApiProxy.FieldProp("X", type, format, new List<string>(), false);
@@ -144,8 +146,8 @@ public class ProxyTests
     // A proxy target is a url an operator types and the server fetches from inside its own network, so it is the one place an ssrf reaches cloud metadata or a neighbour's admin port.
     [Theory]
     [InlineData("http://169.254.169.254/latest/meta-data/")]
-    [InlineData("http://127.0.0.1:5263/api/openapi.json")]
-    [InlineData("http://localhost:5263/api/openapi.json")]
+    [InlineData("http://127.0.0.1:5000/api/openapi.json")]
+    [InlineData("http://localhost:5000/api/openapi.json")]
     [InlineData("http://10.0.0.5/spec.json")]
     [InlineData("http://192.168.1.10/spec.json")]
     [InlineData("http://172.16.4.4/spec.json")]
@@ -171,10 +173,10 @@ public class ProxyTests
     public void An_operator_can_open_private_targets()
     {
         ProxyTarget.Configure(new AppSettings { ProxyPrivateTargetsEnabled = true });
-        Assert.Null(ProxyTarget.Problem("http://127.0.0.1:5263/api/openapi.json"));
+        Assert.Null(ProxyTarget.Problem("http://127.0.0.1:5000/api/openapi.json"));
 
         ProxyTarget.Configure(new AppSettings());
-        Assert.NotNull(ProxyTarget.Problem("http://127.0.0.1:5263/api/openapi.json"));
+        Assert.NotNull(ProxyTarget.Problem("http://127.0.0.1:5000/api/openapi.json"));
     }
 
     // A scheme is refused whatever the setting says: only http(s) is ever fetched.

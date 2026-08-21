@@ -25,10 +25,10 @@ RUN mkdir -p /data && chown baseport:baseport /data
 USER baseport
 
 ENV Baseport__ConnectionString="Data Source=/data/baseport.db" \
-    ASPNETCORE_URLS="http://+:5263"
+    ASPNETCORE_URLS="http://+:5000"
 WORKDIR /data
 
-EXPOSE 5263
+EXPOSE 5000
 VOLUME ["/data"]
 
 ENTRYPOINT ["/app/Baseport"]

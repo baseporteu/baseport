@@ -17,13 +17,11 @@ The id is checked on write. If no record with that id exists in the target table
 
 ## Modelling the usual shapes
 
-Because a reference field holds exactly one id, the relationship you get depends on where you put the field.
+Because a reference field stores a single identifier, the resulting relationship relies entirely on where that field is placed.
 
-**One to many.** A customer has many orders and each order has one customer. Put the reference on the many side: give **Orders** a `Customer` reference field pointing at Customers. This is the common case and the one you will use most.
-
-**One to one.** A customer has one billing profile. Same as above, but also tick **Unique** on the reference field, so no two records can point at the same target.
-
-**Many to many.** An order carries several tags and a tag appears on several orders. One field cannot hold two ids, so add a third table whose rows are the pairings:
+* **One to many:** A customer has many orders, while each order belongs to one customer. Place the reference on the "many" side by adding a `Customer` reference field to **Orders** pointing to Customers. This is the standard approach used most frequently.
+* **One to one:** A customer has a single billing profile. This uses the same setup as above, but with the **Unique** option enabled on the reference field to prevent multiple records from pointing to the same target.
+* **Many to many:** An order can have multiple tags, and a single tag can appear on multiple orders. Since a single field cannot hold multiple identifiers, you must introduce a third junction table to store the pairings:
 
 | Table | Fields |
 | --- | --- |
@@ -35,7 +33,7 @@ One row in OrderTags means one tag on one order. To list an order's tags, read O
 
 ## Links
 
-Every record in an API response carries a `links` block. Reference fields appear in it beside `self` and `collection`:
+Every record in an API response includes a `links` block. Reference fields appear in it beside `self` and `collection`:
 
 ```json
 {
@@ -57,7 +55,7 @@ Follow the reference in the same request with `$expand`, so you do not need a se
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:5263/api/v1/sales-orders/records?\$expand=Customer"
+  "http://localhost:5000/api/v1/sales-orders/records?\$expand=Customer"
 ```
 
 ```json

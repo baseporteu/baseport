@@ -25,7 +25,7 @@ Use a `consumer` account for this. It can hold an API token but cannot sign in t
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:5263/api/v1/sales-orders/records?pageSize=5"
+  "http://localhost:5000/api/v1/sales-orders/records?pageSize=5"
 ```
 
 ```json
@@ -59,7 +59,7 @@ Writes use the same path. All the routes are listed in the [Web APIs reference](
 
 ```bash
 curl -N -H "Authorization: Bearer $TOKEN" \
-  http://localhost:5263/api/v1/sales-orders/subscribe
+  http://localhost:5000/api/v1/sales-orders/subscribe
 ```
 
 ```

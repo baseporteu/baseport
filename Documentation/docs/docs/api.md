@@ -48,7 +48,7 @@ Every collection endpoint pages. None returns an unbounded list.
 A write body is a plain JSON object of field names, or `multipart/form-data` when you are sending a file in the same request. There is no wrapper key.
 
 ```bash
-curl -X POST http://localhost:5263/api/v1/sales-orders/records \
+curl -X POST http://localhost:5000/api/v1/sales-orders/records \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"OrderNo":"SO-100001","Total":88.4}'
