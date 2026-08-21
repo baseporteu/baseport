@@ -198,7 +198,7 @@ public static class RecordEngine
             merged = (JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject) ?? new JsonObject();
             foreach (var kv in patch)
             {
-                // An object field merges member by member, so patching one member does not drop the rest.
+                // Member by member, patching does not drop residuals.
                 var nested = fields.FirstOrDefault(f => f.Name == kv.Key) is { } f2 && FieldTypes.Of(f2).Shape == FieldShape.Object;
                 if (nested && merged[kv.Key] is JsonObject target && kv.Value is JsonObject source) MergeInto(target, source);
                 else merged[kv.Key] = kv.Value?.DeepClone();
@@ -220,7 +220,7 @@ public static class RecordEngine
         return (merged, outcome);
     }
 
-    // Objects merge, everything else is replaced whole. A null still writes null, the same as at the top level.
+    // Objects merge, everything else is replaced whole.
     private static void MergeInto(JsonObject target, JsonObject source)
     {
         foreach (var kv in source)

@@ -12,7 +12,7 @@ public static class Html
         {
             null => "",
             string s => s,
-            // No trailing Z: every caller converts to local time first, and "u" would label that local time UTC.
+            // No trailing Z: callers convert to local time first, and "u" would label that UTC.
             DateTime d => d.ToString("yyyy-MM-dd HH:mm:ss"),
             _ => value.ToString() ?? ""
         };
@@ -86,8 +86,7 @@ public static class Html
     public static string JsString(string value) =>
         value.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\r", "").Replace("\n", "\\n");
 
-    // ToJsonString()'s default encoder escapes anything an HTML page could choke on, so a phone number reads
-    // "+31" in a grid cell. Safe to relax here and only here: every caller passes the result to Text().
+    // Relaxed here only: every caller passes the result to Text(), which does the HTML escaping.
     private static readonly System.Text.Json.JsonSerializerOptions DisplayJson =
         new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 

@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -180,13 +179,7 @@ public class Record
     public string TableId { get; set; } = "";
     public string JsonData { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
-
-    // RecordChangeInterceptor stamps UpdatedAt on every write that goes through EF, but a bulk import writing
-    // raw SQL never reaches it and leaves the column on its default. Never modified reads as the creation time,
-    // the same answer AddRecordUpdatedAt backfilled, rather than as year 1.
-    [NotMapped]
-    public DateTime Modified => UpdatedAt == default ? CreatedAt : UpdatedAt;
+    public DateTime UpdatedAt { get; set; } // Equal to CreatedAt until the first edit.
 }
 
 public class UserAccount

@@ -9,8 +9,7 @@ public static class RecordIndexes
 {
     private const string Table = "_records";
 
-    // Named after the field id, which never changes, so a rename rewrites the expression rather than orphaning a column.
-    // A nested member has no id and gets no column: it is not reachable by a top-level json_extract path anyway.
+    // A nested member has no id and gets no column.
     public static string? ColumnFor(FieldDefinition field) =>
         field.Id.Length > 0 && FieldTypes.Of(field).Indexable ? $"g_{field.Id}" : null;
 

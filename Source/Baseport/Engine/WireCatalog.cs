@@ -6,15 +6,14 @@ namespace Baseport;
 
 public enum WireDialect { Postgres, Tds }
 
-// Records live as JSON in one shared _records table, so a sql client browsing this instance would otherwise see the storage schema and nothing an author actually built.
-// rebuilt per connection, and SqlEngine opens one connection per query, so a browse pays two metadata reads per statement. Cache per wire session if that ever shows up in a profile.
+// Records reside as JSON in _records, hiding author schemas from SQL clients; rebuilt per-query connection (2 metadata reads per statement), so cache per session if profiling shows impact.
 public static class WireCatalog
 {
-    // RefTableId is set on a reference field, and is what the catalog reports as a foreign key.
+    // RefTableId is set on a reference field and reported as a foreign key.
     private sealed record CatalogColumn(string Name, string DataType, bool Required, string? RefTableId = null);
     private sealed record CatalogTable(string Id, string Name, int Oid, long Rows, List<CatalogColumn> Columns, string ReadRule);
 
-    // One relationship: a reference column on Table pointing at the id of Target. Both ends are already in the catalog, so a client can draw the join.
+    // A reference column pointing at Target.id. Both ends are in the catalog, so a client can draw the join.
     private sealed record CatalogLink(CatalogTable Table, CatalogColumn Column, CatalogTable Target)
     {
         public string Name => $"fk_{Table.Name}_{Column.Name}";
@@ -66,6 +65,7 @@ public static class WireCatalog
 
         var tables = new List<CatalogTable>();
         var oid = 16384;
+        
         // The wire exposes only published tables (ApiEnabled), the same set a token reaches over REST, never an author's unpublished working table. The console, already inside the operator's own handle, sees them all.
         using (var reader = Query(conn, $"SELECT Id, Name, ReadRule FROM _tables WHERE IsProxy = 0{(publishedOnly ? " AND ApiEnabled = 1" : "")} ORDER BY Name"))
             while (reader.Read())
@@ -81,7 +81,7 @@ public static class WireCatalog
         return tables;
     }
 
-    // Every reference field whose target is also in the catalog. A target that is unpublished, proxied or deleted yields no link rather than a dangling one.
+    // An unpublished, proxied or deleted target yields no link rather than a dangling one.
     private static List<CatalogLink> Links(List<CatalogTable> tables)
     {
         var byId = tables.ToDictionary(t => t.Id, StringComparer.Ordinal);
@@ -96,11 +96,8 @@ public static class WireCatalog
     {
         foreach (var table in tables)
         {
-            // Same fallback Record.Modified applies: a row written outside EF keeps the column default, and a
-            // SQL client must not be told it was modified in year 1.
             var projection = new StringBuilder(
-                $"SELECT r.Id AS {Quote("id")}, r.CreatedAt AS {Quote("created_at")}, " +
-                $"IIF(r.UpdatedAt IS NULL OR r.UpdatedAt <= '0001-01-01 00:00:00', r.CreatedAt, r.UpdatedAt) AS {Quote("updated_at")}");
+                $"SELECT r.Id AS {Quote("id")}, r.CreatedAt AS {Quote("created_at")}, r.UpdatedAt AS {Quote("updated_at")}");
             foreach (var column in table.Columns)
                 projection.Append($", json_extract(r.JsonData, '$.{column.Name}') AS {Quote(column.Name)}");
             projection.Append($" FROM main._records r WHERE r.TableId = {Literal(table.Id)}");
@@ -193,8 +190,7 @@ public static class WireCatalog
 
         Empty(conn, "information_schema", "views", "table_catalog, table_schema, table_name, view_definition, check_option, is_updatable");
 
-        // Keys, so a client can draw the relationships instead of showing unrelated tables. Every table has a
-        // primary key on id, and every reference field is a foreign key to the id of the table it points at.
+        // Primary key on id per table, foreign key per reference field, so a client can draw the joins.
         var links = Links(tables);
 
         Fill(conn, "information_schema", "table_constraints",
@@ -207,7 +203,7 @@ public static class WireCatalog
             tables.Select(t => $"'baseport', 'public', {Literal($"pk_{t.Name}")}, 'baseport', 'public', {Literal(t.Name)}, 'id', 1")
                 .Concat(links.Select(l => $"'baseport', 'public', {Literal(l.Name)}, 'baseport', 'public', {Literal(l.Table.Name)}, {Literal(l.Column.Name)}, 1")));
 
-        // A reference is resolved by the API, not by SQLite, so nothing cascades: both rules are NO ACTION.
+        // Nothing cascades: a reference is resolved by the API, not the store.
         Fill(conn, "information_schema", "referential_constraints",
             "constraint_catalog, constraint_schema, constraint_name, unique_constraint_catalog, unique_constraint_schema, unique_constraint_name, match_option, update_rule, delete_rule",
             links.Select(l => $"'baseport', 'public', {Literal(l.Name)}, 'baseport', 'public', {Literal($"pk_{l.Target.Name}")}, 'NONE', 'NO ACTION', 'NO ACTION'"));
@@ -257,8 +253,7 @@ public static class WireCatalog
             "name, system_type_id, user_type_id, schema_id, principal_id, max_length, precision, scale, collation_name, is_nullable, is_user_defined, is_assembly_type, default_object_id, rule_object_id, is_table_type",
             TdsTypes.Select(t => $"{Literal(t.Name)}, {t.SystemTypeId}, {t.SystemTypeId}, 4, NULL, {t.MaxLength}, {t.Precision}, {t.Scale}, NULL, 1, 0, 0, 0, 0, 0"));
 
-        // Same relationships the Postgres catalog reports, in the shape a TDS client reads them. id is column 1
-        // of every table (SystemColumns), so a primary key names ordinal 1 and a foreign key names its own column.
+        // Same relationships, TDS shapes. id is column 1 of every table (SystemColumns).
         var links = Links(tables);
         var linkOid = 90000;
         var linkRows = links.Select(l => (Link: l, Oid: linkOid += 16)).ToList();
@@ -273,7 +268,7 @@ public static class WireCatalog
             "object_id, index_id, index_column_id, column_id, key_ordinal, partition_ordinal, is_descending_key, is_included_column",
             tables.Select(t => $"{t.Oid}, 1, 1, 1, 1, 0, 0, 0"));
 
-        // Nothing cascades: a reference is resolved by the API, not by the store. 0 is NO_ACTION.
+        // 0 is NO_ACTION.
         Fill(conn, "sys", "foreign_keys",
             "name, object_id, principal_id, schema_id, parent_object_id, type, type_desc, referenced_object_id, key_index_id, is_disabled, is_not_trusted, delete_referential_action, update_referential_action",
             linkRows.Select(r => $"{Literal(r.Link.Name)}, {r.Oid}, 1, 1, {r.Link.Table.Oid}, 'F ', 'FOREIGN_KEY_CONSTRAINT', {r.Link.Target.Oid}, 1, 0, 0, 0, 0"));

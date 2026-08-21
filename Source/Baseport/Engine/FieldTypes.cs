@@ -2,7 +2,6 @@ using System.Collections.Frozen;
 
 namespace Baseport;
 
-// Validation, the OpenAPI schema and the wire catalog branch on this instead of on a list of type names.
 public enum FieldShape { Scalar, Object, Array }
 
 public readonly record struct TdsColumnType(string Name, int SystemTypeId, int MaxLength, int Precision, int Scale)
@@ -16,7 +15,7 @@ public readonly record struct TdsColumnType(string Name, int SystemTypeId, int M
     public static readonly TdsColumnType DateTime2 = new("datetime2", 42, 8, 27, 7);
 }
 
-// What the picker groups a type under. Ordered the way the list is drawn, most-reached-for first.
+// Ordered the way the picker draws them.
 public static class FieldGroups
 {
     public const string Text = "Text";
@@ -29,7 +28,7 @@ public static class FieldGroups
     public static readonly IReadOnlyList<string> Order = [Text, Numbers, Time, Choice, Structured, Computed];
 }
 
-// One row per field type. FieldDefinition.DataType is a key into this table, and nothing else interprets it.
+// FieldDefinition.DataType is a key into this table, and nothing else interprets it.
 public sealed record FieldType(string Name, string Label, string Group, FieldShape Shape = FieldShape.Scalar)
 {
     public string JsonType { get; init; } = "string";
@@ -38,19 +37,16 @@ public sealed record FieldType(string Name, string Label, string Group, FieldSha
     public int PostgresOid { get; init; } = 25;
     public TdsColumnType Tds { get; init; } = TdsColumnType.NVarChar;
 
-    // Worth a generated column and an index on _records.
     public bool Indexable { get; init; }
 
-    // Filled in by the server, so it is never validated, never required and never a lookup identifier.
+    // Server-filled: never validated, never required, never an identifier.
     public bool Computed { get; init; }
 
-    // Stripped from every read path.
     public bool Secret { get; init; }
 
-    // A type whose write path only runs over a top-level field cannot be a member of a nested object.
+    // False when the write path only runs over a top-level field.
     public bool Nestable { get; init; } = true;
 
-    // Accepted on input and normalized to Name.
     public IReadOnlyList<string> Aliases { get; init; } = [];
 }
 
@@ -95,10 +91,10 @@ public static class FieldTypes
 
     public static readonly FieldType Text = ByName["text"];
 
-    // Null for an unknown type: the one caller that must reject rather than guess is field definition validation.
+    // Null for an unknown type; definition validation is what rejects it.
     public static FieldType? Find(string? name) =>
         name is not null && ByName.TryGetValue(name.Trim(), out var t) ? t : null;
 
-    // Every read path: an unknown type on a stored field is treated as text rather than crashing a listing.
+    // A stored field with an unknown type reads as text rather than crashing a listing.
     public static FieldType Of(FieldDefinition field) => Find(field.DataType) ?? Text;
 }

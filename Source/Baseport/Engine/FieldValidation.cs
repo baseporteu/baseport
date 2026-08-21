@@ -11,7 +11,6 @@ public static class FieldValidation
     private static readonly TimeSpan PatternTimeout = TimeSpan.FromMilliseconds(100);
     private const string PatternProbe = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!";
 
-    // The canonical name for an author-supplied type, or null when there is no such type.
     public static string? NormalizeType(string? t) => FieldTypes.Find(t)?.Name;
 
     private static readonly Regex SlugPattern = new(@"^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.Compiled);
@@ -95,13 +94,11 @@ public static class FieldValidation
         return null;
     }
 
-    // How deep an object may nest below a top-level field.
     public const int MaxNestingDepth = 3;
 
     private static readonly JsonSerializerOptions NestedSchemaJson = new() { PropertyNameCaseInsensitive = true };
 
-    // The sub-schema of an object or array field: { "fields": [ ... ] }, each member the shape a field has on the wire.
-    // Empty means free-form: an opaque object, or a list of bare scalars.
+    // { "fields": [ ... ] }, each member the shape a field has on the wire. Empty means free-form.
     public static IReadOnlyList<FieldDefinition> NestedFields(string optionsJson)
     {
         try
@@ -114,7 +111,7 @@ public static class FieldValidation
         catch (JsonException) { return []; }
     }
 
-    // The reference check takes the field it is checking: a nested member configures its own target table.
+    // recordExists takes the field: a nested member configures its own target table.
     public static List<string> ValidateFieldValue(FieldDefinition f, JsonNode? v, Func<FieldDefinition, string, bool> recordExists) =>
         ValidateFieldValue(f, v, recordExists, 0);
 
@@ -134,7 +131,7 @@ public static class FieldValidation
         }
         if (type.Computed || f.IsHidden) return errs;
 
-        // Without this, Str()/TryNum() collapse a JsonObject/JsonArray to "" or 0 and every check below passes.
+        // Without this, Str()/TryNum() collapse an object or array to "" or 0 and every check below passes.
         var shapeMatches = type.Shape switch
         {
             FieldShape.Object => v is JsonObject,
@@ -290,7 +287,7 @@ public static class FieldValidation
         return errs;
     }
 
-    // Members are validated as fields in their own right, so they carry the same rules a top-level field does.
+    // Members are fields, so they carry the same rules.
     private static List<string> ValidateMembers(
         FieldDefinition owner, IReadOnlyList<FieldDefinition> members, JsonObject obj,
         Func<FieldDefinition, string, bool> recordExists, int depth)
@@ -303,7 +300,7 @@ public static class FieldValidation
             return errs;
         }
 
-        // Refused rather than dropped: a sub-schema ships with the object that declares it, so an extra key is a mistake, not a stale form.
+        // Refused, not dropped: a sub-schema ships with the object that declares it.
         var declared = members.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
         foreach (var kv in obj)
             if (!declared.Contains(kv.Key)) errs.Add($"{owner.Name} has an unknown member '{kv.Key}'.");
@@ -405,7 +402,7 @@ public static class FieldValidation
         return errs;
     }
 
-    // A sub-schema is a list of fields, so it is checked by the same validator, one level down.
+    // Same validator, one level down.
     private static List<string> ValidateNestedSchema(FieldDefinition owner, Func<string, bool> tableExists, int depth)
     {
         var errs = new List<string>();
