@@ -131,7 +131,7 @@ public static class ConsoleEndpoints
                     t,
                     formCounts.FirstOrDefault(f => f.TableId == t.Id)?.Count ?? 0,
                     recordCounts.FirstOrDefault(r => r.TableId == t.Id)?.Count ?? 0)),
-                settings = new { settings.AppName, settings.Currency },
+                settings = new { settings.AppName, settings.Currency, settings.TimeZone },
                 stats = new
                 {
                     dbSizeBytes = ApiDtos.DatabaseBytes(db),

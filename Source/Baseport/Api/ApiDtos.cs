@@ -104,10 +104,12 @@ public static class ApiDtos
     };
 
     // Public form schema handed to the embed.
-    public static object PublicFormSchema(FormConfig form, TableDefinition table, IEnumerable<FieldDefinition> visibleFields, string currency = "EUR") => new
+    public static object PublicFormSchema(FormConfig form, TableDefinition table, IEnumerable<FieldDefinition> visibleFields, string currency = "EUR", string timeZone = "UTC") => new
     {
         // The embed formats subtotals, which belong to no single field, so the instance default travels with the schema.
         Currency = currency,
+        // Timestamps go out in UTC. A client that renders one has to be told which zone the instance reads its dates in, or every reader picks their own.
+        TimeZone = timeZone,
         Form = new { form.Id, form.Kind, Actions = FormActions.Parse(form.Actions), form.IsReadOnly, form.Title, form.Description, form.LayoutJson, form.ConfigJson },
         Table = new
         {

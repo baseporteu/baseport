@@ -24,6 +24,8 @@ Every field has a type. The type decides how the value is validated and how it a
 
 A `password` field is hashed when written and never included in an API response.
 
+A `currency` field picks its own ISO 4217 code, or leaves it empty to follow the instance default. `date` and `datetime` values are stored in UTC and rendered in the instance time zone. Both defaults live in **Settings > Host**, and both travel with the published form schema, so a form renders the same amounts and the same clock wherever it is embedded.
+
 ## Constraints
 
 Every field has `Label`, `HelpText`, `DefaultValue`, `Min`, `Max` and `Pattern`, plus these switches:

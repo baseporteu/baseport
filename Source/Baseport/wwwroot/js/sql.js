@@ -140,7 +140,7 @@ function showScheduleStatus(q) {
     const el = document.getElementById('sqlScheduleStatus');
     if (!el) return;
     const parts = [];
-    if (q.scheduleEnabled && q.nextRunAt) parts.push(`Next run ${new Date(q.nextRunAt).toLocaleString()}`);
+    if (q.scheduleEnabled && q.nextRunAt) parts.push(`Next run ${ui.when(q.nextRunAt)}`);
     else if (q.schedule) parts.push('Paused');
     if (q.lastResult) parts.push(q.lastResult);
     el.textContent = parts.join(' · ');
@@ -217,7 +217,7 @@ async function saveQuery() {
     renderSchedule(data);
     const status = document.getElementById('sqlStatus');
     status.style.color = '';
-    status.innerText = `Saved ${new Date(data.updatedAt).toLocaleTimeString()}`;
+    status.innerText = `Saved ${ui.when(data.updatedAt)}`;
     renderQueryBreadcrumb();
     loadSavedQueries();
 }
@@ -271,7 +271,7 @@ async function runSql() {
     });
     if (!meta) return;
 
-    const time = new Date().toLocaleTimeString();
+    const time = ui.when(new Date().toISOString());
     if (Number(meta.header('X-Column-Count')) === 0) {
         status.innerText = `Executed ${time}`;
         document.getElementById('sqlNoData').classList.remove('hidden');

@@ -94,7 +94,10 @@ async function loadSettings() {
     document.getElementById('settingsAppName').value = settingsData.appName || 'Baseport';
     document.getElementById('settingsSiteUrl').value = settingsData.siteUrl || '';
     document.getElementById('settingsLogRetention').value = settingsData.logRetentionSec ?? 0;
-    document.getElementById('settingsCurrency').value = settingsData.currency || 'EUR';
+    // The browser ships ISO 4217 and the IANA zone list, so neither is ours to carry or keep current.
+    ui.fillOptions(document.getElementById('settingsCurrency'), ui.currencyOptions(), settingsData.currency || 'EUR');
+    ui.fillOptions(document.getElementById('settingsTimeZone'), ui.timeZoneOptions(), settingsData.timeZone || 'UTC');
+    ui.timeZone(settingsData.timeZone || 'UTC');
     document.getElementById('settingsAllowedOrigins').value = settingsData.allowedOrigins || '';
     renderAllowedOrigins(settingsData.allowedOrigins || '');
     document.getElementById('settingsBackupRetention').value = settingsData.backupRetention ?? 5;
@@ -144,6 +147,7 @@ function renderSettingsInfo() {
         ['API reference', s.docsPath],
         ['Database path', s.dbPath],
         ['Database size', s.dbSizeBytes != null ? fmtSize(s.dbSizeBytes) : 'n/a'],
+        ['Free disk space', s.freeDiskBytes != null ? fmtSize(s.freeDiskBytes) : 'n/a'],
         ['Estimated index size', s.estimatedIndexBytes != null ? fmtSize(s.estimatedIndexBytes) : 'n/a'],
         ['Tables', (s.tables ?? 0).toLocaleString()],
         ['Fields', (s.fields ?? 0).toLocaleString()],
@@ -164,6 +168,7 @@ async function submitSettings(btn) {
             siteUrl: document.getElementById('settingsSiteUrl').value,
             logRetentionSec: Number(document.getElementById('settingsLogRetention').value) || 0,
             currency: document.getElementById('settingsCurrency').value.trim().toUpperCase(),
+            timeZone: document.getElementById('settingsTimeZone').value,
             backupRetention: Number(document.getElementById('settingsBackupRetention').value) || 5,
         };
         const res = await fetch('/api/_admin/settings', {
@@ -367,9 +372,7 @@ async function toggleTableApiDocs(pid, enabled) {
 /* Jobs: cron schedules, run now, enabled toggle */
 
 function formatWhen(iso) {
-    if (!iso) return 'never';
-    const d = new Date(iso);
-    return isNaN(d) ? iso : d.toLocaleString();
+    return iso ? ui.when(iso) : 'never';
 }
 
 function switchHtml(id, checked) {
@@ -522,9 +525,16 @@ async function loadBackups() {
 }
 
 async function triggerBackup() {
+    const size = settingsData && settingsData.dbSizeBytes != null ? fmtSize(settingsData.dbSizeBytes) : null;
+    const free = settingsData && settingsData.freeDiskBytes != null ? fmtSize(settingsData.freeDiskBytes) : null;
+    const retention = (settingsData && settingsData.backupRetention) || 5;
     const ok = await ui.confirm({
+        // A snapshot is a second full copy of the store, and on a tight disk that is the number worth seeing before pressing the button.
         title: 'Trigger backup',
-        message: 'Create a new database snapshot now?',
+        message: [
+            size ? `Copies the whole database, about ${size}${free ? `, with ${free} free` : ''}.` : 'Copies the whole database.',
+            `The newest ${retention} snapshots are kept; older ones are deleted.`,
+        ].join(' '),
         confirmLabel: 'Trigger backup',
     });
     if (!ok) return;

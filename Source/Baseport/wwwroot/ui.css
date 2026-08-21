@@ -349,10 +349,11 @@ body:has(.sheet.open) .toasts {
     flex-shrink: 0;
 }
 
+/* Above the sheet (91), below the toasts (100): a confirmation is asked from inside a sheet, and it is the last thing on screen until it is answered. */
 .modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 60;
+    z-index: 95;
     background: rgb(0 0 0 / .45);
     backdrop-filter: blur(3px);
     display: none;

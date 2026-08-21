@@ -41,6 +41,26 @@ public class BackupStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_snapshot_is_refused_when_the_disk_could_not_hold_it()
+    {
+        // VACUUM INTO writes a second full copy of the store. On a tight disk that is
+        // how a backup fills the filesystem the instance is still running on, and the
+        // nightly job would do it unattended, so the guard sits in CreateAsync rather
+        // than in the button that calls it.
+        var storePath = Path.Combine(_dir, "store.db");
+        using var store = NewFileStore(storePath);
+
+        Assert.Null(BackupStore.SpaceProblem(_dir, store, freeBytes: long.MaxValue));
+
+        var problem = BackupStore.SpaceProblem(_dir, store, freeBytes: 0);
+        Assert.NotNull(problem);
+        Assert.Contains("free disk space", problem);
+
+        // Room for the copy alone is not enough: the store keeps growing while it is written.
+        Assert.NotNull(BackupStore.SpaceProblem(_dir, store, freeBytes: BackupStore.StoreBytes(store)));
+    }
+
+    [Fact]
     public async Task The_rolling_window_keeps_only_the_newest_backups()
     {
         var storePath = Path.Combine(_dir, "store.db");

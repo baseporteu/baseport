@@ -154,8 +154,9 @@ $$"""
                 if (actions.Contains(FormActions.Lookup))
                     visible.AddRange(LookupResultFields(form, fields).Where(f => !visible.Contains(f)));
             }
-            var currency = (await db.SettingsAsync())?.Currency ?? "EUR";
-            return Results.Ok(ApiDtos.PublicFormSchema(form, table, visible, currency));
+            var settings = await db.SettingsAsync();
+            return Results.Ok(ApiDtos.PublicFormSchema(form, table, visible,
+                settings?.Currency ?? "EUR", settings?.TimeZone ?? "UTC"));
         }).RequireRateLimiting(RateLimit.Schema);
 
         // reference dropdown options: id + label only, never the record's own data, and only for a real query, never the whole table

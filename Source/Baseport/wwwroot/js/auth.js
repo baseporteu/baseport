@@ -70,6 +70,8 @@ async function boot() {
         ...(settingsData || {}),
         ...me.settings
     };
+    // Every timestamp the console prints reads this, so it is set before the first view renders rather than when the settings page happens to load.
+    if (settingsData) ui.timeZone(settingsData.timeZone || 'UTC');
 
     greet(username);
     applySidebarState();
@@ -194,8 +196,16 @@ async function changePassword(ev) {
 let otpRequested = false;
 let otpExpiryTimer = null;
 
+// The server issues a code for one username and consumes it for that same username, so a field the operator can still edit only offers them a code that cannot work.
+function lockUsername(locked) {
+    const user = document.getElementById('loginUser');
+    if (!user) return;
+    user.readOnly = locked;
+}
+
 function resetOtpFlow() {
     otpRequested = false;
+    lockUsername(false);
     clearTimeout(otpExpiryTimer);
     otpExpiryTimer = null;
     const row = document.getElementById('otpCodeRow');
@@ -212,6 +222,7 @@ function resetOtpFlow() {
 
 function expireOtpFlow() {
     otpRequested = false;
+    lockUsername(false);
     clearTimeout(otpExpiryTimer);
     otpExpiryTimer = null;
     const code = document.getElementById('otpCode');
@@ -255,6 +266,7 @@ async function signIn(ev) {
             });
             if (!sent) return false;
             otpRequested = true;
+            lockUsername(true);
             const row = document.getElementById('otpCodeRow');
             if (row) row.hidden = false;
             const code = document.getElementById('otpCode');
@@ -314,7 +326,6 @@ async function signOut() {
         title: 'Sign out',
         message: 'End this session?',
         confirmLabel: 'Sign out',
-        modal: true,
         danger: true,
     });
     if (!ok) return;

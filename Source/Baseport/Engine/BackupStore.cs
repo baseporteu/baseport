@@ -16,9 +16,58 @@ public static class BackupStore
         return Path.Combine(Path.GetDirectoryName(dbFile)!, "backups");
     }
 
+    // Bytes the store occupies on disk, which is what a snapshot of it costs. The write-ahead log counts: VACUUM INTO copies the committed database it describes.
+    public static long StoreBytes(AppDbContext db)
+    {
+        var source = db.Database.GetDbConnection().DataSource;
+        if (source == ":memory:" || !File.Exists(source)) return 0;
+        var total = new FileInfo(source).Length;
+        var wal = new FileInfo(source + "-wal");
+        return wal.Exists ? total + wal.Length : total;
+    }
+
+    // Free bytes on whichever mount holds the directory, or null when the platform will not say.
+    public static long? FreeBytes(string dir)
+    {
+        try
+        {
+            var full = Path.GetFullPath(dir);
+            return DriveInfo.GetDrives()
+                .Where(d => d.IsReady && full.StartsWith(d.RootDirectory.FullName, StringComparison.Ordinal))
+                // Longest match wins: every path on Linux starts with "/", and the store may sit on a mount of its own.
+                .OrderByDescending(d => d.RootDirectory.FullName.Length)
+                .FirstOrDefault()?.AvailableFreeSpace;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    // A snapshot is a second full copy of the store, so on a tight disk a backup is how an instance fills its own filesystem. Checked here rather than in the endpoint: the nightly job writes through this same door, unattended.
+    public static string? SpaceProblem(string dir, AppDbContext db, long? freeBytes = null)
+    {
+        var free = freeBytes ?? FreeBytes(dir);
+        if (free is null) return null;
+        // A tenth over the copy, since the store keeps growing while VACUUM INTO writes.
+        var needed = (long)(StoreBytes(db) * 1.1);
+        return free >= needed
+            ? null
+            : $"Not enough free disk space for a snapshot: about {Human(needed)} is needed and {Human(free.Value)} is free.";
+    }
+
+    public static string Human(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        < 1024 * 1024 * 1024 => $"{bytes / 1024.0 / 1024:0.#} MB",
+        _ => $"{bytes / 1024.0 / 1024 / 1024:0.##} GB"
+    };
+
     public static async Task<string> CreateAsync(string dir, AppDbContext db, int retention, CancellationToken ct = default)
     {
         Directory.CreateDirectory(dir);
+        if (SpaceProblem(dir, db) is { } problem) throw new IOException(problem);
         // DataSource, not Database: the latter is SQLite's schema name and is always "main", so a connection built from it opened an empty database and the snapshot came out carrying nothing.
         var source = db.Database.GetDbConnection().DataSource;
         // The short id keeps two snapshots from colliding in the same millisecond.

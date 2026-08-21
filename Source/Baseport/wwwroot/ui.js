@@ -856,21 +856,94 @@ const ui = (() => {
         });
     }
 
-    // Confirmation. Resolves true when confirmed, false otherwise. Render as a sheet (default) or a centered modal.
+    // Timestamps travel as UTC and render in the instance zone, so two operators reading one row read the same clock. The zone is named only when it is not the reader's own, where an unlabelled time is a wrong one.
+    let instanceZone = null;
+    let whenFormat = null;
+
+    function timeZone(zone) {
+        if (zone === undefined) return instanceZone;
+        instanceZone = zone || null;
+        whenFormat = null;
+        return instanceZone;
+    }
+
+    function whenFormatter() {
+        if (whenFormat) return whenFormat;
+        const parts = {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        };
+        const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (instanceZone && instanceZone !== local) {
+            parts.timeZone = instanceZone;
+            parts.timeZoneName = 'short';
+        }
+        try {
+            whenFormat = new Intl.DateTimeFormat(navigator.language || undefined, parts);
+        } catch (e) {
+            // A zone this browser does not know is the reader's problem to see, not a reason to print nothing.
+            delete parts.timeZone;
+            delete parts.timeZoneName;
+            whenFormat = new Intl.DateTimeFormat(navigator.language || undefined, parts);
+        }
+        return whenFormat;
+    }
+
+    function when(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        return isNaN(d) ? String(iso) : whenFormatter().format(d);
+    }
+
+    // ISO 4217 and the IANA zone list both ship with the browser, so neither list is ours to carry or keep current.
+    function currencyOptions() {
+        const codes = Intl.supportedValuesOf ? Intl.supportedValuesOf('currency') : [];
+        let names = null;
+        try {
+            names = new Intl.DisplayNames(navigator.language || 'en', {
+                type: 'currency'
+            });
+        } catch (e) {}
+        return codes.map((code) => {
+            const name = names ? names.of(code) : code;
+            return [code, name && name !== code ? `${code} - ${name}` : code];
+        });
+    }
+
+    function timeZoneOptions() {
+        const zones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [];
+        return ['UTC'].concat(zones.filter((z) => z !== 'UTC')).map((z) => [z, z]);
+    }
+
+    // Fills a native select with [value, label] pairs, keeping the stored value selectable even when this browser has never heard of it.
+    function fillOptions(select, options, value) {
+        const list = options.slice();
+        if (value && !list.some(([v]) => v === value)) list.unshift([value, value]);
+        select.innerHTML = '';
+        list.forEach(([v, label]) => select.append(el('option', null, {
+            value: v,
+            textContent: label
+        })));
+        select.value = value || (list[0] ? list[0][0] : '');
+    }
+
+    // Confirmation. Resolves true when confirmed, false otherwise. Always a centered modal: a sheet closes whatever sheet is already open, so asking from inside one answered the question by destroying what it was about.
     function confirm({
         title,
         message,
         confirmLabel = 'Confirm',
         cancelLabel = 'Cancel',
-        danger = false,
-        modal = false
+        danger = false
     }) {
         return new Promise((resolve) => {
             const body = el('p', 'muted', {
                 textContent: message
             });
             const actions = el('div', 'row');
-            const close = () => (modal ? closeModal() : closeSheet());
+            const close = closeModal;
             actions.append(
                 button(
                     cancelLabel,
@@ -891,8 +964,7 @@ const ui = (() => {
                     },
                 ),
             );
-            if (modal) renderModal(title, body, actions);
-            else sheet(title, body, actions);
+            renderModal(title, body, actions);
         });
     }
 
@@ -918,6 +990,11 @@ const ui = (() => {
         closeModal,
         confirm,
         ask,
+        when,
+        timeZone,
+        currencyOptions,
+        timeZoneOptions,
+        fillOptions,
         theme,
         themeChoice,
         setTheme,

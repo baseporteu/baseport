@@ -1889,6 +1889,56 @@ test('one panel at a time, and the providers belong to the sign-in panel', () =>
         assert.ok(new RegExp(`getElementById\\('${panel}'\\).hidden`).test(auth), `${panel} is not part of the panel switch`);
 });
 
+test('the username stops moving once a one-time code is out', () => {
+    // The server issues a code for one username and consumes it for that same
+    // username, so a field still open for editing only offered the operator a
+    // code that could never work, with "that code is not valid" as the answer.
+    const auth = read('js/auth.js');
+    assert.ok(/function lockUsername/.test(auth), 'nothing locks the username field');
+    assert.ok(/otpRequested = true;\s*\n\s*lockUsername\(true\)/.test(auth), 'the field stays editable while a code is pending');
+    for (const flow of ['resetOtpFlow', 'expireOtpFlow']) {
+        const body = auth.slice(auth.indexOf(`function ${flow}`), auth.indexOf('}', auth.indexOf(`function ${flow}`)));
+        assert.ok(/lockUsername\(false\)/.test(body), `${flow} leaves the username locked with no code to use`);
+    }
+    assert.ok(/\.input\[readonly\]/.test(read('app.css')), 'a locked field looks exactly like an editable one');
+});
+
+test('a confirmation is a modal, so asking never destroys what it asks about', () => {
+    // sheet() closes whatever sheet is already open, so a confirmation rendered
+    // as one answered the question by throwing away the editor behind it: the
+    // account sheet vanished the moment its Revoke button asked to be sure.
+    const ui = read('ui.js');
+    const confirm = ui.slice(ui.indexOf('function confirm('), ui.indexOf('return {', ui.indexOf('function confirm(')));
+    assert.ok(/renderModal\(title, body, actions\)/.test(confirm), 'a confirmation does not render as a modal');
+    assert.ok(!/sheet\(title, body, actions\)/.test(confirm), 'a confirmation still renders as a sheet');
+    assert.ok(!/modal = false/.test(confirm), 'the sheet path is still reachable through an option');
+    assert.ok(/function sheet\([\s\S]{0,80}closeSheet\(\)/.test(ui), 'sheet() no longer closes the open sheet, which was the reason');
+    // And it has to be on top of the sheet it was asked from, not behind it.
+    const css = read('ui.css');
+    const z = (sel) => Number(css.slice(css.indexOf(sel)).match(/z-index:\s*(\d+)/)[1]);
+    assert.ok(z('.modal-overlay {') > z('.sheet {'), 'a confirmation renders behind the sheet that asked for it');
+    assert.ok(z('.modal-overlay {') < z('.toasts {'), 'a confirmation covers the toasts that report its outcome');
+});
+
+test('the currency and time zone lists come from the browser, not from a list we keep current', () => {
+    // A three-letter free-text box accepted "EU" and "eur" alike, and there is
+    // no reason to ship ISO 4217 or the IANA zone table when every browser has
+    // both. The stored value stays selectable even if this browser lacks it.
+    const settings = read('js/settings.js');
+    const html = read('admin/views/settings.html');
+    assert.ok(/<select class='input' id='settingsCurrency'>/.test(html), 'the currency is typed in again');
+    assert.ok(/<select class='input' id='settingsTimeZone'>/.test(html), 'there is nowhere to set the instance zone');
+    assert.ok(/ui\.fillOptions\(document\.getElementById\('settingsCurrency'\), ui\.currencyOptions\(\)/.test(settings), 'the currency list is not filled from the browser');
+    assert.ok(/ui\.fillOptions\(document\.getElementById\('settingsTimeZone'\), ui\.timeZoneOptions\(\)/.test(settings), 'the zone list is not filled from the browser');
+    assert.ok(/timeZone: document\.getElementById\('settingsTimeZone'\)\.value/.test(settings), 'the zone is never saved');
+    assert.ok(/supportedValuesOf/.test(read('ui.js')), 'the lists are carried in our own source');
+    // One formatter, so a timestamp reads the same in every view.
+    assert.ok(/function when\(iso\)/.test(read('ui.js')), 'there is no shared timestamp formatter');
+    // Numbers still take the reader's locale; only the clock is the instance's.
+    for (const file of ['js/settings.js', 'js/sql.js', 'js/accounts.js'])
+        assert.ok(!/new Date\([^)]*\)\.toLocale/.test(read(file)), `${file} formats a timestamp in the reader's own zone`);
+});
+
 test('a new provider is offered somewhere by default', () => {
     // Enabled alone put a provider in the list, said "Enabled" in its row, and
     // showed no button on any sign-in screen. Three switches, two of which had to

@@ -196,7 +196,7 @@ function apiTokenPanel(a) {
         a.apiTokenExpired ?
         'This account has a token, but it has expired.' :
         a.apiTokenExpiresAt ?
-        `Token active until ${new Date(a.apiTokenExpiresAt).toLocaleDateString()}.` :
+        `Token active until ${ui.when(a.apiTokenExpiresAt)}.` :
         'This account has a token with no expiry date. Regenerate it to set one.';
     wrap.append(state);
 
@@ -263,7 +263,7 @@ function showGeneratedToken(token, expiresAt) {
     const body = ui.el('div');
     body.append(
         ui.el('p', 'muted', {
-            textContent: `Copy this now. It is not shown again. Valid until ${new Date(expiresAt).toLocaleDateString()}.`,
+            textContent: `Copy this now. It is not shown again. Valid until ${ui.when(expiresAt)}.`,
         }),
     );
     const box = ui.el('input', 'input embed-input mono', {

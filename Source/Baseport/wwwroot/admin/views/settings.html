@@ -31,8 +31,13 @@
                                     </div>
                                     <div class='settings-form-row'>
                                         <label for='settingsCurrency'>Default currency</label>
-                                        <input type='text' class='input' id='settingsCurrency' maxlength='3' placeholder='EUR'>
-                                        <p class='desc'>Three-letter ISO code used by currency fields that do not set their own.</p>
+                                        <select class='input' id='settingsCurrency'></select>
+                                        <p class='desc'>ISO 4217 code used by currency fields that do not set their own.</p>
+                                    </div>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsTimeZone'>Time zone</label>
+                                        <select class='input' id='settingsTimeZone'></select>
+                                        <p class='desc'>Timestamps are stored in UTC and rendered in this zone, here and in published forms. Starts on the server's own zone.</p>
                                     </div>
                                     <div class='settings-form-footer'>
                                         <button class='btn' onclick='submitSettings(this)'>Save</button>

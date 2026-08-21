@@ -278,6 +278,9 @@ public class AppSettings
     public string SiteUrl { get; set; } = "";
     public int LogRetentionSec { get; set; } = 604800;
     public string Currency { get; set; } = "EUR"; // Fallback currency code.
+
+    // IANA zone the console and the published schema render timestamps in. Storage stays UTC; this is a display default, defined once so every client agrees on it. A new instance starts on the host's zone, an upgraded one keeps the UTC its migration wrote.
+    public string TimeZone { get; set; } = TimeZones.HostDefault;
     public int BackupRetention { get; set; } = 5; // Maximum local backups to retain.
 
     // Preview link signing secret (generated on first boot).

@@ -327,7 +327,10 @@ public static class AdminEndpoints
         app.MapPost("/api/_admin/backups", async (AppDbContext db) =>
         {
             var settings = await db.SettingsAsync() ?? new AppSettings();
-            var created = await BackupStore.CreateAsync(BackupStore.Dir(db), db, settings.BackupRetention);
+            string created;
+            // A full disk is the expected failure here, and it says what is wrong rather than arriving as a 500.
+            try { created = await BackupStore.CreateAsync(BackupStore.Dir(db), db, settings.BackupRetention); }
+            catch (IOException ex) { return Results.BadRequest(new { errors = new[] { ex.Message } }); }
             return Results.Ok(new { created, backups = BackupStore.List(BackupStore.Dir(db)) });
         });
 
@@ -352,6 +355,8 @@ public static class AdminEndpoints
             var s = await db.SettingsAsync() ?? new AppSettings();
             var dbPath = db.Database.GetDbConnection().DataSource;
             var dbSizeBytes = ApiDtos.DatabaseBytes(db);
+            // What a backup has to fit into, next to what it would cost.
+            var freeDiskBytes = BackupStore.FreeBytes(BackupStore.Dir(db));
 
             // Same estimate the tables list sorts "Index size" by, summed instance-wide.
             var indexTables = await db.Tables.Include(t => t.Fields).ToListAsync();
@@ -366,6 +371,7 @@ public static class AdminEndpoints
                 s.SiteUrl,
                 s.LogRetentionSec,
                 s.Currency,
+                s.TimeZone,
                 s.BackupRetention,
                 s.ApiTitle,
                 s.ApiDescription,
@@ -393,6 +399,7 @@ public static class AdminEndpoints
                 docsPath = "/docs",
                 dbPath,
                 dbSizeBytes,
+                freeDiskBytes,
                 estimatedIndexBytes,
                 tables = await db.Tables.CountAsync(),
                 fields = await db.Fields.CountAsync(),
@@ -433,6 +440,16 @@ public static class AdminEndpoints
                 if (code.Length != 3 || !code.All(char.IsAsciiLetterUpper))
                     return Results.BadRequest(new { errors = new[] { "Currency must be a three-letter ISO 4217 code, for example EUR." } });
                 s.Currency = code;
+            }
+
+            // Storage stays UTC; this is the zone clients render in, so it only has to be one an IANA-speaking client would accept.
+            if (body["timeZone"] is JsonValue tzv && tzv.TryGetValue<string>(out var timeZone))
+            {
+                var zone = (timeZone ?? "").Trim();
+                if (zone.Length == 0) zone = "UTC";
+                if (!TimeZones.IsValid(zone))
+                    return Results.BadRequest(new { errors = new[] { "Time zone must be an IANA zone name, for example Europe/Amsterdam." } });
+                s.TimeZone = zone;
             }
             // What the API reference says about itself.
             if (body["apiTitle"] is JsonValue tv && tv.TryGetValue<string>(out var title))
@@ -495,7 +512,7 @@ public static class AdminEndpoints
             ProxyTarget.Configure(s);
             return Results.Ok(new
             {
-                s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.BackupRetention, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled,
+                s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.TimeZone, s.BackupRetention, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled,
                 s.PublicAuthEnabled, s.PublicRegistrationEnabled, s.AnonymousAuthEnabled, s.AnonymousRetentionDays,
                 s.AuthIssuer, s.AuthTokenLifetimeSec, s.AuthRefreshLifetimeDays,
                 s.ProxyPrivateTargetsEnabled,

@@ -1422,6 +1422,18 @@ li.CodeMirror-hint-active {
     box-shadow: 0 0 0 2px hsl(var(--ring) / .2);
 }
 
+/* Still readable and still copyable, but plainly not editable: a field held for a reason, not a field that failed. */
+.input[readonly] {
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    cursor: default;
+}
+
+.input[readonly]:focus {
+    border-color: hsl(var(--input));
+    box-shadow: none;
+}
+
 .input-sm {
     height: 1.75rem;
     padding: .25rem .5rem;

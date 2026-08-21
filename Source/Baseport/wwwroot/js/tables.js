@@ -597,6 +597,19 @@ function closeModal() {
     ui.closeSheet();
 }
 
+// The select twin of fieldInputRow, so a row of fixed choices sits in the sheet exactly like a row of free text.
+function fieldSelectRow(label, id, value, options) {
+    const lab = document.createElement('label');
+    lab.className = 'field-label';
+    lab.innerText = label;
+    const sel = document.createElement('select');
+    sel.className = 'input';
+    sel.id = id;
+    ui.fillOptions(sel, options, value || '');
+    lab.appendChild(sel);
+    return lab;
+}
+
 // dataField, if given, is what a server's { invalid: [...] } names this field as -- see ui.markInvalid.
 function fieldInputRow(label, id, value, placeholder, mono, dataField) {
     const lab = document.createElement('label');
@@ -734,11 +747,9 @@ function openFieldEditor(fieldId) {
     const defaultRow = document.createElement('div');
     defaultRow.id = 'feDefaultRow';
     wrap.appendChild(defaultRow);
-    wrap.appendChild(fieldInputRow('Currency code', 'feCurrency', f.currency, 'EUR'));
-    const currencyHint = document.createElement('p');
-    currencyHint.className = 'sheet-note';
-    currencyHint.id = 'feCurrencyHint';
-    wrap.appendChild(currencyHint);
+    const instanceCurrency = (settingsData && settingsData.currency) || 'EUR';
+    wrap.appendChild(fieldSelectRow('Currency code', 'feCurrency', f.currency,
+        [['', `Instance default (${instanceCurrency})`]].concat(ui.currencyOptions())));
 
     // One pair of bounds: value range for numbers, length range for text.
     const boundsRow = document.createElement('div');
@@ -874,11 +885,7 @@ function openFieldEditor(fieldId) {
         const currencyRow =
             document.getElementById('feCurrency').closest('.field-label') ||
             document.getElementById('feCurrency').parentElement;
-        const isCurrency = t === 'currency';
-        currencyRow.classList.toggle('hidden', !isCurrency);
-        document.getElementById('feCurrencyHint').classList.toggle('hidden', !isCurrency);
-        document.getElementById('feCurrencyHint').innerText =
-            `Three-letter ISO code. Leave empty to use the instance default (${settingsData && settingsData.currency ? settingsData.currency : 'EUR'}).`;
+        currencyRow.classList.toggle('hidden', t !== 'currency');
         const hint = document.getElementById('feBoundsHint');
         if (!hint) return;
         // matches the Min/Max cases FieldValidation.cs actually checks -- everything else silently ignores them
