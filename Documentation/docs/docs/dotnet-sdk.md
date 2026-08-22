@@ -21,7 +21,7 @@ services.AddBaseport(o =>
 });
 ```
 
-`IBaseportClient` is registered as a singleton over `IHttpClientFactory`. If your callers sign in as end users rather than sharing a static token, leave `ApiToken` unset and call `LoginAsync`. The client refreshes its own token a minute before expiry.
+Registers `IBaseportClient` as a singleton over `IHttpClientFactory`. For end-user sessions rather than a shared static token, leave `ApiToken` unset and call `LoginAsync`; the client refreshes a minute before expiry.
 
 ## Records
 
@@ -44,16 +44,16 @@ await orders.DeleteAsync(id);
 
 `As<T>()` deserializes the record's `data` into your own type.
 
-## Reading a whole table
+## Walking a whole table
 
 ```csharp
 await foreach (var row in orders.WalkAsync(pageSize: 200, cancellationToken: ct))
     Process(row.As<SalesOrder>());
 ```
 
-Use this instead of looping `page: 1, 2, 3`. Page numbers count rows to skip, so they get slower the further in you go, and a row written while you page shifts everything after it. `WalkAsync` resumes from where the last page stopped, so neither happens.
+Keyset paging under the hood, so page 500 costs what page 1 costs and an insert mid-walk cannot shift unread rows into what you already read. Prefer it over looping `page: 1, 2, 3`, which is `OFFSET` and degrades linearly.
 
-## Not overwriting someone else's change
+## Optimistic concurrency
 
 Records come back with an `ETag`. Pass it to a write and the write is refused if the record moved on since you read it:
 
@@ -70,7 +70,7 @@ catch (BaseportException e) when (e.IsPreconditionFailure)
 }
 ```
 
-You can leave the `ETag` off and write unconditionally. A write that loses a race is still refused (`e.IsConflict`), so you cannot silently drop another writer's change either way. The `ETag` is what lets you find out before the write rather than after.
+The `ETag` is optional. A write that loses a race is refused with `e.IsConflict` either way, because the server holds a concurrency token on the record. Sending the `ETag` moves the failure earlier and tells you which version you were working from.
 
 ## Errors
 
@@ -87,7 +87,7 @@ catch (BaseportException e) when (e.IsConflict)
 }
 ```
 
-Worth splitting the two: a conflict may be worth retrying with a different value, a validation failure is not.
+Split the two in your retry logic: a conflict may succeed with a different value, a validation failure never will.
 
 ## Live updates
 

@@ -8,7 +8,7 @@ namespace Baseport;
 
 public static class ApiLinks
 {
-    public const string ExpandParameter = "$expand";
+    public const string ExpandParameter = "expand";
 
     public sealed record Relation(FieldDefinition Field, TableDefinition Target, List<FieldDefinition> TargetFields);
 

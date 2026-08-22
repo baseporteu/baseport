@@ -97,7 +97,7 @@ public class OpenApiSpecTests
         }
     }
 
-    // A read reaches 400 through a malformed $expand, which is why it is declared there too; a delete parses nothing a caller wrote and still must not claim it.
+    // A read reaches 400 through a malformed expand, which is why it is declared there too; a delete parses nothing a caller wrote and still must not claim it.
     [Fact]
     public void Only_the_operations_that_parse_caller_input_document_400()
     {
@@ -277,7 +277,7 @@ public class OpenApiSpecTests
     public void The_documented_record_shape_matches_what_the_api_returns()
     {
         var record = new Record { Id = Ids.NewShortId(12), TableId = "t", JsonData = "{}", CreatedAt = DateTime.UtcNow };
-        // The public API always includes links, and includes expanded whenever $expand asked for one, the fullest shape is what the document has to describe.
+        // The public API always includes links, and includes expanded whenever expand asked for one, the fullest shape is what the document has to describe.
         var returned = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(
             ApiDtos.RecordDto(record, new List<FieldDefinition>(), new JsonObject(), new JsonObject()),
             new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)))!.AsObject();
@@ -294,7 +294,38 @@ public class OpenApiSpecTests
     {
         foreach (var (_, path) in OpenApiSpec.BuildPaths(new List<TableDefinition> { Detailed() }))
         foreach (var (_, operation) in path!.AsObject())
-            Assert.Contains((operation!["security"] as JsonArray)!, s => s!.AsObject().ContainsKey("bearerAuth"));
+            Assert.Contains((operation!["security"] as JsonArray)!, s => s!.AsObject().ContainsKey(OpenApiSpec.SecurityScheme));
+    }
+
+    // Scalar labels a scheme by its key, and docs.html preselects it by that same string. Renaming one without the other leaves the auth panel showing an identifier, or showing nothing preselected.
+    [Fact]
+    public void The_security_scheme_is_named_the_way_the_reference_renders_it()
+    {
+        Assert.Equal("Bearer", OpenApiSpec.SecurityScheme);
+
+        var docs = File.ReadAllText(Path.Combine(RepoRoot(), "Source", "Baseport", "wwwroot", "docs.html"));
+        Assert.Contains($"preferredSecurityScheme: '{OpenApiSpec.SecurityScheme}'", docs);
+    }
+
+    // A sigil in a parameter name promises semantics this API does not implement, and "$" in a double-quoted shell string is dropped before curl ever sees it.
+    [Fact]
+    public void No_query_parameter_carries_a_sigil()
+    {
+        var list = (OpenApiSpec.BuildPaths(new List<TableDefinition> { Detailed() })["/api/v1/sales-orders/records"]!["get"]!["parameters"] as JsonArray)!;
+        foreach (var p in list)
+        {
+            var name = p!["name"]!.GetValue<string>();
+            Assert.Matches("^[a-zA-Z][a-zA-Z0-9]*$", name);
+        }
+        Assert.Equal("expand", ApiLinks.ExpandParameter);
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null && !File.Exists(Path.Combine(dir, "AGENTS.md")))
+            dir = Path.GetDirectoryName(dir);
+        return dir ?? throw new InvalidOperationException("Could not find the repository root.");
     }
 
     /* endpoint documentation and method switches */

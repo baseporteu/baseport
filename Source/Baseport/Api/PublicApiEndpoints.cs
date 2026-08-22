@@ -30,13 +30,13 @@ public static class PublicApiEndpoints
                 },
                 ["servers"] = new JsonArray(new JsonObject { ["url"] = "/" }),
                 ["tags"] = OpenApiSpec.BuildTags(tables),
-                ["security"] = new JsonArray(new JsonObject { ["bearerAuth"] = new JsonArray() }),
+                ["security"] = new JsonArray(new JsonObject { [OpenApiSpec.SecurityScheme] = new JsonArray() }),
                 ["paths"] = OpenApiSpec.BuildPaths(tables),
                 ["components"] = new JsonObject
                 {
                     ["securitySchemes"] = new JsonObject
                     {
-                        ["bearerAuth"] = new JsonObject { ["type"] = "http", ["scheme"] = "bearer", ["bearerFormat"] = "opaque" }
+                        [OpenApiSpec.SecurityScheme] = new JsonObject { ["type"] = "http", ["scheme"] = "bearer" }
                     },
                     ["schemas"] = OpenApiSpec.BuildSchemas(tables)
                 }

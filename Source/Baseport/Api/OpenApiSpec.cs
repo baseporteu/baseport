@@ -4,6 +4,9 @@ namespace Baseport;
 
 public static class OpenApiSpec
 {
+    // Scalar labels a security scheme by its key, so the key is what a reader sees in the auth panel. "Bearer" is what RFC 6750 calls the scheme; "bearerAuth" was an identifier leaking into the UI.
+    public const string SecurityScheme = "Bearer";
+
     // One tag per exposed table, the document is navigable in any spec viewer.
     public static JsonArray BuildTags(List<TableDefinition> tables) =>
         new(tables.Select(t =>
@@ -301,7 +304,7 @@ public static class OpenApiSpec
             ["summary"] = summary,
             // One tag per table so generated clients group by object, not into a single "records" bucket that grows unusable past a few tables.
             ["tags"] = new JsonArray((JsonNode)table.ApiName),
-            ["security"] = new JsonArray(new JsonObject { ["bearerAuth"] = new JsonArray() }),
+            ["security"] = new JsonArray(new JsonObject { [SecurityScheme] = new JsonArray() }),
             ["responses"] = responses
         };
         if (requestBody != null) op["requestBody"] = requestBody;

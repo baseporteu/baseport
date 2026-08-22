@@ -6,7 +6,7 @@ description: "Configuration, the reverse proxy, backups and the switches that ar
 # Going to production
 
 :::warning
-Baseport is pre-alpha. The database format and the API surface still move between commits. Treat this page as what deployment will look like instead of a promise that today's file opens tomorrow.
+Baseport is in early pre-alpha. Expect breaking changes to the database schema and API surface between commits. Consider this guide a preview of the eventual deployment architecture, with no backward compatibility guaranteed for your current data.
 :::
 
 ## Configuration
@@ -64,14 +64,16 @@ Run it again with different options and it rewrites the unit and restarts. It re
 
 `sudo baseport start`, `sudo baseport stop` and `sudo baseport restart` control that unit once it exists. Without sudo they ask for it themselves rather than telling you to retype the command.
 
-`baseport update` restarts the service itself when the unit runs from the directory it updated. `sudo baseport restart` does it by hand.
+`baseport stop --force` is the one to reach for when you do not care how it is running. It stops the service if there is one, kills a foreground instance if there is one, and says so rather than failing when there was nothing to stop. This is what `baseport update` runs before it replaces the binary.
+
+`baseport update` stops what is running, replaces the binary, and restarts the service when the unit runs from the directory it updated. `sudo baseport restart` does it by hand.
 
 `baseport status` prints what systemd thinks. `baseport doctor` goes wider: version, PATH, database, unit state, whether the unit runs from the directory the wrapper updates, and whether anything answers on its address.
 
 `sudo baseport uninstall` disables and removes the unit, removes the program files and the wrapper, and leaves the data. Add `--purge` to delete the directory and the `baseport` system user with it.
 
 :::warning
-`baseport update` only updates the directory the wrapper was installed with. If you installed as yourself into `~/.baseport` but your service runs from `/opt/baseport`, you will update a copy nothing is running. The installer says so when it detects this, and you can point it at the right place with `BASEPORT_DIR`.
+The `baseport update` command targets the directory where the wrapper was originally installed. If you installed it locally (e.g., to `~/.baseport`) but run your service from a different location (e.g., `/opt/baseport`), the update will modify the inactive copy. The installer will warn you if it detects this mismatch. To ensure you are updating the active service, specify the correct path using the `BASEPORT_DIR` environment variable.
 :::
 
 ## Backups
@@ -89,15 +91,24 @@ The `backup` job copies the SQLite file into `backups/` at 03:00 by default and 
 
 ## Jobs
 
-Maintenance jobs run on a scheduler you can see and edit under **Settings**. Backups, log cleanup, session cleanup, `PRAGMA optimize`, search index maintenance and anonymous account cleanup are on by default. File deletions is off, because an upload you have not attached to a record yet looks the same as an abandoned one.
+A scheduler runs maintenance against your data whether you configured it or not. Schedules and on/off are under **Settings**.
 
-You can also give a saved SQL query a cron expression and it will run on the same schedule. Give it a URL and each run posts the results there:
+| Key | Default | What it does |
+| --- | --- | --- |
+| `backup` | 03:00 daily | Copies the SQLite file into `backups/`, keeping the most recent five |
+| `heartbeat` | every 5 min | Records that the scheduler is alive |
+| `logs-cleanup` | 04:00 daily | Prunes audit rows past the log retention setting |
+| `session-cleanup` | hourly | Drops expired sessions, sign-in codes and lockouts |
+| `anonymous-cleanup` | 04:15 daily | Deletes abandoned anonymous accounts, see [Authentication](/docs/authentication) |
+| `query-optimizer` | 05:00 Sundays | `PRAGMA optimize` |
+| `search-index` | 05:30 Sundays | Optimizes the full text index, rebuilding it if it has drifted |
+| `file-deletions` | **off** | Deletes uploads no record refers to, see [Files and uploads](/docs/files) |
 
-```json
-{"query":"Daily revenue","ranAt":"2026-08-20T07:00:00Z","columns":["day","total"],"rows":[["2026-08-19","4210.50"]]}
-```
+`backup` writes to the same disk as the database, so it survives a bad migration and nothing else. Copy `backups/` somewhere off the host.
 
-Leave the URL empty and the row count is recorded against the query instead, you can read it in the console. **Run now** lets you check the URL works without waiting for the schedule. The cron expression and the URL are both validated when you save, and the URL is checked again at run time, since a hostname that pointed at a public address when you saved it might not later.
+`file-deletions` ships off because an upload you have not attached to a record yet is indistinguishable from an abandoned one.
+
+You can also put a saved SQL query on this scheduler and POST its results to a URL. See [SQL and scheduled queries](/docs/sql-and-queries).
 
 ## Things that are off by default
 

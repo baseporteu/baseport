@@ -40,13 +40,13 @@ A table publishes only the methods you left enabled on it.
 | `page` | `1` | |
 | `pageSize` | `50` | Capped at 200 |
 | `cursor` | none | Position from a previous response's `nextCursor` |
-| `$expand` | none | Comma separated reference fields, see [Relations](/docs/relations) |
+| `expand` | none | Comma separated reference fields, see [Relations](/docs/relations) |
 
 Every collection endpoint pages. None returns an unbounded list.
 
-### Paging through everything
+### Cursor paging
 
-`page` is fine for a grid someone clicks through. For walking a whole table, follow `nextCursor` instead:
+`page` is fine for a grid someone clicks through. Walking a whole table, use `nextCursor`:
 
 ```bash
 curl "http://localhost:5000/api/v1/sales-orders/records?pageSize=200" -H "Authorization: Bearer $TOKEN"
@@ -57,9 +57,11 @@ curl "http://localhost:5000/api/v1/sales-orders/records?pageSize=200&cursor=eyJD
 
 `links.next` has the same URL already built. Keep going until `nextCursor` is null.
 
-A cursor resumes from the last row of the previous page rather than counting rows to skip, so a deep page costs what the first one costs, and a record written while you page will not shift rows you have not reached yet into ones you already read. It works on the default newest-first order only. Ask for a `sort` field and a `cursor` together and you get a `400`, because the position a cursor stores does not describe that order.
+Keyset, not offset: the cursor holds `(CreatedAt, Id)` from the last row of the previous page, so page 500 costs what page 1 costs and an insert mid-walk cannot shift unread rows into the window you already read.
 
-### Not overwriting someone else's change
+Defined for the default `CreatedAt DESC, Id DESC` order only. `sort` plus `cursor` is a `400`: a keyset over a nullable column needs the NULLS FIRST/LAST half of the comparison, and one that gets it wrong skips or repeats rows silently.
+
+### Optimistic concurrency
 
 A single record response comes back with an `ETag`. Send it back as `If-Match` on a write and the write is refused with `412` if the record changed since you read it.
 
@@ -71,7 +73,7 @@ curl -X PATCH http://localhost:5000/api/v1/sales-orders/records/gAOPLyJDI5UU \
   -d '{"Total":91.0}'
 ```
 
-`If-Match` is optional. Without it a write still cannot silently discard another writer's change: if two writes race, the one that arrives second is refused with `409` and has to re-read. `If-Match` is how you find that out before the write instead of after.
+`If-Match` is optional. `Record.UpdatedAt` is an EF concurrency token, so the version the writer read is in the `UPDATE`'s own `WHERE` clause and a write that loses a race gets `409` whether or not it sent a precondition. `If-Match` moves that failure earlier: you learn the record moved before your write is attempted, not after.
 
 `If-None-Match` on a read answers `304` when you already hold the current version.
 

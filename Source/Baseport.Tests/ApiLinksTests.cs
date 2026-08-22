@@ -175,15 +175,15 @@ public class ApiLinksTests : IDisposable
     {
         var request = new DefaultHttpContext().Request;
         request.Path = "/api/v1/orders/records";
-        request.QueryString = new QueryString("?q=acme&page=2&$expand=customer");
+        request.QueryString = new QueryString("?q=acme&page=2&expand=customer");
 
         var links = ApiLinks.PageLinks(request, new QueryEngine.ListPage(Array.Empty<Record>(), 120, 2, 50, true));
 
-        Assert.Equal("/api/v1/orders/records?q=acme&$expand=customer&page=1", links["first"]!.GetValue<string>());
-        Assert.Equal("/api/v1/orders/records?q=acme&$expand=customer&page=1", links["prev"]!.GetValue<string>());
-        Assert.Equal("/api/v1/orders/records?q=acme&$expand=customer&page=3", links["next"]!.GetValue<string>());
-        Assert.Equal("/api/v1/orders/records?q=acme&$expand=customer&page=3", links["last"]!.GetValue<string>());
-        Assert.Equal("/api/v1/orders/records?q=acme&$expand=customer&page=2", links["self"]!.GetValue<string>());
+        Assert.Equal("/api/v1/orders/records?q=acme&expand=customer&page=1", links["first"]!.GetValue<string>());
+        Assert.Equal("/api/v1/orders/records?q=acme&expand=customer&page=1", links["prev"]!.GetValue<string>());
+        Assert.Equal("/api/v1/orders/records?q=acme&expand=customer&page=3", links["next"]!.GetValue<string>());
+        Assert.Equal("/api/v1/orders/records?q=acme&expand=customer&page=3", links["last"]!.GetValue<string>());
+        Assert.Equal("/api/v1/orders/records?q=acme&expand=customer&page=2", links["self"]!.GetValue<string>());
     }
 
     [Fact]

@@ -52,4 +52,6 @@ The only thing protecting an upload is that nobody can guess its name. Twenty-tw
 
 ## Deleting unused files
 
-The `file-deletions` job removes uploads that no record refers to any more. It is **off by default**, because a file you have uploaded but not yet attached to a record looks the same as an abandoned one. Turn it on under **Settings** once you are confident your code attaches files promptly.
+The `file-deletions` job removes uploads no record refers to any more. It is off by default: an upload you have not attached to a record yet is indistinguishable from an abandoned one, so until your code reliably attaches files in the same request, this job deletes work in progress.
+
+It matches on the `/uploads/` path segment inside each record's JSON, not on a substring, so a filename mentioned in a text field is not treated as a reference. Schedule it under **Settings**, alongside the other [jobs](/docs/going-to-production).

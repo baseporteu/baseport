@@ -51,11 +51,11 @@ A reference only appears in `links` if the target table is published and allows 
 
 ## Expanding a reference
 
-Follow the reference in the same request with `$expand`, you do not need a second call:
+Follow the reference in the same request with `expand`, no second call:
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:5000/api/v1/sales-orders/records?\$expand=Customer"
+  "http://localhost:5000/api/v1/sales-orders/records?expand=Customer"
 ```
 
 ```json

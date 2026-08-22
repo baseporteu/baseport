@@ -81,6 +81,10 @@
             "path": "docs/forms"
           },
           {
+            "title": "SQL and scheduled queries",
+            "path": "docs/sql-and-queries"
+          },
+          {
             "title": ".NET SDK",
             "path": "docs/dotnet-sdk"
           }

@@ -95,9 +95,30 @@ die() { echo "$*" >&2; exit 1; }
 # Telling someone to retype a command with sudo in front of it is a step a script can take itself.
 need_root() {
   if [ "$(id -u)" = "0" ]; then return 0; fi
-  command -v sudo >/dev/null 2>&1 || die "That needs root and there is no sudo here. Run it as root."
+  command -v sudo >/dev/null 2>&1 || die "That needs root and there is no sudo here. Run it as root:
+  su -c '$SELF $*'"
+  # sudo -n fails when this user has no sudo rights at all, which is worth saying plainly instead of letting sudo prompt for a password it will then reject.
+  if ! sudo -n true 2>/dev/null && [ ! -t 0 ]; then
+    die "That needs root, and sudo cannot ask for a password here. Run it as root:
+  sudo $SELF $*"
+  fi
   echo "This needs root, running it again through sudo." >&2
   exec sudo -- "$SELF" "$@"
+}
+
+# Escalate only when the thing we are about to write is actually out of reach. Used by the commands that sometimes need root and sometimes do not: a user install in $HOME needs none, the same command against /opt needs all of it.
+need_write() {
+  CMD=$1
+  shift
+  for P in "$@"; do
+    TARGET=$P
+    [ -e "$TARGET" ] || TARGET=$(dirname "$TARGET")
+    if [ ! -w "$TARGET" ]; then
+      need_root "$CMD"
+      return 0
+    fi
+  done
+  return 0
 }
 
 need_service() {
@@ -116,14 +137,24 @@ service_url() {
 }
 
 case "${1:-}" in
-uninstall|doctor) ;;
+uninstall|doctor|update) ;;
 *) [ -x "$DIR/Baseport" ] || die "No Baseport in $DIR. Reinstall it:
   curl -sSL $INSTALLER | bash" ;;
 esac
 
 case "${1:-}" in
 update)
-  curl -fsSL "$INSTALLER" | BASEPORT_REPO="$REPO" BASEPORT_DIR="$DIR" BASEPORT_BIN="$BIN" bash
+  need_write update "$DIR" "$BIN"
+
+  # Replacing a binary that is still running is what leaves a half-updated install: the old process keeps serving and the file it was started from is gone. --force so an install with no service, or one already stopped, is not an error here.
+  "$SELF" stop --force
+
+  # curl piped straight into bash reports the shell's exit code, not curl's, so a 404 or a dropped connection ran an empty script and called it a successful update. Download first, check it, then run it.
+  TMP=$(mktemp) || die "Could not create a temporary file for the download."
+  trap 'rm -f "$TMP"' EXIT INT TERM
+  curl -fsSL "$INSTALLER" -o "$TMP" || die "Could not download the installer from $INSTALLER."
+  [ -s "$TMP" ] || die "The installer downloaded from $INSTALLER was empty."
+  BASEPORT_REPO="$REPO" BASEPORT_DIR="$DIR" BASEPORT_BIN="$BIN" sh "$TMP"
   ;;
 service)
   shift
@@ -179,10 +210,38 @@ start)
   echo "baseport.service started on $(service_url)."
   ;;
 stop)
-  need_service
-  need_root stop
-  systemctl stop baseport
-  echo "baseport.service stopped. It comes back on the next boot until you run: sudo $SELF uninstall"
+  shift
+  FORCE=no
+  [ "${1:-}" = "--force" ] && FORCE=yes
+
+  if [ "$FORCE" = "no" ]; then
+    need_service
+    need_root stop
+    systemctl stop baseport
+    echo "baseport.service stopped. It comes back on the next boot until you run: sudo $SELF uninstall"
+    exit 0
+  fi
+
+  # --force means "make sure nothing from this directory is running", and says so rather than failing when there was nothing to stop. No systemd, no unit and not running are all fine outcomes.
+  STOPPED=no
+  if command -v systemctl >/dev/null 2>&1 && [ -e "$UNIT" ] && systemctl is-active --quiet baseport 2>/dev/null; then
+    need_root stop --force
+    systemctl stop baseport && STOPPED=yes
+  fi
+
+  # A foreground instance holds the binary open just as firmly as the service does, and no unit file knows about it. Matched on this directory so a second install is left alone.
+  if command -v pkill >/dev/null 2>&1; then
+    if pkill -f "$DIR/Baseport" 2>/dev/null; then
+      STOPPED=yes
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        pgrep -f "$DIR/Baseport" >/dev/null 2>&1 || break
+        sleep 1
+      done
+      pkill -KILL -f "$DIR/Baseport" 2>/dev/null || true
+    fi
+  fi
+
+  if [ "$STOPPED" = "yes" ]; then echo "Stopped Baseport in $DIR."; else echo "Nothing to stop, Baseport in $DIR is not running."; fi
   ;;
 restart)
   need_service
@@ -311,10 +370,31 @@ uninstall)
   ;;
 logs)
   cd "$DIR"
+  LINES=${2:-200}
+  case "$LINES" in
+    ''|*[!0-9]*) die "The line count has to be a number: $SELF logs 50" ;;
+  esac
+
+  # The seeded login is written once, at the very first start, and is the one line somebody comes looking for. Tailing the last 200 lines scrolls past it on any instance that has been up for a while, and -f then blocks so nothing prints at all. Search the whole history for it first, then follow.
   if ls log/baseport-*.log >/dev/null 2>&1; then
-    exec tail -n "${2:-200}" -f log/baseport-*.log
+    SEEDED=$(grep -h "Seeded a one-time admin account" log/baseport-*.log 2>/dev/null | tail -1 || true)
   elif [ -e "$UNIT" ]; then
-    exec journalctl -u baseport -n "${2:-200}" -f
+    SEEDED=$(journalctl -u baseport --no-pager 2>/dev/null | grep "Seeded a one-time admin account" | tail -1 || true)
+  else
+    SEEDED=""
+  fi
+
+  if [ -n "$SEEDED" ]; then
+    echo "First-start login, from $(if ls log/baseport-*.log >/dev/null 2>&1; then echo "$DIR/log"; else echo "the journal"; fi):"
+    echo "  $SEEDED"
+    echo "This is a one-time password. You are asked to change it at first sign-in, so if it no longer works somebody has already used it."
+    echo
+  fi
+
+  if ls log/baseport-*.log >/dev/null 2>&1; then
+    exec tail -n "$LINES" -f log/baseport-*.log
+  elif [ -e "$UNIT" ]; then
+    exec journalctl -u baseport -n "$LINES" -f
   else
     die "No log files in $DIR/log yet."
   fi
@@ -323,8 +403,16 @@ help|-h|--help)
   exec "$DIR/Baseport" help
   ;;
 *)
+  # Started by its absolute path, not ./Baseport: "stop --force", "status" and doctor all find a foreground instance by matching this command line, and a relative argv[0] matches none of them.
+  if command -v systemctl >/dev/null 2>&1 && [ -e "$UNIT" ] && systemctl is-active --quiet baseport 2>/dev/null; then
+    echo "baseport.service is already running from $DIR." >&2
+    echo "Two processes on one SQLite file is not what you want. Use one of:" >&2
+    echo "  sudo $SELF stop     then run it in the foreground" >&2
+    echo "  $SELF status        see where the running one is listening" >&2
+    exit 1
+  fi
   cd "$DIR"
-  exec ./Baseport "$@"
+  exec "$DIR/Baseport" "$@"
   ;;
 esac
 SHIM
@@ -376,8 +464,9 @@ if [ "$SERVICE_OK" = "yes" ]; then
   echo "  sudo baseport service [--urls URL]   run it as a systemd service"
   echo "  sudo baseport start|stop|restart     control that service"
 fi
+echo "  baseport stop --force                stop it however it is running"
 echo "  baseport status                      is it running, and where"
-echo "  baseport logs                        follow the log files"
+echo "  baseport logs                        follow the logs, and show the first-start login"
 echo "  baseport doctor                      check this install"
 echo "  baseport update                      pull the latest release"
 echo "  baseport uninstall [--purge]         remove it, --purge deletes the data too"

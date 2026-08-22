@@ -59,6 +59,7 @@ baseport update           # Upgrade binary to the latest release
 sudo baseport service     # Install the systemd service
 sudo baseport start       # Start that service
 sudo baseport stop        # Stop it
+baseport stop --force     # Stop it however it is running
 sudo baseport restart     # Restart it
 baseport uninstall        # Remove Baseport, keeping your data
 ```
@@ -67,7 +68,9 @@ Anything that needs root asks sudo for you instead of telling you to retype the 
 
 `baseport logs` follows the rolling log files in the install directory, 200 lines back by default. Pass a number for more or less: `baseport logs 50`. Under systemd, `journalctl -u baseport` shows the same output.
 
-`baseport update` downloads the current release and replaces the binary, leaving your data alone.
+It also searches the whole log history for the login printed at the first start and prints that above the tail, so you can still find it once the instance has been up long enough to scroll past it.
+
+`baseport update` stops whatever is running first, then downloads the current release and replaces the binary, leaving your data alone. It restarts the service afterwards if there is one. Stopping first is not optional: replacing a binary while it is running leaves the old process serving from a file that no longer exists, and on Windows the copy fails outright.
 
 `baseport doctor` is the first thing to run when something is off. It prints one line per check: the version and where it lives, whether the wrapper on your PATH is this one, whether the database is there, what the service is doing, and whether anything answers on the address the service listens on. Every `warn` and `FAIL` line names the command that fixes it.
 

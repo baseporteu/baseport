@@ -58,7 +58,7 @@ try {
 
     $shim = @"
 @echo off
-for %%V in (update logs status doctor uninstall) do if /I "%~1"=="%%V" goto :bptools
+for %%V in (update logs status doctor uninstall stop) do if /I "%~1"=="%%V" goto :bptools
 if /I "%~1"=="-h" goto :bphelp
 if /I "%~1"=="--help" goto :bphelp
 cd /d "%~dp0"
@@ -99,15 +99,58 @@ function Bad($m) { Write-Host "FAIL  $m"; $script:rc = 1 }
 switch ($verb) {
 
 'update' {
+    # Windows will not replace a running .exe, so an update over a live instance fails halfway and leaves the old binary in place.
+    & $PSCommandPath stop -Force
+    $body = (Invoke-WebRequest -UseBasicParsing $installer).Content
+    if (-not $body) { Write-Error "The installer downloaded from $installer was empty."; exit 1 }
     $env:BASEPORT_REPO = $repo
     $env:BASEPORT_DIR = $dir
-    Invoke-Expression (Invoke-WebRequest -UseBasicParsing $installer).Content
+    Invoke-Expression $body
+}
+
+'stop' {
+    $force = $rest -contains '-Force' -or $rest -contains '--force'
+    $stopped = $false
+
+    $task = Get-BaseportTask
+    if ($task -and $task.State -eq 'Running') {
+        try { Stop-ScheduledTask -TaskName 'Baseport'; $stopped = $true }
+        catch { if (-not $force) { Write-Error "Could not stop the Baseport scheduled task, try again as an administrator."; exit 1 } }
+    }
+
+    $running = Get-BaseportProcess
+    if ($running) {
+        $running | Stop-Process -Force -ErrorAction SilentlyContinue
+        $stopped = $true
+        for ($i = 0; $i -lt 10 -and (Get-BaseportProcess); $i++) { Start-Sleep -Seconds 1 }
+    }
+
+    if ($stopped) { Write-Host "Stopped Baseport in $dir." }
+    elseif ($force) { Write-Host "Nothing to stop, Baseport in $dir is not running." }
+    else { Write-Error "Baseport is not running."; exit 1 }
 }
 
 'logs' {
     $log = Get-LatestLog
     if (-not $log) { Write-Error "No log files in $dir\log yet."; exit 1 }
-    $count = if ($rest.Count -gt 0) { [int]$rest[0] } else { 200 }
+    $count = 200
+    if ($rest.Count -gt 0) {
+        if ($rest[0] -notmatch '^\d+$') { Write-Error "The line count has to be a number: baseport logs 50"; exit 1 }
+        $count = [int]$rest[0]
+    }
+
+    # The seeded login is written once, at the very first start. Tailing the last 200 lines scrolls past it on any instance that has been up for a while, and -Wait then blocks so nothing prints at all. Search every log file for it first, then follow.
+    $seeded = Get-ChildItem (Join-Path $dir 'log\baseport-*.log') -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime |
+        Select-String -Pattern 'Seeded a one-time admin account' |
+        Select-Object -Last 1
+    if ($seeded) {
+        Write-Host "First-start login, from $dir\log:"
+        Write-Host ("  " + $seeded.Line.Trim())
+        Write-Host "This is a one-time password. You are asked to change it at first sign-in, so if it no longer works somebody has already used it."
+        Write-Host ""
+    }
+
     Get-Content $log.FullName -Tail $count -Wait
 }
 
