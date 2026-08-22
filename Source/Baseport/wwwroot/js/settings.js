@@ -318,9 +318,12 @@ async function loadApiTables() {
 
         const docsGroup = document.createElement('span');
         docsGroup.className = 'api-table-state';
-        docsGroup.title = 'Whether this table appears in the OpenAPI document. It stays live at /api/v1 either way.';
+        docsGroup.title = t.apiEnabled ?
+            'Whether this table appears in the OpenAPI document. It stays live at /api/v1 either way.' :
+            'Turn the REST API on first. An unpublished table is never listed.';
         docsGroup.append('OpenAPI');
         const docsToggle = apiSwitch(`apiDocs-${t.id}`, t.apiDocsEnabled !== false, (checked) => toggleTableApiDocs(t.id, checked));
+        docsToggle.querySelector('input').disabled = !t.apiEnabled;
         docsGroup.append(docsToggle);
 
         const configureBtn = ui.button('Configure', () => openEndpointSheet(t.id), {
@@ -351,6 +354,7 @@ async function toggleTableApi(pid, enabled) {
     }
     if (settingsData) settingsData.apiEnabledTables = (settingsData.apiEnabledTables || 0) + (enabled ? 1 : -1);
     if (settingsData) renderSettingsInfo();
+    await loadApiTables();
     await loadTables();
 }
 

@@ -2332,6 +2332,20 @@ test('ticking Identifier ticks Required, and the validate call carries both key 
     assert.ok(/isIdentifier: document\.getElementById\('feIdentifier'\)/.test(body), 'Validate never sends isIdentifier');
 });
 
+test('the OpenAPI switch is dead while the table is not exposed', () => {
+    // The document is built from ApiEnabled && ApiDocsEnabled, so with Expose off this
+    // switch cannot take effect. It was live, and its help text described the off state
+    // as if it were the action.
+    const tables = read('js/tables.js');
+    const sheet = tables.slice(tables.indexOf("'sheetApiDocsEnabled'"), tables.indexOf('const displayName'));
+    assert.ok(!/Hides endpoint/.test(sheet), 'the help text still describes the off state as the action');
+    assert.ok(/docsEnabled\.ctrl\.disabled = !exposed\.ctrl\.checked/.test(tables), 'the sheet no longer greys the docs switch');
+
+    const settings = read('js/settings.js');
+    assert.ok(/docsToggle\.querySelector\('input'\)\.disabled = !t\.apiEnabled/.test(settings), 'the settings list no longer greys the docs switch');
+    assert.ok(/await loadApiTables\(\);\s*\n\s*await loadTables\(\);/.test(settings), 'flipping the API switch never repaints the docs switch');
+});
+
 test('the API reference preselects the security scheme the document defines', () => {
     // Scalar labels a document-defined scheme by its key in components.securitySchemes,
     // and preselects by that same string. Rename one without the other and the auth panel

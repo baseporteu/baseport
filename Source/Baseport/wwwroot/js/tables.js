@@ -173,8 +173,13 @@ function openEndpointSheet(id) {
         'sheetApiDocsEnabled',
         table.apiDocsEnabled !== false,
         'Show in API docs',
-        'Hides endpoint from OpenAPI docs without disabling it.'
+        'Lists this table in /api/openapi.json. Needs Expose on.'
     );
+    function syncDocsSwitch() {
+        docsEnabled.ctrl.disabled = !exposed.ctrl.checked;
+    }
+    exposed.ctrl.addEventListener('change', syncDocsSwitch);
+    syncDocsSwitch();
     const displayName = ui.field('Name', {
         value: table.apiDisplayName || '',
         placeholder: table.apiName || 'Sales orders',
