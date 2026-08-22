@@ -4,6 +4,12 @@ Thanks for helping out. Keep pull requests small and focused, reuse patterns alr
 
 ## Setup
 
+The SDK is pinned in `global.json` and it's a preview, so distro packages won't have it. This installs the exact version side by side with whatever you already have:
+
+```bash
+curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --jsonfile global.json
+```
+
 ```bash
 cd Source
 dotnet run --project Baseport --urls http://localhost:5000
