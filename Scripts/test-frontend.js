@@ -2332,6 +2332,21 @@ test('ticking Identifier ticks Required, and the validate call carries both key 
     assert.ok(/isIdentifier: document\.getElementById\('feIdentifier'\)/.test(body), 'Validate never sends isIdentifier');
 });
 
+test('the API reference preselects the security scheme the document defines', () => {
+    // Scalar labels a document-defined scheme by its key in components.securitySchemes,
+    // and preselects by that same string. Rename one without the other and the auth panel
+    // either shows an internal identifier or comes up with nothing selected.
+    const spec = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'Api', 'OpenApiSpec.cs'), 'utf8');
+    const match = spec.match(/SecurityScheme\s*=\s*"([^"]+)"/);
+    assert.ok(match, 'OpenApiSpec no longer defines SecurityScheme');
+
+    const docs = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'docs.html'), 'utf8');
+    assert.ok(
+        docs.includes(`preferredSecurityScheme: '${match[1]}'`),
+        `docs.html does not preselect '${match[1]}'`,
+    );
+});
+
 test('which types are computed comes from the payload, not a copy in the console', () => {
     // One table says what a field type is; a hardcoded list here drifts from FieldTypes.cs.
     const src = read('js/tables.js');

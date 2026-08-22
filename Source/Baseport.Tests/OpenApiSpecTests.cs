@@ -297,15 +297,10 @@ public class OpenApiSpecTests
             Assert.Contains((operation!["security"] as JsonArray)!, s => s!.AsObject().ContainsKey(OpenApiSpec.SecurityScheme));
     }
 
-    // Scalar labels a scheme by its key, and docs.html preselects it by that same string. Renaming one without the other leaves the auth panel showing an identifier, or showing nothing preselected.
+    // Scalar labels a scheme by its key, so this string is what a reader sees in the auth panel. docs.html has to preselect the same one; that pair is pinned in Scripts/test-frontend.js, which reads the working tree.
     [Fact]
-    public void The_security_scheme_is_named_the_way_the_reference_renders_it()
-    {
+    public void The_security_scheme_is_named_the_way_the_reference_renders_it() =>
         Assert.Equal("Bearer", OpenApiSpec.SecurityScheme);
-
-        var docs = File.ReadAllText(Path.Combine(RepoRoot(), "Source", "Baseport", "wwwroot", "docs.html"));
-        Assert.Contains($"preferredSecurityScheme: '{OpenApiSpec.SecurityScheme}'", docs);
-    }
 
     // A sigil in a parameter name promises semantics this API does not implement, and "$" in a double-quoted shell string is dropped before curl ever sees it.
     [Fact]
@@ -320,13 +315,6 @@ public class OpenApiSpecTests
         Assert.Equal("expand", ApiLinks.ExpandParameter);
     }
 
-    private static string RepoRoot()
-    {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null && !File.Exists(Path.Combine(dir, "AGENTS.md")))
-            dir = Path.GetDirectoryName(dir);
-        return dir ?? throw new InvalidOperationException("Could not find the repository root.");
-    }
 
     /* endpoint documentation and method switches */
 
