@@ -2318,6 +2318,20 @@ test('the field editor greys what the server refuses on a computed type', () => 
     assert.ok(/el\.checked = false/.test(fn), 'a ticked switch survives the change to a computed type');
 });
 
+test('ticking Identifier ticks Required, and the validate call carries both key flags', () => {
+    // An identifier that may be absent admits rows nothing can ever look up, which is issue #15
+    // read from a REST client: the key column comes back empty. FieldValidation refuses the pair,
+    // so the editor shapes it instead of letting the save fail, and Validate has to send the two
+    // flags or the button answers a question about a different field than the one on screen.
+    const src = read('js/tables.js');
+    const editor = src.slice(src.indexOf("settingSwitch('feUnique'"), src.indexOf("settingSwitch('feHidden'"));
+    assert.ok(/required\.checked = true/.test(editor), 'ticking Identifier no longer ticks Required');
+
+    const body = src.slice(src.indexOf('async function validateFieldEditor'), src.indexOf("fetch('/api/_admin/validate-field'"));
+    assert.ok(/isUnique: document\.getElementById\('feUnique'\)/.test(body), 'Validate never sends isUnique');
+    assert.ok(/isIdentifier: document\.getElementById\('feIdentifier'\)/.test(body), 'Validate never sends isIdentifier');
+});
+
 test('which types are computed comes from the payload, not a copy in the console', () => {
     // One table says what a field type is; a hardcoded list here drifts from FieldTypes.cs.
     const src = read('js/tables.js');

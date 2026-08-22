@@ -212,6 +212,7 @@ public static class OpenApiSpec
         else if (type.Name == "array" && f.Max is { } max) schema["maxItems"] = (int)max;
 
         if (!string.IsNullOrEmpty(f.DefaultValue)) schema["default"] = JsonValue.Create(f.DefaultValue);
+        if (f.IsUnique && !f.IsHidden) schema["x-unique"] = true;
         return schema;
     }
 

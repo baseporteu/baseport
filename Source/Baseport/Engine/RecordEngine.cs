@@ -173,7 +173,13 @@ public static class RecordEngine
         return new JsonArray(JsonValue.Create(raw));
     }
 
+    private static object UniqueKey(JsonNode value, string text) =>
+        value.GetValueKind() == JsonValueKind.Number && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var n)
+            ? n
+            : text;
+
     // Uniqueness requires instead of a SQL constraint: fields are rows in Fields, not columns, there is no column to constrain.
+    // ponytail: check-then-write, so two concurrent writes of one value can both pass. A partial unique index on the generated column would close it, but SchemaBootstrap reconciles every table on start and creating one would then refuse to open a database that already holds duplicates. Add it behind a repair step, never on its own.
     private static async Task CheckUniqueAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, JsonObject obj, string? excludeRecordId, List<string> errors, List<string> invalid)
     {
         if (table.IsProxy) return; // nothing is stored locally, there is nothing to collide with
@@ -193,16 +199,60 @@ public static class RecordEngine
                     SELECT 1 FROM "_records" r
                     WHERE r."TableId" = {0}
                       AND r."Id" <> {1}
-                      AND {{column}} = {2}
+                      AND {{column}} = {2} COLLATE NOCASE
                 ) AS "Value"
                 """;
-            var count = await db.Database.SqlQueryRaw<int>(sql, table.Id, excludeRecordId ?? "", text).SingleAsync();
+            var count = await db.Database.SqlQueryRaw<int>(sql, table.Id, excludeRecordId ?? "", UniqueKey(val, text)).SingleAsync();
             if (count > 0)
             {
                 errors.Add($"{FieldValidation.DisplayName(f)} must be unique, '{text}' is already used.");
                 invalid.Add(f.Name);
             }
         }
+    }
+
+    private const int MaxReportedValues = 5;
+
+    public static async Task<List<string>> ConstraintErrorsAsync(AppDbContext db, TableDefinition table, FieldDefinition field, string? storedUnder = null)
+    {
+        var errors = new List<string>();
+        if (table.IsProxy || (!field.IsUnique && !field.IsIdentifier)) return errors;
+
+        var name = string.IsNullOrEmpty(storedUnder) ? field.Name : storedUnder;
+        var column = $"json_extract(r.\"JsonData\", '$.\"{name.Replace("'", "''").Replace("\"", "\"\"")}\"')";
+        var label = FieldValidation.DisplayName(field);
+        var role = field.IsUnique ? "unique" : "a lookup identifier";
+
+        var duplicateSql = $$"""
+            SELECT CAST({{column}} AS TEXT) AS "Value"
+            FROM "_records" r
+            WHERE r."TableId" = {0} AND {{column}} IS NOT NULL AND TRIM(CAST({{column}} AS TEXT)) <> ''
+            GROUP BY CAST({{column}} AS TEXT) COLLATE NOCASE
+            HAVING COUNT(*) > 1
+            ORDER BY COUNT(*) DESC
+            LIMIT {{MaxReportedValues + 1}}
+            """;
+        var duplicates = await db.Database.SqlQueryRaw<string>(duplicateSql, table.Id).ToListAsync();
+
+        if (duplicates.Count > 0)
+        {
+            var shown = duplicates.Take(MaxReportedValues).Select(v => $"'{v}'");
+            var more = duplicates.Count > MaxReportedValues ? ", and others" : "";
+            errors.Add($"'{label}' cannot be {role}: {string.Join(", ", shown)}{more} already appear on more than one stored record. Clear the duplicates first.");
+        }
+
+        if (!field.IsIdentifier) return errors;
+
+        var missingSql = $$"""
+            SELECT COUNT(*) AS "Value" FROM "_records" r
+            WHERE r."TableId" = {0} AND ({{column}} IS NULL OR TRIM(CAST({{column}} AS TEXT)) = '')
+            """;
+        var missing = await db.Database.SqlQueryRaw<int>(missingSql, table.Id).SingleAsync();
+
+        if (missing > 0)
+            errors.Add($"'{label}' cannot be a lookup identifier: {missing} stored record(s) carry no value for it, and nothing can ever look those up. Fill them in first.");
+
+        return errors;
     }
 
     // Merges a partial update onto the stored record, then runs the full write path over the result.

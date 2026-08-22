@@ -808,7 +808,16 @@ function openFieldEditor(fieldId) {
     wrap.appendChild(patHint);
 
     wrap.appendChild(settingSwitch('feUnique', f.isUnique, 'Unique', 'Reject a submission whose value already exists.'));
-    wrap.appendChild(settingSwitch('feIdentifier', f.isIdentifier, 'Identifier', 'Offer this field as a match key in lookup forms.'));
+    const identifierRow = settingSwitch('feIdentifier', f.isIdentifier, 'Identifier', 'Offer this field as a match key in lookup forms. Requires Required.');
+    identifierRow.ctrl.addEventListener('change', () => {
+        if (!identifierRow.ctrl.checked) return;
+        const required = document.getElementById('feRequired');
+        if (required && !required.checked) {
+            required.checked = true;
+            ui.toast('Identifier fields are required: a record stored without one could never be found by it.');
+        }
+    });
+    wrap.appendChild(identifierRow);
     wrap.appendChild(settingSwitch('feHidden', f.isHidden, 'Hidden', 'Not rendered in forms; value set via API or server only.'));
 
     const valPanel = document.createElement('div');
@@ -1106,6 +1115,8 @@ function openFieldEditor(fieldId) {
             isRequired: document.getElementById('feRequired').checked,
             pattern: document.getElementById('fePattern').value.trim(),
             isHidden: document.getElementById('feHidden').checked,
+            isUnique: document.getElementById('feUnique').checked,
+            isIdentifier: document.getElementById('feIdentifier').checked,
             tableId: currentTablePublicId,
             fieldId: String(editingFieldId),
         };

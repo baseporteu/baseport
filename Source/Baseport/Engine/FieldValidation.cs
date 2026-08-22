@@ -360,6 +360,7 @@ public static class FieldValidation
         }
         if ((type.Shape != FieldShape.Scalar || type.Secret) && f.IsIdentifier) errs.Add($"A {t} field cannot be a lookup identifier.");
         if (f.IsIdentifier && f.IsHidden) errs.Add("A hidden field cannot be a lookup identifier.");
+        if (f.IsIdentifier && !f.IsRequired && !type.Computed) errs.Add($"Identifier is a match key and must be required: a record stored without a value for '{f.Name}' could never be found by it.");
         if (f.IsUnique && (type.Shape != FieldShape.Scalar || type.Secret || t == "boolean")) errs.Add($"A {t} field cannot be unique.");
 
         if (!string.IsNullOrWhiteSpace(f.Pattern))

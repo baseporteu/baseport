@@ -155,4 +155,94 @@ public class RecordEngineTests : IDisposable
 
         Assert.Empty((await RecordEngine.PrepareAsync(_db, table, table.Fields, Json("""{ "OrderNo": "A-1" }"""))).Errors);
     }
+
+    [Fact]
+    public async Task Unique_number_field_rejects_a_value_that_already_exists()
+    {
+        var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "OrderNo", DataType = "number", IsUnique = true });
+        _db.Records.Add(new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{"OrderNo":42}""", CreatedAt = DateTime.UtcNow });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var clash = await RecordEngine.PrepareAsync(_db, table, table.Fields, Json("""{ "OrderNo": 42 }"""));
+        var fresh = await RecordEngine.PrepareAsync(_db, table, table.Fields, Json("""{ "OrderNo": 43 }"""));
+
+        Assert.Single(clash.Errors);
+        Assert.Equal(new[] { "OrderNo" }, clash.InvalidFields);
+        Assert.Empty(fresh.Errors);
+    }
+
+    [Fact]
+    public async Task Unique_matches_the_way_a_lookup_matches_and_ignores_case()
+    {
+        var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "OrderNo", DataType = "text", IsUnique = true });
+        _db.Records.Add(new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{"OrderNo":"A-1"}""", CreatedAt = DateTime.UtcNow });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var clash = await RecordEngine.PrepareAsync(_db, table, table.Fields, Json("""{ "OrderNo": "a-1" }"""));
+
+        Assert.Single(clash.Errors);
+        Assert.Equal(new[] { "OrderNo" }, clash.InvalidFields);
+    }
+
+    [Fact]
+    public async Task Marking_a_column_unique_is_refused_while_stored_records_hold_duplicates()
+    {
+        var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "OrderNo", DataType = "text" });
+        _db.Records.Add(new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{"OrderNo":"A-1"}""", CreatedAt = DateTime.UtcNow });
+        _db.Records.Add(new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{"OrderNo":"a-1"}""", CreatedAt = DateTime.UtcNow });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var field = table.Fields[0];
+        Assert.Empty(await RecordEngine.ConstraintErrorsAsync(_db, table, field));
+
+        field.IsUnique = true;
+        var errors = await RecordEngine.ConstraintErrorsAsync(_db, table, field);
+
+        Assert.Single(errors);
+        Assert.Contains("A-1", errors[0]);
+    }
+
+    [Fact]
+    public async Task Marking_a_column_an_identifier_is_refused_while_stored_records_hold_no_value()
+    {
+        var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "OrderNo", DataType = "text", IsRequired = true });
+        _db.Records.Add(new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{"OrderNo":"A-1"}""", CreatedAt = DateTime.UtcNow });
+        _db.Records.Add(new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{}""", CreatedAt = DateTime.UtcNow });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var field = table.Fields[0];
+        field.IsIdentifier = true;
+        var errors = await RecordEngine.ConstraintErrorsAsync(_db, table, field);
+
+        Assert.Single(errors);
+        Assert.Contains("1 stored record(s) carry no value", errors[0]);
+    }
+
+    [Fact]
+    public async Task A_rename_and_a_unique_flag_in_one_request_check_the_name_the_data_is_stored_under()
+    {
+        var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "OrderNo", DataType = "text" });
+        _db.Records.Add(new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{"OrderNo":"A-1"}""", CreatedAt = DateTime.UtcNow });
+        _db.Records.Add(new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{"OrderNo":"A-1"}""", CreatedAt = DateTime.UtcNow });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var field = table.Fields[0];
+        field.Name = "Reference";
+        field.IsUnique = true;
+
+        Assert.Empty(await RecordEngine.ConstraintErrorsAsync(_db, table, field));
+        Assert.Single(await RecordEngine.ConstraintErrorsAsync(_db, table, field, "OrderNo"));
+    }
+
+    [Fact]
+    public void An_identifier_that_is_not_required_is_refused()
+    {
+        var optional = new FieldDefinition { Id = Ids.NewShortId(12), Name = "OrderNo", DataType = "text", IsIdentifier = true };
+        Assert.Contains(
+            FieldValidation.ValidateFieldDefinition(optional, Array.Empty<string>(), new[] { "OrderNo" }, _ => true),
+            e => e.Contains("must be required"));
+
+        var required = new FieldDefinition { Id = Ids.NewShortId(12), Name = "OrderNo", DataType = "text", IsIdentifier = true, IsRequired = true };
+        Assert.Empty(FieldValidation.ValidateFieldDefinition(required, Array.Empty<string>(), new[] { "OrderNo" }, _ => true));
+    }
 }

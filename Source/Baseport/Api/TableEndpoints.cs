@@ -24,6 +24,7 @@ public static class TableEndpoints
         {
             var names = await db.Tables.Select(t => t.Name).ToListAsync();
             var errs = FieldValidation.ValidateTable(table, names);
+            errs.AddRange(FieldErrors(db, table));
             if (errs.Count > 0) return Results.BadRequest(new { errors = errs });
             table.Id = Ids.NewShortId(12);
             table.CreatedAt = table.UpdatedAt = DateTime.UtcNow;
@@ -107,6 +108,8 @@ public static class TableEndpoints
             var others = table.Fields.Select(f => f.Name).ToList();
             var errs = FieldValidation.ValidateFieldDefinition(field, others, others, tpid => db.Tables.Any(t => t.Id == tpid));
             if (errs.Count > 0) return Results.BadRequest(new { errors = errs });
+            var conflicts = await RecordEngine.ConstraintErrorsAsync(db, table, field);
+            if (conflicts.Count > 0) return Results.Conflict(new { errors = conflicts });
             field.TableId = table.Id;
             field.Id = Ids.NewShortId(12);
             field.Position = table.Fields.Count == 0 ? 0 : table.Fields.Max(f => f.Position) + 1;
@@ -174,6 +177,8 @@ public static class TableEndpoints
             var all = table.Fields.Select(f => f.Name).ToList();
             var errs = FieldValidation.ValidateFieldDefinition(field, others, all, tpid => db.Tables.Any(t => t.Id == tpid));
             if (errs.Count > 0) return Results.BadRequest(new { errors = errs });
+            var conflicts = await RecordEngine.ConstraintErrorsAsync(db, table, field, wasName);
+            if (conflicts.Count > 0) return Results.Conflict(new { errors = conflicts });
 
             table.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
@@ -369,6 +374,7 @@ public static class TableEndpoints
 
             var existing = await db.Tables.Select(t => t.Name).ToListAsync();
             var tableErrors = FieldValidation.ValidateTable(table, existing);
+            tableErrors.AddRange(FieldErrors(db, table));
 
             if (form["preview"].ToString() is "true" or "1")
                 return Results.Ok(new
@@ -486,6 +492,8 @@ public static class TableEndpoints
             var isRequired = body["isRequired"] is JsonValue bv && bv.TryGetValue<bool>(out var b) && b;
             var pattern = body["pattern"] is JsonValue pv && pv.TryGetValue<string>(out var pat) ? pat : "";
             var isHidden = body["isHidden"] is JsonValue hv && hv.TryGetValue<bool>(out var h) && h;
+            var isUnique = body["isUnique"] is JsonValue uv2 && uv2.TryGetValue<bool>(out var u2) && u2;
+            var isIdentifier = body["isIdentifier"] is JsonValue iv2 && iv2.TryGetValue<bool>(out var i2) && i2;
             var fieldId = body["fieldId"] is JsonValue fv && fv.TryGetValue<string>(out var fid) ? fid : null;
             var tableId = body["tableId"] is JsonValue tv && tv.TryGetValue<string>(out var tpid) ? tpid : "";
 
@@ -499,9 +507,13 @@ public static class TableEndpoints
                 .Select(f => f.Name)
                 .ToList();
 
-            var field = new FieldDefinition { Name = name, DataType = dataType, Expression = expression, OptionsJson = optionsJson, IsRequired = isRequired, Pattern = pattern, IsHidden = isHidden };
+            var field = new FieldDefinition { Name = name, DataType = dataType, Expression = expression, OptionsJson = optionsJson, IsRequired = isRequired, Pattern = pattern, IsHidden = isHidden, IsUnique = isUnique, IsIdentifier = isIdentifier };
             var errs = FieldValidation.ValidateFieldDefinition(field, others, allNames, tpid => db.Tables.Any(t => t.Id == tpid));
             if (errs.Count > 0) return Results.Ok(new { valid = false, errors = errs, dataType = field.DataType });
+
+            var stored = table.Fields.FirstOrDefault(f => f.Id == fieldId);
+            var conflicts = await RecordEngine.ConstraintErrorsAsync(db, table, field, stored?.Name);
+            if (conflicts.Count > 0) return Results.Ok(new { valid = false, errors = conflicts, dataType = field.DataType });
 
             var referenced = Array.Empty<string>();
             if (field.DataType is "calculated" or "derived")
@@ -591,6 +603,18 @@ public static class TableEndpoints
             await db.SaveChangesAsync();
             return Results.Ok(new { deleted = record.Id });
         });
+    }
+
+    private static List<string> FieldErrors(AppDbContext db, TableDefinition table)
+    {
+        var all = table.Fields.Select(f => f.Name).ToList();
+        var errs = new List<string>();
+        for (var i = 0; i < table.Fields.Count; i++)
+        {
+            var others = table.Fields.Where((_, j) => j != i).Select(f => f.Name).ToList();
+            errs.AddRange(FieldValidation.ValidateFieldDefinition(table.Fields[i], others, all, tpid => db.Tables.Any(t => t.Id == tpid)));
+        }
+        return errs;
     }
 
     // Reads an upload into memory under the import cap. A file this size is parsed whole either way, and refusing early keeps a large upload from being buffered before anything looks at it.

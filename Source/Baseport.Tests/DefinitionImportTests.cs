@@ -330,4 +330,28 @@ public class DefinitionImportTests
         Assert.Equal(2, rows.Count);
         Assert.Equal(new[] { "name", "type" }, rows[0].Select(kv => kv.Key));
     }
+
+    [Fact]
+    public void Every_field_an_import_infers_passes_the_validator_that_now_gates_it()
+    {
+        // Table creation validates its inline fields, so an inferred schema the validator
+        // refuses would turn a file that imported yesterday into a 400 with no way to fix it
+        // short of editing the file.
+        var csv = "Order No,First Name,e-mail,Total,When,Status,Site,Flag\n"
+                + "A-1,Ann,a@b.com,12.5,2026-01-02,open,https://example.com,true\n"
+                + "A-2,Bob,c@d.com,3,2026-01-03,closed,https://example.org,false\n"
+                + "A-3,Cid,e@f.com,9,2026-01-04,open,https://example.net,true\n";
+        var (rows, error) = Parse(csv, "orders.csv");
+        Assert.Null(error);
+
+        var fields = DefinitionImport.ToFields(DefinitionImport.InferFields(rows));
+        Assert.NotEmpty(fields);
+
+        var all = fields.Select(f => f.Name).ToList();
+        for (var i = 0; i < fields.Count; i++)
+        {
+            var others = fields.Where((_, j) => j != i).Select(f => f.Name).ToList();
+            Assert.Empty(FieldValidation.ValidateFieldDefinition(fields[i], others, all, _ => true));
+        }
+    }
 }
