@@ -16,7 +16,7 @@ public class StartupGuardTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
         UserTokens.Initialize(null);
         UserTokens.Configure(new AppSettings());
     }
@@ -117,7 +117,7 @@ public class StartupGuardTests : IDisposable
         var account = await AccountAsync("r1", AccountRoles.Admin);
         var ctx = await SignedInAsync(account);
 
-        using var restarted = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        using var restarted = TestDb.Open(_connection);
         Assert.Equal(account.Id, (await AdminAuth.ResolveAsync(restarted, ctx))!.Id);
     }
 

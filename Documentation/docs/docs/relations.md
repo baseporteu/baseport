@@ -13,7 +13,7 @@ Writing one means sending the id:
 { "OrderNo": "SO-100000", "Customer": "T7mQ2xR9vLbK" }
 ```
 
-The id is checked on write. If no record with that id exists in the target table you get a `400` saying so, instead of a row pointing at nothing.
+The id is checked on write. If no record with that id exists in the target table you get a `422` saying so, instead of a row pointing at nothing.
 
 ## Modelling the usual shapes
 
@@ -68,7 +68,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 }
 ```
 
-Separate several field names with commas. If you name something that is not an expandable reference field you get a `400`, a typo is reported instead of silently ignored.
+Separate several field names with commas. Name something that is not an expandable reference field and you get a `400`, so a typo is reported rather than quietly ignored.
 
 Expansion goes one level deep. To follow a chain, expand at each step or read the next record directly. This works the same way when you read a single record.
 
@@ -80,10 +80,14 @@ Expanding a reference re-reads the target table through its own read rule. If th
 
 Baseport checks a reference when you write it, not afterwards, and deleting a record does not touch anything referring to it. So if you delete a customer, the orders that pointed at them keep the old id.
 
-Two things follow. Reading those orders still works, and `expanded` simply leaves the customer out. But **editing one of them fails**, even if you are not touching the reference: an update revalidates the whole record, and the reference no longer resolves.
+Two things follow from that. Reading those orders still works, and `expanded` leaves the customer out. But **editing one of them fails**, even if you never touch the reference, because an update revalidates the whole record and the reference no longer resolves.
 
 ```json
-{ "errors": ["Customer references a record that doesn't exist."], "invalid": ["Customer"] }
+{
+  "status": 422,
+  "detail": "Customer references a record that doesn't exist.",
+  "invalid": ["Customer"]
+}
 ```
 
 If you delete records that others point at, delete or repoint the children first. A [scheduled query](/docs/going-to-production) is a reasonable way to find orphans before they become a surprise.

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -39,7 +40,39 @@ public static class QueryEngine
 
         // False once the match count passed CountCeiling; Total is then a floor.
         public bool CountExact => Total < CountCeiling;
+
+        // Set only on a keyset read. Null means page-number paging, or the last page of a keyset walk.
+        public string? NextCursor { get; init; }
     }
+
+    // ponytail: keyset paging covers the default ordering only, where the key is (CreatedAt, Id) and neither half is ever null. A nullable sort column needs the NULLS FIRST/LAST half of the comparison, and a keyset that gets that wrong skips or repeats rows silently. Widen it when a caller needs to walk a sorted column, not before.
+    public readonly record struct Cursor(DateTime CreatedAt, string Id)
+    {
+        public string Encode() => Base64Url(JsonSerializer.SerializeToUtf8Bytes(new CursorDto(CreatedAt.ToString("O", CultureInfo.InvariantCulture), Id)));
+
+        public static Cursor? Decode(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            try
+            {
+                var padded = value.Replace('-', '+').Replace('_', '/');
+                padded = padded.PadRight(padded.Length + (4 - padded.Length % 4) % 4, '=');
+                var dto = JsonSerializer.Deserialize<CursorDto>(Convert.FromBase64String(padded));
+                if (dto is null || string.IsNullOrEmpty(dto.I)) return null;
+                if (!DateTime.TryParse(dto.C, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var created)) return null;
+                return new Cursor(created, dto.I);
+            }
+            catch (Exception e) when (e is JsonException or FormatException or ArgumentException)
+            {
+                return null;
+            }
+        }
+
+        private static string Base64Url(byte[] bytes) =>
+            Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    }
+
+    private sealed record CursorDto(string C, string I);
 
     // Exact, case-insensitive match of term against any of the identifier fields.
     public static async Task<Record?> LookupAsync(AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> matchFields, string term)
@@ -71,7 +104,8 @@ public static class QueryEngine
         int pageSize,
         IReadOnlyList<Filter>? filters = null,
         IReadOnlyList<FieldDefinition>? accessFields = null,
-        string? accessUserId = null)
+        string? accessUserId = null,
+        Cursor? cursor = null)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize <= 0 ? 25 : pageSize, 1, MaxPageSize);
@@ -140,20 +174,38 @@ public static class QueryEngine
                 : Column(sortField);
         var direction = ranked || !sortDescending ? "ASC" : "DESC";
 
+        // A keyset read walks from the last row of the previous page instead of counting rows to skip, so a deep page costs the same as the first one and a row inserted mid-walk cannot shift the window. It only ever applies to the default ordering, whose key is (CreatedAt, Id): both are always present, and Id breaks the tie an import leaves behind when it stamps one timestamp on every row.
+        var keyset = "";
+        if (cursor is { } from)
+        {
+            var createdSlot = args.Count;
+            args.Add(from.CreatedAt);
+            var idSlot = args.Count;
+            args.Add(from.Id);
+            keyset = $" AND (r.\"CreatedAt\" < {{{createdSlot}}} OR (r.\"CreatedAt\" = {{{createdSlot}}} AND r.\"Id\" < {{{idSlot}}}))";
+        }
+
         var pageSql = $$"""
             SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt", r."UpdatedAt"
             FROM "_records" r{{(ranked ? rankJoin : "")}}
-            WHERE {{where}}{{(ranked ? "" : search)}}
+            WHERE {{where}}{{(ranked ? "" : search)}}{{keyset}}
             ORDER BY {{order}} {{direction}}, r."Id" DESC
-            LIMIT {{pageSize + 1}} OFFSET {{(page - 1) * pageSize}}
+            LIMIT {{pageSize + 1}} OFFSET {{(keyset.Length > 0 ? 0 : (page - 1) * pageSize)}}
             """;
         var records = await db.Records.FromSqlRaw(pageSql, args.ToArray()).AsNoTracking().ToListAsync();
 
         // One row past the page is what tells a pager there is a next page.
         var hasMore = records.Count > pageSize;
         if (hasMore) records.RemoveAt(records.Count - 1);
-        return new ListPage(records, total, page, pageSize, hasMore);
+
+        var next = hasMore && records.Count > 0 && CursorsApply(sortField, rankJoin)
+            ? new Cursor(records[^1].CreatedAt, records[^1].Id).Encode()
+            : null;
+        return new ListPage(records, total, page, pageSize, hasMore) { NextCursor = next };
     }
+
+    // Keyset paging is only correct on the ordering it was built for: name a sort field, or let a search fall through to relevance ranking, and the key stops being (CreatedAt, Id).
+    public static bool CursorsApply(FieldDefinition? sortField, string? rankJoin) => sortField is null && rankJoin is null;
 
     // Projects a record down to the fields a public form is allowed to reveal.
     public static JsonObject Project(Record record, IReadOnlyList<FieldDefinition> visible)

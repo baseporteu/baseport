@@ -34,7 +34,7 @@ Save that `url` into a `file` field on a record.
 | `GET /api/v1/files/{bucket}/{name}` | Read it back, with range requests |
 | `DELETE /api/v1/files/{bucket}/{name}` | Delete it |
 
-All three need a bearer token. A bucket name is 1 to 32 characters of lower-case letters, digits and hyphens, and it is just a folder under `uploads/`.
+All three need a bearer token. A bucket is a folder under `uploads/`, and its name is 1 to 32 characters of lower-case letters, digits and hyphens.
 
 ## Limits
 
@@ -47,7 +47,7 @@ All three need a bearer token. A bucket name is 1 to 32 characters of lower-case
 `/uploads` is served as static files with no authentication. A `file` field stores an absolute URL, the file has to be fetchable without a session or a token, the same as any other URL you would put in that field.
 
 :::warning
-So the only thing protecting an upload is that its name is unguessable. Twenty-two characters is 132 bits, which is plenty, but anyone you give the URL to can pass it on. Do not upload files here that must not be readable by whoever ends up with the link.
+The only thing protecting an upload is that nobody can guess its name. Twenty-two characters is 132 bits, which is enough, but whoever has the URL can pass it on. Do not put files here that would be a problem in the wrong hands.
 :::
 
 ## Deleting unused files

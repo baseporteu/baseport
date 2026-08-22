@@ -5,7 +5,7 @@ description: "API tokens, end user accounts, single sign-on and anonymous accoun
 
 # Authentication
 
-There are two kinds of credentials, as we both support API-tokens and JWT-authentications. An **API token** is a long lived string you issue to an account itself, used primarily for the REST API. A **JWT** is a shorter lived token you get by signing in, retrieved by authenticating from the clients. Both work on the same `/api/v1` routes.
+There are two kinds of credential. An **API token** is a long lived string you issue to an account yourself, usually for something server side calling the REST API. A **JWT** is short lived and comes from signing in, which is what your application's own users get. Both work on the same `/api/v1` routes.
 
 ```
 Authorization: Bearer <token or jwt>
@@ -42,7 +42,7 @@ curl -X POST http://localhost:5000/api/auth/v1/login \
 | `POST /api/auth/v1/delete` | Delete your own account |
 | `GET /api/auth/v1/jwks.json` | The public half of the signing key |
 
-The role is never taken from the token. Every request looks the account up again, if you demote someone it takes effect on their next request instead of their next sign-in.
+The role is never read from the token. Every request looks the account up again, so demoting someone takes effect on their next request rather than their next sign-in.
 
 ## Anonymous accounts
 
@@ -68,11 +68,11 @@ Copy the redirect URL out of the sheet and register it at your provider:
 https://baseport.example.com/api/auth/oidc/{key}/callback
 ```
 
-Saving fetches and checks the discovery document immediately, you find out about a wrong issuer URL there instead of from a button that does nothing on the sign-in screen. The flow uses PKCE and a nonce, and verifies the `id_token` against the provider's JWKS.
+Saving fetches and checks the discovery document straight away, so a wrong issuer URL is an error in the sheet rather than a dead button on the sign-in screen. The flow uses PKCE and a nonce, and verifies the `id_token` against the provider's JWKS.
 
 Choose where the provider appears: the console at `/_/auth`, your application's own sign-in at `/auth`, or both. If you enable a provider but do not show it on either, the save is rejected.
 
-Accounts are matched on the provider's subject id instead of on a name, renaming someone in your directory does not lock them out. The first sign-in can attach an existing account by an exact username match, or by an email address the provider says it has verified. Turn **Create accounts on first sign-in** on if you want unknown users created automatically as plain users.
+Accounts are matched on the provider's subject id, never on a name, so renaming someone in your directory does not lock them out. The first sign-in can attach an existing account by an exact username match, or by an email address the provider says it has verified. Turn **Create accounts on first sign-in** on if you want unknown users created automatically as plain users.
 
 :::warning
 Admin accounts are never linked automatically, whatever the provider sends. Console access should not depend on a name in your directory, no claim will ever match one.

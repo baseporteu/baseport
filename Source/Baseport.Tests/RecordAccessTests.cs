@@ -16,7 +16,7 @@ public class RecordAccessTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
     }
 
     private async Task<(TableDefinition Table, List<FieldDefinition> Fields)> NotesAsync(string readRule = "", string createRule = "")
@@ -254,7 +254,7 @@ public class PublicAccountGuardTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
     }
 
     [Fact]

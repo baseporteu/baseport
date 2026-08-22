@@ -19,7 +19,7 @@ public class AccountsCliTests : IDisposable
     }
 
     private AppDbContext Open() =>
-        new(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connectionString).Options);
+        TestDb.Open(_connectionString);
 
     private static Task<int> RunAsync(params string[] args) =>
         AccountsCli.RunAsync(["accounts", .. args], "missing.json", "missing.json");

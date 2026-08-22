@@ -16,7 +16,7 @@ public class RecordEngineTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
         _db.Database.EnsureCreated();
     }
 
@@ -244,5 +244,77 @@ public class RecordEngineTests : IDisposable
 
         var required = new FieldDefinition { Id = Ids.NewShortId(12), Name = "OrderNo", DataType = "text", IsIdentifier = true, IsRequired = true };
         Assert.Empty(FieldValidation.ValidateFieldDefinition(required, Array.Empty<string>(), new[] { "OrderNo" }, _ => true));
+    }
+
+    // Two callers read one record, both merge their own change, both write. Without a version in the UPDATE's WHERE clause the second silently discards the first, and nothing anywhere says it happened.
+    [Fact]
+    public async Task A_concurrent_write_loses_instead_of_silently_discarding_the_other_change()
+    {
+        var table = Seed(
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Customer", DataType = "text" },
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Note", DataType = "text" });
+
+        var id = Ids.NewShortId(12);
+        _db.Records.Add(new Record { TableId = table.Id, Id = id, JsonData = """{"Customer":"Ann","Note":"first"}""", CreatedAt = DateTime.UtcNow });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // Two contexts over one database is what two concurrent requests are.
+        using var other = TestDb.Open(_connection);
+
+        var mine = await _db.Records.FirstAsync(r => r.Id == id, TestContext.Current.CancellationToken);
+        var theirs = await other.Records.FirstAsync(r => r.Id == id, TestContext.Current.CancellationToken);
+
+        mine.JsonData = """{"Customer":"Ann","Note":"mine"}""";
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        theirs.JsonData = """{"Customer":"Ann","Note":"theirs"}""";
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => other.SaveChangesAsync(TestContext.Current.CancellationToken));
+
+        var stored = await _db.Records.AsNoTracking().FirstAsync(r => r.Id == id, TestContext.Current.CancellationToken);
+        Assert.Contains("mine", stored.JsonData);
+    }
+
+    [Fact]
+    public async Task An_ETag_changes_with_the_record_and_If_Match_follows_it()
+    {
+        var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "Note", DataType = "text" });
+        var record = new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{"Note":"a"}""", CreatedAt = DateTime.UtcNow };
+        _db.Records.Add(record);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var before = ApiConditional.ETag(record).ToString();
+
+        var ctx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        Assert.True(ApiConditional.Matches(ctx, record));           // no If-Match is never a refusal
+        ctx.Request.Headers.IfMatch = before;
+        Assert.True(ApiConditional.Matches(ctx, record));
+        ctx.Request.Headers.IfMatch = "\"someone-elses-version\"";
+        Assert.False(ApiConditional.Matches(ctx, record));
+        ctx.Request.Headers.IfMatch = "*";
+        Assert.True(ApiConditional.Matches(ctx, record));
+
+        record.JsonData = """{"Note":"b"}""";
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        Assert.NotEqual(before, ApiConditional.ETag(record).ToString());
+    }
+
+    // A uniqueness clash is a conflict to retry with a different value; a bad value never is. They were one status.
+    [Fact]
+    public async Task A_duplicate_is_a_conflict_and_a_bad_value_is_a_validation_failure()
+    {
+        var table = Seed(
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "OrderNo", DataType = "text", IsUnique = true },
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Customer", DataType = "text", IsRequired = true });
+        _db.Records.Add(new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{"OrderNo":"A-1","Customer":"Ann"}""", CreatedAt = DateTime.UtcNow });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var duplicate = await RecordEngine.PrepareAsync(_db, table, table.Fields, Json("""{ "OrderNo": "A-1", "Customer": "Bob" }"""));
+        Assert.Equal(ValidationFailure.Conflict, duplicate.Failure);
+
+        var missing = await RecordEngine.PrepareAsync(_db, table, table.Fields, Json("""{ "OrderNo": "A-2" }"""));
+        Assert.Equal(ValidationFailure.Invalid, missing.Failure);
+
+        var fine = await RecordEngine.PrepareAsync(_db, table, table.Fields, Json("""{ "OrderNo": "A-3", "Customer": "Cid" }"""));
+        Assert.Equal(ValidationFailure.None, fine.Failure);
     }
 }

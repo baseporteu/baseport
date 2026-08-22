@@ -16,10 +16,49 @@ public sealed class BaseportException : Exception
     {
         StatusCode = statusCode;
         Body = body;
+        (ProblemType, Title, Detail, InvalidFields) = ReadProblem(body);
     }
 
     public HttpStatusCode StatusCode { get; }
     public string Body { get; }
+
+    // RFC 9457 members, when the server sent a problem document. Null against an older server, or a failure that produced no body at all.
+    public string? ProblemType { get; }
+    public string? Title { get; }
+    public string? Detail { get; }
+
+    // Storage names of the fields a 422 rejected, so a caller can point at them without parsing prose.
+    public IReadOnlyList<string> InvalidFields { get; } = Array.Empty<string>();
+
+    // A duplicate is worth retrying with a different value; a validation failure never is. They were one status before.
+    public bool IsConflict => StatusCode == HttpStatusCode.Conflict;
+    public bool IsValidationFailure => (int)StatusCode == 422;
+
+    // The record moved on since the version this caller held.
+    public bool IsPreconditionFailure => StatusCode == HttpStatusCode.PreconditionFailed;
+
+    private static (string?, string?, string?, IReadOnlyList<string>) ReadProblem(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return (null, null, null, Array.Empty<string>());
+
+            var invalid = root.TryGetProperty("invalid", out var names) && names.ValueKind == JsonValueKind.Array
+                ? names.EnumerateArray().Select(n => n.GetString() ?? "").Where(n => n.Length > 0).ToArray()
+                : Array.Empty<string>();
+
+            return (Text(root, "type"), Text(root, "title"), Text(root, "detail"), invalid);
+        }
+        catch (JsonException)
+        {
+            return (null, null, null, Array.Empty<string>());
+        }
+    }
+
+    private static string? Text(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static string Describe(string body)
     {
@@ -28,6 +67,8 @@ public sealed class BaseportException : Exception
             using var document = JsonDocument.Parse(body);
             if (document.RootElement.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
                 return string.Join(" ", errors.EnumerateArray().Select(e => e.GetString()));
+            if (document.RootElement.TryGetProperty("detail", out var detail) && detail.ValueKind == JsonValueKind.String)
+                return detail.GetString() ?? body;
         }
         catch (JsonException)
         {
@@ -157,7 +198,8 @@ public sealed class BaseportClient : IBaseportClient
         bool authenticate = true,
         bool throwOnError = true,
         IDictionary<string, string?>? query = null,
-        HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead)
+        HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead,
+        string? ifMatch = null)
     {
         if (authenticate && Tokens is not null && NearExpiry(Tokens)) await RefreshAsync(cancellationToken: cancellationToken);
 
@@ -165,6 +207,7 @@ public sealed class BaseportClient : IBaseportClient
         {
             Content = content
         };
+        if (!string.IsNullOrWhiteSpace(ifMatch)) request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
         if (authenticate && Bearer() is { } bearer)
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
 

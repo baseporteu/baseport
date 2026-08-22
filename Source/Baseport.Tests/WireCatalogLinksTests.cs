@@ -17,7 +17,7 @@ public class WireCatalogLinksTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
         _db.Database.EnsureCreated();
 
         _db.Tables.Add(new TableDefinition { Id = _customers, Name = "Customers", ApiEnabled = true, ApiName = "customers" });

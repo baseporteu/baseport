@@ -47,12 +47,13 @@ public static class PublicApiEndpoints
         });
 
         // Read: list records.
-        app.MapGet("/api/v1/{apiName}/records", async (AppDbContext db, HttpContext ctx, string apiName, string? q, string? sort, string? order, int? page, int? pageSize) =>
+        app.MapGet("/api/v1/{apiName}/records", async (AppDbContext db, HttpContext ctx, string apiName, string? q, string? sort, string? order, int? page, int? pageSize, string? cursor) =>
         {
-            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(ctx, ApiProblem.Unauthorized, "Missing or invalid bearer token.");
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
-            if (table == null) return ApiError(404, "Table not found.");
+            if (table == null) return ApiError(ctx, ApiProblem.NotFound, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
+            if (AcceptGate(ctx) is { } unacceptable) return unacceptable;
 
             var fields = table.Fields.OrderBy(f => f.Position).ThenBy(f => f.Id).ToList();
             var sortField = fields.FirstOrDefault(f => f.Name == sort);
@@ -60,10 +61,19 @@ public static class PublicApiEndpoints
 
             var relations = await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted);
             var (expand, expandError) = ApiLinks.ParseExpand(ctx.Request.Query[ApiLinks.ExpandParameter], relations);
-            if (expandError is { } listProblem) return ApiError(400, listProblem);
+            if (expandError is { } listProblem) return ApiError(ctx, ApiProblem.BadRequest, listProblem);
+
+            QueryEngine.Cursor? from = null;
+            if (!string.IsNullOrWhiteSpace(cursor))
+            {
+                if (sortField is not null)
+                    return ApiError(ctx, ApiProblem.BadRequest, "cursor cannot be combined with sort: a keyset walk is only defined for the default newest-first order. Use page for a sorted listing.");
+                from = QueryEngine.Cursor.Decode(cursor);
+                if (from is null) return ApiError(ctx, ApiProblem.BadRequest, "cursor is not a cursor this endpoint issued.");
+            }
 
             var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50,
-                accessFields: fields, accessUserId: caller.Id);
+                accessFields: fields, accessUserId: caller.Id, cursor: from);
             var extras = await ApiLinks.ForRecordsAsync(db, apiName, result.Records, relations, expand, caller.Id, ctx.RequestAborted);
             return Results.Ok(new
             {
@@ -74,6 +84,7 @@ public static class PublicApiEndpoints
                 result.TotalPages,
                 result.HasMore,
                 result.CountExact,
+                result.NextCursor,
                 links = ApiLinks.PageLinks(ctx.Request, result)
             });
         });
@@ -85,11 +96,12 @@ public static class PublicApiEndpoints
             using var scope = scopes.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(ctx, ApiProblem.Unauthorized, "Missing or invalid bearer token.");
             var table = await db.Tables.FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
-            if (table == null) return ApiError(404, "Table not found.");
+            if (table == null) return ApiError(ctx, ApiProblem.NotFound, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
-            if (table.IsProxy) return ApiError(400, "Proxy tables store nothing locally and emit no changes.");
+            if (AcceptGate(ctx) is { } unacceptable) return unacceptable;
+            if (table.IsProxy) return ApiError(ctx, ApiProblem.BadRequest, "Proxy tables store nothing locally and emit no changes.");
 
             return TypedResults.ServerSentEvents(Stream(scopes, table.Id, null, caller.Id, ctx.RequestAborted), "record");
         });
@@ -100,17 +112,18 @@ public static class PublicApiEndpoints
             using var scope = scopes.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(ctx, ApiProblem.Unauthorized, "Missing or invalid bearer token.");
             var table = await db.Tables.FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
-            if (table == null) return ApiError(404, "Table not found.");
+            if (table == null) return ApiError(ctx, ApiProblem.NotFound, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
-            if (table.IsProxy) return ApiError(400, "Proxy tables store nothing locally and emit no changes.");
+            if (AcceptGate(ctx) is { } unacceptable) return unacceptable;
+            if (table.IsProxy) return ApiError(ctx, ApiProblem.BadRequest, "Proxy tables store nothing locally and emit no changes.");
 
             // The row is checked at the handshake for the same reason the single-record GET checks it: opening a stream on a record the caller may not read would confirm it exists.
-            if (!await db.Records.AnyAsync(r => r.TableId == table.Id && r.Id == rid)) return ApiError(404, "Record not found.");
+            if (!await db.Records.AnyAsync(r => r.TableId == table.Id && r.Id == rid)) return ApiError(ctx, ApiProblem.NotFound, "Record not found.");
             var fields = await db.Fields.Where(f => f.TableId == table.Id).ToListAsync();
             if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, caller.Id, rid))
-                return ApiError(403, "This record is not yours to read.");
+                return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to read.");
 
             return TypedResults.ServerSentEvents(Stream(scopes, table.Id, rid, caller.Id, ctx.RequestAborted), "record");
         });
@@ -118,19 +131,23 @@ public static class PublicApiEndpoints
         // Read: single record
         app.MapGet("/api/v1/{apiName}/records/{rid}", async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
         {
-            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(ctx, ApiProblem.Unauthorized, "Missing or invalid bearer token.");
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
-            if (table == null) return ApiError(404, "Table not found.");
+            if (table == null) return ApiError(ctx, ApiProblem.NotFound, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
+            if (AcceptGate(ctx) is { } unacceptable) return unacceptable;
             var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == rid);
-            if (record == null) return ApiError(404, "Record not found.");
+            if (record == null) return ApiError(ctx, ApiProblem.NotFound, "Record not found.");
             var readFields = table.Fields.OrderBy(f => f.Position).ThenBy(f => f.Id).ToList();
             if (!await RecordAccess.AllowsAsync(db, table, readFields, Permission.Read, caller.Id, rid))
-                return ApiError(403, "This record is not yours to read.");
+                return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to read.");
 
             var readRelations = await ApiLinks.RelationsAsync(db, readFields, ctx.RequestAborted);
             var (readExpand, readProblem) = ApiLinks.ParseExpand(ctx.Request.Query[ApiLinks.ExpandParameter], readRelations);
-            if (readProblem is { } problem) return ApiError(400, problem);
+            if (readProblem is { } problem) return ApiError(ctx, ApiProblem.BadRequest, problem);
+
+            ApiConditional.SetETag(ctx, record);
+            if (ApiConditional.NotModified(ctx, record)) return Results.StatusCode(StatusCodes.Status304NotModified);
 
             var read = await ApiLinks.ForRecordAsync(db, apiName, record, readRelations, readExpand, caller.Id, ctx.RequestAborted);
             return Results.Ok(ApiDtos.RecordDto(record, readFields, read.Links, read.Expanded));
@@ -139,20 +156,21 @@ public static class PublicApiEndpoints
         // Create: same validation/computation as the embedded form. JSON or multipart/form-data (for file fields).
         app.MapPost("/api/v1/{apiName}/records", async (AppDbContext db, HttpContext ctx, string apiName) =>
         {
-            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(ctx, ApiProblem.Unauthorized, "Missing or invalid bearer token.");
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
-            if (table == null) return ApiError(404, "Table not found.");
+            if (table == null) return ApiError(ctx, ApiProblem.NotFound, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
+            if (AcceptGate(ctx) is { } unacceptable) return unacceptable;
+            if (MediaTypeGate(ctx) is { } unsupported) return unsupported;
             var fields = table.Fields.ToList();
             var (obj, formErrors) = await MultipartRecord.FromRequestAsync(ctx, fields);
-            if (formErrors.Count > 0) return Results.BadRequest(new { errors = formErrors });
+            if (formErrors.Count > 0) return ApiProblems.Write(ctx, BodyProblem(ctx), formErrors);
             var outcome = await RecordEngine.PrepareAsync(db, table, fields, obj);
-            if (outcome.HasErrors)
-                return Results.BadRequest(new { errors = outcome.Errors, invalid = outcome.InvalidFields });
+            if (outcome.HasErrors) return ApiProblems.FromOutcome(ctx, outcome);
             if (table.IsProxy)
-                return Results.BadRequest(new { errors = new[] { "Proxy tables forward to a remote API and cannot be written via the REST API." } });
+                return ApiError(ctx, ApiProblem.BadRequest, "Proxy tables forward to a remote API and cannot be written via the REST API.");
             if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, caller.Id, request: obj))
-                return ApiError(403, "This record is not yours to create.");
+                return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to create.");
             var record = new Record
             {
                 TableId = table.Id,
@@ -163,6 +181,7 @@ public static class PublicApiEndpoints
             db.Records.Add(record);
             await db.SaveChangesAsync();
             var created = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller.Id, ctx.RequestAborted);
+            ApiConditional.SetETag(ctx, record);
             return Results.Created(ApiLinks.Self(apiName, record.Id), ApiDtos.RecordDto(record, fields, created.Links));
         });
 
@@ -170,53 +189,69 @@ public static class PublicApiEndpoints
         app.MapMethods("/api/v1/{apiName}/records/{rid}", new[] { "PATCH", "PUT" },
             async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
         {
-            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(ctx, ApiProblem.Unauthorized, "Missing or invalid bearer token.");
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
-            if (table == null) return ApiError(404, "Table not found.");
+            if (table == null) return ApiError(ctx, ApiProblem.NotFound, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
-            if (table.IsProxy) return Results.BadRequest(new { errors = new[] { "Proxy tables store nothing locally and cannot be updated." } });
+            if (AcceptGate(ctx) is { } unacceptable) return unacceptable;
+            if (table.IsProxy) return ApiError(ctx, ApiProblem.BadRequest, "Proxy tables store nothing locally and cannot be updated.");
+
+            if (MediaTypeGate(ctx) is { } unsupported) return unsupported;
 
             var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == rid);
-            if (record == null) return ApiError(404, "Record not found.");
+            if (record == null) return ApiError(ctx, ApiProblem.NotFound, "Record not found.");
+            if (!ApiConditional.Matches(ctx, record))
+                return ApiError(ctx, ApiProblem.PreconditionFailed, "The record changed since the version you hold. Re-read it and apply your change to the current one.");
 
             var fields = table.Fields.OrderBy(f => f.Position).ThenBy(f => f.Id).ToList();
             var (obj, formErrors) = await MultipartRecord.FromRequestAsync(ctx, fields);
-            if (formErrors.Count > 0) return Results.BadRequest(new { errors = formErrors });
+            if (formErrors.Count > 0) return ApiProblems.Write(ctx, BodyProblem(ctx), formErrors);
             var replace = HttpMethods.IsPut(ctx.Request.Method);
 
             if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Update, caller.Id, rid, request: obj))
-                return ApiError(403, "This record is not yours to change.");
+                return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to change.");
 
             var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, obj, replace);
-            if (outcome.HasErrors)
-                return Results.BadRequest(new { errors = outcome.Errors, invalid = outcome.InvalidFields });
+            if (outcome.HasErrors) return ApiProblems.FromOutcome(ctx, outcome);
 
             record.JsonData = merged.ToJsonString();
-            await db.SaveChangesAsync();
+            try { await db.SaveChangesAsync(); }
+            catch (DbUpdateConcurrencyException)
+            {
+                return ApiError(ctx, ApiProblem.Conflict, "Another write reached this record first. Re-read it and apply your change to the current one.");
+            }
             var written = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller.Id, ctx.RequestAborted);
+            ApiConditional.SetETag(ctx, record);
             return Results.Ok(ApiDtos.RecordDto(record, fields, written.Links));
         });
 
         // Delete: single record
         app.MapDelete("/api/v1/{apiName}/records/{rid}", async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
         {
-            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(401, "Missing or invalid bearer token.");
+            if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(ctx, ApiProblem.Unauthorized, "Missing or invalid bearer token.");
             var table = await db.Tables.FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
-            if (table == null) return ApiError(404, "Table not found.");
+            if (table == null) return ApiError(ctx, ApiProblem.NotFound, "Table not found.");
             if (MethodGate(table, ctx) is { } denied) return denied;
+            if (AcceptGate(ctx) is { } unacceptable) return unacceptable;
             var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == rid);
-            if (record == null) return ApiError(404, "Record not found.");
+            if (record == null) return ApiError(ctx, ApiProblem.NotFound, "Record not found.");
+            if (!ApiConditional.Matches(ctx, record))
+                return ApiError(ctx, ApiProblem.PreconditionFailed, "The record changed since the version you hold. Re-read it before deleting.");
             if (!await RecordAccess.AllowsAsync(db, table, await db.Fields.Where(f => f.TableId == table.Id).ToListAsync(), Permission.Delete, caller.Id, rid))
-                return ApiError(403, "This record is not yours to delete.");
+                return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to delete.");
             db.Records.Remove(record);
-            await db.SaveChangesAsync();
+            try { await db.SaveChangesAsync(); }
+            catch (DbUpdateConcurrencyException)
+            {
+                return ApiError(ctx, ApiProblem.Conflict, "Another write reached this record first. Re-read it before deleting.");
+            }
             return Results.Ok(new { deleted = rid });
         });
 
         // SPA admin routing, serve the builder UI for any non-API path so deep links like /tables/2 or /tables/2/records render without a server reload.
     }
 
-    // Every error the public API returns speaks one shape, {"errors": [...]}, a client parses failures the same way across every status code.
+    // Every error the public API returns is an RFC 9457 problem document. `errors` and `invalid` ride along as extension members, which the RFC allows, so the console, the embed and the SDK keep reading exactly what they read before.
     private static async IAsyncEnumerable<object> Stream(
         IServiceScopeFactory scopes, string tableId, string? recordId, string userId,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
@@ -260,8 +295,13 @@ public static class PublicApiEndpoints
             row: e.Json is null ? null : JsonNode.Parse(e.Json) as JsonObject);
     }
 
-    private static IResult ApiError(int status, string message) =>
-        Results.Json(new { errors = new[] { message } }, statusCode: status);
+    private static IResult ApiError(HttpContext ctx, ApiProblem problem, string detail) =>
+        ApiProblems.Write(ctx, problem, detail);
+
+
+    // A body that could not be read is a request problem; a file refused for its size is its own status.
+    private static ApiProblem BodyProblem(HttpContext ctx) =>
+        MultipartRecord.Oversize(ctx) ? ApiProblem.TooLarge : ApiProblem.BadRequest;
 
     // Refuses a method the author switched off.
     private static IResult? MethodGate(TableDefinition table, HttpContext ctx)
@@ -269,6 +309,40 @@ public static class PublicApiEndpoints
         if (ApiMethods.Allows(table, ctx.Request.Method)) return null;
         // 405 owes the caller the list of what would have worked.
         ctx.Response.Headers.Allow = string.Join(", ", ApiMethods.Parse(table.ApiMethods));
-        return ApiError(405, $"{ctx.Request.Method} is not enabled for this endpoint.");
+        return ApiError(ctx, ApiProblem.MethodNotAllowed, $"{ctx.Request.Method} is not enabled for this endpoint.");
+    }
+
+    // The API speaks JSON and nothing else. A caller that asked for something else was previously handed JSON anyway with a 200 on top, which is the one answer that cannot be right.
+    private static IResult? AcceptGate(HttpContext ctx)
+    {
+        var accept = ctx.Request.Headers.Accept;
+        if (accept.Count == 0) return null;
+
+        foreach (var raw in accept)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            foreach (var part in raw.Split(','))
+            {
+                var media = part.Split(';')[0].Trim();
+                if (media.Length == 0) continue;
+                if (media is "*/*" or "application/*" ||
+                    media.Equals(ApiProblems.ContentType, StringComparison.OrdinalIgnoreCase) ||
+                    media.Contains("json", StringComparison.OrdinalIgnoreCase) ||
+                    media.Equals("text/event-stream", StringComparison.OrdinalIgnoreCase))
+                    return null;
+            }
+        }
+        return ApiError(ctx, ApiProblem.NotAcceptable, "This API answers application/json only.");
+    }
+
+    // A body the write path cannot read at all is a media-type refusal, not a validation failure: 400 told the caller their record was wrong when the record was never parsed.
+    private static IResult? MediaTypeGate(HttpContext ctx)
+    {
+        if (ctx.Request.HasFormContentType) return null;
+        var type = ctx.Request.ContentType;
+        if (string.IsNullOrWhiteSpace(type)) return null;
+        if (type.Contains("json", StringComparison.OrdinalIgnoreCase)) return null;
+        ctx.Response.Headers.Accept = "application/json, multipart/form-data";
+        return ApiError(ctx, ApiProblem.UnsupportedMediaType, $"'{type}' is not a content type this endpoint accepts.");
     }
 }

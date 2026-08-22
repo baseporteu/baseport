@@ -137,9 +137,20 @@ public static class ApiLinks
             ["first"] = Href(request, 1)
         };
         if (page.Page > 1) links["prev"] = Href(request, page.Page - 1);
-        if (page.HasMore) links["next"] = Href(request, page.Page + 1);
+        if (page.HasMore) links["next"] = page.NextCursor is { } cursor ? Cursored(request, cursor) : Href(request, page.Page + 1);
         if (page.CountExact && page.TotalPages > 0) links["last"] = Href(request, page.TotalPages);
         return links;
+    }
+
+    // A keyset walk carries its position in the link rather than in a page number, so the caller follows `next` and never computes an offset.
+    private static string Cursored(HttpRequest request, string cursor)
+    {
+        var query = request.Query
+            .Where(kv => !string.Equals(kv.Key, "page", StringComparison.OrdinalIgnoreCase)
+                      && !string.Equals(kv.Key, "cursor", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        query.Add(new KeyValuePair<string, StringValues>("cursor", cursor));
+        return QueryHelpers.AddQueryString(request.Path.Value ?? "", query);
     }
 
     private static string Href(HttpRequest request, int page)

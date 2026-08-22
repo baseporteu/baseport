@@ -74,7 +74,7 @@ You get a Server-Sent Event for every write to that table. Add a record id to th
 A request has to get past both of these before access rules are even considered:
 
 - the account's own **API enabled** switch, which answers `401` when it is off
-- the table's **API enabled** switch, which answers `403` when it is off
+- the table's **API enabled** switch, which answers `404` when it is off, so nobody can probe for which tables you have
 
 After that, [access rules](/docs/access-rules) decide which records the caller can see.
 

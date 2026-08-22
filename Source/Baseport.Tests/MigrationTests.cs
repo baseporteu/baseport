@@ -9,7 +9,7 @@ namespace Baseport.Tests;
 public class MigrationTests
 {
     private static AppDbContext Open(SqliteConnection conn) =>
-        new(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options);
+        TestDb.Open(conn);
 
     [Fact]
     public async Task AFreshDatabaseGetsTheWholeSchema()

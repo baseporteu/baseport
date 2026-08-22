@@ -13,7 +13,7 @@ public static class RecordEngine
     private static readonly HtmlSanitizer Sanitizer = new();
 
     // A write path verdict: the messages to show a visitor and, alongside them, the storage names of every field that failed, a form renders exactly the offending inputs red instead of asking the visitor to guess.
-    public sealed record ValidationOutcome(List<string> Errors, List<string> InvalidFields)
+    public sealed record ValidationOutcome(List<string> Errors, List<string> InvalidFields, ValidationFailure Failure = ValidationFailure.None)
     {
         public bool HasErrors => Errors.Count > 0;
     }
@@ -68,10 +68,10 @@ public static class RecordEngine
                 invalid.Add(f.Name);
             }
         }
-        if (errors.Count > 0) return new ValidationOutcome(errors, invalid);
+        if (errors.Count > 0) return new ValidationOutcome(errors, invalid, ValidationFailure.Invalid);
 
         await CheckUniqueAsync(db, table, fields, obj, excludeRecordId, errors, invalid);
-        if (errors.Count > 0) return new ValidationOutcome(errors, invalid);
+        if (errors.Count > 0) return new ValidationOutcome(errors, invalid, ValidationFailure.Conflict);
 
         SanitizeRichText(fields, obj);
         HashPasswords(fields, obj);
@@ -84,7 +84,7 @@ public static class RecordEngine
         foreach (var f in fields.Where(f => FieldValidation.NormalizeType(f.DataType) == "calculated"))
         {
             if (!TryCompute(f, obj, out var err, out var jv))
-            { errors.Add($"Field '{f.Name}' has an invalid expression: {err}"); invalid.Add(f.Name); return new ValidationOutcome(errors, invalid); }
+            { errors.Add($"Field '{f.Name}' has an invalid expression: {err}"); invalid.Add(f.Name); return new ValidationOutcome(errors, invalid, ValidationFailure.Invalid); }
             if (jv != null) obj[f.Name] = jv;
         }
 
@@ -92,7 +92,7 @@ public static class RecordEngine
         foreach (var f in fields.Where(f => FieldValidation.NormalizeType(f.DataType) == "derived"))
         {
             if (!TryCompute(f, obj, out var err, out var jv))
-            { errors.Add($"Field '{f.Name}' has an invalid expression: {err}"); invalid.Add(f.Name); return new ValidationOutcome(errors, invalid); }
+            { errors.Add($"Field '{f.Name}' has an invalid expression: {err}"); invalid.Add(f.Name); return new ValidationOutcome(errors, invalid, ValidationFailure.Invalid); }
             if (jv != null) obj[f.Name] = jv;
             else obj.Remove(f.Name);
         }

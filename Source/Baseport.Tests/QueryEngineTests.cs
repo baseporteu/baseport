@@ -18,7 +18,7 @@ public class QueryEngineTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
         _db.Database.EnsureCreated();
 
         _fields = new List<FieldDefinition>
@@ -152,5 +152,92 @@ public class QueryEngineTests : IDisposable
         var resolved = QueryEngine.Resolve(_fields, names);
 
         Assert.Equal(new[] { "OrderNo", "Total" }, resolved.Select(f => f.Name));
+    }
+
+    private async Task<List<string>> WalkAsync(int pageSize)
+    {
+        var seen = new List<string>();
+        QueryEngine.Cursor? cursor = null;
+        for (var guard = 0; guard < 100; guard++)
+        {
+            var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, pageSize, cursor: cursor);
+            seen.AddRange(page.Records.Select(r => r.Id));
+            if (page.NextCursor is null) break;
+            cursor = QueryEngine.Cursor.Decode(page.NextCursor);
+            Assert.NotNull(cursor);
+        }
+        return seen;
+    }
+
+    [Fact]
+    public async Task A_cursor_walk_sees_every_record_exactly_once()
+    {
+        var all = await _db.Records.Where(r => r.TableId == _table.Id).Select(r => r.Id).ToListAsync(TestContext.Current.CancellationToken);
+        var seen = await WalkAsync(7);
+
+        Assert.Equal(all.Count, seen.Count);
+        Assert.Equal(all.OrderBy(x => x, StringComparer.Ordinal), seen.OrderBy(x => x, StringComparer.Ordinal));
+    }
+
+    // An import stamps one CreatedAt on every row it writes, so the timestamp alone is not a position. Without the Id tiebreaker in the keyset predicate this walk either loops on one page forever or skips the rest of the batch.
+    [Fact]
+    public async Task A_cursor_walk_is_stable_when_every_record_shares_one_timestamp()
+    {
+        var stamped = DateTime.UtcNow;
+        foreach (var record in await _db.Records.Where(r => r.TableId == _table.Id).ToListAsync(TestContext.Current.CancellationToken))
+            record.CreatedAt = stamped;
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var all = await _db.Records.Where(r => r.TableId == _table.Id).Select(r => r.Id).ToListAsync(TestContext.Current.CancellationToken);
+        var seen = await WalkAsync(4);
+
+        Assert.Equal(all.Count, seen.Count);
+        Assert.Equal(all.Count, seen.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    // The point of keyset paging: a row arriving mid-walk cannot shift rows the caller has not reached yet into ones it has already read.
+    [Fact]
+    public async Task A_row_inserted_mid_walk_never_repeats_a_row_already_read()
+    {
+        var first = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 5);
+        Assert.NotNull(first.NextCursor);
+
+        _db.Records.Add(new Record
+        {
+            TableId = _table.Id,
+            Id = Ids.NewShortId(12),
+            JsonData = """{"OrderNo":"A-999"}""",
+            CreatedAt = DateTime.UtcNow.AddYears(1)
+        });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var second = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 5,
+            cursor: QueryEngine.Cursor.Decode(first.NextCursor));
+
+        Assert.Empty(second.Records.Select(r => r.Id).Intersect(first.Records.Select(r => r.Id), StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_cursor_round_trips_and_a_forged_one_is_refused()
+    {
+        var cursor = new QueryEngine.Cursor(new DateTime(2026, 8, 22, 10, 30, 0, DateTimeKind.Utc), "abc123");
+        var back = QueryEngine.Cursor.Decode(cursor.Encode());
+
+        Assert.NotNull(back);
+        Assert.Equal(cursor.Id, back!.Value.Id);
+        Assert.Equal(cursor.CreatedAt, back.Value.CreatedAt);
+
+        // A caller must never turn a bad cursor into a 500.
+        foreach (var bad in new[] { "", "   ", "not-base64!!", "eyJub3RhY3Vyc29yIjoxfQ" })
+            Assert.Null(QueryEngine.Cursor.Decode(bad));
+    }
+
+    // Keyset ordering is only defined for the default key. A sorted listing pages by number, and must not hand back a cursor that would silently walk a different order.
+    [Fact]
+    public async Task A_sorted_listing_issues_no_cursor()
+    {
+        var sorted = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), _fields[0], true, null, 1, 5);
+        Assert.True(sorted.HasMore);
+        Assert.Null(sorted.NextCursor);
     }
 }

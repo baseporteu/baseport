@@ -34,7 +34,7 @@ https://baseport.example.com/f/Kf3nQ8xR2vLm
 
 For a list, the first page of rows is included in the HTML, you can share the link, search engines can index it, and it still works with JavaScript turned off. Once the embed loads it replaces that with the interactive version.
 
-The server-rendered version is intentionally basic. It shows the same columns the list is configured with, using the same code the JSON route uses, it cannot expose a field the embed would have hidden. Custom renderers and row actions are JavaScript expressions and Baseport has no JavaScript engine, they are left out instead of approximated.
+The server-rendered version is deliberately plain. It projects through the same columns the JSON route does, so it cannot show a field the embed would have hidden. Custom renderers and row actions are JavaScript expressions and there is no JavaScript engine here, so they are left out rather than approximated.
 
 For a submit form the page shows only the heading and description. Rendering a second set of inputs with nowhere to send them would just be a form that does nothing.
 
@@ -51,11 +51,11 @@ https://shop.example.com
 https://portal.example.org
 ```
 
-Leave it empty and any site can embed them, which is usually what you want while developing. Once you fill it in, remember to keep it current, because a site that is not on the list will not render the form.
+Leave it empty and any site can embed them, which is usually what you want while you are building. Once you fill it in, keep it current: a site that is not on the list gets nothing.
 
 ## Rate limits
 
-The public form routes are rate limited per client, per form, one busy visitor does not use up everyone else's budget.
+The public form routes are rate limited per client and per form, so one busy visitor does not use up everyone else's budget.
 
 | Route | Per minute |
 | --- | --- |

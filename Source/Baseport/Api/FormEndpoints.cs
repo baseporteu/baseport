@@ -239,7 +239,7 @@ $$"""
                     return Results.BadRequest(new { errors = new[] { "This proxy table has no readable GET endpoint." } });
 
                 var (remote, error) = await ProxyQuery.LookupAsync(http, table, matchFields, q);
-                if (error != null) return Results.BadRequest(new { errors = new[] { error } });
+                if (error is { } upstream) return ApiProblems.Write(ctx, upstream.Problem, upstream.Detail);
                 if (remote == null) return Results.NotFound(new { found = false, message = notFound });
                 return Results.Ok(new { found = true, proxy = true, Data = ProxyQuery.Project(remote, visible) });
             }
@@ -369,7 +369,7 @@ $$"""
                     return Results.BadRequest(new { errors = new[] { "This proxy table has no readable GET endpoint." } });
 
                 var (remotePage, error) = await ProxyQuery.ListAsync(http, table, searchFields, q, page ?? 1, effective, filters, sortField, descending);
-                if (error != null) return Results.BadRequest(new { errors = new[] { error } });
+                if (error is { } upstream) return ApiProblems.Write(ctx, upstream.Problem, upstream.Detail);
                 return Results.Ok(new
                 {
                     columns = columnDtos,

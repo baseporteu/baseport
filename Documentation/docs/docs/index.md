@@ -5,7 +5,7 @@ description: "What Baseport is, and what you get once it is running"
 
 # Introduction
 
-Baseport is a single-executable backend powered by an embedded SQLite database. It eliminates the need for a separate database server. You define tables through the admin console, and every published table automatically receives a REST API, real-time updates via Server-Sent Events (SSE), and optional public forms.
+Baseport is one executable with SQLite inside it, so there is no database server to run alongside it. You define tables in the admin console. Publish one and you get a REST API for it, live updates over Server-Sent Events, and public forms if you want them.
 
 :::warning
 Baseport is pre-alpha. The database format and the API surface both still move between commits, keep production data out of it for now.
@@ -38,20 +38,20 @@ volumes:
 
 Releases ship `linux-x64` and `win-x64` builds.
 
-The first start prints an admin username and a one-time password. You can use `baseport logs` to retrieve both the randomly generated username and password. Contineu to `http://localhost:5000/_/admin` and sign in. You'll be forced to set a new password.
+The first start prints an admin username and a one-time password. `baseport logs` shows both again if you missed them. Go to `http://localhost:5000/_/admin`, sign in, and you will be asked to set a new password straight away.
 
-`--urls http://localhost:5000` listens on loopback only, nothing else on your network can reach it. Running on a server? Then you may want to reach from elsewhere, bind to every interface instead using `0.0.0.0` as your hostname.
+`--urls http://localhost:5000` listens on loopback only, so nothing else on your network can reach it. On a server you probably want to reach it from elsewhere, so bind every interface with `0.0.0.0` instead.
 
 Baseport speaks plain HTTP. For anything reachable beyond your own machine, put it behind a reverse proxy that terminates TLS. See [Going to production](/docs/going-to-production).
 
 ## The baseport command
 
-The installer installs a lightweight `baseport` wrapper utility on your system PATH. The wrapper guarantees that application binaries execute within their designated root directory, ensuring databases, logs, and upload files remain consolidated regardless of where the command is issued.
+The installer puts a small `baseport` wrapper on your PATH. It runs the binary from the install directory no matter where you are when you type it, so the database, logs and uploads always end up in the same place.
 
 ```bash
-baseport help             # Display available CLI subcommands
-baseport accounts list    # List administrative accounts
-baseport providers status # Check active authentication provider configurations
+baseport help             # List the subcommands
+baseport accounts list    # List the accounts
+baseport providers status # Show which sign-on providers are on
 baseport status           # Say whether Baseport is running, and where
 baseport doctor           # Check the install and name what is wrong
 baseport logs             # View rolling log output
@@ -82,7 +82,7 @@ BASEPORT_DIR=/srv/baseport BASEPORT_BIN=/usr/local/bin \
 
 The wrapper remembers that directory, `baseport update` returns to it instead of falling back to the default.
 
-For Docker environments, define a shell function in your `~/.bashrc` or `~/.zshrc` to route commands directly to your container setup:
+On Docker there is no wrapper, so put a shell function in `~/.bashrc` or `~/.zshrc` that sends the same commands into the container:
 
 ```bash
 baseport() {
@@ -96,7 +96,7 @@ baseport() {
 
 ```
 
-This mirror function allows commands like `baseport accounts list` and `baseport update` to operate identically to binary installations.
+`baseport accounts list` and `baseport update` then work the way they do on a normal install.
 
 ## Addresses
 
@@ -108,21 +108,23 @@ This mirror function allows commands like `baseport accounts list` and `baseport
 | Forms | `/f/{formId}` and `/embed.js` | Anyone, per published form |
 | OpenAPI document | `/api/openapi.json` | Anyone you give the URL to |
 
-## File Layout & Data Management
+## What is on disk
 
-Baseport writes operational files directly to its execution directory. Ensure your backup procedures capture this entire path:
+Everything Baseport writes goes in the directory it runs from. Back up the whole directory, not just the database:
 
-* `baseport.db` — Main SQLite database storing schemas, user records, and application state.
-* `baseport.key` — Private ES256 key used to sign JWT authentication tokens (restricted to owner-only permissions).
-* `log/` — Rolling log file storage.
-* `uploads/` — Binary assets uploaded via published forms or APIs.
-* `backups/` — Snapshot backups of the SQLite database.
+| File | What it is |
+| --- | --- |
+| `baseport.db` | The database: your schema, your records, accounts and settings |
+| `baseport.key` | The ES256 key that signs auth tokens, readable only by the owner |
+| `log/` | Rolling log files |
+| `uploads/` | Files uploaded through forms or the API |
+| `backups/` | Database snapshots |
 
 ::: danger
-If `baseport.key` is lost or deleted, all previously issued authentication tokens will immediately become invalid.
+Lose `baseport.key` and every token already issued stops working. Everyone signs in again.
 :::
 
-## Next Steps
+## Next
 
-* Complete the onboarding guide in [How to use Baseport](https://www.google.com/search?q=/docs/how-to-use).
-* Learn schema modeling in [Tables and fields](https://www.google.com/search?q=/docs/tables-and-fields).
+- [How to use Baseport](/docs/how-to-use) walks from an empty console to a working REST call.
+- [Tables and fields](/docs/tables-and-fields) covers the field types and what each one enforces.

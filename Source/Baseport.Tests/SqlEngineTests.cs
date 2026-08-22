@@ -15,7 +15,7 @@ public class SqlEngineTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
         _db.Database.EnsureCreated();
     }
 
@@ -114,7 +114,7 @@ public class SqlEngineTests : IDisposable
         var file = Path.Combine(Path.GetTempPath(), $"baseport-{Ids.NewShortId(12)}.db");
         try
         {
-            using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite($"Data Source={file}").Options);
+            using var db = TestDb.Open($"Data Source={file}");
             db.Database.EnsureCreated();
             db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = "Orders" });
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);

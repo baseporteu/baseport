@@ -17,7 +17,7 @@ public class JobsTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
         _db.Database.Migrate();
     }
 
@@ -145,8 +145,7 @@ public class JobsTests : IDisposable
         Directory.CreateDirectory(dir);
 
         // A file-backed store: VACUUM INTO of an in-memory source would copy nothing but an empty schema.
-        var store = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={storePath}").Options);
+        var store = TestDb.Open($"Data Source={storePath}");
         
         store.Database.EnsureCreated();
         store.AppSettings.Add(new AppSettings { BackupRetention = 5 });

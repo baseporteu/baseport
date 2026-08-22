@@ -73,12 +73,12 @@ public class OpenApiSpecTests
         var resp = responses[code] as JsonObject;
         Assert.NotNull(resp);
         Assert.NotNull(resp!["description"]);
-        var schema = resp!["content"]!["application/json"]!["schema"] as JsonObject;
+        var schema = resp!["content"]![ApiProblems.ContentType]!["schema"] as JsonObject;
         Assert.Equal("#/components/schemas/Error", schema?["$ref"]?.GetValue<string>());
     }
 
     [Fact]
-    public void Every_operation_documents_401_404_500_via_the_shared_error_schema()
+    public void Every_operation_documents_401_403_404_500_via_the_shared_error_schema()
     {
         var t = Table();
         var paths = Paths(t);
@@ -90,39 +90,103 @@ public class OpenApiSpecTests
                 ? (list[method]!["responses"] as JsonObject)!
                 : (paths["/api/v1/orders/records/{recordId}"]![method]!["responses"] as JsonObject)!;
             AssertErrorRef(responses, "401");
+            // 403 is what an access rule answers with, and it went undeclared while five call sites returned it.
+            AssertErrorRef(responses, "403");
             AssertErrorRef(responses, "404");
             AssertErrorRef(responses, "500");
         }
     }
 
+    // A read reaches 400 through a malformed $expand, which is why it is declared there too; a delete parses nothing a caller wrote and still must not claim it.
     [Fact]
-    public void Only_write_operations_document_400()
+    public void Only_the_operations_that_parse_caller_input_document_400()
     {
         var t = Table();
         var paths = Paths(t);
         var list = paths["/api/v1/orders/records"] as JsonObject;
         var item = paths["/api/v1/orders/records/{recordId}"] as JsonObject;
 
-        foreach (var method in new[] { "post" })
+        foreach (var responses in new[]
+                 {
+                     list!["get"]!["responses"] as JsonObject,
+                     list["post"]!["responses"] as JsonObject,
+                     item!["get"]!["responses"] as JsonObject,
+                     item["patch"]!["responses"] as JsonObject,
+                     item["put"]!["responses"] as JsonObject
+                 })
+            Assert.True(responses!.ContainsKey("400"), "an operation that parses caller input should document 400");
+
+        var deleteResponses = item["delete"]!["responses"] as JsonObject;
+        Assert.False(deleteResponses!.ContainsKey("400"), "delete must not document a 400 it cannot return");
+    }
+
+    // A write refuses a duplicate with 409 and a bad value with 422, and the document has to name both or a client cannot tell a retry from a fix.
+    [Fact]
+    public void A_write_documents_the_conflict_and_validation_statuses_it_returns()
+    {
+        var paths = Paths(Table());
+        var list = paths["/api/v1/orders/records"] as JsonObject;
+        var item = paths["/api/v1/orders/records/{recordId}"] as JsonObject;
+
+        foreach (var responses in new[]
+                 {
+                     list!["post"]!["responses"] as JsonObject,
+                     item!["patch"]!["responses"] as JsonObject,
+                     item["put"]!["responses"] as JsonObject
+                 })
         {
-            var responses = list![method]!["responses"] as JsonObject;
-            Assert.True(responses!.ContainsKey("400"), $"{method} should document 400");
+            AssertErrorRef(responses!, "409");
+            AssertErrorRef(responses!, "412");
+            AssertErrorRef(responses!, "413");
+            AssertErrorRef(responses!, "415");
+            AssertErrorRef(responses!, "422");
         }
-        foreach (var method in new[] { "get" })
+
+        // Delete writes no body, so only the precondition applies to it.
+        var del = item["delete"]!["responses"] as JsonObject;
+        AssertErrorRef(del!, "412");
+        Assert.False(del!.ContainsKey("422"), "delete validates no record and must not claim 422");
+    }
+
+    [Fact]
+    public void A_versioned_response_carries_an_ETag_and_the_write_takes_If_Match()
+    {
+        var paths = Paths(Table());
+        var item = paths["/api/v1/orders/records/{recordId}"] as JsonObject;
+
+        Assert.NotNull(item!["get"]!["responses"]!["200"]!["headers"]!["ETag"]);
+        Assert.NotNull(item["patch"]!["responses"]!["200"]!["headers"]!["ETag"]);
+        Assert.NotNull((paths["/api/v1/orders/records"] as JsonObject)!["post"]!["responses"]!["201"]!["headers"]!["Location"]);
+
+        // A caller cannot send a precondition it was never told about.
+        foreach (var method in new[] { "patch", "put", "delete" })
         {
-            var responses = list![method]!["responses"] as JsonObject;
-            Assert.False(responses!.ContainsKey("400"), $"{method} must not document a 400 it cannot return");
+            var parameters = item[method]!["parameters"] as JsonArray;
+            Assert.Contains(parameters!, n => n!["name"]!.GetValue<string>() == "If-Match" && n["in"]!.GetValue<string>() == "header");
         }
-        foreach (var method in new[] { "patch", "put" })
-        {
-            var responses = item![method]!["responses"] as JsonObject;
-            Assert.True(responses!.ContainsKey("400"), $"{method} should document 400");
-        }
-        foreach (var method in new[] { "get", "delete" })
-        {
-            var responses = item![method]!["responses"] as JsonObject;
-            Assert.False(responses!.ContainsKey("400"), $"{method} must not document a 400 it cannot return");
-        }
+        Assert.Contains((item["get"]!["parameters"] as JsonArray)!, n => n!["name"]!.GetValue<string>() == "If-None-Match");
+    }
+
+    [Fact]
+    public void The_listing_publishes_its_cursor_in_both_directions()
+    {
+        var list = (Paths(Table())["/api/v1/orders/records"] as JsonObject)!["get"]!;
+        Assert.Contains((list["parameters"] as JsonArray)!, n => n!["name"]!.GetValue<string>() == "cursor");
+        var page = list["responses"]!["200"]!["content"]!["application/json"]!["schema"] as JsonObject;
+        Assert.NotNull(page!["properties"]!["nextCursor"]);
+    }
+
+    // RFC 9457: the members a client keys off must be there, and the extensions the console, embed and SDK already read must survive beside them.
+    [Fact]
+    public void The_error_schema_is_a_problem_document_that_kept_its_extension_members()
+    {
+        var schema = ErrorSchema();
+        foreach (var member in new[] { "type", "title", "status", "detail", "instance" })
+            Assert.NotNull(schema!["properties"]![member]);
+
+        var required = schema!["required"] as JsonArray;
+        foreach (var member in new[] { "type", "title", "status", "errors" })
+            Assert.Contains(required!, n => n!.GetValue<string>() == member);
     }
 
     [Fact]

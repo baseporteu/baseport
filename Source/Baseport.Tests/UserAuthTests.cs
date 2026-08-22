@@ -14,7 +14,7 @@ public class UserAuthTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
         UserTokens.Initialize(null);
         UserTokens.Configure(new AppSettings());
     }
@@ -208,7 +208,9 @@ public class UserAuthTests : IDisposable
         try
         {
             var dbPath = Path.Combine(dir, "baseport.db");
-            var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite($"Data Source={dbPath}").Options;
+            var builder = new DbContextOptionsBuilder<AppDbContext>();
+            AppDbContext.Configure(builder, $"Data Source={dbPath}");
+            var options = builder.Options;
 
             string first;
             await using (var db = new AppDbContext(options))

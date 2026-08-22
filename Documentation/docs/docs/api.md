@@ -28,7 +28,7 @@ Your own instance publishes an OpenAPI document at `/api/openapi.json`, and the 
 | `GET` | `/api/v1/{apiName}/subscribe` | Server-Sent Events for the table |
 | `GET` | `/api/v1/{apiName}/subscribe/{id}` | Server-Sent Events for one record |
 
-A table publishes only the methods you left enabled on it. A method you turned off answers `403`.
+A table publishes only the methods you left enabled on it.
 
 ### List parameters
 
@@ -39,9 +39,41 @@ A table publishes only the methods you left enabled on it. A method you turned o
 | `order` | `desc` | `asc` or `desc` |
 | `page` | `1` | |
 | `pageSize` | `50` | Capped at 200 |
+| `cursor` | none | Position from a previous response's `nextCursor` |
 | `$expand` | none | Comma separated reference fields, see [Relations](/docs/relations) |
 
 Every collection endpoint pages. None returns an unbounded list.
+
+### Paging through everything
+
+`page` is fine for a grid someone clicks through. For walking a whole table, follow `nextCursor` instead:
+
+```bash
+curl "http://localhost:5000/api/v1/sales-orders/records?pageSize=200" -H "Authorization: Bearer $TOKEN"
+# -> { "rows": [...], "nextCursor": "eyJDIjoi..." }
+
+curl "http://localhost:5000/api/v1/sales-orders/records?pageSize=200&cursor=eyJDIjoi..." -H "Authorization: Bearer $TOKEN"
+```
+
+`links.next` has the same URL already built. Keep going until `nextCursor` is null.
+
+A cursor resumes from the last row of the previous page rather than counting rows to skip, so a deep page costs what the first one costs, and a record written while you page will not shift rows you have not reached yet into ones you already read. It works on the default newest-first order only. Ask for a `sort` field and a `cursor` together and you get a `400`, because the position a cursor stores does not describe that order.
+
+### Not overwriting someone else's change
+
+A single record response comes back with an `ETag`. Send it back as `If-Match` on a write and the write is refused with `412` if the record changed since you read it.
+
+```bash
+curl -X PATCH http://localhost:5000/api/v1/sales-orders/records/gAOPLyJDI5UU \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'If-Match: "gAOPLyJDI5UU-638912736000000000"' \
+  -H 'Content-Type: application/json' \
+  -d '{"Total":91.0}'
+```
+
+`If-Match` is optional. Without it a write still cannot silently discard another writer's change: if two writes race, the one that arrives second is refused with `409` and has to re-read. `If-Match` is how you find that out before the write instead of after.
+
+`If-None-Match` on a read answers `304` when you already hold the current version.
 
 ### Bodies
 
@@ -97,22 +129,25 @@ Public, per form, and rate limited. See [Forms and embeds](/docs/forms).
 
 ## Errors
 
-Errors always come back in the same shape:
+Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents, served as `application/problem+json`:
 
 ```json
-{ "errors": ["Missing or invalid bearer token."] }
+{
+  "type": "urn:baseport:problem:validation-failed",
+  "title": "Validation failed",
+  "status": 422,
+  "detail": "Field 'Total' is required.",
+  "instance": "/api/v1/sales-orders/records",
+  "errors": ["Field 'Total' is required."],
+  "invalid": ["Total"]
+}
 ```
 
-Validation errors also list the fields that were rejected:
+`errors` and `invalid` are extensions on top of the standard members. `invalid` names the fields that were rejected, so you can mark them in a form without parsing the messages.
 
-```json
-{ "errors": ["Field 'Total' is required."], "invalid": ["Total"] }
-```
+Two statuses are worth telling apart:
 
-| Status | What it means |
-| --- | --- |
-| `400` | Something in the body or a parameter is wrong |
-| `401` | Missing or invalid bearer token, or the account's API access is turned off |
-| `403` | The table's API access is off, the method is not enabled, or an access rule rejected the request |
-| `404` | No such table, record or route |
-| `429` | You hit a rate limit. Applies to the auth and form routes |
+- `409` means the write conflicts with what is stored. A value that must be unique is already used, or another write reached the record first. Retrying with a different value may work.
+- `422` means the record itself is wrong. Retrying will not help until you change it.
+
+A table with its API access turned off answers `404`, not `403`. It reads the same as a table that does not exist, on purpose, so nobody can probe for which tables you have. A method you turned off answers `405` with an `Allow` header listing the ones that work.

@@ -5,9 +5,9 @@ description: "Per record create, read, update and delete rules, evaluated by SQL
 
 # Access rules
 
-Once a table is published, any caller who bypasses the two API switches has visibility into the entire dataset, though access rules restrict this down to specific individual records.
+A published table is readable by anyone who gets past the two API switches, and at that point they can see every row in it. Access rules are how you narrow that down to the rows a particular caller should see.
 
-Every table includes four distinct rules, each defined as a SQLite boolean expression:
+Each table has four rules, each one a SQLite boolean expression:
 
 ```sql
 _ROW_.owner = _USER_.id
@@ -23,7 +23,7 @@ Set them on the table's access panel: **create**, **read**, **update** and **del
 | `_ROW_.<field>` | A field on the stored record. `NULL` on create, because there is no row yet. |
 | `_REQ_.<field>` | A field in the incoming request body. |
 
-There is no custom expression language here. Baseport turns your references into `json_extract` calls with bound parameters and passes the whole thing to SQLite, anything you can write in a SQLite `WHERE` clause works.
+There is no expression language to learn. Baseport rewrites your references into `json_extract` calls with bound parameters and hands the rest to SQLite, so anything you can put in a SQLite `WHERE` clause works.
 
 ```sql
 _ROW_.status = 'open' AND _ROW_.owner = _USER_.id
@@ -39,7 +39,7 @@ A read rule **filters a list** instead of rejecting the request, a caller gets t
 
 A rule that evaluates to `NULL`, or that refers to a record that no longer exists, counts as a rejection.
 
-Live updates are filtered the same way reads are. If a caller could not fetch a record, they do not get an event for it either. The rule is re-read for every event, tightening a rule affects connections that are already open.
+Live updates are filtered the same way reads are. If a caller could not fetch a record, no event for it reaches them either. The rule is re-read for every event, so tightening one takes effect on streams that are already open.
 
 ## Rules are checked when you save
 

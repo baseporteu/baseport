@@ -78,13 +78,11 @@ public static class OpenApiSpec
             var list = new JsonObject();
             if (allowed.Contains("GET"))
                 list["get"] = BuildOp(t, $"list_{SchemaName(t)}", $"List {name} records",
-                    Responses(("200", JsonResp("OK", PageResponse()))),
+                    Responses(ReadProblems, ("200", JsonResp("OK", PageResponse()))),
                     parameters: ListParameters());
             if (allowed.Contains("POST"))
                 list["post"] = BuildOp(t, $"create_{SchemaName(t)}", $"Create a {name} record",
-                    Responses(
-                        ("201", JsonResp("Created", RecordResponse())),
-                        ("400", JsonResp("Validation error", ErrorResponse()))),
+                    Responses(WriteProblems, ("201", Created())),
                     new JsonObject
                     {
                         ["content"] = new JsonObject { ["application/json"] = new JsonObject { ["schema"] = TableRef() } }
@@ -93,31 +91,30 @@ public static class OpenApiSpec
             var item = new JsonObject();
             if (allowed.Contains("GET"))
                 item["get"] = BuildOp(t, $"get_{SchemaName(t)}", $"Get a {name} record",
-                    Responses(("200", JsonResp("OK", RecordResponse()))),
-                    parameters: new JsonArray(ExpandParameter()));
+                    Responses(ReadProblems, ("200", Versioned("OK")), ("304", new JsonObject { ["description"] = "Not modified: the `If-None-Match` you sent is the current version." })),
+                    parameters: new JsonArray(ExpandParameter(), IfNoneMatchParameter()));
             if (allowed.Contains("PATCH"))
                 item["patch"] = BuildOp(t, $"update_{SchemaName(t)}", $"Update a {name} record",
-                    Responses(
-                        ("200", JsonResp("Updated", RecordResponse())),
-                        ("400", JsonResp("Validation error", ErrorResponse()))),
+                    Responses(WriteProblems, ("200", Versioned("Updated"))),
                     new JsonObject
                     {
                         ["description"] = "Fields to change. Omitted fields keep their stored value.",
                         ["content"] = new JsonObject { ["application/json"] = new JsonObject { ["schema"] = TableRef() } }
-                    });
+                    },
+                    new JsonArray(IfMatchParameter()));
             if (allowed.Contains("PUT"))
                 item["put"] = BuildOp(t, $"replace_{SchemaName(t)}", $"Replace a {name} record",
-                    Responses(
-                        ("200", JsonResp("Replaced", RecordResponse())),
-                        ("400", JsonResp("Validation error", ErrorResponse()))),
+                    Responses(WriteProblems, ("200", Versioned("Replaced"))),
                     new JsonObject
                     {
                         ["description"] = "The full record. Omitted fields are cleared.",
                         ["content"] = new JsonObject { ["application/json"] = new JsonObject { ["schema"] = TableRef() } }
-                    });
+                    },
+                    new JsonArray(IfMatchParameter()));
             if (allowed.Contains("DELETE"))
                 item["delete"] = BuildOp(t, $"delete_{SchemaName(t)}", $"Delete a {name} record",
-                    Responses(("200", JsonResp("Deleted", new JsonObject { ["type"] = "object", ["properties"] = new JsonObject { ["deleted"] = new JsonObject { ["type"] = "string" } } }))));
+                    Responses(ConditionalProblems, ("200", JsonResp("Deleted", new JsonObject { ["type"] = "object", ["properties"] = new JsonObject { ["deleted"] = new JsonObject { ["type"] = "string" } } }))),
+                    parameters: new JsonArray(IfMatchParameter()));
 
             // A path with no operations left is not an empty path, it is no path.
             if (list.Count > 0) paths[$"/api/v1/{t.ApiName}/records"] = list;
@@ -168,13 +165,18 @@ public static class OpenApiSpec
         schemas["Error"] = new JsonObject
         {
             ["type"] = "object",
-            ["description"] = "Applies to all error responses regardless of status code. On a 400 validation error, the `invalid` field maps each specific issue to its target form field.",
+            ["description"] = "RFC 9457 problem details, served as `application/problem+json`. `errors` and `invalid` are extension members: `errors` lists every message, and on a 422 `invalid` names the fields they belong to.",
             ["properties"] = new JsonObject
             {
+                ["type"] = new JsonObject { ["type"] = "string", ["description"] = "Stable identifier for this kind of problem." },
+                ["title"] = new JsonObject { ["type"] = "string" },
+                ["status"] = new JsonObject { ["type"] = "integer" },
+                ["detail"] = new JsonObject { ["type"] = "string" },
+                ["instance"] = new JsonObject { ["type"] = "string", ["description"] = "Path of the request that produced it. The query string is deliberately omitted: it can carry a token." },
                 ["errors"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
                 ["invalid"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } }
             },
-            ["required"] = new JsonArray((JsonNode)"errors")
+            ["required"] = new JsonArray((JsonNode)"type", (JsonNode)"title", (JsonNode)"status", (JsonNode)"errors")
         };
         return schemas;
     }
@@ -255,6 +257,7 @@ public static class OpenApiSpec
         Param("order", "Sort direction: `asc` (ascending) or `desc` (descending). Defaults to `desc`.", "string"),
         Param("page", "1-based page number to retrieve. Defaults to 1.", "integer"),
         Param("pageSize", $"Number of items per page (1 to {QueryEngine.MaxPageSize}). Defaults to 50.", "integer"),
+        Param("cursor", "Opaque position from a previous response's `nextCursor`, for keyset paging. A deep page costs the same as the first one and rows inserted mid-walk cannot shift the window. Cannot be combined with `sort`.", "string"),
         ExpandParameter());
 
     private static JsonNode ExpandParameter() => Param(ApiLinks.ExpandParameter,
@@ -280,6 +283,7 @@ public static class OpenApiSpec
             ["totalPages"] = new JsonObject { ["type"] = "integer" },
             ["hasMore"] = new JsonObject { ["type"] = "boolean" },
             ["countExact"] = new JsonObject { ["type"] = "boolean", ["description"] = $"False past {QueryEngine.CountCeiling} matches: total is a floor." },
+            ["nextCursor"] = new JsonObject { ["type"] = "string", ["nullable"] = true, ["description"] = "Pass back as `cursor` for the next page. Null on the last page, and on any listing that named a `sort` field." },
             ["links"] = new JsonObject
             {
                 ["type"] = "object",
@@ -315,16 +319,95 @@ public static class OpenApiSpec
         };
     }
 
-    // Merges an operation's success responses with the standard error set that applies to every public operation: 401 missing or invalid token, 404 unknown table or record, and a 500 fallback for the unexpected.
-    private static JsonObject Responses(params (string Code, JsonObject Response)[] success)
+    // An error is served as application/problem+json, so the document has to advertise that media type and not application/json.
+    private static JsonObject ProblemResp(ApiProblem problem, string description)
+    {
+        var response = new JsonObject
+        {
+            ["description"] = description,
+            ["content"] = new JsonObject { [ApiProblems.ContentType] = new JsonObject { ["schema"] = ErrorResponse() } }
+        };
+        if (problem.Status == 405) response["headers"] = Header("Allow", "The methods this endpoint does answer.");
+        if (problem.Status == 429) response["headers"] = Header("Retry-After", "Seconds to wait before retrying.");
+        return response;
+    }
+
+    private static JsonObject Header(string name, string description) => new()
+    {
+        [name] = new JsonObject
+        {
+            ["description"] = description,
+            ["schema"] = new JsonObject { ["type"] = "string" }
+        }
+    };
+
+    private static JsonObject ETagHeader() => Header("ETag", "Version of the record as returned. Send it back as `If-Match` on a write, or as `If-None-Match` on a read.");
+
+    private static JsonObject Versioned(string description)
+    {
+        var response = JsonResp(description, RecordResponse());
+        response["headers"] = ETagHeader();
+        return response;
+    }
+
+    private static JsonObject Created()
+    {
+        var response = JsonResp("Created", RecordResponse());
+        var headers = ETagHeader();
+        headers["Location"] = new JsonObject
+        {
+            ["description"] = "Address of the record that was created.",
+            ["schema"] = new JsonObject { ["type"] = "string" }
+        };
+        response["headers"] = headers;
+        return response;
+    }
+
+    private static JsonNode IfMatchParameter() => HeaderParam("If-Match",
+        "The `ETag` of the version you read. The write is refused with 412 if the record changed since. Omit it to write unconditionally.");
+
+    private static JsonNode IfNoneMatchParameter() => HeaderParam("If-None-Match",
+        "The `ETag` you already hold. Answers 304 with no body when it is still current.");
+
+    private static JsonNode HeaderParam(string name, string description) => new JsonObject
+    {
+        ["name"] = name,
+        ["in"] = "header",
+        ["required"] = false,
+        ["description"] = description,
+        ["schema"] = new JsonObject { ["type"] = "string" }
+    };
+
+    // Merges an operation's success responses with the error set every public operation can return. Declaring a status the route cannot produce is the same bug as omitting one it can, so the per-operation extras are named by the caller rather than added to every operation alike.
+    private static JsonObject Responses(params (string Code, JsonObject Response)[] success) =>
+        Responses(Array.Empty<ApiProblem>(), success);
+
+    private static JsonObject Responses(IReadOnlyList<ApiProblem> extra, params (string Code, JsonObject Response)[] success)
     {
         var responses = new JsonObject();
         foreach (var (code, resp) in success) responses[code] = resp;
-        responses["401"] = JsonResp("Missing or invalid bearer token", ErrorResponse());
-        responses["404"] = JsonResp("Table or record not found", ErrorResponse());
-        responses["500"] = JsonResp("Internal server error", ErrorResponse());
+
+        foreach (var problem in extra)
+            responses[problem.Status.ToString(System.Globalization.CultureInfo.InvariantCulture)] = ProblemResp(problem, problem.Title);
+
+        responses["401"] = ProblemResp(ApiProblem.Unauthorized, "Missing or invalid bearer token");
+        responses["403"] = ProblemResp(ApiProblem.Forbidden, "An access rule on this table refused the request");
+        responses["404"] = ProblemResp(ApiProblem.NotFound, "Table or record not found");
+        responses["406"] = ProblemResp(ApiProblem.NotAcceptable, "The Accept header asks for a format this API does not produce");
+        responses["429"] = ProblemResp(ApiProblem.TooManyRequests, "Rate limit exceeded");
+        responses["500"] = ProblemResp(ApiProblem.Internal, "Internal server error");
         return responses;
     }
+
+    private static readonly ApiProblem[] ReadProblems = [ApiProblem.BadRequest];
+
+    private static readonly ApiProblem[] WriteProblems =
+    [
+        ApiProblem.BadRequest, ApiProblem.Conflict, ApiProblem.PreconditionFailed, ApiProblem.TooLarge,
+        ApiProblem.UnsupportedMediaType, ApiProblem.Unprocessable
+    ];
+
+    private static readonly ApiProblem[] ConditionalProblems = [ApiProblem.PreconditionFailed];
 
     // OpenAPI 3.2's itemSchema: the response is an unbounded text/event-stream, what is described is one event, not the body.
     private static JsonObject SseResp() => new()

@@ -48,11 +48,12 @@ public class RecordEventsTests : IDisposable
             _db.Records.Remove(record);
             await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
+            // RecordEvents is process-wide and xUnit runs test classes in parallel, so the channel also carries whatever every other class happened to write. Only this table's events say anything about this test.
             var seen = new List<RecordEvent>();
-            while (channel.Reader.TryRead(out var e)) seen.Add(e);
+            while (channel.Reader.TryRead(out var e))
+                if (e.TableId == "table-1") seen.Add(e);
 
             Assert.Equal(new[] { "create", "update", "delete" }, seen.Select(e => e.Action));
-            Assert.All(seen, e => Assert.Equal("table-1", e.TableId));
             // A delete includes no body: the row it described is gone.
             Assert.Null(seen[2].Json);
         }
@@ -108,7 +109,12 @@ public class RecordEventsTests : IDisposable
             _db.AppSettings.Add(new AppSettings());
             await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-            Assert.False(channel.Reader.TryRead(out _));
+            // Same reason as above: what is pinned is that this save emitted nothing, not that the process was silent.
+            var mine = new List<RecordEvent>();
+            while (channel.Reader.TryRead(out var e))
+                if (e.TableId is "table-1" or "table-2") mine.Add(e);
+
+            Assert.Empty(mine);
         }
         finally
         {

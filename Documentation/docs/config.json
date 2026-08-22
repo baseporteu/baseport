@@ -79,16 +79,16 @@
           {
             "title": "Forms and embeds",
             "path": "docs/forms"
+          },
+          {
+            "title": ".NET SDK",
+            "path": "docs/dotnet-sdk"
           }
         ]
       },
       {
         "title": "Going to production",
         "path": "docs/going-to-production"
-      },
-      {
-        "title": "What is stable",
-        "path": "docs/compatibility"
       },
       {
         "title": "Web APIs reference",

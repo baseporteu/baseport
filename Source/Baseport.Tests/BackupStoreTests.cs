@@ -18,8 +18,7 @@ public class BackupStoreTests : IDisposable
 
     private static AppDbContext NewFileStore(string path)
     {
-        var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={path}").Options);
+        var db = TestDb.Open($"Data Source={path}");
         db.Database.EnsureCreated();
         return db;
     }

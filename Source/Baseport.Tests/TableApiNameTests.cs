@@ -15,7 +15,7 @@ public class TableApiNameTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
         _db.Database.EnsureCreated();
     }
 
@@ -79,8 +79,7 @@ public class TableApiNameTests : IDisposable
         Assert.NotEmpty(FieldValidation.ValidateTable(table, Array.Empty<string>()));
 
         // The audit log's context, from its own scope over the same database.
-        await using var audit = new AppDbContext(
-            new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        await using var audit = TestDb.Open(_connection);
         audit.AuditLogs.Add(new AuditLog
         {
             Id = Ids.NewShortId(12),

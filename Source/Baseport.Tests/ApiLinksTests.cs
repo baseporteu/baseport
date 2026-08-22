@@ -16,7 +16,7 @@ public class ApiLinksTests : IDisposable
     {
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        _db = TestDb.Open(_connection);
     }
 
     private async Task<TableDefinition> TableAsync(string name, string apiName, bool apiEnabled = true, string readRule = "", string methods = "GET,POST,PATCH,PUT,DELETE")

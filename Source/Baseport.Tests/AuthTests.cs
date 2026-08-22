@@ -122,7 +122,7 @@ public class AuthTests
     {
         var conn = new SqliteConnection("Filename=:memory:");
         conn.Open();
-        var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options);
+        var db = TestDb.Open(conn);
         db.Database.EnsureCreated();
         return (db, conn);
     }

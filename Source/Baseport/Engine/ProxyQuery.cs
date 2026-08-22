@@ -5,13 +5,21 @@ using System.Text.Json.Nodes;
 namespace Baseport;
 
 // Read path for proxy tables.
+// An upstream failure is not the caller's fault, and answering 400 said it was. RFC 9110 separates the two: 502 when the remote answered wrongly or could not be reached at all, 504 when it did not answer in time.
+public readonly record struct ProxyFailure(ApiProblem Problem, string Detail)
+{
+    public static ProxyFailure Upstream(string detail) => new(ApiProblem.BadGateway, detail);
+    public static ProxyFailure Timeout(string detail) => new(ApiProblem.GatewayTimeout, detail);
+    public static ProxyFailure Request(string detail) => new(ApiProblem.BadRequest, detail);
+}
+
 public static class ProxyQuery
 {
     public sealed record Page(List<JsonObject> Records, int Total, bool Remote);
 
     public static bool CanRead(TableDefinition table) => !string.IsNullOrWhiteSpace(table.ProxyReadUrl);
 
-    public static async Task<(JsonObject? Record, string? Error)> LookupAsync(
+    public static async Task<(JsonObject? Record, ProxyFailure? Error)> LookupAsync(
         HttpClient http, TableDefinition table, IReadOnlyList<FieldDefinition> matchFields, string term)
     {
         if (matchFields.Count == 0 || string.IsNullOrWhiteSpace(term)) return (null, null);
@@ -34,7 +42,7 @@ public static class ProxyQuery
         return (hit, null);
     }
 
-    public static async Task<(Page? Page, string? Error)> ListAsync(
+    public static async Task<(Page? Page, ProxyFailure? Error)> ListAsync(
         HttpClient http, TableDefinition table, IReadOnlyList<FieldDefinition> searchFields, string? search, int page, int pageSize,
         IReadOnlyList<QueryEngine.Filter>? filters = null, FieldDefinition? sortField = null, bool sortDescending = false)
     {
@@ -81,10 +89,10 @@ public static class ProxyQuery
     private static string ODataLiteral(string value) =>
         $"'{new string(value.Where(c => !char.IsControl(c)).ToArray()).Replace("'", "''")}'";
 
-    private static async Task<(JsonNode? Body, string? Error)> GetAsync(HttpClient http, TableDefinition table, List<string> query)
+    private static async Task<(JsonNode? Body, ProxyFailure? Error)> GetAsync(HttpClient http, TableDefinition table, List<string> query)
     {
         var url = table.ProxyReadUrl;
-        if (ProxyTarget.Problem(url) is { } blocked) return (null, blocked);
+        if (ProxyTarget.Problem(url) is { } blocked) return (null, ProxyFailure.Upstream(blocked));
         if (query.Count > 0) url += (url.Contains('?') ? "&" : "?") + string.Join("&", query);
 
         return await ProxyLog.TraceAsync("read", table.Name, "GET", url, async () =>
@@ -100,13 +108,13 @@ public static class ProxyQuery
                 using var resp = await http.SendAsync(req);
                 var raw = await resp.Content.ReadAsStringAsync();
                 if (!resp.IsSuccessStatusCode)
-                    return ((JsonNode?)null, $"The remote API returned {(int)resp.StatusCode}. {OpenApiProxy.TryParseError(raw) ?? ""}".Trim());
-                return (OpenApiProxy.TryParseJson(raw), (string?)null);
+                    return ((JsonNode?)null, (ProxyFailure?)ProxyFailure.Upstream($"The remote API returned {(int)resp.StatusCode}. {OpenApiProxy.TryParseError(raw) ?? ""}".Trim()));
+                return (OpenApiProxy.TryParseJson(raw), (ProxyFailure?)null);
             }
-            catch (HttpRequestException ex) { return ((JsonNode?)null, $"Could not reach the remote API: {ex.Message}"); }
-            catch (TaskCanceledException) { return ((JsonNode?)null, "The remote API timed out."); }
+            catch (HttpRequestException ex) { return ((JsonNode?)null, (ProxyFailure?)ProxyFailure.Upstream($"Could not reach the remote API: {ex.Message}")); }
+            catch (TaskCanceledException) { return ((JsonNode?)null, (ProxyFailure?)ProxyFailure.Timeout("The remote API timed out.")); }
         },
-        r => r.Item2 ?? $"{OpenApiProxy.Records(r.Item1).Count} record(s)");
+        r => r.Item2?.Detail ?? $"{OpenApiProxy.Records(r.Item1).Count} record(s)");
     }
 
     private static List<string> DeclaredQuery(TableDefinition table)

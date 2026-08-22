@@ -10,6 +10,10 @@ public class AppDbContext : DbContext
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options.UseSqlite(connectionString).AddInterceptors(new SqlitePragmas(), new RecordChangeInterceptor());
 
+    // Same one place, for a caller that already holds the connection: an in-memory SQLite database only exists while its connection is open, so a test cannot hand over a connection string. Building the options by hand instead is what silently drops the interceptor, and with it the UpdatedAt stamp that the concurrency token and every live subscriber depend on.
+    public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, System.Data.Common.DbConnection connection) =>
+        options.UseSqlite(connection).AddInterceptors(new SqlitePragmas(), new RecordChangeInterceptor());
+
     public static AppDbContext Open(string connectionString)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>();
@@ -60,6 +64,12 @@ public class AppDbContext : DbContext
             .WithMany()
             .HasForeignKey(f => f.TableId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // The lost update, closed where every writer passes rather than where a client remembers to ask. A read-merge-write spans several statements, so two concurrent PATCHes both read one JsonData, both merge their own change onto it and both write: last one wins and the first change is gone with nothing anywhere to say so. As a concurrency token, UpdatedAt puts the version the writer read into the UPDATE's own WHERE clause, so the loser changes no rows and is told. RecordChangeInterceptor already stamps it on every write, which is what makes it a version; it needs no column of its own and so no migration.
+        // This is where Firestore and TrailBase put it too: the guarantee is a property of the write path, and an If-Match precondition is a caller's optional extra on top, never the thing the guarantee rests on.
+        modelBuilder.Entity<Record>()
+            .Property(r => r.UpdatedAt)
+            .IsConcurrencyToken();
 
         modelBuilder.Entity<Record>()
             .HasOne<TableDefinition>()

@@ -7,6 +7,12 @@ namespace Baseport;
 // turns JSON or multipart/form-data into the JsonObject RecordEngine expects, both reach the same one write path
 public static class MultipartRecord
 {
+    // Whether the last read refused a file for its size, so the caller can answer 413 instead of folding it into a generic 400. Read from the size itself rather than from the message, which is prose and drifts.
+    public static bool Oversize(HttpContext ctx) =>
+        ctx.Items.TryGetValue(OversizeKey, out var flag) && flag is true;
+
+    private const string OversizeKey = "baseport.oversize";
+
     public static async Task<(JsonObject Obj, List<string> Errors)> FromRequestAsync(HttpContext ctx, List<FieldDefinition> fields)
     {
         if (!ctx.Request.HasFormContentType)
@@ -34,6 +40,7 @@ public static class MultipartRecord
             {
                 var file = form.Files[f.Name];
                 if (file is null) continue; // not part of this submission; existing/default value applies
+                if (file.Length > FileStore.MaxBytes) ctx.Items[OversizeKey] = true;
                 var (stored, error) = await FileStore.SaveAsync(file, ctx.RequestAborted);
                 if (error is not null) errors.Add($"{f.Name}: {error}");
                 else obj[f.Name] = $"{ctx.Request.Scheme}://{ctx.Request.Host}/uploads/{stored}";
