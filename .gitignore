@@ -3,6 +3,7 @@
 [Oo]bj/
 [Oo]ut/
 Deployment/
+[d][a-z][a-z]/
 .vs/
 .vscode/
 .idea/
