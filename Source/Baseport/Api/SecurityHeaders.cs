@@ -21,7 +21,7 @@ public static class SecurityHeaders
         "midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), " +
         "screen-wake-lock=(), usb=(), xr-spatial-tracking=()";
 
-    // Rendered inside somebody else's page on purpose, these carry the dynamic frame-ancestors policy instead of the console's.
+    // Rendered in external pages; uses a dynamic frame-ancestors policy instead of the console's.
     private static bool IsEmbeddable(string path) =>
         path.StartsWith("/preview/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/api/forms/", StringComparison.OrdinalIgnoreCase)

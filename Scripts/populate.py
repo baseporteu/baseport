@@ -36,7 +36,8 @@ TOKEN = os.environ.get("PORTWAY_TOKEN", "")
 
 DEFAULT_DB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                           "Source", "Baseport", "baseport.db")
-VOLUMES = {"products": 80, "customers": 4_000, "orders": 40_000, "lines": 250_000}
+VOLUMES = {"products": 80, "customers": 4_000, "orders": 40_000, "lines": 250_000,
+           "receipts": 600, "shipments": 30_000}
 SEED = 20260101
 BATCH = 5_000
 ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-"
@@ -103,6 +104,19 @@ LINES_DOC = """The individual lines of an order.
 Each line references the order it belongs to and the product it sells.
 `LineTotal` is calculated from `Quantity` and `UnitPrice` on write; sending it
 has no effect.
+"""
+
+RECEIPTS_DOC = """The stock movement log: every count that changed a product's stock level.
+
+`AfterQty` is calculated from `BeforeQty` and `DeltaQty` on write; sending it
+has no effect. `Reason` says why the count changed - a delivery, an opening
+balance, or a correction.
+"""
+
+SHIPMENTS_DOC = """Packing slips: what shipped against an order, and when.
+
+Each shipment references the order it fulfils. An order can have more than
+one shipment if it went out in separate packages.
 """
 
 PRODUCTS_DOC = """The catalogue order lines point at.
@@ -186,6 +200,8 @@ POSTCODE = {
 VAT_RATE = {"Netherlands": 0.21, "Belgium": 0.21, "Germany": 0.19, "France": 0.20}
 STATUSES = ["open", "picking", "shipped", "closed", "cancelled"]
 STATUS_WEIGHTS = [12, 8, 20, 55, 5]
+RECEIPT_REASONS = ["Receipt", "Opening balance", "Correction"]
+RECEIPT_REASON_WEIGHTS = [80, 5, 15]
 CHANNELS = ["web", "phone", "edi", "counter"]
 CHANNEL_WEIGHTS = [55, 15, 25, 5]
 START = date(2024, 1, 1).toordinal()
@@ -303,6 +319,19 @@ def slugify(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
+def gs1_check_digit(digits):
+    """Standard GS1 mod-10 check digit, shared by EAN/GTIN/GLN - all the same 13-digit numbering."""
+    total = sum(int(d) * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed(digits)))
+    return str((10 - total % 10) % 10)
+
+
+def gs1_code(prefix, seq):
+    """A 13-digit, correctly-checksummed demo code. `prefix` sits in GS1's restricted-circulation range
+    (never assigned to a real company), so nothing generated here can collide with an actual GTIN or GLN."""
+    base = f"{prefix}{seq:010d}"[:12]
+    return base + gs1_check_digit(base)
+
+
 class Bulk:
     """Rows straight into SQLite. _records is five stable columns; the generated
     index columns are virtual, SQLite derives them from JsonData on insert.
@@ -339,10 +368,17 @@ class Bulk:
         return rid
 
     def flush(self):
+        # Committing here, not just at close(), is the whole point: the one BEGIN in __init__ would
+        # otherwise hold a single write transaction open for the entire run - on a large seed that is
+        # minutes with every other writer against this file (the running server's own JobScheduler tick,
+        # a live admin edit) blocked past its busy_timeout. A commit per batch bounds the lock to one
+        # batch's worth of rows, small enough that a concurrent writer's timeout comfortably covers it.
         if self.batch:
             self.conn.executemany(self.SQL, self.batch)
             self.written += len(self.batch)
             self.batch.clear()
+            self.conn.execute("COMMIT")
+            self.conn.execute("BEGIN")
 
     def close(self):
         self.flush()
@@ -385,6 +421,12 @@ def main():
     lines, fresh_l = table("OrderLines", "The lines of an order", line_fields(orders, products))
     publish(lines, "order-lines", "Order lines", "Sales", LINES_DOC)
 
+    receipts, fresh_r = table("Receipts", "Stock movements against the catalogue", receipt_fields(products))
+    publish(receipts, "receipts", "Receipts", "Warehousing", RECEIPTS_DOC)
+
+    shipments, fresh_s = table("Shipments", "Packing slips against an order", shipment_fields(orders))
+    publish(shipments, "shipments", "Shipments", "Warehousing", SHIPMENTS_DOC)
+
     if fresh_p:
         product_forms(products)
     if fresh_c:
@@ -392,9 +434,13 @@ def main():
     track_id = order_forms(orders) if fresh_o else None
     if fresh_l:
         line_forms(lines, track_id)
+    if fresh_r:
+        receipt_forms(receipts)
+    if fresh_s:
+        shipment_forms(shipments)
 
-    if fresh_p and fresh_c and fresh_o and fresh_l:
-        fill(args.db, counts, products, customers, orders, lines)
+    if fresh_p and fresh_c and fresh_o and fresh_l and fresh_r and fresh_s:
+        fill(args.db, counts, products, customers, orders, lines, receipts, shipments)
     else:
         print("  Records: skipped, some tables already existed")
 
@@ -406,6 +452,8 @@ def product_fields():
     return [
         {"name": "Sku", "label": "SKU", "dataType": "text", "isRequired": True,
          "isUnique": True, "isIdentifier": True, "helpText": "Printed on the packing slip."},
+        {"name": "Gtin", "label": "GTIN", "dataType": "text", "isUnique": True,
+         "pattern": r"^\d{13}$", "helpText": "13-digit GS1 barcode (EAN-13/GTIN-13), the identifier that travels outside this system - a PO, a carrier label, a retailer's own catalogue."},
         {"name": "Name", "label": "Description", "dataType": "text", "isRequired": True},
         {"name": "Slug", "dataType": "slug", "optionsJson": json.dumps({"sourceField": "Name"}),
          "helpText": "Auto-generated from the name; used in the storefront product URL."},
@@ -413,6 +461,9 @@ def product_fields():
          "defaultValue": CATEGORIES[0]},
         {"name": "UnitPrice", "label": "List price", "dataType": "currency", "min": 0},
         {"name": "Active", "dataType": "boolean", "defaultValue": "true"},
+        {"name": "StockQty", "label": "Stock on hand", "dataType": "number", "min": 0, "defaultValue": "0"},
+        {"name": "StockStatus", "dataType": "calculated",
+         "expression": 'data.StockQty > 0 ? "Available" : "Out of stock"'},
         {"name": "Body", "label": "Description (long)", "dataType": "richtext",
          "helpText": "Storefront copy. Sanitized on save."},
         # Left free-form on purpose: the attributes differ per category, there is no one schema to declare.
@@ -460,6 +511,8 @@ def customer_fields():
             {"name": "Role", "dataType": "select", "optionsJson": json.dumps(CONTACT_ROLES)},
         ]}), "helpText": "Who to call about an order."},
         {"name": "SignedUp", "label": "Signed up", "dataType": "date"},
+        {"name": "Gln", "label": "GLN", "dataType": "text", "isUnique": True,
+         "pattern": r"^\d{13}$", "helpText": "13-digit GS1 Global Location Number identifying this account's ship-to party in EDI traffic."},
         {"name": "Reference", "dataType": "systemid"},
     ]
 
@@ -509,22 +562,56 @@ def line_fields(orders, products):
     ]
 
 
+def receipt_fields(products):
+    return [
+        {"name": "ReceiptNo", "label": "Receipt number", "dataType": "text",
+         "isRequired": True, "isUnique": True, "isIdentifier": True},
+        {"name": "Product", "dataType": "reference",
+         "optionsJson": json.dumps({"tableId": products}), "isRequired": True},
+        {"name": "Reason", "dataType": "select", "optionsJson": json.dumps(RECEIPT_REASONS),
+         "defaultValue": RECEIPT_REASONS[0]},
+        {"name": "ReceiptDate", "label": "Date", "dataType": "date"},
+        {"name": "BeforeQty", "label": "Before", "dataType": "number"},
+        {"name": "DeltaQty", "label": "Change", "dataType": "number"},
+        {"name": "AfterQty", "label": "After", "dataType": "calculated",
+         "expression": "data.BeforeQty + data.DeltaQty"},
+    ]
+
+
+def shipment_fields(orders):
+    return [
+        {"name": "PackingSlipNo", "label": "Packing slip number", "dataType": "text",
+         "isRequired": True, "isUnique": True, "isIdentifier": True},
+        {"name": "Order", "dataType": "reference",
+         "optionsJson": json.dumps({"tableId": orders}), "isRequired": True},
+        {"name": "ShipDate", "label": "Ship date", "dataType": "date"},
+        {"name": "Tracking", "label": "Track & trace", "dataType": "text"},
+        {"name": "Notes", "dataType": "text"},
+    ]
+
+
 def product_forms(products):
     # Slug is derived server-side from Name when left blank, it has no place in a visitor-facing form.
     # Attributes/Tags are structured PIM data, filled through the admin grid or an import, not typed by hand here.
     form(products, kind="form", actions=["submit"], title="Products - Create new",
          description="A new article for the catalogue.",
-         layoutJson=layout(["Sku", "Name"], ["Category", "UnitPrice", "Active"],
-                            ["Body"], ["Datasheet"]))
+         layoutJson=layout(["Sku", "Gtin", "Name"], ["Category", "UnitPrice", "Active"],
+                            ["StockQty"], ["Body"], ["Datasheet"]))
     form(products, kind="form", actions=["lookup"], title="Products - Look up", isReadOnly=True,
-         description="Enter a SKU.",
-         configJson={"matchFields": ["Sku"], "resultFields": ["Sku", "Name", "Category", "UnitPrice", "Active"],
-                     "notFoundText": "No product with that SKU."})
+         description="Enter a SKU or scan a barcode.",
+         configJson={"matchFields": ["Sku", "Gtin"], "resultFields": ["Sku", "Gtin", "Name", "Category", "UnitPrice", "Active"],
+                     "notFoundText": "No product with that SKU or barcode."})
     form(products, kind="list", title="Products - Catalogue",
          description="Every article, by description.",
-         configJson={"columns": ["Sku", "Name", "Category", "UnitPrice", "Active"],
-                     "searchFields": ["Sku", "Name"],
+         configJson={"columns": ["Sku", "Gtin", "Name", "Category", "UnitPrice", "Active"],
+                     "searchFields": ["Sku", "Gtin", "Name"],
                      "sortField": "Name", "sortDir": "asc", "pageSize": 25})
+    # Ops-facing: same table as the catalogue above, different columns - what a warehouse worker checks, not what a customer browses.
+    form(products, kind="list", title="Products - Stock",
+         description="Stock on hand, by article.",
+         configJson={"columns": ["Sku", "Gtin", "Name", "StockQty", "StockStatus", "Active"],
+                     "searchFields": ["Sku", "Gtin", "Name"],
+                     "sortField": "StockQty", "sortDir": "asc", "pageSize": 25})
 
 
 def customer_forms(customers):
@@ -625,7 +712,39 @@ def line_forms(lines, track_id=None):
          configJson=lines_cfg)
 
 
-def fill(db_path, counts, products, customers, orders, lines):
+def receipt_forms(receipts):
+    form(receipts, kind="form", actions=["submit"], title="Receipts - Create new",
+         description="Record a stock movement.",
+         layoutJson=layout(["ReceiptNo", "Product"], ["Reason", "ReceiptDate"], ["BeforeQty", "DeltaQty"]))
+    form(receipts, kind="form", actions=["lookup"], title="Receipts - Look up", isReadOnly=True,
+         description="Enter a receipt number.",
+         configJson={"matchFields": ["ReceiptNo"],
+                     "resultFields": ["ReceiptNo", "Reason", "ReceiptDate", "BeforeQty", "DeltaQty", "AfterQty"],
+                     "notFoundText": "No receipt with that number."})
+    form(receipts, kind="list", title="Receipts - Overview",
+         description="Every stock movement, newest first.",
+         configJson={"columns": ["ReceiptNo", "Reason", "ReceiptDate", "BeforeQty", "DeltaQty", "AfterQty"],
+                     "searchFields": ["ReceiptNo"],
+                     "sortField": "ReceiptDate", "sortDir": "desc", "pageSize": 25})
+
+
+def shipment_forms(shipments):
+    form(shipments, kind="form", actions=["submit"], title="Shipments - Create new",
+         description="Record what shipped against an order.",
+         layoutJson=layout(["PackingSlipNo", "Order"], ["ShipDate", "Tracking"], ["Notes"]))
+    form(shipments, kind="form", actions=["lookup"], title="Shipments - Look up", isReadOnly=True,
+         description="Enter a packing slip number.",
+         configJson={"matchFields": ["PackingSlipNo"],
+                     "resultFields": ["PackingSlipNo", "ShipDate", "Tracking"],
+                     "notFoundText": "No shipment with that packing slip number."})
+    form(shipments, kind="list", title="Shipments - Overview",
+         description="Every packing slip, newest first.",
+         configJson={"columns": ["PackingSlipNo", "ShipDate", "Tracking"],
+                     "searchFields": ["PackingSlipNo"],
+                     "sortField": "ShipDate", "sortDir": "desc", "pageSize": 25})
+
+
+def fill(db_path, counts, products, customers, orders, lines, receipts, shipments):
     random.seed(SEED)  # short_id draws from the same stream, ids are stable too
     started = time.perf_counter()
     print(f"  Records: generating {sum(counts.values()):,} rows", flush=True)
@@ -641,6 +760,7 @@ def fill(db_path, counts, products, customers, orders, lines):
         category = random.choice(CATEGORIES)
         data = {
             "Sku": f"P-{i:05d}",
+            "Gtin": gs1_code("20", i),
             "Name": name,
             "Slug": f"{slugify(name)}-{i:05d}",  # size/material repeat a lot, the row index is what actually makes it unique
             "Category": category,
@@ -661,7 +781,30 @@ def fill(db_path, counts, products, customers, orders, lines):
             "Tags": random.sample(PRODUCT_TAGS, k=random.randint(0, 3)),
             "Datasheet": f"https://cdn.example.test/datasheets/P-{i:05d}.pdf",
         }
+        # Bulk writes straight into SQLite and skips RecordEngine, so a calculated field is never computed
+        # for it - it has to arrive pre-computed, same as LineTotal below.
+        stock_qty = random.choices([0, random.randint(1, 20), random.randint(20, 500)], weights=[8, 30, 62])[0]
+        data["StockQty"] = stock_qty
+        data["StockStatus"] = "Available" if stock_qty > 0 else "Out of stock"
         catalogue.append((bulk.add(products, data, stamp(START)), price))
+
+    # Stock movement history: scattered receipts against random articles, each a delta on top of whatever
+    # came before it - the same shape the reference warehousing screens showed (a receipt log, not a snapshot).
+    for i in range(counts["receipts"]):
+        product, _ = catalogue[random.randrange(len(catalogue))]
+        day = random.randint(START, END)
+        before = random.randint(0, 300)
+        reason = random.choices(RECEIPT_REASONS, RECEIPT_REASON_WEIGHTS)[0]
+        delta = random.randint(1, 50) if reason != "Correction" else random.randint(-20, 20)
+        bulk.add(receipts, {
+            "ReceiptNo": f"RC-{100000 + i}",
+            "Product": product,
+            "Reason": reason,
+            "ReceiptDate": str(date.fromordinal(day)),
+            "BeforeQty": before,
+            "DeltaQty": delta,
+            "AfterQty": before + delta,  # precomputed: Bulk skips RecordEngine, nothing else fills a calculated field in
+        }, stamp(day))
 
     accounts = []
     for i in range(counts["customers"]):
@@ -689,6 +832,7 @@ def fill(db_path, counts, products, customers, orders, lines):
                 "Role": random.choice(CONTACT_ROLES),
             },
             "SignedUp": str(date.fromordinal(signed)),
+            "Gln": gs1_code("04", i),
             "Reference": short_id(10),
         }
         accounts.append((bulk.add(customers, data, stamp(signed)), signed, country, city, data["Address"]))
@@ -698,11 +842,13 @@ def fill(db_path, counts, products, customers, orders, lines):
     for _ in range(counts["lines"] - counts["orders"]):
         per_order[random.randrange(counts["orders"])] += 1
 
+    shippable_orders = []  # (order_id, order_no, ship_day) - only orders that actually shipped get a packing slip
     for i, line_count in enumerate(per_order):
         account, signed, country, city, address = accounts[random.randrange(len(accounts))]
         day = random.randint(signed, END)
         order_no = f"SO-{100000 + i}"
         order_id = short_id()
+        status = random.choices(STATUSES, STATUS_WEIGHTS)[0]
         total = 0.0
         for n in range(line_count):
             product, list_price = catalogue[random.randrange(len(catalogue))]
@@ -727,16 +873,31 @@ def fill(db_path, counts, products, customers, orders, lines):
             "Customer": account,
             "OrderDate": str(date.fromordinal(day)),
             "Channel": random.choices(CHANNELS, CHANNEL_WEIGHTS)[0],
-            "Status": random.choices(STATUSES, STATUS_WEIGHTS)[0],
+            "Status": status,
             "Total": net,
             "ShipTo": {"Street": address["Street"], "PostalCode": address["PostalCode"],
                         "City": city, "Country": country},
             "Amounts": {"Net": net, "Vat": vat, "Gross": round(net + vat, 2)},
         }, stamp(day), record_id=order_id)
+        if status in ("shipped", "closed"):
+            shippable_orders.append((order_id, order_no, day))
+
+    # One packing slip per shipped order, occasionally two - an order that went out in separate packages.
+    # Guarded: at a tiny --scale the single generated order can land on a status that never ships.
+    for i in range(counts["shipments"] if shippable_orders else 0):
+        order_id, order_no, order_day = shippable_orders[random.randrange(len(shippable_orders))]
+        ship_day = min(order_day + random.randint(0, 3), END)
+        bulk.add(shipments, {
+            "PackingSlipNo": f"PS-{100000 + i}",
+            "Order": order_id,
+            "ShipDate": str(date.fromordinal(ship_day)),
+            "Tracking": f"3S{random.randint(10**11, 10**12 - 1)}",
+        }, stamp(ship_day))
 
     bulk.close()
     print(f"  Records: {counts['products']} products, {counts['customers']} customers, "
-          f"{counts['orders']} orders, {counts['lines']} order lines "
+          f"{counts['orders']} orders, {counts['lines']} order lines, "
+          f"{counts['receipts']} receipts, {counts['shipments']} shipments "
           f"in {time.perf_counter() - started:.1f}s")
 
 

@@ -44,10 +44,11 @@ public static class FieldValidation
     }
 
     private static string Str(JsonNode? v) => v is JsonValue jv && jv.GetValueKind() == JsonValueKind.String ? jv.GetValue<string>() : "";
+    
     // Deliberately not NumberStyles.Any, which allows thousands separators: invariant parsing then reads the European "1234,56" as 123456 and "1.234,56" as 0, silently, on a value a person typed correctly. A separator is ambiguous without knowing the writer's locale, and this codebase never knows it, a value carrying one is refused by name instead of guessed at.
     public const NumberStyles Numeric = NumberStyles.Float;
 
-    // How this codebase reads a number out of JSON, wherever one is read: validation and expression evaluation must agree on what a number is and on what counts as one.
+    // validation and expression evaluation must agree on what a number is and on what counts as one.
     public static bool TryNumber(JsonNode? v, out double d)
     {
         d = 0;
@@ -59,6 +60,14 @@ public static class FieldValidation
             if (jv.GetValueKind() == JsonValueKind.String) return double.TryParse(jv.GetValue<string>(), Numeric, CultureInfo.InvariantCulture, out d);
         }
         return false;
+    }
+
+    // counts digits after the decimal point in the raw json text, avoids float rounding noise
+    private static bool WithinScale(JsonNode? v, int scale)
+    {
+        var s = v is JsonValue jv ? jv.ToJsonString() : "";
+        var dot = s.IndexOf('.');
+        return dot < 0 || s.Length - dot - 1 <= scale;
     }
 
     private static bool TryInt(JsonNode? v, out int i)
@@ -177,6 +186,7 @@ public static class FieldValidation
                 // Min/Max are bounds on the value for numerics, and on the length for text, the same two columns serve both so a field never needs four nullable limits.
                 else if (f.Min is { } lo && nv < lo) errs.Add($"{f.Name} must be at least {lo.ToString("0.##", CultureInfo.InvariantCulture)}.");
                 else if (f.Max is { } hi && nv > hi) errs.Add($"{f.Name} must be at most {hi.ToString("0.##", CultureInfo.InvariantCulture)}.");
+                else if (f.Scale is { } sc && !WithinScale(v, sc)) errs.Add($"{f.Name} accepts at most {sc} decimal place{(sc == 1 ? "" : "s")}.");
                 break;
             case "boolean":
                 if (v is JsonValue bj && (bj.GetValueKind() == JsonValueKind.True || bj.GetValueKind() == JsonValueKind.False)) break;
@@ -344,6 +354,20 @@ public static class FieldValidation
 
         if (f.Min is { } lo && f.Max is { } hi && lo > hi) errs.Add("Minimum cannot be greater than maximum.");
 
+        if (f.Scale is { } sc)
+        {
+            if (sc < 0 || sc > 10) errs.Add("Decimal places must be between 0 and 10.");
+            if (t != "number" && t != "currency") errs.Add("Only a number or currency field can limit decimal places.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(f.ValidationExpr))
+        {
+            var vr = JsExpr.Validate(f.ValidationExpr, allNames);
+            if (!vr.Valid) errs.AddRange(vr.Errors.Select(e => $"Validation rule: {e}"));
+        }
+        else if (!string.IsNullOrWhiteSpace(f.ValidationMessage))
+            errs.Add("A validation message needs a validation rule.");
+
         if (!string.IsNullOrWhiteSpace(f.Currency))
         {
             f.Currency = f.Currency.Trim().ToUpperInvariant();
@@ -465,6 +489,17 @@ public static class FieldValidation
         return errs;
     }
 
+    // optional on every block type, same engine as a subtotal or button-link expression
+    private static List<string> ValidateShowIf(JsonElement row, int rowIdx, IReadOnlyCollection<string> fieldNames)
+    {
+        var errs = new List<string>();
+        var expr = row.ValueKind == JsonValueKind.Object && row.TryGetProperty("showIf", out var si) ? si.GetString() ?? "" : "";
+        if (string.IsNullOrWhiteSpace(expr)) return errs;
+        var r = JsExpr.Validate(expr, fieldNames);
+        if (!r.Valid) errs.AddRange(r.Errors.Select(x => $"Row {rowIdx + 1} show-if: {x}"));
+        return errs;
+    }
+
     // Shared by a top-level "row"/"group" and a "row" nested inside a "container".
     private static void ValidateCols(JsonElement row, int rowIdx, IReadOnlyCollection<string> fieldNames, HashSet<string> seen, List<string> errs)
     {
@@ -488,6 +523,61 @@ public static class FieldValidation
                 else if (!seen.Add(name)) errs.Add($"Field '{name}' appears more than once in the layout.");
             }
         }
+    }
+
+
+    // Steps run in order; each is validated the same way a calculated field's expression is, against the
+    // triggering table's own fields. A step's own shape errors are reported by index, same as a layout row.
+    public static List<string> ValidateActionDef(ActionDef action, IReadOnlyCollection<FieldDefinition> fields)
+    {
+        var errs = new List<string>();
+        if (string.IsNullOrWhiteSpace(action.Name)) errs.Add("Action name is required.");
+        else if (action.Name.Length > 128) errs.Add("Action name is too long (max 128 characters).");
+
+        if (!ActionTriggers.All.Contains(action.TriggerKind))
+            errs.Add($"Unknown trigger '{action.TriggerKind}'. Must be one of {string.Join(", ", ActionTriggers.All)}.");
+
+        var fieldNames = fields.Select(f => f.Name).ToList();
+        var settableNames = fields.Where(f => !FieldTypes.Of(f).Computed).Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
+
+        JsonElement steps;
+        try { steps = JsonSerializer.Deserialize<JsonElement>(string.IsNullOrWhiteSpace(action.StepsJson) ? "[]" : action.StepsJson); }
+        catch (JsonException) { errs.Add("Steps is not valid JSON."); return errs; }
+        if (steps.ValueKind != JsonValueKind.Array) { errs.Add("Steps must be a JSON array."); return errs; }
+        if (steps.GetArrayLength() == 0) { errs.Add("An action needs at least one step."); return errs; }
+
+        int i = 0;
+        foreach (var step in steps.EnumerateArray())
+        {
+            var type = step.ValueKind == JsonValueKind.Object && step.TryGetProperty("type", out var tp) ? tp.GetString() : null;
+            if (type == "runExpression")
+            {
+                var expr = step.TryGetProperty("expr", out var e) ? e.GetString() ?? "" : "";
+                if (string.IsNullOrWhiteSpace(expr)) errs.Add($"Step {i + 1}: an expression is required.");
+                else
+                {
+                    var r = JsExpr.Validate(expr, fieldNames);
+                    if (!r.Valid) errs.AddRange(r.Errors.Select(x => $"Step {i + 1}: {x}"));
+                }
+            }
+            else if (type == "updateRecord")
+            {
+                if (!step.TryGetProperty("setJson", out var set) || set.ValueKind != JsonValueKind.Object || !set.EnumerateObject().Any())
+                    errs.Add($"Step {i + 1}: at least one field to set is required.");
+                else
+                    foreach (var prop in set.EnumerateObject())
+                    {
+                        if (!settableNames.Contains(prop.Name)) { errs.Add($"Step {i + 1}: '{prop.Name}' is not a field on this table, or is server-computed."); continue; }
+                        var expr = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() ?? "" : "";
+                        if (string.IsNullOrWhiteSpace(expr)) { errs.Add($"Step {i + 1}: '{prop.Name}' needs an expression."); continue; }
+                        var r = JsExpr.Validate(expr, fieldNames);
+                        if (!r.Valid) errs.AddRange(r.Errors.Select(x => $"Step {i + 1}, '{prop.Name}': {x}"));
+                    }
+            }
+            else errs.Add($"Step {i + 1}: unknown step type '{type}'.");
+            i++;
+        }
+        return errs;
     }
 
     public static List<string> ValidateLayout(FormConfig form, IReadOnlyCollection<FieldDefinition> fields)
@@ -526,6 +616,8 @@ public static class FieldValidation
                 continue;
             }
 
+            errs.AddRange(ValidateShowIf(row, rowIdx, fieldNames));
+
             if (t is "row" or "group")
             {
                 ValidateCols(row, rowIdx, fieldNames, seen, errs);
@@ -560,7 +652,11 @@ public static class FieldValidation
                     {
                         var nt = nrow.ValueKind == JsonValueKind.Object && nrow.TryGetProperty("t", out var ntp) ? ntp.GetString() : null;
                         if (nt != "row") errs.Add($"Row {rowIdx + 1}, nested row {nestedIdx + 1}: a container may only nest plain rows, not '{nt}'.");
-                        else ValidateCols(nrow, rowIdx, fieldNames, seen, errs);
+                        else
+                        {
+                            ValidateCols(nrow, rowIdx, fieldNames, seen, errs);
+                            errs.AddRange(ValidateShowIf(nrow, rowIdx, fieldNames));
+                        }
                         nestedIdx++;
                     }
                 }

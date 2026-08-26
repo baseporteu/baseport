@@ -60,11 +60,14 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor
         return result;
     }
 
-    public override ValueTask<int> SavedChangesAsync(
+    // Async only: enqueueing is a write; sync override exists only for untracked test seeding.
+    public override async ValueTask<int> SavedChangesAsync(
         SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
     {
-        Flush(eventData.Context);
-        return ValueTask.FromResult(result);
+        var pending = Flush(eventData.Context);
+        if (pending.Count > 0 && eventData.Context is AppDbContext db)
+            await ActionEngine.EnqueueTriggeredRunsAsync(db, pending, cancellationToken);
+        return result;
     }
 
     public override void SaveChangesFailed(DbContextErrorEventData eventData) => Discard(eventData.Context);
@@ -91,8 +94,7 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor
             };
             if (action is null) continue;
 
-            // Stamped here instead of in an endpoint for the same reason the events are: this is the one place every write passes. Assigning through the entry marks the column modified, which a plain property set after change detection would not.
-            // An insert that never set CreatedAt would otherwise be stamped as year 1, which is worse than a timestamp a millisecond late.
+            // Stamped here so every write passes through it; ensures change tracking marks it modified.
             if (entry.State is EntityState.Added or EntityState.Modified)
                 entry.Property(r => r.UpdatedAt).CurrentValue =
                     entry.State is EntityState.Added && entry.Entity.CreatedAt != default
@@ -107,10 +109,11 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor
         else Discard(eventData.Context);
     }
 
-    private void Flush(DbContext? context)
+    private List<RecordEvent> Flush(DbContext? context)
     {
-        if (context is null || !_pending.TryRemove(context, out var pending)) return;
+        if (context is null || !_pending.TryRemove(context, out var pending)) return new List<RecordEvent>();
         foreach (var e in pending) RecordEvents.Publish(e);
+        return pending;
     }
 
     private void Discard(DbContext? context)

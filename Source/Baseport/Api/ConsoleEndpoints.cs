@@ -17,6 +17,7 @@ public static class ConsoleEndpoints
         "admin/_shell.html",
         "admin/views/tables.html",
         "admin/views/forms.html",
+        "admin/views/actions.html",
         "admin/views/sql.html",
         "admin/views/schema.html",
         "admin/views/auth.html",

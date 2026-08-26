@@ -54,10 +54,13 @@ public static class ApiDtos
         f.Expression,
         f.OptionsJson,
         f.Pattern,
+        f.ValidationExpr,
+        f.ValidationMessage,
         f.DefaultValue,
         f.Currency,
         f.Min,
         f.Max,
+        f.Scale,
         f.Position,
         f.IsRequired,
         f.IsUnique,
@@ -84,6 +87,31 @@ public static class ApiDtos
         if (expanded is not null) dto["expanded"] = expanded;
         return dto;
     }
+
+    public static object ActionDto(ActionDef a) => new
+    {
+        a.Id,
+        a.TableId,
+        a.Name,
+        a.TriggerKind,
+        a.StepsJson,
+        a.IsEnabled,
+        a.CreatedAt,
+        a.UpdatedAt
+    };
+
+    public static object ActionRunDto(PendingActionRun r) => new
+    {
+        r.Id,
+        r.RecordId,
+        r.TriggerKind,
+        r.Status,
+        r.Attempts,
+        r.NextAttemptAt,
+        r.LastError,
+        r.CreatedAt,
+        r.UpdatedAt
+    };
 
     // Admin-facing form summary. Includes the owning table so the Forms page can stand alone.
     public static object FormDto(FormConfig f, TableDefinition? table = null) => new
@@ -129,6 +157,7 @@ public static class ApiDtos
                 f.Currency,
                 f.Min,
                 f.Max,
+                f.Scale,
                 f.IsRequired,
                 f.IsReadOnly
             })

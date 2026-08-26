@@ -180,6 +180,50 @@ public class FieldValidationNewTypesTests
         Assert.Empty(Validate(Field("json"), JsonNode.Parse("""{"k":"v"}""")));
         Assert.Empty(Validate(Field("array"), JsonNode.Parse("""["a",1]""")));
     }
+
+    [Theory]
+    [InlineData("1.5", 2, true)]
+    [InlineData("1.505", 2, false)]
+    [InlineData("2", 0, true)]
+    public void Scale_caps_decimal_places(string value, int scale, bool valid)
+    {
+        var f = Field("number");
+        f.Scale = scale;
+        var errs = Validate(f, JsonNode.Parse(value));
+        Assert.Equal(valid, errs.Count == 0);
+    }
+
+    [Fact]
+    public void Scale_definition_rejects_a_non_numeric_type()
+    {
+        var f = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Title", DataType = "text", Scale = 2 };
+        var errs = FieldValidation.ValidateFieldDefinition(f, new List<string>(), new List<string> { "Title" }, _ => true);
+        Assert.Contains(errs, e => e.Contains("decimal places"));
+    }
+
+    [Fact]
+    public void Scale_definition_rejects_an_out_of_range_value()
+    {
+        var f = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Price", DataType = "currency", Scale = 20 };
+        var errs = FieldValidation.ValidateFieldDefinition(f, new List<string>(), new List<string> { "Price" }, _ => true);
+        Assert.Contains(errs, e => e.Contains("between 0 and 10"));
+    }
+
+    [Fact]
+    public void Validation_rule_definition_rejects_a_malformed_expression()
+    {
+        var f = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number", ValidationExpr = "data.Qty >" };
+        var errs = FieldValidation.ValidateFieldDefinition(f, new List<string>(), new List<string> { "Qty" }, _ => true);
+        Assert.Contains(errs, e => e.StartsWith("Validation rule:"));
+    }
+
+    [Fact]
+    public void Validation_message_without_a_rule_is_rejected()
+    {
+        var f = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number", ValidationMessage = "Nope" };
+        var errs = FieldValidation.ValidateFieldDefinition(f, new List<string>(), new List<string> { "Qty" }, _ => true);
+        Assert.Contains(errs, e => e.Contains("needs a validation rule"));
+    }
 }
 
 // write-path mutations: slug derivation, richtext sanitization, password hashing and redaction
@@ -359,5 +403,25 @@ public class RecordEngineNewTypesTests : IDisposable
 
         Assert.Empty(outcome.Errors);
         Assert.Null(merged["Address"]!["Street"]);
+    }
+
+    [Fact]
+    public async Task A_validation_rule_blocks_the_write_with_its_own_message()
+    {
+        var table = Seed(
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number" },
+            new FieldDefinition
+            {
+                Id = Ids.NewShortId(12), Name = "Stock", DataType = "number",
+                ValidationExpr = "data.Qty <= data.Stock", ValidationMessage = "Not enough stock."
+            });
+
+        var over = Json("""{ "Qty": 5, "Stock": 2 }""");
+        var blocked = await RecordEngine.PrepareAsync(_db, table, table.Fields, over);
+        Assert.Contains("Not enough stock.", blocked.Errors);
+
+        var ok = Json("""{ "Qty": 1, "Stock": 2 }""");
+        var allowed = await RecordEngine.PrepareAsync(_db, table, table.Fields, ok);
+        Assert.Empty(allowed.Errors);
     }
 }

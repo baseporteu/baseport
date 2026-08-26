@@ -60,6 +60,34 @@ public sealed class JobScheduler : BackgroundService
         }
 
         await RunScheduledQueriesAsync(scope, db, now, ct);
+        await RunDueActionRunsAsync(db, now, ct);
+    }
+
+    // Durable action runs: a batch cap keeps one tick from running unboundedly long if a burst of writes queued a lot of work at once, the rest picks up on the next tick.
+    private const int ActionRunBatchSize = 50;
+
+    private async Task RunDueActionRunsAsync(AppDbContext db, DateTime now, CancellationToken ct)
+    {
+        var due = await db.PendingActionRuns
+            .Where(r => r.Status == ActionRunStatus.Pending && r.NextAttemptAt <= now)
+            .OrderBy(r => r.NextAttemptAt)
+            .Take(ActionRunBatchSize)
+            .ToListAsync(ct);
+
+        foreach (var run in due)
+        {
+            try { await ActionRunner.RunAsync(db, run, _log, ct); }
+            catch (Exception ex)
+            {
+                // ActionRunner already turns a step failure into a retry/failed state; reaching here something broke outside that (a bad record read), not the action itself.
+                run.LastError = ex.Message;
+                run.Attempts++;
+                run.Status = run.Attempts >= ActionRunner.MaxAttempts ? ActionRunStatus.Failed : ActionRunStatus.Pending;
+                run.UpdatedAt = now;
+                _log.Error(ex, "Action run {RunId} errored outside its own handling", run.Id);
+            }
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     // The operator's own tasks. Kept separate from the fixed registry because one of them failing is their business, not a fault in the instance: it is recorded on the query and read in the console.

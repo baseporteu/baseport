@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Two minimal mock sites for testing Baseport embeds the way they actually get
 used: pasted onto someone else's domain, loaded cross-origin, spread across more
-than one page, behind the sidebar-and-breadcrumb chrome a real customer or ops
-portal actually has. Standard library only, reads form ids straight out of
-baseport.db (no admin login needed).
+than one page, behind the sidebar chrome a real customer or ops portal actually
+has. Styled with Pico CSS (classless: it styles bare <input>/<button>/<table>
+directly, which is exactly what embed.js renders - no override CSS needed to
+make a Baseport embed look native here). Standard library only, reads form ids
+straight out of baseport.db (no admin login needed).
 
     customers.site.com  the sales-facing site: a "My orders" list that links out
                          to a dedicated order page, plus place-order and sign-up
@@ -33,19 +35,16 @@ SITES = {
             <line x1="12" y1="22.08" x2="12" y2="12"></line>
         </svg>""",
         "theme_css": """
-            :root {
-                --bs-primary: #696cff;
-                --bs-primary-hover: #5f61e6;
-                --sidebar-bg: #ffffff;
-                --sidebar-text: #697a8d;
-                --sidebar-border: #eceef1;
-                --sidebar-link: #697a8d;
-                --sidebar-link-hover-bg: rgba(67, 89, 113, 0.04);
-                --sidebar-link-active: #696cff;
-                --sidebar-link-active-bg: rgba(105, 108, 255, 0.16);
-                --body-bg: #f5f5f9;
-                --btn-shadow: rgba(105, 108, 255, 0.35);
-            }
+            --pico-primary: #696cff;
+            --pico-primary-background: #696cff;
+            --pico-primary-border: #696cff;
+            --pico-primary-underline: rgba(105, 108, 255, .5);
+            --pico-primary-hover: #5f61e6;
+            --pico-primary-hover-background: #5f61e6;
+            --pico-primary-hover-border: #5f61e6;
+            --pico-primary-hover-underline: #5f61e6;
+            --pico-primary-focus: rgba(105, 108, 255, .375);
+            --pico-primary-inverse: #fff;
         """,
         "pages": {
             "/": {
@@ -74,19 +73,16 @@ SITES = {
             <polygon points="12 11 12 17 17 14"></polygon>
         </svg>""",
         "theme_css": """
-            :root {
-                --bs-primary: #ffab00;
-                --bs-primary-hover: #e69a00;
-                --sidebar-bg: #ffffff;
-                --sidebar-text: #697a8d;
-                --sidebar-border: #eceef1;
-                --sidebar-link: #697a8d;
-                --sidebar-link-hover-bg: rgba(67, 89, 113, 0.04);
-                --sidebar-link-active: #ffab00;
-                --sidebar-link-active-bg: rgba(255, 171, 0, 0.16);
-                --body-bg: #f5f5f9;
-                --btn-shadow: rgba(255, 171, 0, 0.35);
-            }
+            --pico-primary: #ffab00;
+            --pico-primary-background: #ffab00;
+            --pico-primary-border: #ffab00;
+            --pico-primary-underline: rgba(255, 171, 0, .5);
+            --pico-primary-hover: #e69a00;
+            --pico-primary-hover-background: #e69a00;
+            --pico-primary-hover-border: #e69a00;
+            --pico-primary-hover-underline: #e69a00;
+            --pico-primary-focus: rgba(255, 171, 0, .375);
+            --pico-primary-inverse: #1a1a1a;
         """,
         "pages": {
             "/": {
@@ -105,6 +101,24 @@ SITES = {
                 "title": "Product catalogue",
                 "forms": [
                     ("Product catalogue", ["Products - Catalogue", "Catalogue"]),
+                ],
+            },
+            "/stock": {
+                "title": "Stock on hand",
+                "forms": [
+                    ("Stock on hand", ["Products - Stock"]),
+                ],
+            },
+            "/receipts": {
+                "title": "Receipts",
+                "forms": [
+                    ("Receipts", ["Receipts - Overview"]),
+                ],
+            },
+            "/shipments": {
+                "title": "Shipments",
+                "forms": [
+                    ("Shipments", ["Shipments - Overview"]),
                 ],
             },
         },
@@ -131,206 +145,111 @@ def render_page(hostname: str, spec: dict, page_path: str, baseport_url: str, db
     if page is None:
         return None
 
+    # Pico styles bare <input>/<select>/<button>/<table> by tag, which is exactly what embed.js renders -
+    # unlike the Bootstrap version this replaced, no override CSS is needed to make an embed look native here.
     blocks = []
     for label, candidates in page["forms"]:
         form_id = find_form_id(db_path, candidates)
         body = (
             f"<script src='{baseport_url}/embed.js?id={form_id}'></script>"
             if form_id else
-            "<p class='text-muted mb-0'><em>Not found -- run POPULATE.sh, or check the title in SITES matches your seed.</em></p>"
+            "<p><em>Not found -- run POPULATE.sh, or check the title in SITES matches your seed.</em></p>"
         )
         # Avoid duplicate title when section label matches page title
-        header_html = f"<h2 class='h5 mb-3 fw-bold' style='color: #566a7f;'>{label}</h2>" if label != page["title"] else ""
-        blocks.append(f"<div class='mb-5 baseport-overrides'>{header_html}{body}</div>")
+        header_html = f"<h2>{label}</h2>" if label != page["title"] else ""
+        blocks.append(f"<article>{header_html}{body}</article>")
 
-    nav_items = "".join(
-        f"<li class='nav-item'><a class='nav-link{' active' if path == page_path else ''}' href='{path}'>{p['title']}</a></li>"
-        for path, p in spec["pages"].items()
-    )
+    nav_parts = []
+    for path, p in spec["pages"].items():
+        current = " aria-current='page'" if path == page_path else ""
+        nav_parts.append(f"<li><a href='{path}'{current}>{p['title']}</a></li>")
+    nav_items = "".join(nav_parts)
 
     return f"""<!doctype html>
-<html lang='en'><head><meta charset='utf-8'>
+<html lang='en' data-theme='light'><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1'>
 <title>{spec['heading']} &middot; {page['title']}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css' rel='stylesheet'>
+<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css'>
 <style>
+:root {{
+    --pico-font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 {spec['theme_css']}
+}}
 
 body {{
-    background-color: var(--body-bg);
-    color: #566a7f;
-    font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    display: flex;
+    min-height: 100vh;
+    margin: 0;
 }}
 
 .app-sidebar {{
-    background-color: var(--sidebar-bg);
-    box-shadow: 0 0.125rem 0.375rem 0 rgba(161, 172, 184, 0.12);
-    z-index: 10;
-}}
-
-.app-sidebar .nav-link {{
-    color: var(--sidebar-link);
-    border-radius: 0.375rem;
-    padding: 0.625rem 1rem;
-    font-weight: 400;
-    margin-bottom: 0.25rem;
-    transition: all 0.2s ease-in-out;
-}}
-
-.app-sidebar .nav-link:hover {{
-    color: var(--sidebar-link-active);
-    background-color: var(--sidebar-link-hover-bg);
-}}
-
-.app-sidebar .nav-link.active {{
-    color: var(--sidebar-link-active);
-    background-color: var(--sidebar-link-active-bg);
-    font-weight: 600;
+    width: 16rem;
+    flex-shrink: 0;
+    padding: 2rem 1.5rem;
+    border-right: 1px solid var(--pico-muted-border-color);
 }}
 
 .app-brand {{
     display: flex;
     align-items: center;
-    gap: 0.875rem;
-    padding-bottom: 0.5rem;
+    gap: .875rem;
+    margin-bottom: 2rem;
 }}
 
 .app-brand-text {{
-    color: #566a7f;
     font-weight: 700;
-    letter-spacing: -0.5px;
+    line-height: 1.2;
 }}
 
-.breadcrumb-item a {{
-    color: var(--bs-primary);
-    text-decoration: none;
+.app-brand-tagline {{
+    font-size: .8125rem;
+    color: var(--pico-muted-color);
 }}
 
-.breadcrumb-item.active {{
-    color: #697a8d;
+.app-sidebar nav ul {{
+    margin-bottom: 0;
 }}
 
-/* BASEPORT EMBED OVERRIDES */
-
-.baseport-overrides iframe {{
-    border: none !important;
-    background: transparent !important;
-    width: 100%;
-    min-height: 400px;
+.app-main {{
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
 }}
 
-.baseport-overrides input,
-.baseport-overrides select,
-.baseport-overrides textarea {{
-    border: 1px solid #d9dee3;
-    border-radius: 0.375rem;
-    padding: 0.4375rem 0.875rem;
-    font-size: 0.9375rem;
-    color: #697a8d;
-    background-color: #fff;
-    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+.app-main > .container {{
+    padding-block: 2.5rem;
 }}
 
-.baseport-overrides input:focus,
-.baseport-overrides select:focus,
-.baseport-overrides textarea:focus {{
-    border-color: var(--bs-primary);
-    box-shadow: 0 0 0 0.25rem var(--sidebar-link-active-bg);
-    outline: 0;
-}}
-
-/* General Button Overrides */
-.baseport-overrides button,
-.baseport-overrides .btn,
-.baseport-overrides a.btn {{
-    border-radius: 0.375rem;
-    font-weight: 500;
-    font-size: 0.875rem;
-    padding: 0.375rem 0.875rem;
-    transition: all 0.15s ease-in-out;
-}}
-
-/* Primary Buttons */
-.baseport-overrides .btn-primary,
-.baseport-overrides button[type="submit"] {{
-    background-color: var(--bs-primary) !important;
-    border-color: var(--bs-primary) !important;
-    color: #ffffff !important;
-    box-shadow: 0 0.125rem 0.25rem 0 var(--btn-shadow);
-}}
-
-.baseport-overrides .btn-primary:hover,
-.baseport-overrides button[type="submit"]:hover {{
-    background-color: var(--bs-primary-hover) !important;
-    border-color: var(--bs-primary-hover) !important;
-    color: #ffffff !important;
-}}
-
-/* Table Row Action Buttons ("View order", etc.) */
-.baseport-overrides table .btn,
-.baseport-overrides table a.btn,
-.baseport-overrides .btn-outline-primary,
-.baseport-overrides .btn-secondary,
-.baseport-overrides .btn-light {{
-    background-color: rgba(105, 108, 255, 0.08) !important;
-    border: 1px solid transparent !important;
-    color: var(--bs-primary) !important;
-    box-shadow: none !important;
-}}
-
-.baseport-overrides table .btn:hover,
-.baseport-overrides table a.btn:hover,
-.baseport-overrides .btn-outline-primary:hover,
-.baseport-overrides .btn-secondary:hover,
-.baseport-overrides .btn-light:hover {{
-    background-color: var(--bs-primary) !important;
-    border-color: var(--bs-primary) !important;
-    color: #ffffff !important;
-    box-shadow: 0 0.125rem 0.25rem 0 var(--btn-shadow) !important;
-}}
-
-.baseport-overrides table {{
-    border-collapse: collapse;
-    width: 100%;
-}}
-
-.baseport-overrides th {{
-    text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 0.5px;
-    color: #a1acb8;
-    border-bottom: 1px solid #d9dee3;
-    padding-bottom: 0.75rem;
+.app-footnote {{
+    font-size: .75rem;
+    color: var(--pico-muted-color);
+    margin-top: 2rem;
 }}
 </style>
-</head><body class='d-flex flex-column flex-md-row vh-100'>
-<div class='d-flex flex-column flex-shrink-0 p-4 app-sidebar' style='width:100%;max-width:16rem'>
-<div class='app-brand mb-2'>
-    {spec['logo_svg']}
-    <div>
-        <div class='fs-5 app-brand-text leading-tight'>{spec['heading']}</div>
-        <div class='small text-muted' style='font-size: 0.75rem;'>{spec['tagline']}</div>
+</head><body>
+<aside class='app-sidebar'>
+    <div class='app-brand'>
+        {spec['logo_svg']}
+        <div>
+            <div class='app-brand-text'>{spec['heading']}</div>
+            <div class='app-brand-tagline'>{spec['tagline']}</div>
+        </div>
     </div>
-</div>
-<ul class='nav nav-pills flex-column mb-auto mt-4'>{nav_items}</ul>
-<div class='small text-muted mt-4' style='font-size: 0.75rem;'>
-    <div class='fw-semibold' style='color: #a1acb8;'>{hostname}</div>
-    Mock site for embed testing
-</div>
-</div>
-<div class='flex-grow-1 overflow-auto'>
-<div class='container py-5' style='max-width:1000px'>
-<nav aria-label='breadcrumb'><ol class='breadcrumb' style='font-size: 0.875rem;'>
-<li class='breadcrumb-item text-muted'>{spec['heading']}</li>
-<li class='breadcrumb-item active' aria-current='page'>{page['title']}</li>
-</ol></nav>
-<h1 class='h4 mb-4' style='color: #566a7f; font-weight: 500;'>{page['title']}</h1>
+    <nav><ul>{nav_items}</ul></nav>
+    <p class='app-footnote'>{hostname}<br>Mock site for embed testing</p>
+</aside>
+<main class='app-main'>
+<div class='container'>
+<hgroup>
+    <h1>{page['title']}</h1>
+    <p>{spec['heading']}</p>
+</hgroup>
 {''.join(blocks)}
 </div>
-</div>
+</main>
 </body></html>"""
 
 

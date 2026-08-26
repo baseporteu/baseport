@@ -212,6 +212,8 @@ try
         // Configuration wins when an operator sets one; otherwise the per-instance secret the bootstrap generated.
         var settings = await db.SettingsAsync() ?? new AppSettings();
         PreviewAuth.Initialize(previewSecret ?? settings.PreviewSecret, TimeSpan.FromDays(1));
+
+        await ActionDefCache.ReloadFromDbAsync(db);
     }
 
     app.MapAuthEndpoints();
@@ -221,6 +223,7 @@ try
     app.MapStorageEndpoints();
     app.MapTableEndpoints();
     app.MapFormEndpoints();
+    app.MapActionEndpoints();
     app.MapAdminEndpoints();
     app.MapPublicApiEndpoints();
 

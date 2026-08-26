@@ -11,6 +11,7 @@ let layout = {
     rows: []
 };
 let formOriginalSnapshot = null; // set once the editor finishes loading; hasUnsavedFormChanges diffs against it
+let blockDragFrom = null; // { array, index } of the canvas block currently being dragged, same-array reorder only
 
 const ACTION_HINTS = {
     submit: 'Collects a new record. Design the matrix below.',
@@ -1111,6 +1112,13 @@ function testExprButton(getExpr) {
 function rowFields(row) {
     const div = document.createElement('div');
     div.className = 'brow-fields';
+
+    // same engine as a subtotal or button-link expression; evaluated against the record on every change, hides the whole block when false
+    const showIfLab = labeledInput('Show if (optional)', row, 'showIf', "data.Country === 'NL'");
+    showIfLab.appendChild(testExprButton(() => row.showIf));
+    attachFieldExprAutocomplete(showIfLab.querySelector('input'), () => formTableFields.map((f) => f.name));
+    div.appendChild(showIfLab);
+
     const dropdown = (label, prop, options, fallback) => {
         const sel = document.createElement('select');
         sel.className = 'input input-sm';
@@ -1128,7 +1136,9 @@ function rowFields(row) {
 
     if (row.t === 'subtotal') {
         div.appendChild(labeledInput('Label', row, 'label', 'Total'));
-        div.appendChild(labeledInput('Expression', row, 'expr', 'data.Quantity * data.Price'));
+        const subtotalExprLab = labeledInput('Expression', row, 'expr', 'data.Quantity * data.Price');
+        attachFieldExprAutocomplete(subtotalExprLab.querySelector('input'), () => formTableFields.map((f) => f.name));
+        div.appendChild(subtotalExprLab);
         div.appendChild(
             dropdown(
                 'Format',
@@ -1172,11 +1182,13 @@ function rowFields(row) {
         } else if (row.action === 'link') {
             const hrefLab = labeledInput('URL expression', row, 'hrefExpr', LINK_EXPR_PLACEHOLDER);
             hrefLab.appendChild(testExprButton(() => row.hrefExpr));
+            attachFieldExprAutocomplete(hrefLab.querySelector('input'), () => formTableFields.map((f) => f.name));
             div.appendChild(hrefLab);
         } else if (row.action === 'run') {
             // A blank button: no fixed outcome, just this expression evaluated on click and shown as a toast.
             const exprLab = labeledInput('Expression', row, 'expr', "'Total: ' + (data.Qty * data.Price)");
             exprLab.appendChild(testExprButton(() => row.expr));
+            attachFieldExprAutocomplete(exprLab.querySelector('input'), () => formTableFields.map((f) => f.name));
             div.appendChild(exprLab);
         }
     } else if (row.t === 'group') {
@@ -1286,10 +1298,12 @@ function buttonBarEditor(row) {
             } else if (btn.action === 'link') {
                 const hrefLab = labeledInput('URL expression', btn, 'hrefExpr', LINK_EXPR_PLACEHOLDER);
                 hrefLab.appendChild(testExprButton(() => btn.hrefExpr));
+                attachFieldExprAutocomplete(hrefLab.querySelector('input'), () => formTableFields.map((f) => f.name));
                 line.appendChild(hrefLab);
             } else if (btn.action === 'run') {
                 const exprLab = labeledInput('Expression', btn, 'expr', "'Total: ' + (data.Qty * data.Price)");
                 exprLab.appendChild(testExprButton(() => btn.expr));
+                attachFieldExprAutocomplete(exprLab.querySelector('input'), () => formTableFields.map((f) => f.name));
                 line.appendChild(exprLab);
             }
 
@@ -1348,14 +1362,46 @@ function renderCanvas() {
 function buildRowElement(row, index, ownerArray, path) {
     const el = document.createElement('div');
     el.className = 'brow' + (row.t === 'group' ? ' brow-group' : '');
-    el.addEventListener('dragover', (ev) => ev.preventDefault());
+    el.draggable = true;
+
+    el.addEventListener('dragstart', (ev) => {
+        ev.stopPropagation(); // a nested row starting its own drag must not also start its container's
+        blockDragFrom = { array: ownerArray, index };
+        ev.dataTransfer.effectAllowed = 'move';
+        requestAnimationFrame(() => el.classList.add('dragging')); // after the browser has taken its drag snapshot
+    });
+    el.addEventListener('dragend', () => {
+        el.classList.remove('dragging', 'drop-above', 'drop-below');
+        blockDragFrom = null;
+    });
+    el.addEventListener('dragover', (ev) => {
+        ev.preventDefault();
+        const above = ev.clientY - el.getBoundingClientRect().top < el.offsetHeight / 2;
+        el.classList.toggle('drop-above', above);
+        el.classList.toggle('drop-below', !above);
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drop-above', 'drop-below'));
     el.addEventListener('drop', (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        // Only the top-level canvas accepts a new block dropped from the palette; a nested row is already inside one.
-        if (path.length > 1) return;
+        const before = el.classList.contains('drop-above');
+        el.classList.remove('drop-above', 'drop-below');
+        const insertAt = index + (before ? 0 : 1);
+
         const block = ev.dataTransfer.getData('text/block');
-        if (block) addRow(block, index);
+        if (block) {
+            // Only the top-level canvas accepts a new block dropped from the palette; a nested row is already inside one.
+            if (path.length > 1) return;
+            addRow(block, insertAt);
+            return;
+        }
+
+        // reordering an existing block; cross-container moves aren't supported, drag it out with ✕ and re-add instead
+        if (!blockDragFrom || blockDragFrom.array !== ownerArray || blockDragFrom.index === index) return;
+        const from = blockDragFrom.index;
+        const [moved] = ownerArray.splice(from, 1);
+        ownerArray.splice(from < insertAt ? insertAt - 1 : insertAt, 0, moved);
+        renderCanvas();
     });
 
     const head = document.createElement('div');
@@ -1418,6 +1464,10 @@ function buildRowElement(row, index, ownerArray, path) {
     head.appendChild(actions);
     el.appendChild(head);
 
+    // every block type gets "show if" (and whatever else rowFields renders for its own type); this is also what
+    // wires up the group title editor, previously unreachable because nothing called rowFields for a group.
+    el.appendChild(rowFields(row));
+
     if (row.t === 'container') {
         if (!Array.isArray(row.rows)) row.rows = [];
         el.appendChild(labeledInput('Section title', row, 'title', 'Section'));
@@ -1431,9 +1481,7 @@ function buildRowElement(row, index, ownerArray, path) {
             body.appendChild(empty);
         }
         el.appendChild(body);
-    } else if (row.t === 'subtotal' || row.t === 'button' || row.t === 'line_items' || row.t === 'button_bar') {
-        el.appendChild(rowFields(row));
-    } else {
+    } else if (row.t === 'row' || row.t === 'group') {
         const body = document.createElement('div');
         body.className = 'brow-cols';
         row.cols.forEach((col, ci) => body.appendChild(renderColumn(row, [...path, ci], col, ci)));

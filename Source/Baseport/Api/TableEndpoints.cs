@@ -106,7 +106,8 @@ public static class TableEndpoints
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.Id == publicId);
             if (table == null) return Results.NotFound();
             var others = table.Fields.Select(f => f.Name).ToList();
-            var errs = FieldValidation.ValidateFieldDefinition(field, others, others, tpid => db.Tables.Any(t => t.Id == tpid));
+            // a rule may reference the field carrying it, same as an edited field's own name is already in scope on patch
+            var errs = FieldValidation.ValidateFieldDefinition(field, others, others.Append(field.Name).ToList(), tpid => db.Tables.Any(t => t.Id == tpid));
             if (errs.Count > 0) return Results.BadRequest(new { errors = errs });
             var conflicts = await RecordEngine.ConstraintErrorsAsync(db, table, field);
             if (conflicts.Count > 0) return Results.Conflict(new { errors = conflicts });
@@ -116,8 +117,8 @@ public static class TableEndpoints
             db.Fields.Add(field);
             table.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
-            // A field change reconciles both kinds of derived state: the indexes it implies, and the computed values it implies.
-            // The new field's name is stale by definition: deleting a field leaves its data in the records, so a name reused here would inherit those values rather than be generated.
+
+            // Reconciles indexes and computed values for a field change, noting that reused names inherit stale data.
             await RecordIndexes.SyncAsync(db, table);
             await RecordEngine.ReconcileComputedAsync(db, table, new[] { field.Name });
             return Results.Ok(ApiDtos.FieldDto(field));
@@ -134,9 +135,10 @@ public static class TableEndpoints
             if (unknown.Count > 0) return Results.BadRequest(new { errors = new[] { "The order contains fields that are not on this table." } });
 
             var position = 0;
+            
             foreach (var pid in wanted)
                 table.Fields.First(f => f.Id == pid).Position = position++;
-            // Anything the client did not mention keeps its relative order at the end.
+           
             foreach (var f in table.Fields.Where(f => !wanted.Contains(f.Id)).OrderBy(f => f.Position).ThenBy(f => f.Id))
                 f.Position = position++;
 
@@ -166,12 +168,15 @@ public static class TableEndpoints
             if (patch["currency"] is JsonValue cv && cv.TryGetValue<string>(out var currency)) field.Currency = currency;
             if (patch["isRequired"] is JsonValue rv && rv.TryGetValue<bool>(out var req)) field.IsRequired = req;
             if (patch["pattern"] is JsonValue pv && pv.TryGetValue<string>(out var pat)) field.Pattern = pat;
+            if (patch["validationExpr"] is JsonValue vev && vev.TryGetValue<string>(out var vexpr)) field.ValidationExpr = vexpr;
+            if (patch["validationMessage"] is JsonValue vmv && vmv.TryGetValue<string>(out var vmsg)) field.ValidationMessage = vmsg;
             if (patch["isHidden"] is JsonValue hv && hv.TryGetValue<bool>(out var hidden)) field.IsHidden = hidden;
             if (patch["isUnique"] is JsonValue uv && uv.TryGetValue<bool>(out var unique)) field.IsUnique = unique;
             if (patch["isIdentifier"] is JsonValue iv && iv.TryGetValue<bool>(out var ident)) field.IsIdentifier = ident;
             // null clears the bound; an absent key leaves it untouched.
             if (patch.ContainsKey("min")) field.Min = (patch["min"] as JsonValue)?.TryGetValue<double>(out var lo) == true ? lo : null;
             if (patch.ContainsKey("max")) field.Max = (patch["max"] as JsonValue)?.TryGetValue<double>(out var hi) == true ? hi : null;
+            if (patch.ContainsKey("scale")) field.Scale = (patch["scale"] as JsonValue)?.TryGetValue<int>(out var sc) == true ? sc : null;
 
             var others = table.Fields.Where(f => f.Id != fpid).Select(f => f.Name).ToList();
             var all = table.Fields.Select(f => f.Name).ToList();
@@ -491,6 +496,9 @@ public static class TableEndpoints
             var optionsJson = body["optionsJson"] is JsonValue ov && ov.TryGetValue<string>(out var o) ? o : "[]";
             var isRequired = body["isRequired"] is JsonValue bv && bv.TryGetValue<bool>(out var b) && b;
             var pattern = body["pattern"] is JsonValue pv && pv.TryGetValue<string>(out var pat) ? pat : "";
+            var validationExpr = body["validationExpr"] is JsonValue vev && vev.TryGetValue<string>(out var vexpr) ? vexpr : "";
+            var validationMessage = body["validationMessage"] is JsonValue vmv && vmv.TryGetValue<string>(out var vmsg) ? vmsg : "";
+            var scale = body["scale"] is JsonValue scv && scv.TryGetValue<int>(out var scn) ? scn : (int?)null;
             var isHidden = body["isHidden"] is JsonValue hv && hv.TryGetValue<bool>(out var h) && h;
             var isUnique = body["isUnique"] is JsonValue uv2 && uv2.TryGetValue<bool>(out var u2) && u2;
             var isIdentifier = body["isIdentifier"] is JsonValue iv2 && iv2.TryGetValue<bool>(out var i2) && i2;
@@ -501,13 +509,14 @@ public static class TableEndpoints
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.Id == tableId);
             if (table == null) return Results.NotFound();
 
-            var allNames = table.Fields.Select(f => f.Name).ToList();
+            // a new field (not yet in table.Fields) needs its own proposed name added, an edited one already has it
+            var allNames = table.Fields.Select(f => f.Name).Append(name).Distinct().ToList();
             var others = table.Fields
                 .Where(f => fieldId == null || string.IsNullOrEmpty(fieldId) || f.Id != fieldId)
                 .Select(f => f.Name)
                 .ToList();
 
-            var field = new FieldDefinition { Name = name, DataType = dataType, Expression = expression, OptionsJson = optionsJson, IsRequired = isRequired, Pattern = pattern, IsHidden = isHidden, IsUnique = isUnique, IsIdentifier = isIdentifier };
+            var field = new FieldDefinition { Name = name, DataType = dataType, Expression = expression, OptionsJson = optionsJson, IsRequired = isRequired, Pattern = pattern, ValidationExpr = validationExpr, ValidationMessage = validationMessage, Scale = scale, IsHidden = isHidden, IsUnique = isUnique, IsIdentifier = isIdentifier };
             var errs = FieldValidation.ValidateFieldDefinition(field, others, allNames, tpid => db.Tables.Any(t => t.Id == tpid));
             if (errs.Count > 0) return Results.Ok(new { valid = false, errors = errs, dataType = field.DataType });
 

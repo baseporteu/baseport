@@ -70,6 +70,18 @@ public static class RecordEngine
         }
         if (errors.Count > 0) return new ValidationOutcome(errors, invalid, ValidationFailure.Invalid);
 
+        // same expression engine as a calculated field, but boolean and cross-field: runs against the whole record, not one value
+        foreach (var f in fields.Where(f => !string.IsNullOrWhiteSpace(f.ValidationExpr)))
+        {
+            bool ok;
+            try { ok = JsExpr.EvaluateBool(f.ValidationExpr, name => obj.TryGetPropertyValue(name, out var v) ? v : null); }
+            catch (FormatException) { continue; } // malformed expressions are rejected at field-definition time, not here
+            if (ok) continue;
+            errors.Add(string.IsNullOrWhiteSpace(f.ValidationMessage) ? $"{FieldValidation.DisplayName(f)} is not valid." : f.ValidationMessage);
+            invalid.Add(f.Name);
+        }
+        if (errors.Count > 0) return new ValidationOutcome(errors, invalid, ValidationFailure.Invalid);
+
         await CheckUniqueAsync(db, table, fields, obj, excludeRecordId, errors, invalid);
         if (errors.Count > 0) return new ValidationOutcome(errors, invalid, ValidationFailure.Conflict);
 

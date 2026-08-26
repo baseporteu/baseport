@@ -3,6 +3,7 @@
 const SECTION_ICONS = {
     tables: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M3 9h18M9 21V9'/></svg>",
     forms: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><rect x='4' y='3' width='16' height='18' rx='2'/><path d='M8 8h8M8 12h8M8 16h4'/></svg>",
+    actions: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><path d='M13 2 3 14h8l-1 8 10-12h-8z'/></svg>",
     sql: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><path d='M17 3a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6M3 21l9-9M12.2 6.3 11 5l-3.5 3.5 1.2 1.2z'/><path d='M5 3l1.5 1.5M5 3 3.5 4.5M12.8 17.3 14 18.6l3.5-3.5-1.2-1.2zM14.5 12.5h2M17 21l-1.5-1.5M17 21l1.5-1.5'/></svg>",
     schema: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><circle cx='12' cy='5' r='2'/><circle cx='5' cy='19' r='2'/><circle cx='19' cy='19' r='2'/><path d='M12 7v6M5 17l2.5-4M19 17l-2.5-4M12 13l-4.5 4M12 13l4.5 4'/></svg>",
     auth: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><path d='M5 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.85'/></svg>",
@@ -23,6 +24,7 @@ const OBJECT_ICONS = {
 const SECTIONS = [
     ['tables', 'Tables'],
     ['forms', 'Forms'],
+    ['actions', 'Actions'],
     ['sql', 'Query'],
     ['schema', 'Schema'],
     ['auth', 'Users'],
@@ -69,6 +71,26 @@ const SIDEBARS = {
                 icon: f.kind === 'list' ? OBJECT_ICONS.list : OBJECT_ICONS.form,
                 active: f.id === formEditingId,
                 onSelect: () => navigate(`/forms/${f.id}`),
+            })));
+        },
+    },
+
+    actions: {
+        group: 'Actions',
+        items: () => {
+            const actions = (typeof actionsAll === 'undefined' ? [] : actionsAll).slice()
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            return [{
+                label: 'Show all',
+                icon: OBJECT_ICONS.folder,
+                root: true,
+                active: !actionEditingId && routePath() === '/actions',
+                onSelect: () => navigate('/actions'),
+            }].concat(actions.map((a) => ({
+                label: a.name || 'Untitled action',
+                icon: SECTION_ICONS.actions,
+                active: a.id === actionEditingId,
+                onSelect: () => navigate(`/actions/${a.id}`),
             })));
         },
     },

@@ -295,6 +295,9 @@ public static class JsExpr
         return Eval(tree, get);
     }
 
+    // truthiness only, for a validation rule
+    public static bool EvaluateBool(string expr, Func<string, JsonNode?> get) => AsBool(Evaluate(expr, get));
+
     private static object Eval(Node n, Func<string, JsonNode?> get)
     {
         switch (n)

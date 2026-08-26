@@ -1,8 +1,8 @@
 (function() {
-    const script = document.currentScript;
-    const urlParams = new URL(script.src);
-    const formId = urlParams.searchParams.get('id');
-    const apiBase = urlParams.origin;
+    // one form instance, mounted into `container`; callable directly (a page composing several forms in its own
+    // layout) or via the auto-bootstrap below (today's single `<script src="embed.js?id=X">` embed, unchanged)
+    function mountBaseportForm(container, formId, apiBase) {
+    container.classList.add('baserow-embed');
 
     if (!document.getElementById('baserow-embed-style')) {
         const style = document.createElement('style');
@@ -185,10 +185,6 @@
         `;
         document.head.appendChild(style);
     }
-
-    const container = document.createElement('div');
-    container.className = 'baserow-embed';
-    script.parentNode.insertBefore(container, script.nextSibling);
 
     // Feedback is a toast here too, a host page's layout is never disturbed by a message box appearing inside the form.
     function toastHost() {
@@ -919,7 +915,14 @@
         return wrap;
     }
 
+    // tags the block's own wrapper once, whatever type-specific branch below produced it, so triggerReactiveUpdate can show/hide it uniformly
     function renderLayoutRow(row, table) {
+        const node = renderLayoutRowInner(row, table);
+        if (node && row.showIf) node.dataset.showIf = row.showIf;
+        return node;
+    }
+
+    function renderLayoutRowInner(row, table) {
         if (row.t === 'subtotal') {
             const div = document.createElement('div');
             div.className = 'baserow-subtotal';
@@ -1063,12 +1066,12 @@
         } else if (type === 'number') {
             el = document.createElement('input');
             el.type = 'number';
-            el.step = 'any';
+            el.step = field.scale === null || field.scale === undefined ? 'any' : (1 / Math.pow(10, field.scale)).toString();
             el.dataset.kind = 'num';
         } else if (type === 'currency' || type === 'price') {
             el = document.createElement('input');
             el.type = 'number';
-            el.step = '0.01';
+            el.step = (1 / Math.pow(10, field.scale === null || field.scale === undefined ? 2 : field.scale)).toString();
             el.inputMode = 'decimal';
             el.placeholder = '0.00';
             el.dataset.kind = 'num';
@@ -1422,6 +1425,9 @@
     function triggerReactiveUpdate() {
         if (!formEl) return;
         const data = extractFormData();
+        formEl.querySelectorAll('[data-show-if]').forEach((el) => {
+            el.hidden = !safeEval(el.dataset.showIf, data);
+        });
         formEl.querySelectorAll('input[data-expr], .baserow-subtotal-value[data-expr]').forEach((el) => {
             if (el.dataset.expr === 'GETDATE()') {
                 el.value = new Date().toISOString().split('T')[0];
@@ -1542,5 +1548,21 @@
         let out = '';
         for (let i = 0; i < len; i++) out += chars[arr[i] % chars.length];
         return out;
+    }
+    } // end mountBaseportForm
+
+    window.Baseport = window.Baseport || {};
+    window.Baseport.mountForm = mountBaseportForm;
+
+    // today's embed: a bare <script src="/embed.js?id=X"> mounts itself into a fresh div right after its own tag.
+    // No id means a caller only wanted the library loaded, to call window.Baseport.mountForm itself.
+    const script = document.currentScript;
+    if (script && new URL(script.src).searchParams.get('id')) {
+        const urlParams = new URL(script.src);
+        const formId = urlParams.searchParams.get('id');
+        const apiBase = urlParams.origin;
+        const container = document.createElement('div');
+        script.parentNode.insertBefore(container, script.nextSibling);
+        mountBaseportForm(container, formId, apiBase);
     }
 })();

@@ -82,9 +82,12 @@ function cloneField(f) {
         currency: f.currency || '',
         min: f.min === undefined ? null : f.min,
         max: f.max === undefined ? null : f.max,
+        scale: f.scale === undefined ? null : f.scale,
         position: f.position || 0,
         isRequired: !!f.isRequired,
         pattern: f.pattern || '',
+        validationExpr: f.validationExpr || '',
+        validationMessage: f.validationMessage || '',
         isHidden: !!f.isHidden,
         isUnique: !!f.isUnique,
         isIdentifier: !!f.isIdentifier,
@@ -156,6 +159,10 @@ const ROUTES = [
     ],
     [/^\/forms(?:\/([\w-]+))?$/, (m) => ({
         section: 'forms',
+        id: m[1]
+    })],
+    [/^\/actions(?:\/([\w-]+))?$/, (m) => ({
+        section: 'actions',
         id: m[1]
     })],
     [/^\/sql(?:\/([\w-]+))?$/, (m) => ({
@@ -247,6 +254,22 @@ const SECTION_ROUTES = {
         }
         await editForm(id);
     },
+    actions: async (id) => {
+        if (!currentTables.length) await loadTables(); // the table picker needs the catalogue loaded
+        await loadActions();
+        const overview = !id;
+        document.getElementById('actionsOverview').classList.toggle('hidden', !overview);
+        document.getElementById('actionEditor').classList.toggle('hidden', overview);
+        if (overview) {
+            closeActionEditor();
+            return;
+        }
+        if (id === 'new') {
+            newAction();
+            return;
+        }
+        await editAction(id);
+    },
     sql: async (id) => {
         await initSqlEditor();
         await loadSavedQueries();
@@ -275,7 +298,7 @@ async function render() {
     document
         .querySelectorAll('.side-nav-btn')
         .forEach((b) => b.classList.toggle('active', b.dataset.section === route.section));
-    ['forms', 'sql', 'schema', 'auth', 'logs', 'settings'].forEach((v) =>
+    ['forms', 'actions', 'sql', 'schema', 'auth', 'logs', 'settings'].forEach((v) =>
         document.getElementById(v + 'View').classList.toggle('active', v === route.section),
     );
 
@@ -346,4 +369,99 @@ async function newTable() {
     }
     await loadTables();
     navigate(`/tables/${data.id}`);
+}
+
+// Suggests field names while typing "data.<partial>" inside a free-text JS-expression input (showIf, a
+// subtotal or button expr, a validation rule); Enter/Tab or a click completes the identifier in place and
+// leaves the rest of the expression alone. Reuses the combobox-list/-option look from ui.combobox, not that
+// widget itself: ui.combobox replaces a whole field's value, this inserts one at the cursor.
+function attachFieldExprAutocomplete(input, getFieldNames) {
+    let list = null;
+    let items = [];
+    let active = -1;
+
+    function close() {
+        if (list) {
+            list.remove();
+            list = null;
+        }
+        active = -1;
+    }
+
+    function currentToken() {
+        const pos = input.selectionStart || 0;
+        const before = input.value.slice(0, pos);
+        const m = /data\.(\w*)$/.exec(before);
+        return m ? {
+            start: pos - m[1].length,
+            query: m[1]
+        } : null;
+    }
+
+    function refreshActive() {
+        list.querySelectorAll('.combobox-option').forEach((el, i) => el.classList.toggle('active', i === active));
+    }
+
+    function complete(token, name) {
+        const before = input.value.slice(0, token.start);
+        const after = input.value.slice(input.selectionStart || token.start);
+        input.value = before + name + after;
+        const caret = before.length + name.length;
+        input.setSelectionRange(caret, caret);
+        input.dispatchEvent(new Event('input', {
+            bubbles: true
+        }));
+        close();
+        input.focus();
+    }
+
+    function open(token) {
+        const names = getFieldNames().filter((n) => n.toLowerCase().startsWith(token.query.toLowerCase()));
+        if (!names.length) {
+            close();
+            return;
+        }
+        items = names;
+        if (!list) {
+            list = document.createElement('ul');
+            list.className = 'combobox-list';
+            const parent = input.parentElement || document.body;
+            if (!parent.style.position) parent.style.position = 'relative';
+            parent.appendChild(list);
+        }
+        list.innerHTML = names
+            .map((n, i) => `<li class="combobox-option${i === active ? ' active' : ''}" data-i="${i}">${n}</li>`)
+            .join('');
+        list.querySelectorAll('.combobox-option').forEach((el) => {
+            el.addEventListener('mousedown', (ev) => {
+                ev.preventDefault(); // keeps focus on input, so blur's close() doesn't beat this click
+                const token2 = currentToken();
+                if (token2) complete(token2, names[Number(el.dataset.i)]);
+            });
+        });
+    }
+
+    input.addEventListener('input', () => {
+        const token = currentToken();
+        active = -1;
+        if (token) open(token);
+        else close();
+    });
+    input.addEventListener('keydown', (ev) => {
+        if (!list) return;
+        if (ev.key === 'ArrowDown') {
+            ev.preventDefault();
+            active = Math.min(active + 1, items.length - 1);
+            refreshActive();
+        } else if (ev.key === 'ArrowUp') {
+            ev.preventDefault();
+            active = Math.max(active - 1, 0);
+            refreshActive();
+        } else if ((ev.key === 'Enter' || ev.key === 'Tab') && active >= 0) {
+            ev.preventDefault();
+            const token = currentToken();
+            if (token) complete(token, items[active]);
+        } else if (ev.key === 'Escape') close();
+    });
+    input.addEventListener('blur', () => setTimeout(close, 150));
 }

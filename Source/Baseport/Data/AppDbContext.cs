@@ -24,6 +24,8 @@ public class AppDbContext : DbContext
     public DbSet<TableDefinition> Tables => Set<TableDefinition>();
     public DbSet<FieldDefinition> Fields => Set<FieldDefinition>();
     public DbSet<FormConfig> FormConfigs => Set<FormConfig>();
+    public DbSet<ActionDef> Actions => Set<ActionDef>();
+    public DbSet<PendingActionRun> PendingActionRuns => Set<PendingActionRun>();
     public DbSet<Record> Records => Set<Record>();
     public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
@@ -44,6 +46,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<FieldDefinition>().ToTable("_fields");
         modelBuilder.Entity<Record>().ToTable("_records");
         modelBuilder.Entity<FormConfig>().ToTable("_forms");
+        modelBuilder.Entity<ActionDef>().ToTable("_actions");
+        modelBuilder.Entity<PendingActionRun>().ToTable("_action_runs");
         modelBuilder.Entity<UserAccount>().ToTable("_users");
         modelBuilder.Entity<UserSession>().ToTable("_user_sessions");
         modelBuilder.Entity<AuditLog>().ToTable("_audit_log");
@@ -64,6 +68,16 @@ public class AppDbContext : DbContext
             .WithMany()
             .HasForeignKey(f => f.TableId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ActionDef>()
+            .HasOne<TableDefinition>()
+            .WithMany()
+            .HasForeignKey(a => a.TableId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The scheduler's own tick query: every due run, oldest first.
+        modelBuilder.Entity<PendingActionRun>()
+            .HasIndex(r => new { r.Status, r.NextAttemptAt });
 
         // The lost update, closed where every writer passes rather than where a client remembers to ask. A read-merge-write spans several statements, so two concurrent PATCHes both read one JsonData, both merge their own change onto it and both write: last one wins and the first change is gone with nothing anywhere to say so. As a concurrency token, UpdatedAt puts the version the writer read into the UPDATE's own WHERE clause, so the loser changes no rows and is told. RecordChangeInterceptor already stamps it on every write, which is what makes it a version; it needs no column of its own and so no migration.
         // This is where Firestore and TrailBase put it too: the guarantee is a property of the write path, and an If-Match precondition is a caller's optional extra on top, never the thing the guarantee rests on.
@@ -86,6 +100,8 @@ public class AppDbContext : DbContext
                      modelBuilder.Entity<TableDefinition>().Metadata,
                      modelBuilder.Entity<FieldDefinition>().Metadata,
                      modelBuilder.Entity<FormConfig>().Metadata,
+                     modelBuilder.Entity<ActionDef>().Metadata,
+                     modelBuilder.Entity<PendingActionRun>().Metadata,
                      modelBuilder.Entity<Record>().Metadata,
                      modelBuilder.Entity<UserAccount>().Metadata,
                      modelBuilder.Entity<UserSession>().Metadata,

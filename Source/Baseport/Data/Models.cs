@@ -70,10 +70,13 @@ public class FieldDefinition
     public string Expression { get; set; } = string.Empty; // JS expression for calculated/derived fields.
     public string OptionsJson { get; set; } = "[]"; // Select options, reference config, or the sub-schema of an object or list field.
     public string Pattern { get; set; } = string.Empty; // Validation regex.
+    public string ValidationExpr { get; set; } = string.Empty; // js bool expr over the whole record, false blocks the write
+    public string ValidationMessage { get; set; } = string.Empty; // shown when ValidationExpr is false, falls back to a generic message
     public string DefaultValue { get; set; } = ""; // Fallback for omitted fields.
     public string Currency { get; set; } = ""; // ISO 4217 code (falls back to app default).
     public double? Min { get; set; } // Min value or string length.
     public double? Max { get; set; } // Max value or string length.
+    public int? Scale { get; set; } // decimal places accepted for number/currency
     public int Position { get; set; } // Display order.
     public bool IsRequired { get; set; } = false;
     public bool IsUnique { get; set; } = false; // Enforced on stored records.
@@ -171,6 +174,64 @@ public class FormConfig
     public bool IsPublished { get; set; } = true; // Unpublished forms return 404.
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+// Fires on a table's own record events. StepsJson is an ordered array of { type, ... }; runExpression and
+// updateRecord are the two types the runner knows about, see Engine/ActionRunner.cs.
+public class ActionDef
+{
+    public string Id { get; set; } = "";
+    public string TableId { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
+    public string TriggerKind { get; set; } = ActionTriggers.OnCreate;
+    public string StepsJson { get; set; } = "[]";
+    public bool IsEnabled { get; set; } = true;
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public static class ActionTriggers
+{
+    public const string OnCreate = "onCreate";
+    public const string OnUpdate = "onUpdate";
+    public const string OnDelete = "onDelete";
+
+    public static readonly string[] All = { OnCreate, OnUpdate, OnDelete };
+
+    // The record event name RecordEvents.Publish already uses for each of these.
+    public static string? ForRecordAction(string action) => action switch
+    {
+        "create" => OnCreate,
+        "update" => OnUpdate,
+        "delete" => OnDelete,
+        _ => null
+    };
+}
+
+// One durable, queued run of an ActionDef against one record - written in the same SaveChanges call as the
+// record event that triggered it, so a crash between "record written" and "run picked up" loses nothing:
+// the row is already committed. JobScheduler picks up Pending rows whose NextAttemptAt is due.
+public class PendingActionRun
+{
+    public string Id { get; set; } = "";
+    public string ActionDefId { get; set; } = "";
+    public string TableId { get; set; } = "";
+    public string RecordId { get; set; } = "";
+    public string TriggerKind { get; set; } = ActionTriggers.OnCreate;
+    public string Status { get; set; } = ActionRunStatus.Pending;
+    public int Attempts { get; set; } = 0;
+    public DateTime NextAttemptAt { get; set; }
+    public string LastError { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public static class ActionRunStatus
+{
+    public const string Pending = "pending";
+    public const string Done = "done";
+    // Exhausted its retries. Left in place, not deleted, an operator's only record that it never ran.
+    public const string Failed = "failed";
 }
 
 public class Record

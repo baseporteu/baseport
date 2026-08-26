@@ -1,0 +1,79 @@
+            <div id='actionsView' class='view'>
+                <div id='actionsOverview'>
+                    <div class='page-header'>
+                        <div>
+                            <h1>Actions</h1>
+                            <p class='page-sub'>Run steps automatically when a record is created, updated or deleted.</p>
+                        </div>
+                        <div class='page-actions'>
+                            <button class='btn' onclick='navigate("/actions/new")'>New action</button>
+                        </div>
+                    </div>
+
+                    <div class='table-wrap'>
+                        <table class='table'>
+                            <thead><tr>
+                                <th>Name</th>
+                                <th>Table</th>
+                                <th>Trigger</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr></thead>
+                            <tbody id='actionsRows'></tbody>
+                        </table>
+                    </div>
+                    <p id='actionsEmpty' class='muted empty-hint'>No actions yet. Create one to get started.</p>
+                </div>
+
+                <div class='hidden' id='actionEditor'>
+                    <div class='page-header'>
+                        <div>
+                            <h1 id='actionEditorTitle'>New action</h1>
+                            <p class='page-sub'>Steps run in order. A failed step stops the rest and retries later.</p>
+                        </div>
+                        <div class='page-actions'>
+                            <button class='btn btn-outline btn-danger hidden' id='actionDeleteBtn' onclick='deleteCurrentAction()'>Delete</button>
+                            <button class='btn btn-outline' onclick='cancelActionEditor()'>Cancel</button>
+                            <button class='btn' id='saveActionBtn' onclick='saveAction(this)'>Save action</button>
+                        </div>
+                    </div>
+
+                    <div class='grid-form two'>
+                        <input type='text' id='actionName' class='input' placeholder='Action name'>
+                        <select id='actionTable' class='input' onchange='onActionTableChange()'></select>
+                    </div>
+                    <div class='grid-form two'>
+                        <select id='actionTrigger' class='input'>
+                            <option value='onCreate'>When a record is created</option>
+                            <option value='onUpdate'>When a record is updated</option>
+                            <option value='onDelete'>When a record is deleted</option>
+                        </select>
+                        <label class='switch-row'><span class='switch'><input type='checkbox' id='actionEnabled' checked><span class='track'></span><span class='thumb'></span></span><span>Enabled</span></label>
+                    </div>
+
+                    <div class='builder-toolbar' style='margin-top:1rem'>
+                        <button class='btn btn-outline btn-sm' onclick='addActionStep("runExpression")'>+ Run expression</button>
+                        <button class='btn btn-outline btn-sm' onclick='addActionStep("updateRecord")'>+ Update record</button>
+                    </div>
+                    <div id='actionSteps' class='builder-canvas'></div>
+                    <p class='canvas-empty hidden' id='actionStepsEmpty'>No steps yet. Add one above.</p>
+
+                    <div id='actionRunsPanel' class='hidden' style='margin-top:2rem'>
+                        <h3>Recent runs</h3>
+                        <div class='table-wrap'>
+                            <table class='table'>
+                                <thead><tr>
+                                    <th>Record</th>
+                                    <th>Trigger</th>
+                                    <th>Status</th>
+                                    <th>Attempts</th>
+                                    <th>Next attempt</th>
+                                    <th>Last error</th>
+                                </tr></thead>
+                                <tbody id='actionRunsRows'></tbody>
+                            </table>
+                        </div>
+                        <p id='actionRunsEmpty' class='muted empty-hint'>No runs yet.</p>
+                    </div>
+                </div>
+            </div>

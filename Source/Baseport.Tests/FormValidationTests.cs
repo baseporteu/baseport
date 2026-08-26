@@ -202,6 +202,17 @@ public class FormValidationTests
     }
 
     [Fact]
+    public void A_show_if_expression_is_validated_like_any_other()
+    {
+        var form = Form(FormKinds.Form, "{}", title: "Conditional");
+        form.LayoutJson = @"{""rows"":[{""t"":""row"",""showIf"":""data.Customer === 'VIP'"",""cols"":[{""t"":""col"",""w"":12,""items"":[""Customer""]}]}]}";
+        Assert.Empty(FieldValidation.ValidateForm(form, Fields));
+
+        form.LayoutJson = @"{""rows"":[{""t"":""row"",""showIf"":""data.Ghost =="",""cols"":[{""t"":""col"",""w"":12,""items"":[""Customer""]}]}]}";
+        Assert.Contains(FieldValidation.ValidateForm(form, Fields), e => e.Contains("show-if"));
+    }
+
+    [Fact]
     public void A_lookup_with_no_result_fields_is_refused()
     {
         var errors = FieldValidation.ValidateForm(Lookup(@"{""matchFields"":[""OrderNo""]}"), Fields);

@@ -748,6 +748,7 @@ function openFieldEditor(fieldId) {
     if (!f) return;
     editingFieldId = fieldKey(f);
     let exprRequestId = 0; // read by validateExprLive below, which is declared after this function's own early return
+    let valExprRequestId = 0; // same, for validateValidationExprLive
 
     const wrap = document.createElement('div');
 
@@ -803,6 +804,10 @@ function openFieldEditor(fieldId) {
     boundsHint.id = 'feBoundsHint';
     wrap.appendChild(boundsHint);
 
+    const scaleRow = fieldInputRow('Decimal places', 'feScale', f.scale === null || f.scale === undefined ? '' : String(f.scale), 'Leave blank for no limit');
+    scaleRow.id = 'feScaleRow';
+    wrap.appendChild(scaleRow);
+
     wrap.appendChild(
         fieldInputRow('Validation pattern (regex, optional)', 'fePattern', f.pattern, 'e.g. ^[A-Z]{2}[0-9]{9}$', true),
     );
@@ -811,6 +816,17 @@ function openFieldEditor(fieldId) {
     patHint.id = 'fePatternHint';
     patHint.innerText = 'Leave blank for no format check. Validated on submit and against the example value.';
     wrap.appendChild(patHint);
+
+    wrap.appendChild(
+        fieldInputRow('Validation rule (JS expression, optional)', 'feValidationExpr', f.validationExpr, "data.Qty <= data.Stock", true),
+    );
+    const valExprHint = document.createElement('p');
+    valExprHint.className = 'expr-status';
+    valExprHint.id = 'feValidationExprStatus';
+    wrap.appendChild(valExprHint);
+    wrap.appendChild(
+        fieldInputRow('Validation message', 'feValidationMessage', f.validationMessage, 'Shown when the rule above is false'),
+    );
 
     wrap.appendChild(settingSwitch('feUnique', f.isUnique, 'Unique', 'Reject a submission whose value already exists.'));
     const identifierRow = settingSwitch('feIdentifier', f.isIdentifier, 'Identifier', 'Offer this field as a match key in lookup forms. Requires Required.');
@@ -858,6 +874,14 @@ function openFieldEditor(fieldId) {
     syncBoundsHint();
     typeSel.addEventListener('change', syncFeDefault);
     typeSel.addEventListener('change', syncBoundsHint);
+    document.getElementById('feValidationExpr').addEventListener('input', debounceValidationExprValidate);
+    document.getElementById('feValidationExpr').addEventListener('blur', () => {
+        clearTimeout(debounceValidationExprValidate._t);
+        validateValidationExprLive();
+    });
+    debounceValidationExprValidate();
+    attachFieldExprAutocomplete(document.getElementById('feValidationExpr'),
+        () => fieldDraft.filter((x) => String(fieldKey(x)) !== String(editingFieldId)).map((x) => x.name));
     return;
 
     // Respects the type's actual allowed values instead of being a blank free-text box.
@@ -932,6 +956,7 @@ function openFieldEditor(fieldId) {
             document.getElementById('feCurrency').closest('.field-label') ||
             document.getElementById('feCurrency').parentElement;
         currencyRow.classList.toggle('hidden', t !== 'currency');
+        document.getElementById('feScaleRow').classList.toggle('hidden', t !== 'number' && t !== 'currency');
         const hint = document.getElementById('feBoundsHint');
         if (!hint) return;
         // matches the Min/Max cases FieldValidation.cs actually checks -- everything else silently ignores them
@@ -974,6 +999,7 @@ function openFieldEditor(fieldId) {
                 validateExprLive();
             });
             debounceExprValidate();
+            attachFieldExprAutocomplete(inp, () => fieldDraft.filter((x) => String(fieldKey(x)) !== String(editingFieldId)).map((x) => x.name));
         } else if (t === 'select' || t === 'multiselect') {
             row.appendChild(
                 fieldInputRow(
@@ -1052,6 +1078,39 @@ function openFieldEditor(fieldId) {
         debounceExprValidate._t = setTimeout(validateExprLive, 400);
     }
 
+    function debounceValidationExprValidate() {
+        clearTimeout(debounceValidationExprValidate._t);
+        debounceValidationExprValidate._t = setTimeout(validateValidationExprLive, 400);
+    }
+
+    // same engine as a calculated field's expression, but this one is cross-field: any field name on the table may appear, not just the ones before it
+    async function validateValidationExprLive() {
+        const inp = document.getElementById('feValidationExpr');
+        const hint = document.getElementById('feValidationExprStatus');
+        if (!inp || !hint) return;
+        const expr = inp.value.trim();
+        const id = ++valExprRequestId;
+        if (!expr) {
+            hint.className = 'expr-status';
+            hint.innerText = '';
+            return;
+        }
+        const fieldNames = fieldDraft.map((x) => x.name);
+        const r = await fetch('/api/_admin/validate-expression', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ expression: expr, fieldNames }),
+        }).then((res) => res.json());
+        if (id !== valExprRequestId) return;
+        if (r.valid) {
+            hint.className = 'expr-status ok';
+            hint.innerText = '✓ Valid, ' + (r.referencedFields.join(', ') || 'no field references');
+        } else {
+            hint.className = 'expr-status bad';
+            hint.innerText = '✕ ' + (r.errors || []).join('; ');
+        }
+    }
+
     async function validateExprLive() {
         const inp = document.getElementById('feConfig');
         if (!inp) return;
@@ -1119,6 +1178,12 @@ function openFieldEditor(fieldId) {
             optionsJson,
             isRequired: document.getElementById('feRequired').checked,
             pattern: document.getElementById('fePattern').value.trim(),
+            validationExpr: document.getElementById('feValidationExpr').value.trim(),
+            validationMessage: document.getElementById('feValidationMessage').value.trim(),
+            scale: (() => {
+                const raw = document.getElementById('feScale').value.trim();
+                return raw ? Math.trunc(Number(raw)) : null;
+            })(),
             isHidden: document.getElementById('feHidden').checked,
             isUnique: document.getElementById('feUnique').checked,
             isIdentifier: document.getElementById('feIdentifier').checked,
@@ -1199,6 +1264,25 @@ async function saveFieldChanges() {
         }
     }
 
+    const newValidationExpr = document.getElementById('feValidationExpr').value.trim();
+    const newValidationMessage = document.getElementById('feValidationMessage').value.trim();
+    if (!newValidationExpr && newValidationMessage) {
+        ui.toast('A validation message needs a validation rule.', 'error');
+        return;
+    }
+    if (newValidationExpr) {
+        const fieldNames = fieldDraft.filter((x) => String(fieldKey(x)) !== String(editingFieldId)).map((x) => x.name);
+        const r = await fetch('/api/_admin/validate-expression', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ expression: newValidationExpr, fieldNames }),
+        }).then((res) => res.json());
+        if (!r.valid) {
+            ui.toast(r.errors || ['The validation rule is not valid.'], 'error');
+            return;
+        }
+    }
+
     const newPattern = document.getElementById('fePattern').value.trim();
     if (newPattern) {
         try {
@@ -1221,6 +1305,8 @@ async function saveFieldChanges() {
         ui.toast('Minimum cannot be greater than maximum.', 'error');
         return;
     }
+    const scaleRaw = num('feScale');
+    const scale = scaleRaw === null ? null : Math.trunc(scaleRaw);
 
     // Captured now, before any await: ui.confirm() below opens through the same shared
     // sheet panel this form is rendered in, which removes this form's DOM as a side effect
@@ -1251,11 +1337,14 @@ async function saveFieldChanges() {
     draft.currency = newCurrency;
     draft.min = min;
     draft.max = max;
+    draft.scale = newType === 'number' || newType === 'currency' ? scale : null;
     draft.isRequired = newRequired;
     draft.isUnique = newUnique;
     draft.isIdentifier = newIdentifier;
     draft.isHidden = newHidden;
     draft.pattern = newPattern;
+    draft.validationExpr = newValidationExpr;
+    draft.validationMessage = newValidationMessage;
     if (cfg && (newType === 'calculated' || newType === 'derived')) draft.expression = cfg.value.trim();
     else if (cfg && (newType === 'select' || newType === 'multiselect'))
         draft.optionsJson = JSON.stringify(splitOptions(cfg.value));
@@ -1290,8 +1379,11 @@ function fieldPayload(f) {
         currency: f.currency,
         min: f.min,
         max: f.max,
+        scale: f.scale,
         isRequired: f.isRequired,
         pattern: f.pattern,
+        validationExpr: f.validationExpr,
+        validationMessage: f.validationMessage,
         isHidden: f.isHidden,
         isUnique: f.isUnique,
         isIdentifier: f.isIdentifier,

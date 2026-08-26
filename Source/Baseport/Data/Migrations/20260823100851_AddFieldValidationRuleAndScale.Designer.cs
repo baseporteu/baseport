@@ -3,6 +3,7 @@ using System;
 using Baseport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,49 +11,14 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Baseport.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260823100851_AddFieldValidationRuleAndScale")]
+    partial class AddFieldValidationRuleAndScale
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
-
-            modelBuilder.Entity("Baseport.ActionDef", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("StepsJson")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TableId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TriggerKind")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TableId");
-
-                    b.ToTable("_actions", (string)null);
-                });
 
             modelBuilder.Entity("Baseport.AppSettings", b =>
                 {
@@ -423,54 +389,6 @@ namespace Baseport.Data.Migrations
                     b.ToTable("_oidc_providers", (string)null);
                 });
 
-            modelBuilder.Entity("Baseport.PendingActionRun", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ActionDefId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Attempts")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("LastError")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("NextAttemptAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("RecordId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TableId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TriggerKind")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Status", "NextAttemptAt");
-
-                    b.ToTable("_action_runs", (string)null);
-                });
-
             modelBuilder.Entity("Baseport.Record", b =>
                 {
                     b.Property<string>("Id")
@@ -732,15 +650,6 @@ namespace Baseport.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("_user_sessions", (string)null);
-                });
-
-            modelBuilder.Entity("Baseport.ActionDef", b =>
-                {
-                    b.HasOne("Baseport.TableDefinition", null)
-                        .WithMany()
-                        .HasForeignKey("TableId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Baseport.FieldDefinition", b =>
