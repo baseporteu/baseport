@@ -73,7 +73,7 @@ function openImportDefinition() {
     }));
     actions.appendChild(create);
 
-    ui.sheet('Import from definition', body, actions);
+    ui.sheet('Import', body, actions);
 }
 
 async function previewImport() {

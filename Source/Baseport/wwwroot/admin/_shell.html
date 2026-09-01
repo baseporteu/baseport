@@ -29,6 +29,7 @@
 </head>
 <body>
     <div class='shell' id='appShell' hidden>
+        <div class='nav-scrim' id='navScrim' onclick='closeNavDrawer()' aria-hidden='true'></div>
         <aside class='sidebar' id='sidebar'>
             <div class='sidebar-brand'>
                 <button type='button' class='brand-trigger' onclick='toggleSidebar()' title='Toggle sidebar' aria-expanded='true'>
@@ -117,5 +118,4 @@
                 </div>
             </header>
             <main class='main'>
-                <nav class='subbar' id='subbar' aria-label='Section' hidden></nav>
                 <div class='main-content'>

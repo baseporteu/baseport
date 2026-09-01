@@ -18,13 +18,8 @@ function isAuthPage() {
 
 async function boot() {
     // Server-rendered on a full load, the first render will costs no round trips.
-    const me =
-        bootstrap() ||
-        (await fetch('/api/auth/me')
-            .then((r) => r.json())
-            .catch(() => ({
-                authenticated: false
-            })));
+    const me = bootstrap() || (await fetch('/api/auth/me').then((r) => r.json()).catch(() => null));
+    if (!me) return;
     // Each page forwards to the other: the console to the login page when the session is gone, the login page to the console once it is back.
     if (!me.authenticated) {
         if (!isAuthPage()) {

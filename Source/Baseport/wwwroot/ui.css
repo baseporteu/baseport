@@ -322,8 +322,8 @@ body:has(.sheet.open) .toasts {
     flex-direction: column;
     background: hsl(var(--background));
     color: hsl(var(--foreground));
-    border-left: 1px solid hsl(var(--border));
-    box-shadow: -12px 0 32px rgb(0 0 0 / .12);
+    border-left: 1px solid hsl(var(--sidebar-border));
+    box-shadow: -1.5rem 0 3rem rgb(0 0 0 / .18);
     transform: translateX(100%);
     transition: transform .25s ease;
 }
@@ -337,14 +337,18 @@ body:has(.sheet.open) .toasts {
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid hsl(var(--border));
+    height: var(--topbar-height);
+    padding: 0 1.25rem;
+    background: hsl(var(--sidebar));
+    border-bottom: 1px solid hsl(var(--sidebar-border));
     flex-shrink: 0;
 }
 
 .sheet-head h3 {
     margin: 0;
-    font-size: 1rem;
+    font-size: .9375rem;
+    font-weight: 600;
+    letter-spacing: -.015em;
 }
 
 .sheet-body {
@@ -357,9 +361,11 @@ body:has(.sheet.open) .toasts {
 .sheet-actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: .5rem;
-    padding: 1rem 1.25rem;
-    border-top: 1px solid hsl(var(--border));
+    padding: .75rem 1.25rem;
+    background: hsl(var(--sidebar));
+    border-top: 1px solid hsl(var(--sidebar-border));
     flex-shrink: 0;
 }
 
@@ -547,4 +553,18 @@ body:has(.sheet.open) .toasts {
     gap: .5rem;
     font-size: .875rem;
     margin: .25rem 0 .75rem;
+}
+
+.connection-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 120;
+    padding: .5rem 1rem;
+    background: hsl(var(--destructive));
+    color: #fff;
+    font-size: .8125rem;
+    line-height: 1.4;
+    text-align: center;
 }

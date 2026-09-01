@@ -292,19 +292,21 @@ async function render() {
     const route = parseRoute();
     currentSection = route.section;
 
-    renderSectionNav();
     const isTables = route.section === 'tables';
     document.getElementById('tablesArea').classList.toggle('hidden', !isTables);
-    document
-        .querySelectorAll('.side-nav-btn')
-        .forEach((b) => b.classList.toggle('active', b.dataset.section === route.section));
     ['forms', 'actions', 'sql', 'schema', 'auth', 'logs', 'settings'].forEach((v) =>
         document.getElementById(v + 'View').classList.toggle('active', v === route.section),
     );
 
     renderSidebar(route.section);
     renderBreadcrumb(route);
-    await SECTION_ROUTES[route.section](route.id);
+    try {
+        await SECTION_ROUTES[route.section](route.id);
+    } catch (e) {
+        if (connectionOk) ui.toast('Could not load this section. Try again.', 'error');
+        lastRenderedUrl = location.href;
+        return;
+    }
     renderSidebar(route.section); // the loader may have changed what is listed or active
     renderBreadcrumb(route);
     lastRenderedUrl = location.href;

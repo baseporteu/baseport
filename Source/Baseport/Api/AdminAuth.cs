@@ -9,7 +9,7 @@ public static class AdminAuth
     public const string AuthCookie = "baseport_auth";
     public const string RefreshCookie = "baseport_refresh";
     // Same alphabet as the sign-in codes: no characters a human misreads off a log line.
-    private const string ReadableAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    private const string ReadableAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_";
 
     // The prefix says what the account is; the suffix is what stops it being guessed.
     public static string SeededUsername() => "admin-" + RandomNumberGenerator.GetString(ReadableAlphabet, 8);

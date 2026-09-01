@@ -39,7 +39,7 @@ public static class OneTimeCodes
         }
 
         // Excludes the characters a human misreads out of a log line.
-        const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+        const string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_";
         var buffer = RandomNumberGenerator.GetBytes(CodeLength);
         var code = new StringBuilder(CodeLength);
         foreach (var b in buffer) code.Append(alphabet[b % alphabet.Length]);
