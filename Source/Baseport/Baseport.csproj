@@ -29,6 +29,8 @@
 
   <ItemGroup>
     <PackageReference Include="Cronos" />
+    <PackageReference Include="DiceBear.Core" />
+    <PackageReference Include="DiceBear.Styles" />
     <PackageReference Include="HtmlSanitizer" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />

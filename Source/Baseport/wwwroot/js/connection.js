@@ -28,7 +28,7 @@ function connectionBar() {
     bar.className = 'connection-bar';
     bar.setAttribute('role', 'status');
     bar.setAttribute('aria-live', 'polite');
-    bar.textContent = 'No connection to the server. This page will pick up where it left off once it is back.';
+    bar.textContent = 'No connection to the server. We\'ll try to reconnect automatically.';
     bar.hidden = true;
     document.body.append(bar);
     return bar;

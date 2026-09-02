@@ -125,7 +125,7 @@ public static class ConsoleEndpoints
             {
                 authenticated = true,
                 // Linked, not the subject itself: the console decides whether to offer a link, and never needs the identity behind one.
-                user = new { user.Username, user.Email, user.Role, Linked = user.OidcSubject.Length > 0 },
+                user = new { user.Username, user.Email, user.Role, Linked = user.OidcSubject.Length > 0, Avatar = Avatars.DataUri(user.Username) },
                 tables = tables.Select(t => ApiDtos.TableDto(
                     t,
                     formCounts.FirstOrDefault(f => f.TableId == t.Id)?.Count ?? 0,

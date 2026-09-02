@@ -43,7 +43,13 @@ async function boot() {
     const avatar = document.getElementById('sidebarAvatar');
     // The bootstrap payload nests the account under `user`; the /api/auth/me reply is flat and capitalised. Read both shapes.
     const username = me.username || me.user?.username || me.Username || '';
-    avatar.innerText = (username || 'A').slice(0, 1).toUpperCase();
+    const avatarUri = me.avatar || me.user?.avatar || me.Avatar || '';
+    // An unrenderable avatar is an initial, never an empty circle.
+    if (avatarUri) {
+        avatar.replaceChildren(Object.assign(new Image(32, 32), { src: avatarUri, alt: '' }));
+    } else {
+        avatar.innerText = (username || 'A').slice(0, 1).toUpperCase();
+    }
     avatar.title = `Signed in as ${username}`;
 
     const accountName = document.getElementById('sidebarAccountName');

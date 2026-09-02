@@ -8,6 +8,8 @@
     <IdentityModelVersion>8.22.0</IdentityModelVersion>
   </PropertyGroup>
   <ItemGroup Label="App">
+    <PackageVersion Include="DiceBear.Core" Version="10.7.0" />
+    <PackageVersion Include="DiceBear.Styles" Version="10.6.0" />
     <PackageVersion Include="HtmlSanitizer" Version="9.2.995" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.AspNetCore" Version="$(SerilogSinksVersion)" />

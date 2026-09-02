@@ -107,7 +107,7 @@ public static class AuthEndpoints
             var user = await AdminAuth.ResolveAsync(db, ctx);
             if (user is null) return Results.Ok(new { authenticated = false });
 
-            return Results.Ok(new { authenticated = true, user.Username, user.Email, user.Role, user.MustChangePassword });
+            return Results.Ok(new { authenticated = true, user.Username, user.Email, user.Role, user.MustChangePassword, Avatar = Avatars.DataUri(user.Username) });
         });
 
         app.MapPost("/api/auth/password", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
