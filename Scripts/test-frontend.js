@@ -15,7 +15,7 @@ const {
 const wwwroot = path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot');
 // The console is split across files that share one scope; tests read them all.
 const ADMIN_SCRIPTS = ['ui.js', 'js/core.js', 'js/proxy.js', 'js/tables.js', 'js/records.js', 'js/import.js',
-    'js/sidebar.js', 'js/schema.js', 'js/sql.js', 'js/accounts.js',
+    'js/sidebar.js', 'js/schema.js', 'js/sql.js', 'js/accounts.js', 'js/actions.js',
     'js/settings.js', 'forms.js', 'js/auth.js'
 ];
 const readAll = () => ADMIN_SCRIPTS.map(read).join('\n');
@@ -24,7 +24,8 @@ const readAll = () => ADMIN_SCRIPTS.map(read).join('\n');
 // Tests read the same list, a part added to one and not the other shows up.
 const HTML_PARTS = ['admin/_shell.html', 'admin/views/tables.html', 'admin/views/forms.html',
     'admin/views/sql.html', 'admin/views/schema.html', 'admin/views/auth.html',
-    'admin/views/logs.html', 'admin/views/settings.html', 'admin/_footer.html'
+    'admin/views/logs.html', 'admin/views/settings.html', 'admin/views/actions.html',
+    'admin/_footer.html'
 ];
 // The login card is a separate page that never loads the console scripts.
 const AUTH_PART = ['admin/_auth.html'];
@@ -1393,7 +1394,7 @@ test('the role select offers admin only when creating', () => {
 test('a blank password field is not sent, saving never clears a password', () => {
     const js = read('js/accounts.js');
     const submit = js.slice(js.indexOf('async function submitAccount'), js.indexOf('async function deleteAccount'));
-    assert.ok(/if \(password && password\.value\) body\.password/.test(submit), 'an empty password field is submitted');
+    assert.ok(/if \(password(?: && password\.value|\?\.value)\) body\.password/.test(submit), 'an empty password field is submitted');
 });
 
 // The generated password is pasted straight into the command, anything under PasswordMin would be refused by the command it appears in.

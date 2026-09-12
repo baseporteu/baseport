@@ -15,6 +15,7 @@ const OBJECT_ICONS = {
     form: SECTION_ICONS.forms,
     list: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><circle cx='4' cy='6' r='1' fill='currentColor' stroke='none'/><circle cx='4' cy='12' r='1' fill='currentColor' stroke='none'/><circle cx='4' cy='18' r='1' fill='currentColor' stroke='none'/><path d='M9 6h11M9 12h11M9 18h11'/></svg>",
     query: SECTION_ICONS.sql,
+    folder: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><path d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/></svg>",
 };
 
 const SECTION_GROUPS = [
@@ -38,12 +39,75 @@ const SORT_ICON = "<svg fill='none' stroke='currentColor' stroke-linecap='round'
 
 const CLEAR = "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='12' height='12'><path d='m6 6 12 12M18 6 6 18'/></svg>";
 
-const CHEVRON = "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' viewBox='0 0 24 24' width='12' height='12'><path d='m9 18 6-6-6-6'/></svg>";
+const navSort = readNavStore('baseport.nav.sort');
+const navOrder = readNavStore('baseport.nav.order');
+const subbarFilters = {};
+
+let sortMenuSection = null;
+let dragging = null;
+
+function readNavStore(key) {
+    try {
+        const v = JSON.parse(localStorage.getItem(key));
+        return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function writeNavStore(key, value) {
+    try {
+        localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {}
+}
+
+function prefersReducedMotion() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function byName(a, b) {
+    return a.label.localeCompare(b.label);
+}
+
+function sortsFor(objects) {
+    const sorts = [
+        ['name', 'Name A to Z'],
+        ['created', 'Newest first'],
+    ];
+    if (objects.some((i) => typeof i.count === 'number')) sorts.push(['records', 'Most records']);
+    sorts.push(['manual', 'Manual']);
+    return sorts;
+}
+
+function sortObjects(section, objects) {
+    const mode = navSort[section] || 'name';
+    const list = [...objects];
+    if (mode === 'created') return list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || byName(a, b));
+    if (mode === 'records') return list.sort((a, b) => (b.count || 0) - (a.count || 0) || byName(a, b));
+    if (mode !== 'manual') return list.sort(byName);
+
+    const order = navOrder[section] || [];
+    return list.sort((a, b) => {
+        const ia = order.indexOf(a.id);
+        const ib = order.indexOf(b.id);
+        if (ia < 0 && ib < 0) return byName(a, b);
+        if (ia < 0) return 1;
+        if (ib < 0) return -1;
+        return ia - ib;
+    });
+}
+
+function withRoot(section, mapped, active, path) {
+    return [
+        { id: '__all', label: 'Show all', icon: OBJECT_ICONS.folder, root: true, active, onSelect: () => navigate(path) },
+        ...sortObjects(section, mapped),
+    ];
+}
 
 const SIDEBARS = {
     tables: {
         group: 'Tables',
-        items: () => currentTables.map((t) => ({
+        items: () => withRoot('tables', currentTables.map((t) => ({
             id: t.id,
             label: t.name,
             icon: OBJECT_ICONS.table,
@@ -52,43 +116,43 @@ const SIDEBARS = {
             count: t.recordCount,
             active: t.id === currentTablePublicId,
             onSelect: () => navigate(`/tables/${t.id}`),
-        })),
+        })), !currentTablePublicId, '/tables'),
     },
 
     forms: {
         group: 'Forms',
-        items: () => (typeof formsAll === 'undefined' ? [] : formsAll).map((f) => ({
+        items: () => withRoot('forms', (typeof formsAll === 'undefined' ? [] : formsAll).map((f) => ({
             id: f.id,
             label: f.title || 'Untitled form',
             icon: f.kind === 'list' ? OBJECT_ICONS.list : OBJECT_ICONS.form,
             createdAt: f.createdAt,
             active: f.id === formEditingId,
             onSelect: () => navigate(`/forms/${f.id}`),
-        })),
+        })), !formEditingId, '/forms'),
     },
 
     actions: {
         group: 'Actions',
-        items: () => (typeof actionsAll === 'undefined' ? [] : actionsAll).map((a) => ({
+        items: () => sortObjects('actions', (typeof actionsAll === 'undefined' ? [] : actionsAll).map((a) => ({
             id: a.id,
             label: a.name || 'Untitled action',
             icon: SECTION_ICONS.actions,
             createdAt: a.createdAt,
             active: a.id === actionEditingId,
             onSelect: () => navigate(`/actions/${a.id}`),
-        })),
+        }))),
     },
 
     sql: {
         group: 'Saved queries',
-        items: () => savedQueries.map((q) => ({
+        items: () => sortObjects('sql', savedQueries.map((q) => ({
             id: q.id,
             label: q.name,
             icon: OBJECT_ICONS.query,
             createdAt: q.createdAt,
             active: q.id === currentQueryId,
             onSelect: () => navigate(`/sql/${q.id}`),
-        })),
+        }))),
     },
 
     settings: {
@@ -112,34 +176,6 @@ const SIDEBARS = {
     logs: { items: () => [] },
 };
 
-const navFilters = {};
-
-const navSort = readNavStore('baseport.nav.sort');
-const navOrder = readNavStore('baseport.nav.order');
-
-let openedSection = null;
-let sortMenuSection = null;
-let dragging = null;
-
-function readNavStore(key) {
-    try {
-        const v = JSON.parse(localStorage.getItem(key));
-        return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-    } catch (e) {
-        return {};
-    }
-}
-
-function writeNavStore(key, value) {
-    try {
-        localStorage.setItem(key, JSON.stringify(value));
-    } catch (e) {}
-}
-
-function prefersReducedMotion() {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 function sectionItems(section) {
     const spec = SIDEBARS[section];
     if (!spec || !spec.items) return [];
@@ -150,76 +186,81 @@ function sectionItems(section) {
     }
 }
 
-function sortsFor(objects) {
-    const sorts = [
-        ['name', 'Name A to Z'],
-        ['created', 'Newest first'],
-    ];
-    if (objects.some((i) => typeof i.count === 'number')) sorts.push(['records', 'Most records']);
-    sorts.push(['manual', 'Manual']);
-    return sorts;
-}
-
-function byName(a, b) {
-    return a.label.localeCompare(b.label);
-}
-
-function sortObjects(section, objects) {
-    const mode = navSort[section] || 'name';
-    const list = [...objects];
-    if (mode === 'created') return list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || byName(a, b));
-    if (mode === 'records') return list.sort((a, b) => (b.count || 0) - (a.count || 0) || byName(a, b));
-    if (mode !== 'manual') return list.sort(byName);
-
-    const order = navOrder[section] || [];
-    return list.sort((a, b) => {
-        const ia = order.indexOf(a.id);
-        const ib = order.indexOf(b.id);
-        if (ia < 0 && ib < 0) return byName(a, b);
-        if (ia < 0) return 1;
-        if (ib < 0) return -1;
-        return ia - ib;
-    });
-}
-
-function sectionObjects(section) {
-    const raw = sectionItems(section);
-    return SIDEBARS[section] && SIDEBARS[section].group ? sortObjects(section, raw) : raw;
-}
-
 function renderSidebar(section) {
+    const current = section || currentSection;
+    renderSectionNav(current);
+    renderSubbar(current);
+}
+
+function renderSectionNav(current) {
     const nav = document.getElementById('sectionNav');
     if (!nav) return;
-    const current = section || currentSection;
     const next = document.createElement('div');
-    let opened = null;
 
     SECTION_GROUPS.forEach(([group, rows]) => {
-        next.append(ui.el('div', 'nav-eyebrow', {
-            textContent: group
-        }));
+        next.append(ui.el('div', 'nav-eyebrow', { textContent: group }));
         rows.forEach(([id, label]) => {
-            const objects = sectionObjects(id);
-            const open = id === current && objects.length > 0;
-            if (open) opened = id;
-            next.append(sectionRow(id, label, objects, open, id === current));
-            if (open) next.append(sectionKids(id, objects));
+            const objects = sectionItems(id).filter((i) => !i.root);
+            next.append(sectionButton(id, label, objects, id === current));
         });
     });
 
-    if (next.innerHTML === nav.innerHTML) return;
-
-    const scroll = nav.scrollTop;
     nav.replaceChildren(...next.childNodes);
-    nav.scrollTop = scroll;
+}
 
-    if (opened && opened !== openedSection && !prefersReducedMotion()) {
-        nav.querySelector('.nav-kids').animate(
-            [{ opacity: 0, transform: 'translateY(-.25rem)' }, {}],
-            { duration: 160, easing: 'ease-out' },
-        );
+function sectionButton(section, label, objects, active) {
+    const b = ui.el('button', 'side-nav-btn', {
+        type: 'button',
+        title: label,
+    });
+    b.dataset.section = section;
+    if (active) {
+        b.classList.add('active');
+        b.setAttribute('aria-current', 'page');
     }
-    openedSection = opened;
+    b.append(ui.el('span', 'nav-icon', {
+        innerHTML: SECTION_ICONS[section]
+    }));
+    b.append(navLabel(label));
+    if (objects.length && SIDEBARS[section].group) b.append(ui.el('span', 'nav-count', {
+        textContent: String(objects.length)
+    }));
+    b.onclick = () => goSection(section);
+    return b;
+}
+
+function renderSubbar(section) {
+    const bar = document.getElementById('subbar');
+    if (!bar) return;
+
+    const spec = SIDEBARS[section];
+    const grouped = !!(spec && spec.group);
+    const objects = sectionItems(section);
+    const root = objects.find((i) => i.root);
+    const rest = objects.filter((i) => !i.root);
+    const next = document.createElement('div');
+
+    if (root) next.append(sidebarItem(root));
+    if (grouped) {
+        next.append(filterBar(section, spec.group, rest));
+        if (sortMenuSection === section) next.append(sortMenu(section, rest));
+    }
+
+    const term = (subbarFilters[section] || '').trim().toLowerCase();
+    const matching = term ? rest.filter((i) => i.label.toLowerCase().includes(term)) : rest;
+    matching.forEach((item) => {
+        const pill = sidebarItem(item);
+        if (grouped && !term) attachOrdering(pill, section, item.id);
+        next.append(pill);
+    });
+
+    if (term && matching.length === 0) next.append(ui.el('p', 'subbar-empty', {
+        textContent: `Nothing matches "${term}".`
+    }));
+
+    const scroll = bar.scrollTop;
+    bar.replaceChildren(...next.childNodes);
+    bar.scrollTop = scroll;
 }
 
 function navLabel(text) {
@@ -234,58 +275,29 @@ function navLabel(text) {
     return wrap;
 }
 
-function sectionRow(section, label, objects, open, active) {
-    const b = ui.el('button', 'side-nav-btn', {
+function sidebarItem(item) {
+    const b = ui.el('button', 'subbar-pill' + (item.active ? ' active' : ''), {
         type: 'button',
-        title: label
+        title: item.label,
     });
-    b.dataset.section = section;
-    if (active) b.classList.add('active');
-    if (open) b.classList.add('open');
-    if (open && objects.some((i) => i.active)) b.classList.add('delegated');
-    if (active && !b.classList.contains('delegated')) b.setAttribute('aria-current', 'page');
-    b.append(ui.el('span', 'nav-icon', {
-        innerHTML: SECTION_ICONS[section]
+    if (item.active) b.setAttribute('aria-current', 'page');
+    if (item.icon) b.append(ui.el('span', 'nav-icon', {
+        innerHTML: item.icon
     }));
-    b.append(navLabel(label));
-    if (objects.length) {
-        if (SIDEBARS[section].group) b.append(ui.el('span', 'nav-count', {
-            textContent: String(objects.length)
-        }));
-        b.append(ui.el('span', 'nav-chevron', {
-            innerHTML: CHEVRON
-        }));
-        b.setAttribute('aria-expanded', String(open));
-    }
-    b.onclick = () => goSection(section);
+    b.append(navLabel(item.label));
+    if (item.badge) b.append(ui.el('span', 'nav-count', {
+        textContent: item.badge
+    }));
+    if (item.onSelect) b.onclick = item.onSelect;
     return b;
 }
 
-function sectionKids(section, objects) {
-    const wrap = ui.el('div', 'nav-kids');
-    const grouped = SIDEBARS[section].group;
-
-    if (grouped) {
-        wrap.append(navFilter(section, grouped, objects));
-        if (sortMenuSection === section) wrap.append(sortMenu(section, objects));
-    }
-
-    const term = (navFilters[section] || '').trim().toLowerCase();
-    const matching = term ? objects.filter((i) => i.label.toLowerCase().includes(term)) : objects;
-    matching.forEach((item) => wrap.append(navItem(section, item, grouped && !term)));
-
-    if (term && matching.length === 0) wrap.append(ui.el('p', 'nav-empty', {
-        textContent: `Nothing matches "${term}".`
-    }));
-    return wrap;
-}
-
-function navFilter(section, group, objects) {
-    const wrap = ui.el('div', 'nav-filter');
+function filterBar(section, group, objects) {
+    const wrap = ui.el('div', 'subbar-filter');
     const field = ui.el('div', 'nav-field');
     const input = ui.el('input', 'input input-sm', {
         type: 'search',
-        value: navFilters[section] || '',
+        value: subbarFilters[section] || '',
         placeholder: 'Filter…',
     });
     input.setAttribute('aria-label', `Filter ${group.toLowerCase()}`);
@@ -297,7 +309,7 @@ function navFilter(section, group, objects) {
     };
     field.append(input);
 
-    if (navFilters[section]) {
+    if (subbarFilters[section]) {
         const clear = ui.el('button', 'nav-clear', {
             type: 'button',
             title: 'Clear filter',
@@ -321,7 +333,7 @@ function navFilter(section, group, objects) {
     sort.onclick = (ev) => {
         ev.stopPropagation();
         sortMenuSection = open ? null : section;
-        renderSidebar(section);
+        renderSubbar(section);
     };
     wrap.append(sort);
     return wrap;
@@ -344,29 +356,11 @@ function sortMenu(section, objects) {
             navSort[section] = id;
             writeNavStore('baseport.nav.sort', navSort);
             sortMenuSection = null;
-            renderSidebar(section);
+            renderSubbar(section);
         };
         menu.append(b);
     });
     return menu;
-}
-
-function navItem(section, item, orderable) {
-    const b = ui.el('button', 'nav-item' + (item.active ? ' active' : ''), {
-        type: 'button',
-        title: item.label
-    });
-    if (item.active) b.setAttribute('aria-current', 'page');
-    if (item.icon) b.append(ui.el('span', 'nav-icon', {
-        innerHTML: item.icon
-    }));
-    b.append(navLabel(item.label));
-    if (item.badge) b.append(ui.el('span', 'nav-count', {
-        textContent: item.badge
-    }));
-    if (item.onSelect) b.onclick = item.onSelect;
-    if (orderable) attachOrdering(b, section, item.id);
-    return b;
 }
 
 function attachOrdering(b, section, id) {
@@ -408,7 +402,7 @@ function attachOrdering(b, section, id) {
 }
 
 function clearDropMarks() {
-    document.querySelectorAll('.nav-item.drop-before, .nav-item.drop-after')
+    document.querySelectorAll('.subbar-pill.drop-before, .subbar-pill.drop-after')
         .forEach((el) => el.classList.remove('drop-before', 'drop-after'));
 }
 
@@ -417,12 +411,12 @@ function commitOrder(section, ids, focusId) {
     navSort[section] = 'manual';
     writeNavStore('baseport.nav.order', navOrder);
     writeNavStore('baseport.nav.sort', navSort);
-    renderSidebar(section);
-    if (focusId) document.querySelector(`.nav-item[data-id="${focusId}"]`)?.focus();
+    renderSubbar(section);
+    if (focusId) document.querySelector(`.subbar-pill[data-id="${focusId}"]`)?.focus();
 }
 
 function moveBeside(section, id, targetId, after) {
-    const ids = sectionObjects(section).map((i) => i.id);
+    const ids = sectionItems(section).filter((i) => !i.root).map((i) => i.id);
     const from = ids.indexOf(id);
     if (from < 0) return;
     ids.splice(from, 1);
@@ -433,7 +427,7 @@ function moveBeside(section, id, targetId, after) {
 }
 
 function moveBy(section, id, delta) {
-    const ids = sectionObjects(section).map((i) => i.id);
+    const ids = sectionItems(section).filter((i) => !i.root).map((i) => i.id);
     const from = ids.indexOf(id);
     const to = from + delta;
     if (from < 0 || to < 0 || to >= ids.length) return;
@@ -442,12 +436,14 @@ function moveBy(section, id, delta) {
 }
 
 function setFilter(section, value) {
-    navFilters[section] = value;
-    renderSidebar(section);
-    const input = document.querySelector('.nav-filter input');
-    if (!input) return;
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
+    const old = document.querySelector('.subbar-filter input');
+    const caret = old ? old.selectionStart : null;
+    subbarFilters[section] = value;
+    renderSubbar(section);
+    const next = document.querySelector('.subbar-filter input');
+    if (!next) return;
+    next.focus();
+    next.setSelectionRange(caret ?? next.value.length, caret ?? next.value.length);
 }
 
 function refreshSidebar(section) {
@@ -574,10 +570,10 @@ document.addEventListener('click', (ev) => {
     if (sortMenuSection && !hit.closest('.nav-sort-menu, .nav-sort')) {
         const section = sortMenuSection;
         sortMenuSection = null;
-        renderSidebar(section);
+        renderSubbar(section);
     }
-    const row = hit.closest('.nav-item, .side-nav-btn');
-    if (row && !row.hasAttribute('aria-expanded')) closeNavDrawer();
+    const row = hit.closest('.subbar-pill, .side-nav-btn');
+    if (row) closeNavDrawer();
 });
 
 document.addEventListener('keydown', (ev) => {
@@ -587,6 +583,6 @@ document.addEventListener('keydown', (ev) => {
     if (sortMenuSection) {
         const section = sortMenuSection;
         sortMenuSection = null;
-        renderSidebar(section);
+        renderSubbar(section);
     }
 });

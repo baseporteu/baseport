@@ -107,7 +107,14 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor
 
         if (pending.Count > 0) _pending[eventData.Context] = pending;
         else Discard(eventData.Context);
+
+        if (SchemaEntriesChanged(eventData.Context.ChangeTracker)) OpenApiCache.Invalidate();
     }
+
+    // a table or field write can change what the openapi document says, a record write cannot
+    internal static bool SchemaEntriesChanged(Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker tracker) =>
+        tracker.Entries<TableDefinition>().Any(e => e.State != EntityState.Unchanged)
+        || tracker.Entries<FieldDefinition>().Any(e => e.State != EntityState.Unchanged);
 
     private List<RecordEvent> Flush(DbContext? context)
     {

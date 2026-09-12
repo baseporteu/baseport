@@ -53,6 +53,9 @@ function element(tag = 'div') {
         set textContent(v) {
             node._text = String(v);
         },
+        get childNodes() {
+            return node.children;
+        },
         get innerHTML() {
             return node._html;
         },
@@ -71,6 +74,11 @@ function element(tag = 'div') {
         appendChild(k) {
             node.append(k);
             return k;
+        },
+        replaceChildren(...kids) {
+            node.children.forEach(c => { c.parentNode = null; });
+            node.children = [];
+            node.append(...kids);
         },
         replaceWith() {},
         remove() {

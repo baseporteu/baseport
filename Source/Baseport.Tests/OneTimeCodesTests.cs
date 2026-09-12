@@ -50,7 +50,9 @@ public class OneTimeCodesTests
     public void A_mutated_code_is_rejected_and_surrounding_space_is_trimmed()
     {
         var code = Fresh("admin");
-        var mutated = code.Substring(0, code.Length - 1) + "0";
+        // guaranteed different from the original last char, a fixed "0" can otherwise collide with it
+        var mutatedChar = code[^1] == '0' ? '1' : '0';
+        var mutated = code.Substring(0, code.Length - 1) + mutatedChar;
         Assert.False(OneTimeCodes.Consume("admin", mutated));
         Assert.True(OneTimeCodes.Consume("admin", $"  {code}  "));
     }

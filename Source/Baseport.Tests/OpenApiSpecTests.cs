@@ -23,7 +23,34 @@ public class OpenApiSpecTests
 
     private static JsonObject Ops(TableDefinition t) => (Paths(t)["/api/v1/orders/records"] as JsonObject)!;
 
+    private static JsonObject Item(TableDefinition t) => (Paths(t)["/api/v1/orders/records/{recordId}"] as JsonObject)!;
+
+    private static string? DataRef(JsonObject data) => data["$ref"]?.GetValue<string>();
+
     private static JsonObject ErrorSchema() => (OpenApiSpec.BuildSchemas(new List<TableDefinition> { Table() })["Error"] as JsonObject)!;
+
+    // A generated client can only type a record's own fields if the document says which schema "data" is, not that it is an open object every table happens to share.
+    [Fact]
+    public void A_records_data_field_points_at_its_own_table_schema_everywhere_it_appears()
+    {
+        var t = Table();
+        var list = Ops(t)["get"]!["responses"]!["200"]!["content"]!["application/json"]!["schema"]!;
+        var listData = (list["properties"]!["rows"]!["items"]!["properties"]!["data"] as JsonObject)!;
+        Assert.Equal("#/components/schemas/Orders", DataRef(listData));
+
+        var created = Ops(t)["post"]!["responses"]!["201"]!["content"]!["application/json"]!["schema"]!;
+        var createdData = (created["properties"]!["data"] as JsonObject)!;
+        Assert.Equal("#/components/schemas/Orders", DataRef(createdData));
+
+        foreach (var verb in new[] { "get", "patch", "put" })
+        {
+            var op = Item(t)[verb] as JsonObject;
+            if (op is null) continue;
+            var schema = op["responses"]!["200"]!["content"]!["application/json"]!["schema"]!;
+            var data = (schema["properties"]!["data"] as JsonObject)!;
+            Assert.Equal("#/components/schemas/Orders", DataRef(data));
+        }
+    }
 
     // An endpoint absent from the document is as good as unpublished: a consumer generating a client never learns it exists.
     [Fact]

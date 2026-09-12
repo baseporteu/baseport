@@ -16,6 +16,9 @@ public static class PublicApiEndpoints
             var settings = await db.SettingsAsync() ?? new AppSettings();
             if (!settings.OpenApiEnabled) return Results.NotFound();
 
+            var version = OpenApiCache.CurrentVersion;
+            if (OpenApiCache.Get(version) is { } cached) return Results.Content(cached, "application/json");
+
             // A table can be live at /api/v1 without appearing here: ApiEnabled and ApiDocsEnabled are independent.
             var tables = (await db.Tables.Include(t => t.Fields).ToListAsync())
                 .Where(t => t.ApiEnabled && t.ApiDocsEnabled).ToList();
@@ -43,7 +46,10 @@ public static class PublicApiEndpoints
             };
             // Only when an author actually grouped something: a renderer that honours tag groups hides every tag missing from them.
             if (OpenApiSpec.BuildTagGroups(tables) is { } groups) spec["x-tagGroups"] = groups;
-            return Results.Json(spec);
+
+            var json = spec.ToJsonString();
+            OpenApiCache.Set(version, json);
+            return Results.Content(json, "application/json");
         });
 
         // Read: list records.

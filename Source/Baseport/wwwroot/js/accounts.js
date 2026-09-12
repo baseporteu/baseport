@@ -100,7 +100,7 @@ async function renderAccounts() {
 // Constructs and presents the account creation or edit form sheet.
 function openAccountForm(pid) {
     const a = pid ? accountsData.find((x) => x.id === pid) : null;
-    const isEditingAdmin = !!a && a.role === 'admin';
+    const locked = !!a && a.role === 'admin';
 
     const body = document.createElement('div');
     body.appendChild(fieldInputRow('Username', 'accUsername', a ? a.username : '', 'e.g. jane', false, 'username'));
@@ -139,26 +139,27 @@ function openAccountForm(pid) {
         body.appendChild(ui.switchRow('Disabled', {
             id: 'accDisabled',
             checked: a.isDisabled,
-            disabled: isEditingAdmin,
+            disabled: locked,
         }));
 
         // Token operations remain accessible for admin accounts.
         body.appendChild(apiTokenPanel(a));
     }
 
-    if (isEditingAdmin) {
+    if (locked) {
         // Disables fields that the API locks for admin accounts.
-        ['accRole', 'accPassword', 'accDisabled'].forEach((id) => {
-            const input = body.querySelector(`#${id}`);
-            if (input) input.disabled = true;
-        });
+        ['accRole', 'accPassword', 'accDisabled']
+            .forEach((id) => {
+                const input = body.querySelector(`#${id}`);
+                if (input) input.disabled = true;
+            });
         body.appendChild(adminNotice(a));
     }
 
     const actions = document.createElement('div');
     actions.className = 'form-actions';
 
-    if (a && !isEditingAdmin) {
+    if (a && !locked) {
         actions.appendChild(ui.button('Delete', () => deleteAccount(a.id, a.username), {
             variant: 'btn-danger',
         }));
@@ -174,7 +175,7 @@ function openAccountForm(pid) {
 
 // 10 to 12 characters, because AccountValidation.PasswordMin is 10 and the command would refuse anything shorter.
 function randomPassword() {
-    const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_';
+    const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
     const bytes = crypto.getRandomValues(new Uint8Array(12));
     return [...bytes].map((b) => alphabet[b % alphabet.length]).join('').slice(0, 10 + (bytes[0] % 3));
 }
@@ -297,8 +298,8 @@ async function submitAccount(pid) {
     };
 
     // Prevents sending restricted field mutations when targeting an admin account.
-    const isEditingAdmin = pid && accountsData.find((x) => x.id === pid)?.role === 'admin';
-    if (!isEditingAdmin) {
+    const locked = pid && accountsData.find((x) => x.id === pid)?.role === 'admin';
+    if (!locked) {
         body.role = document.getElementById('accRole').value;
         const disabled = document.getElementById('accDisabled');
         if (disabled) body.isDisabled = disabled.checked;

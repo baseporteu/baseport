@@ -81,11 +81,11 @@ public static class OpenApiSpec
             var list = new JsonObject();
             if (allowed.Contains("GET"))
                 list["get"] = BuildOp(t, $"list_{SchemaName(t)}", $"List {name} records",
-                    Responses(ReadProblems, ("200", JsonResp("OK", PageResponse()))),
+                    Responses(ReadProblems, ("200", JsonResp("OK", PageResponse(TableRef())))),
                     parameters: ListParameters());
             if (allowed.Contains("POST"))
                 list["post"] = BuildOp(t, $"create_{SchemaName(t)}", $"Create a {name} record",
-                    Responses(WriteProblems, ("201", Created())),
+                    Responses(WriteProblems, ("201", Created(TableRef()))),
                     new JsonObject
                     {
                         ["content"] = new JsonObject { ["application/json"] = new JsonObject { ["schema"] = TableRef() } }
@@ -94,11 +94,11 @@ public static class OpenApiSpec
             var item = new JsonObject();
             if (allowed.Contains("GET"))
                 item["get"] = BuildOp(t, $"get_{SchemaName(t)}", $"Get a {name} record",
-                    Responses(ReadProblems, ("200", Versioned("OK")), ("304", new JsonObject { ["description"] = "Not modified: the `If-None-Match` you sent is the current version." })),
+                    Responses(ReadProblems, ("200", Versioned("OK", TableRef())), ("304", new JsonObject { ["description"] = "Not modified: the `If-None-Match` you sent is the current version." })),
                     parameters: new JsonArray(ExpandParameter(), IfNoneMatchParameter()));
             if (allowed.Contains("PATCH"))
                 item["patch"] = BuildOp(t, $"update_{SchemaName(t)}", $"Update a {name} record",
-                    Responses(WriteProblems, ("200", Versioned("Updated"))),
+                    Responses(WriteProblems, ("200", Versioned("Updated", TableRef()))),
                     new JsonObject
                     {
                         ["description"] = "Fields to change. Omitted fields keep their stored value.",
@@ -107,7 +107,7 @@ public static class OpenApiSpec
                     new JsonArray(IfMatchParameter()));
             if (allowed.Contains("PUT"))
                 item["put"] = BuildOp(t, $"replace_{SchemaName(t)}", $"Replace a {name} record",
-                    Responses(WriteProblems, ("200", Versioned("Replaced"))),
+                    Responses(WriteProblems, ("200", Versioned("Replaced", TableRef()))),
                     new JsonObject
                     {
                         ["description"] = "The full record. Omitted fields are cleared.",
@@ -274,12 +274,12 @@ public static class OpenApiSpec
         ["schema"] = new JsonObject { ["type"] = type }
     };
 
-    private static JsonObject PageResponse() => new()
+    private static JsonObject PageResponse(JsonObject dataSchema) => new()
     {
         ["type"] = "object",
         ["properties"] = new JsonObject
         {
-            ["rows"] = new JsonObject { ["type"] = "array", ["items"] = RecordResponse() },
+            ["rows"] = new JsonObject { ["type"] = "array", ["items"] = RecordResponse(dataSchema) },
             ["page"] = new JsonObject { ["type"] = "integer" },
             ["pageSize"] = new JsonObject { ["type"] = "integer" },
             ["total"] = new JsonObject { ["type"] = "integer" },
@@ -346,16 +346,16 @@ public static class OpenApiSpec
 
     private static JsonObject ETagHeader() => Header("ETag", "Version of the record as returned. Send it back as `If-Match` on a write, or as `If-None-Match` on a read.");
 
-    private static JsonObject Versioned(string description)
+    private static JsonObject Versioned(string description, JsonObject dataSchema)
     {
-        var response = JsonResp(description, RecordResponse());
+        var response = JsonResp(description, RecordResponse(dataSchema));
         response["headers"] = ETagHeader();
         return response;
     }
 
-    private static JsonObject Created()
+    private static JsonObject Created(JsonObject dataSchema)
     {
-        var response = JsonResp("Created", RecordResponse());
+        var response = JsonResp("Created", RecordResponse(dataSchema));
         var headers = ETagHeader();
         headers["Location"] = new JsonObject
         {
@@ -447,7 +447,7 @@ public static class OpenApiSpec
         }
     };
 
-    private static JsonObject RecordResponse() => new()
+    private static JsonObject RecordResponse(JsonObject dataSchema) => new()
     {
         ["type"] = "object",
         ["description"] = "One record: its identifier, when it was created and last changed, and the stored values.",
@@ -457,7 +457,7 @@ public static class OpenApiSpec
             ["id"] = new JsonObject { ["type"] = "string", ["description"] = "Unguessable record identifier." },
             ["createdAt"] = new JsonObject { ["type"] = "string", ["format"] = "date-time" },
             ["updatedAt"] = new JsonObject { ["type"] = "string", ["format"] = "date-time", ["description"] = "Equal to createdAt until the record is first changed." },
-            ["data"] = new JsonObject { ["type"] = "object", ["additionalProperties"] = true },
+            ["data"] = dataSchema,
             ["links"] = new JsonObject
             {
                 ["type"] = "object",

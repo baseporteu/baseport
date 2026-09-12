@@ -5,20 +5,20 @@ using System.Text.Json.Nodes;
 
 namespace Baseport;
 
-// Read paths for LOOKUP and LIST forms.
+// read paths for lookup and list forms
 public static class QueryEngine
 {
     public const int MaxPageSize = 200;
 
-    // Rows counted before the total stops being exact.
+    // rows counted before the total stops being exact
     public const int CountCeiling = 2000;
 
-    // An author-defined condition baked into a list form.
+    // an author-defined condition baked into a list form
     public sealed record Filter(FieldDefinition Field, string Operator, string Value);
 
     public static readonly string[] FilterOperators = { "eq", "ne", "gt", "lt", "contains" };
 
-    // Reads a form's stored filters, dropping any whose field no longer exists.
+    // reads a form's stored filters, dropping any whose field no longer exists
     public static List<Filter> ParseFilters(IReadOnlyList<FieldDefinition> fields, JsonNode? node)
     {
         var result = new List<Filter>();
@@ -38,14 +38,14 @@ public static class QueryEngine
     {
         public int TotalPages => PageSize <= 0 ? 1 : (int)Math.Ceiling(Total / (double)PageSize);
 
-        // False once the match count passed CountCeiling; Total is then a floor.
+        // false once match count passed CountCeiling, Total is then a floor
         public bool CountExact => Total < CountCeiling;
 
-        // Set only on a keyset read. Null means page-number paging, or the last page of a keyset walk.
+        // set only on a keyset read, null means page-number paging or the last page of a walk
         public string? NextCursor { get; init; }
     }
 
-    // ponytail: keyset paging covers the default ordering only, where the key is (CreatedAt, Id) and neither half is ever null. A nullable sort column needs the NULLS FIRST/LAST half of the comparison, and a keyset that gets that wrong skips or repeats rows silently. Widen it when a caller needs to walk a sorted column, not before.
+    // ponytail: keyset only covers the (CreatedAt, Id) default order, widen for a sorted-column walk if needed
     public readonly record struct Cursor(DateTime CreatedAt, string Id)
     {
         public string Encode() => Base64Url(JsonSerializer.SerializeToUtf8Bytes(new CursorDto(CreatedAt.ToString("O", CultureInfo.InvariantCulture), Id)));
@@ -74,12 +74,12 @@ public static class QueryEngine
 
     private sealed record CursorDto(string C, string I);
 
-    // Exact, case-insensitive match of term against any of the identifier fields.
+    // exact, case-insensitive match of term against any identifier field
     public static async Task<Record?> LookupAsync(AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> matchFields, string term)
     {
         if (matchFields.Count == 0 || string.IsNullOrWhiteSpace(term)) return null;
 
-        // One json_extract per identifier field; LIKE without wildcards is an exact but case-insensitive comparison in SQLite, which is what a human-typed identifier needs.
+        // LIKE without wildcards is exact but case-insensitive in SQLite, matches a human-typed identifier
         var conditions = string.Join(" OR ", matchFields.Select(f => $"{Column(f)} LIKE {{1}} ESCAPE '\\'"));
         var sql = $$"""
             SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt", r."UpdatedAt"
@@ -92,7 +92,7 @@ public static class QueryEngine
         return rows.FirstOrDefault();
     }
 
-    // Paged, optionally searched and sorted overview for a LIST form or the records grid.
+    // paged, optionally searched and sorted overview for a list form or the records grid
     public static async Task<ListPage> ListAsync(
         AppDbContext db,
         TableDefinition table,
@@ -113,11 +113,11 @@ public static class QueryEngine
         var args = new List<object> { table.Id };
         var where = "r.\"TableId\" = {0}";
 
-        // Applied before anything the caller controls, a filter or a search term can only narrow what the rule already allows.
+        // access rule applies first, a filter or search term can only narrow it further
         if (accessFields is not null && RecordAccess.ListClause(table, accessFields, "r", accessUserId, args) is { } clause)
             where += $" AND ({clause})";
 
-        // Author-defined filters are baked into the form and are not something a visitor can change, they are applied before the search box narrows anything further.
+        // form-defined filters apply before the search box narrows further
         foreach (var f in filters ?? Array.Empty<Filter>())
         {
             var slot = args.Count;
@@ -144,20 +144,20 @@ public static class QueryEngine
 
             args.Add(match ?? $"%{EscapeLike(term)}%");
             if (searchFields.Count > 0)
-                // Restricted search: only the columns the form exposes.
+                // restricted search: only the columns the form exposes
                 search = " AND (" + string.Join(" OR ", searchFields.Select(f => $"{Column(f)} LIKE {{{slot}}} ESCAPE '\\'")) + ")";
             else if (match is not null)
             {
-                // Unrestricted search over the fts5 index. Right now it just matches whole words and prefixes, not fragments inside a word, which is the trade for not scanning every record
+                // fts5 match: whole words and prefixes only, trade for not scanning every record
                 search = RecordSearch.Clause("r", slot);
                 rankJoin = RecordSearch.RankJoin(slot);
             }
             else
-                // No index, or nothing in the term fts5 can tokenize: json_each walks every stored value, a field added later is searchable without a schema change.
+                // no fts5 match: json_each scan instead, a later field stays searchable with no schema change
                 search = $" AND EXISTS (SELECT 1 FROM json_each(r.\"JsonData\") je WHERE je.value LIKE {{{slot}}} ESCAPE '\\')";
         }
 
-        // Counting doubles the work: the same scan again, for a number most callers only render as "page 1 of n".
+        // counting doubles the work, most callers only render it as "page 1 of n"
         var countSql = $"""
             SELECT COUNT(*) AS "Value" FROM (
                 SELECT 1 FROM "_records" r WHERE {where}{search} LIMIT {CountCeiling}
@@ -165,7 +165,7 @@ public static class QueryEngine
             """;
         var total = await db.Database.SqlQueryRaw<int>(countSql, args.ToArray()).SingleAsync();
 
-        // A caller that named a sort field asked for that order and gets it; relevance only fills in for the default, where "newest first" says nothing about a search term.
+        // a named sort field always wins, relevance ranking only fills in the default order
         var ranked = rankJoin is not null && sortField is null;
         var order = ranked
             ? "m.\"Rank\""
@@ -174,7 +174,7 @@ public static class QueryEngine
                 : Column(sortField);
         var direction = ranked || !sortDescending ? "ASC" : "DESC";
 
-        // A keyset read walks from the last row of the previous page instead of counting rows to skip, so a deep page costs the same as the first one and a row inserted mid-walk cannot shift the window. It only ever applies to the default ordering, whose key is (CreatedAt, Id): both are always present, and Id breaks the tie an import leaves behind when it stamps one timestamp on every row.
+        // walks from the last row instead of counting rows to skip, only valid on the (CreatedAt, Id) default order
         var keyset = "";
         if (cursor is { } from)
         {
@@ -194,7 +194,7 @@ public static class QueryEngine
             """;
         var records = await db.Records.FromSqlRaw(pageSql, args.ToArray()).AsNoTracking().ToListAsync();
 
-        // One row past the page is what tells a pager there is a next page.
+        // one row past the page size signals there is a next page
         var hasMore = records.Count > pageSize;
         if (hasMore) records.RemoveAt(records.Count - 1);
 
@@ -204,10 +204,10 @@ public static class QueryEngine
         return new ListPage(records, total, page, pageSize, hasMore) { NextCursor = next };
     }
 
-    // Keyset paging is only correct on the ordering it was built for: name a sort field, or let a search fall through to relevance ranking, and the key stops being (CreatedAt, Id).
+    // cursors only match the (CreatedAt, Id) order, a sort field or relevance ranking breaks that key
     public static bool CursorsApply(FieldDefinition? sortField, string? rankJoin) => sortField is null && rankJoin is null;
 
-    // Projects a record down to the fields a public form is allowed to reveal.
+    // projects a record down to the fields a public form may reveal
     public static JsonObject Project(Record record, IReadOnlyList<FieldDefinition> visible)
     {
         var source = JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject ?? new JsonObject();
@@ -217,13 +217,13 @@ public static class QueryEngine
         return result;
     }
 
-    // Prefers the indexed generated column RecordIndexes maintains for this field; falls back to json_extract for the types that get no column, which is the same scan as before instead of a wrong answer.
+    // prefers RecordIndexes' generated column, falls back to json_extract for types with none
     private static string Column(FieldDefinition field) =>
         RecordIndexes.ColumnFor(field) is { } column
             ? $"r.\"{column}\""
             : JsonPath(field.Name);
 
-    // Access rules read the JSON directly instead of the generated column: that column only exists once RecordIndexes has synced the field, and a rule that 500s on an unsynced table is worse than one that scans.
+    // access rules read JSON directly, the generated column may not exist yet on an unsynced table
     internal static string JsonPathFor(string fieldName, string alias) => JsonPath(fieldName, alias);
 
     private static string JsonPath(string fieldName, string alias = "r") =>
@@ -232,7 +232,7 @@ public static class QueryEngine
     private static string EscapeLike(string term) =>
         term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
-    // Resolves stored field names (from a form's ConfigJson) to live fields, dropping anything stale.
+    // resolves stored field names to live fields, dropping anything stale
     public static List<FieldDefinition> Resolve(IReadOnlyList<FieldDefinition> fields, JsonNode? names)
     {
         if (names is not JsonArray arr) return new List<FieldDefinition>();

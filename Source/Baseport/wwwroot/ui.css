@@ -440,7 +440,8 @@ body:has(.sheet.open) .toasts {
 
     .overlay,
     .sheet,
-    .modal {
+    .modal,
+    .modal-overlay {
         transition: none;
         animation: none;
     }

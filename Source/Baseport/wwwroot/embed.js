@@ -822,20 +822,33 @@
     // Renders an add/remove-row table bound to one array field. The rows live only in this closure; every
     // mutation re-serializes into a hidden data-kind="json" input, which extractFormData()/toFormData()
     // already know how to turn into that field's array-of-objects value, same as any other json/array field.
+    //
+    // spike (PLAN-sept-12.md): rendered with Preact + htm (js/vendor/preact.min.js, js/vendor/htm.js)
+    // instead of hand-built DOM nodes, to evaluate the vanilla-vs-framework question with a real block.
+    // A cell's own keystrokes never trigger a repaint (sync() updates the row object and the hidden
+    // input directly); only add/remove a row calls setRows(), which repaints the table. That sidesteps
+    // the caret-preservation problem sidebar.js's filter box needed a manual fix for.
     function renderLineItems(rowCfg, table) {
         const field = table.fields.find((f) => f.name === rowCfg.field);
         const columns = field ? arrayColumns(field) : null;
         if (!field || !columns) return null;
+
+        const html = htm.bind(preact.h);
 
         const wrap = document.createElement('div');
         const caption = document.createElement('label');
         caption.innerText = field.label || field.name;
         wrap.appendChild(caption);
 
+        const mount = document.createElement('div');
+        wrap.appendChild(mount);
+
         const hidden = document.createElement('input');
         hidden.type = 'hidden';
         hidden.dataset.name = field.name;
         hidden.dataset.kind = 'json';
+        wrap.appendChild(hidden);
+
         let rows = [];
 
         function sync() {
@@ -845,72 +858,55 @@
             }));
         }
 
-        const tableWrap = document.createElement('div');
-        tableWrap.className = 'baserow-table-wrap';
-        const tableEl = document.createElement('table');
-        tableEl.className = 'baserow-table';
-        const thead = document.createElement('thead');
-        const headRow = document.createElement('tr');
-        columns.forEach((c) => {
-            const th = document.createElement('th');
-            th.innerText = c.label || c.name;
-            headRow.appendChild(th);
-        });
-        headRow.appendChild(document.createElement('th'));
-        thead.appendChild(headRow);
-        tableEl.appendChild(thead);
-
-        const tbody = document.createElement('tbody');
-        tableEl.appendChild(tbody);
-
-        function renderRows() {
-            tbody.innerHTML = '';
-            rows.forEach((r, i) => {
-                const tr = document.createElement('tr');
-                columns.forEach((c) => {
-                    const td = document.createElement('td');
-                    const type = lineItemInputType(c.dataType);
-                    const inp = document.createElement('input');
-                    inp.type = type;
-                    if (type === 'checkbox') inp.checked = !!r[c.name];
-                    else inp.value = r[c.name] === undefined || r[c.name] === null ? '' : r[c.name];
-                    inp.oninput = () => {
-                        r[c.name] = type === 'checkbox' ? inp.checked : type === 'number' ? (inp.value === '' ? '' : Number(inp.value)) : inp.value;
-                        sync();
-                    };
-                    td.appendChild(inp);
-                    tr.appendChild(td);
-                });
-                const rmTd = document.createElement('td');
-                const rm = document.createElement('button');
-                rm.type = 'button';
-                rm.className = 'baserow-btn-custom';
-                rm.innerText = '✕';
-                rm.onclick = () => {
-                    rows.splice(i, 1);
-                    sync();
-                    renderRows();
-                };
-                rmTd.appendChild(rm);
-                tr.appendChild(rmTd);
-                tbody.appendChild(tr);
-            });
-        }
-        renderRows();
-        tableWrap.appendChild(tableEl);
-        wrap.appendChild(tableWrap);
-
-        const addBtn = document.createElement('button');
-        addBtn.type = 'button';
-        addBtn.className = 'baserow-btn-custom';
-        addBtn.innerText = '+ Add row';
-        addBtn.onclick = () => {
-            rows.push({});
+        function setRows(next) {
+            rows = next;
             sync();
-            renderRows();
-        };
-        wrap.appendChild(addBtn);
-        wrap.appendChild(hidden);
+            paint();
+        }
+
+        function cellInput(row, c) {
+            const type = lineItemInputType(c.dataType);
+            const onInput = (e) => {
+                row[c.name] = type === 'checkbox' ? e.target.checked
+                    : type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value))
+                    : e.target.value;
+                sync();
+            };
+            return type === 'checkbox'
+                ? html`<input type="checkbox" checked=${!!row[c.name]} onInput=${onInput} />`
+                : html`<input type=${type} value=${row[c.name] == null ? '' : row[c.name]} onInput=${onInput} />`;
+        }
+
+        function Table() {
+            return html`
+                <div class="baserow-table-wrap">
+                    <table class="baserow-table">
+                        <thead>
+                            <tr>
+                                ${columns.map((c) => html`<th>${c.label || c.name}</th>`)}
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map((row, i) => html`
+                                <tr key=${i}>
+                                    ${columns.map((c) => html`<td>${cellInput(row, c)}</td>`)}
+                                    <td><button type="button" class="baserow-btn-custom"
+                                        onClick=${() => setRows(rows.filter((_, idx) => idx !== i))}>✕</button></td>
+                                </tr>
+                            `)}
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="baserow-btn-custom" onClick=${() => setRows([...rows, {}])}>+ Add row</button>
+            `;
+        }
+
+        function paint() {
+            preact.render(html`<${Table} />`, mount);
+        }
+
+        paint();
         sync();
         return wrap;
     }

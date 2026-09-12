@@ -22,6 +22,16 @@ curl -fsSL "https://cdn.jsdelivr.net/npm/@scalar/api-reference@${VERSION}" \
     -o "$VENDOR_DIR/scalar-api-reference.js"
 echo "   saved:   wwwroot/js/vendor/scalar-api-reference.js"
 
+echo "[Preact + htm]"
+PREACT_VERSION="$(latest_npm_version preact)"
+HTM_VERSION="$(latest_npm_version htm)"
+echo "   versions: preact@$PREACT_VERSION, htm@$HTM_VERSION"
+curl -fsSL "https://cdn.jsdelivr.net/npm/preact@${PREACT_VERSION}/dist/preact.min.js" \
+    -o "$VENDOR_DIR/preact.min.js"
+curl -fsSL "https://cdn.jsdelivr.net/npm/htm@${HTM_VERSION}/dist/htm.js" \
+    -o "$VENDOR_DIR/htm.js"
+echo "   saved:   wwwroot/js/vendor/preact.min.js, wwwroot/js/vendor/htm.js"
+
 echo "[Onest font]"
 FONTS_DIR="$ROOT/Source/Baseport/wwwroot/fonts"
 mkdir -p "$FONTS_DIR"
