@@ -60,14 +60,15 @@ public sealed class JobScheduler : BackgroundService
         }
 
         await RunScheduledQueriesAsync(scope, db, now, ct);
-        await RunDueActionRunsAsync(db, now, ct);
+        await RunDueActionRunsAsync(scope, db, now, ct);
     }
 
     // Durable action runs: a batch cap keeps one tick from running unboundedly long if a burst of writes queued a lot of work at once, the rest picks up on the next tick.
     private const int ActionRunBatchSize = 50;
 
-    private async Task RunDueActionRunsAsync(AppDbContext db, DateTime now, CancellationToken ct)
+    private async Task RunDueActionRunsAsync(IServiceScope scope, AppDbContext db, DateTime now, CancellationToken ct)
     {
+        var http = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
         var due = await db.PendingActionRuns
             .Where(r => r.Status == ActionRunStatus.Pending && r.NextAttemptAt <= now)
             .OrderBy(r => r.NextAttemptAt)
@@ -76,7 +77,7 @@ public sealed class JobScheduler : BackgroundService
 
         foreach (var run in due)
         {
-            try { await ActionRunner.RunAsync(db, run, _log, ct); }
+            try { await ActionRunner.RunAsync(db, run, http, _log, ct); }
             catch (Exception ex)
             {
                 // ActionRunner already turns a step failure into a retry/failed state; reaching here something broke outside that (a bad record read), not the action itself.

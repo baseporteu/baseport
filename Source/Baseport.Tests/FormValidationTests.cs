@@ -447,6 +447,31 @@ public class FormValidationTests
         Assert.Empty(FieldValidation.ValidateForm(form, withField));
     }
 
+    // the deeper check (table and reference field actually exist and point back here) needs the database, run at request time in FormEndpoints.ChildTableBlockAsync, not here
+    [Fact]
+    public void A_child_table_block_needs_a_table_and_a_reference_field_chosen()
+    {
+        var missingBoth = Form(FormKinds.Form, "{}", title: "Order");
+        missingBoth.LayoutJson = """{"rows":[{"t":"child_table"}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(missingBoth, Fields), e => e.Contains("needs both a table and a reference field"));
+
+        var missingRefField = Form(FormKinds.Form, "{}", title: "Order");
+        missingRefField.LayoutJson = """{"rows":[{"t":"child_table","table":"tbl_lines"}]}""";
+        Assert.Contains(FieldValidation.ValidateLayout(missingRefField, Fields), e => e.Contains("needs both a table and a reference field"));
+
+        var good = Form(FormKinds.Form, "{}", title: "Order");
+        good.LayoutJson = """{"rows":[{"t":"child_table","table":"tbl_lines","refField":"OrderId"}]}""";
+        Assert.Empty(FieldValidation.ValidateLayout(good, Fields));
+    }
+
+    [Fact]
+    public void A_child_table_block_alone_satisfies_the_at_least_one_field_rule()
+    {
+        var form = Form(FormKinds.Form, "{}", title: "Order");
+        form.LayoutJson = """{"rows":[{"t":"child_table","table":"tbl_lines","refField":"OrderId"}]}""";
+        Assert.Empty(FieldValidation.ValidateForm(form, Fields));
+    }
+
     [Fact]
     public void A_container_nests_only_plain_rows()
     {

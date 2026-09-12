@@ -133,26 +133,26 @@ const SIDEBARS = {
 
     actions: {
         group: 'Actions',
-        items: () => sortObjects('actions', (typeof actionsAll === 'undefined' ? [] : actionsAll).map((a) => ({
+        items: () => withRoot('actions', (typeof actionsAll === 'undefined' ? [] : actionsAll).map((a) => ({
             id: a.id,
             label: a.name || 'Untitled action',
             icon: SECTION_ICONS.actions,
             createdAt: a.createdAt,
             active: a.id === actionEditingId,
             onSelect: () => navigate(`/actions/${a.id}`),
-        }))),
+        })), !actionEditingId, '/actions'),
     },
 
     sql: {
         group: 'Saved queries',
-        items: () => sortObjects('sql', savedQueries.map((q) => ({
+        items: () => withRoot('sql', savedQueries.map((q) => ({
             id: q.id,
             label: q.name,
             icon: OBJECT_ICONS.query,
             createdAt: q.createdAt,
             active: q.id === currentQueryId,
             onSelect: () => navigate(`/sql/${q.id}`),
-        }))),
+        })), !currentQueryId, '/sql'),
     },
 
     settings: {

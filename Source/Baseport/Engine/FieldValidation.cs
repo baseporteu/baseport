@@ -574,6 +574,32 @@ public static class FieldValidation
                         if (!r.Valid) errs.AddRange(r.Errors.Select(x => $"Step {i + 1}, '{prop.Name}': {x}"));
                     }
             }
+            else if (type == "httpRequest")
+            {
+                var url = step.TryGetProperty("url", out var u) ? u.GetString() ?? "" : "";
+                if (string.IsNullOrWhiteSpace(url)) errs.Add($"Step {i + 1}: a URL is required.");
+                else if (ProxyTarget.Problem(url) is { } blocked) errs.Add($"Step {i + 1}: {blocked}");
+
+                var method = (step.TryGetProperty("method", out var m) ? m.GetString() : null) ?? "POST";
+                if (!ProxyMethods.Contains(method.ToUpperInvariant()))
+                    errs.Add($"Step {i + 1}: method must be one of {string.Join(", ", ProxyMethods)}.");
+
+                if (step.TryGetProperty("headers", out var headers) && headers.ValueKind != JsonValueKind.Object)
+                    errs.Add($"Step {i + 1}: headers must be a JSON object.");
+
+                if (step.TryGetProperty("bodyTemplate", out var body))
+                {
+                    if (body.ValueKind != JsonValueKind.Object) errs.Add($"Step {i + 1}: bodyTemplate must be a JSON object.");
+                    else
+                        foreach (var prop in body.EnumerateObject())
+                        {
+                            var expr = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() ?? "" : "";
+                            if (string.IsNullOrWhiteSpace(expr)) { errs.Add($"Step {i + 1}: '{prop.Name}' needs an expression."); continue; }
+                            var r = JsExpr.Validate(expr, fieldNames);
+                            if (!r.Valid) errs.AddRange(r.Errors.Select(x => $"Step {i + 1}, '{prop.Name}': {x}"));
+                        }
+                }
+            }
             else errs.Add($"Step {i + 1}: unknown step type '{type}'.");
             i++;
         }
@@ -609,7 +635,7 @@ public static class FieldValidation
         foreach (var row in rows.EnumerateArray())
         {
             var t = row.ValueKind == JsonValueKind.Object && row.TryGetProperty("t", out var tp) ? tp.GetString() : null;
-            if (t is not ("row" or "group" or "subtotal" or "button" or "container" or "line_items" or "button_bar"))
+            if (t is not ("row" or "group" or "subtotal" or "button" or "container" or "line_items" or "child_table" or "button_bar"))
             {
                 errs.Add($"Row {rowIdx + 1}: unknown row type '{t}'.");
                 rowIdx++;
@@ -669,6 +695,14 @@ public static class FieldValidation
                 else if (NormalizeType(field.DataType) != "array") errs.Add($"Row {rowIdx + 1}: line items must point at an array field.");
                 else if (NestedFields(field.OptionsJson).Count == 0) errs.Add($"Row {rowIdx + 1}: '{DisplayName(field)}' has no line-item columns configured.");
                 else if (!seen.Add(fieldName)) errs.Add($"Field '{fieldName}' appears more than once in the layout.");
+            }
+            else if (t == "child_table")
+            {
+                // the referenced table and field are resolved and re-checked against the live schema at request time (FormEndpoints.ChildTableBlockAsync), not here: this function has no database access.
+                var childTable = row.TryGetProperty("table", out var ct) ? ct.GetString() ?? "" : "";
+                var refField = row.TryGetProperty("refField", out var rfp) ? rfp.GetString() ?? "" : "";
+                if (string.IsNullOrWhiteSpace(childTable) || string.IsNullOrWhiteSpace(refField))
+                    errs.Add($"Row {rowIdx + 1}: child table needs both a table and a reference field chosen.");
             }
             else if (t == "button_bar")
             {
@@ -919,7 +953,7 @@ public static class FieldValidation
             if (row.ValueKind != JsonValueKind.Object) continue;
             var t = row.TryGetProperty("t", out var tp) ? tp.GetString() : null;
 
-            if (t == "line_items") { count++; continue; }
+            if (t is "line_items" or "child_table") { count++; continue; }
             if (t == "container")
             {
                 if (row.TryGetProperty("rows", out var nested) && nested.ValueKind == JsonValueKind.Array)

@@ -1,3 +1,4 @@
+using Amazon.Runtime;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -81,6 +82,21 @@ public static class BackupStore
         }
         Prune(dir, retention);
         return Path.GetFileName(target);
+    }
+
+    // shared entry point for manual and cron backups; creates a local snapshot and optional export, ignoring export errors
+    public static async Task<string> CreateAndExportAsync(string dir, AppDbContext db, AppSettings settings, CancellationToken ct = default)
+    {
+        var name = await CreateAsync(dir, db, settings.BackupRetention, ct);
+        if (BackupExport.IsConfigured(settings))
+        {
+            try { await BackupExport.UploadAsync(new S3BackupUploader(settings), Path.Combine(dir, name), settings, ct); }
+            catch (Exception ex) when (ex is AmazonServiceException or HttpRequestException)
+            {
+                Serilog.Log.Warning(ex, "Backup {Name} was created locally but export to S3 failed", name);
+            }
+        }
+        return name;
     }
 
     public static List<BackupInfo> List(string dir)

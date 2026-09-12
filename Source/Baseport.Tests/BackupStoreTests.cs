@@ -117,6 +117,17 @@ public class BackupStoreTests : IDisposable
         Assert.False(BackupStore.Delete(_dir, "nope.db"));
     }
 
+    [Fact]
+    public async Task CreateAndExport_creates_the_local_snapshot_and_attempts_no_export_when_S3_is_not_configured()
+    {
+        var storePath = Path.Combine(_dir, "store.db");
+        using var store = NewFileStore(storePath);
+
+        var name = await BackupStore.CreateAndExportAsync(_dir, store, new AppSettings(), TestContext.Current.CancellationToken);
+
+        Assert.True(File.Exists(Path.Combine(_dir, name)));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_dir)) Directory.Delete(_dir, recursive: true);

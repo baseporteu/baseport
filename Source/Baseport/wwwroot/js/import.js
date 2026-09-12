@@ -1,8 +1,8 @@
-/* importing a table, or rows for one, from a file the author already has */
+// Table and record import utility functions
 
 const IMPORT_ACCEPT = '.csv,.tsv,.txt,.json,.xml';
 
-// The file never leaves the browser between the preview and the create: the same File is posted twice, the server stores no upload between two calls.
+// The file stays in the browser between preview and creation; the same File object is posted twice.
 let importFile = null;
 
 function importForm(extra) {
@@ -26,7 +26,7 @@ function importFileRow(onPick) {
     return row;
 }
 
-// The sheet's own elements. Walking up from an input by id does not work for all of them: ui.field wraps a checkbox in a switch, the input's parent is that switch and not the field.
+// Reference to sheet elements. Note: ui.field wraps checkboxes in a switch element.
 let importEls = null;
 
 function openImportDefinition() {
@@ -78,7 +78,7 @@ function openImportDefinition() {
 
 async function previewImport() {
     const els = importEls;
-    els.preview.textContent = 'Reading the file…';
+    els.preview.textContent = 'Reading the file...';
 
     const res = await fetch('/api/_admin/tables/import', {
         method: 'POST',
@@ -167,6 +167,13 @@ function openImportRecords() {
         textContent: 'Columns are matched to this table’s fields by name. Every row is checked before any row is stored, a file with a bad row imports nothing.',
     }));
 
+    const existing = currentTables.find((t) => t.id === currentTablePublicId)?.recordCount || 0;
+    if (existing > 0) {
+        body.appendChild(ui.el('p', 'sheet-note sheet-warning', {
+            textContent: `This table already holds ${existing} record(s). Import adds rows on top of them; it does not update or remove existing ones.`,
+        }));
+    }
+
     const actions = ui.el('div', 'form-actions');
     actions.appendChild(ui.button('Cancel', () => ui.closeSheet(), {
         variant: 'btn-outline'
@@ -176,6 +183,16 @@ function openImportRecords() {
 }
 
 async function importRecords() {
+    const existing = currentTables.find((t) => t.id === currentTablePublicId)?.recordCount || 0;
+    if (existing > 0) {
+        const ok = await ui.confirm({
+            title: 'Import into a table with data',
+            message: `This table already holds ${existing} record(s). The imported rows will be added on top of them. Continue?`,
+            confirmLabel: 'Import',
+        });
+        if (!ok) return;
+    }
+
     const res = await fetch(`/api/_admin/tables/${currentTablePublicId}/records/import`, {
         method: 'POST',
         body: importForm()

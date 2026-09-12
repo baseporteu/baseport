@@ -53,7 +53,7 @@ public static class PublicApiEndpoints
         });
 
         // Read: list records.
-        app.MapGet("/api/v1/{apiName}/records", async (AppDbContext db, HttpContext ctx, string apiName, string? q, string? sort, string? order, int? page, int? pageSize, string? cursor) =>
+        app.MapGet("/api/v1/{apiName}/records", async (AppDbContext db, HttpContext ctx, string apiName, string? q, string? sort, string? order, int? page, int? pageSize, string? cursor, string[]? filter) =>
         {
             if (await ApiAuth.ResolveAsync(db, ctx) is not { } caller) return ApiError(ctx, ApiProblem.Unauthorized, "Missing or invalid bearer token.");
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == apiName && t.ApiEnabled);
@@ -64,6 +64,10 @@ public static class PublicApiEndpoints
             var fields = table.Fields.OrderBy(f => f.Position).ThenBy(f => f.Id).ToList();
             var sortField = fields.FirstOrDefault(f => f.Name == sort);
             var descending = !string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase);
+
+            // equality filter on any field, e.g. a child table listing its rows for one parent: ?filter=OrderId:abc123
+            var (parsedFilters, filterError) = ParseFilterParams(fields, filter);
+            if (filterError is { } badFilter) return ApiError(ctx, ApiProblem.BadRequest, badFilter);
 
             var relations = await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted);
             var (expand, expandError) = ApiLinks.ParseExpand(ctx.Request.Query[ApiLinks.ExpandParameter], relations);
@@ -79,7 +83,7 @@ public static class PublicApiEndpoints
             }
 
             var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50,
-                accessFields: fields, accessUserId: caller.Id, cursor: from);
+                filters: parsedFilters, accessFields: fields, accessUserId: caller.Id, cursor: from);
             var extras = await ApiLinks.ForRecordsAsync(db, apiName, result.Records, relations, expand, caller.Id, ctx.RequestAborted);
             return Results.Ok(new
             {
@@ -308,6 +312,21 @@ public static class PublicApiEndpoints
     // A body that could not be read is a request problem; a file refused for its size is its own status.
     private static ApiProblem BodyProblem(HttpContext ctx) =>
         MultipartRecord.Oversize(ctx) ? ApiProblem.TooLarge : ApiProblem.BadRequest;
+
+    // parses repeated ?filter=field:value query params into equality filters against known fields
+    private static (List<QueryEngine.Filter> Filters, string? Error) ParseFilterParams(List<FieldDefinition> fields, string[]? raw)
+    {
+        var result = new List<QueryEngine.Filter>();
+        foreach (var entry in raw ?? Array.Empty<string>())
+        {
+            var split = entry.IndexOf(':');
+            if (split < 1) return (result, $"filter '{entry}' must be field:value.");
+            var field = fields.FirstOrDefault(f => f.Name == entry[..split]);
+            if (field is null) return (result, $"'{entry[..split]}' is not a filterable field.");
+            result.Add(new QueryEngine.Filter(field, "eq", entry[(split + 1)..]));
+        }
+        return (result, null);
+    }
 
     // Refuses a method the author switched off.
     private static IResult? MethodGate(TableDefinition table, HttpContext ctx)

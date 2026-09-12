@@ -101,6 +101,13 @@ async function loadSettings() {
     document.getElementById('settingsAllowedOrigins').value = settingsData.allowedOrigins || '';
     renderAllowedOrigins(settingsData.allowedOrigins || '');
     document.getElementById('settingsBackupRetention').value = settingsData.backupRetention ?? 5;
+    document.getElementById('settingsS3ExportEnabled').checked = settingsData.s3ExportEnabled === true;
+    document.getElementById('settingsS3Bucket').value = settingsData.s3Bucket || '';
+    document.getElementById('settingsS3Region').value = settingsData.s3Region || '';
+    document.getElementById('settingsS3ServiceUrl').value = settingsData.s3ServiceUrl || '';
+    document.getElementById('settingsS3AccessKey').value = settingsData.s3AccessKey || '';
+    document.getElementById('settingsS3Prefix').value = settingsData.s3Prefix || '';
+    document.getElementById('settingsS3SecretKey').placeholder = settingsData.hasS3SecretKey ? 'Set. Type to replace it.' : '';
     document.getElementById('settingsOpenApiEnabled').checked = settingsData.openApiEnabled !== false;
     document.getElementById('settingsProxyPrivateTargetsEnabled').checked = settingsData.proxyPrivateTargetsEnabled === true;
     document.getElementById('settingsApiTitle').value = settingsData.apiTitle || '';
@@ -566,6 +573,61 @@ async function saveBackupSettings(btn) {
         if (!res) return;
         ui.toast('Backup retention updated.', 'success');
         if (settingsData) settingsData.backupRetention = retention;
+    });
+}
+
+async function saveS3Settings(btn) {
+    await ui.busy(btn, async () => {
+        const body = {
+            s3ExportEnabled: document.getElementById('settingsS3ExportEnabled').checked,
+            s3Bucket: document.getElementById('settingsS3Bucket').value.trim(),
+            s3Region: document.getElementById('settingsS3Region').value.trim(),
+            s3ServiceUrl: document.getElementById('settingsS3ServiceUrl').value.trim(),
+            s3AccessKey: document.getElementById('settingsS3AccessKey').value.trim(),
+            s3Prefix: document.getElementById('settingsS3Prefix').value.trim(),
+        };
+        // blank means "leave the current one alone", the server never echoes it back for us to resend
+        const secret = document.getElementById('settingsS3SecretKey').value;
+        if (secret) body.s3SecretKey = secret;
+        const res = await ui.send('/api/_admin/settings', {
+            method: 'PUT',
+            body,
+            failure: 'The S3 export settings could not be saved.',
+        });
+        if (!res) return;
+        document.getElementById('settingsS3SecretKey').value = '';
+        document.getElementById('settingsS3SecretKey').placeholder = res.hasS3SecretKey ? 'Set. Type to replace it.' : '';
+        if (settingsData) settingsData = { ...settingsData, ...res };
+        ui.toast('S3 export settings updated.', 'success');
+    });
+}
+
+function s3TestBody() {
+    const body = {
+        bucket: document.getElementById('settingsS3Bucket').value.trim(),
+        region: document.getElementById('settingsS3Region').value.trim(),
+        serviceUrl: document.getElementById('settingsS3ServiceUrl').value.trim(),
+        accessKey: document.getElementById('settingsS3AccessKey').value.trim(),
+    };
+    // blank means "use the saved secret", same convention as Save
+    const secret = document.getElementById('settingsS3SecretKey').value;
+    if (secret) body.secretKey = secret;
+    return body;
+}
+
+async function testS3Settings(btn) {
+    await ui.busy(btn, async () => {
+        const res = await ui.send('/api/_admin/settings/s3-test', {
+            method: 'POST',
+            body: s3TestBody(),
+            failure: 'Could not reach the server to test the connection.',
+        });
+        if (!res) return;
+        if (res.ok) {
+            ui.toast('Connected. A test object was written and removed from the bucket.', 'success');
+        } else {
+            ui.toast(res.error || 'Could not connect.', 'error');
+        }
     });
 }
 

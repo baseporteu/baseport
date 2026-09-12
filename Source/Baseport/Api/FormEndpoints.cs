@@ -154,8 +154,23 @@ $$"""
                 if (actions.Contains(FormActions.Lookup))
                     visible.AddRange(LookupResultFields(form, fields).Where(f => !visible.Contains(f)));
             }
+            var childTables = new List<object>();
+            foreach (var childId in ChildTableIdsInLayout(form.LayoutJson))
+            {
+                var (child, childFields, block) = await ChildTableBlockAsync(db, form, table, childId);
+                if (child is null || block is null) continue;
+                var visibleChild = VisibleChildColumns(childFields, block);
+                childTables.Add(new
+                {
+                    child.Id,
+                    child.Name,
+                    RefField = block.RefField.Name,
+                    Columns = visibleChild.Select(f => new { f.Name, f.Label, f.DataType })
+                });
+            }
+
             var settings = await db.SettingsAsync();
-            return Results.Ok(ApiDtos.PublicFormSchema(form, table, visible,
+            return Results.Ok(ApiDtos.PublicFormSchema(form, table, visible, childTables,
                 settings?.Currency ?? "EUR", settings?.TimeZone ?? "UTC"));
         }).RequireRateLimiting(RateLimit.Schema);
 
@@ -210,6 +225,51 @@ $$"""
             await db.SaveChangesAsync();
             return Results.Ok(new { success = true, recordId = record.Id });
         }
+
+        // a child_table block's rows for one header record, reverse-listed by the block's reference field
+        app.MapGet("/api/forms/{fpid}/child/{childTable}", async (AppDbContext db, string fpid, string childTable, string? refId) =>
+        {
+            var (form, table, _) = await LoadAsync(db, fpid);
+            if (form is null || table is null) return Results.NotFound();
+            if (string.IsNullOrWhiteSpace(refId)) return Results.BadRequest(new { errors = new[] { "refId is required." } });
+
+            var (child, childFields, block) = await ChildTableBlockAsync(db, form, table, childTable);
+            if (child is null || block is null)
+                return Results.BadRequest(new { errors = new[] { "This child table is not configured on this form." } });
+
+            var visible = VisibleChildColumns(childFields, block);
+
+            var page = await QueryEngine.ListAsync(db, child, Array.Empty<FieldDefinition>(), null, false, null, 1, QueryEngine.MaxPageSize,
+                filters: new[] { new QueryEngine.Filter(block.RefField, "eq", refId) });
+            return Results.Ok(new { rows = page.Records.Select(r => { var d = QueryEngine.Project(r, visible); d["id"] = r.Id; return d; }) });
+        }).RequireRateLimiting(RateLimit.List);
+
+        // adds one row to a child_table block's table, stamping its reference field to the header record server-side
+        app.MapPost("/api/forms/{fpid}/child/{childTable}", async (AppDbContext db, HttpContext ctx, string fpid, string childTable, string? refId) =>
+        {
+            var (form, table, _) = await LoadAsync(db, fpid);
+            if (form is null || table is null) return Results.NotFound();
+            if (form.IsReadOnly) return Results.BadRequest(new { errors = new[] { "This form is read-only." } });
+            if (string.IsNullOrWhiteSpace(refId)) return Results.BadRequest(new { errors = new[] { "refId is required." } });
+
+            var (child, childFields, block) = await ChildTableBlockAsync(db, form, table, childTable);
+            if (child is null || block is null)
+                return Results.BadRequest(new { errors = new[] { "This child table is not configured on this form." } });
+            if (!await db.Records.AnyAsync(r => r.TableId == table.Id && r.Id == refId))
+                return Results.BadRequest(new { errors = new[] { "The header record does not exist." } });
+
+            var (obj, formErrors) = await MultipartRecord.FromRequestAsync(ctx, childFields);
+            if (formErrors.Count > 0) return Results.BadRequest(new { errors = formErrors });
+            obj[block.RefField.Name] = refId;
+
+            var outcome = await RecordEngine.PrepareAsync(db, child, childFields, obj);
+            if (outcome.HasErrors) return Results.BadRequest(new { errors = outcome.Errors, invalid = outcome.InvalidFields });
+
+            var record = new Record { TableId = child.Id, Id = Ids.NewShortId(12), JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
+            db.Records.Add(record);
+            await db.SaveChangesAsync();
+            return Results.Ok(new { success = true, recordId = record.Id });
+        }).RequireRateLimiting(RateLimit.Submit);
 
         // Finds at most one record by any configured identifier field the visitor already knows.
         app.MapGet("/api/forms/{fpid}/form", LookupAsync).RequireRateLimiting(RateLimit.Lookup);
@@ -422,6 +482,74 @@ $$"""
         }
         catch (JsonException) { }
         return "Record";
+    }
+
+    // the distinct child table ids named by any child_table block in a form's layout, walked without touching the database
+    internal static List<string> ChildTableIdsInLayout(string layoutJson)
+    {
+        var ids = new List<string>();
+        JsonElement layout;
+        try { layout = JsonSerializer.Deserialize<JsonElement>(string.IsNullOrWhiteSpace(layoutJson) ? "[]" : layoutJson); }
+        catch (JsonException) { return ids; }
+
+        JsonElement rows;
+        if (layout.ValueKind == JsonValueKind.Object && layout.TryGetProperty("rows", out var rw) && rw.ValueKind == JsonValueKind.Array) rows = rw;
+        else if (layout.ValueKind == JsonValueKind.Array) rows = layout;
+        else return ids;
+
+        foreach (var row in rows.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Object) continue;
+            if ((row.TryGetProperty("t", out var tp) ? tp.GetString() : null) != "child_table") continue;
+            var id = row.TryGetProperty("table", out var tv) ? tv.GetString() : null;
+            if (!string.IsNullOrEmpty(id) && !ids.Contains(id)) ids.Add(id);
+        }
+        return ids;
+    }
+
+    internal sealed record ChildTableBlock(FieldDefinition RefField, string[] Columns);
+
+    // the block's own chosen columns, or every visible field except the reference field: a visitor never needs to see or edit the id that ties a row to its header
+    internal static List<FieldDefinition> VisibleChildColumns(List<FieldDefinition> childFields, ChildTableBlock block) =>
+        block.Columns.Length > 0
+            ? block.Columns.Select(n => childFields.FirstOrDefault(f => f.Name == n)).Where(f => f is not null).Select(f => f!).ToList()
+            : childFields.Where(f => !f.IsHidden && f.Name != block.RefField.Name).ToList();
+
+    // loads the child table plus its child_table block from this form's layout, or nulls if either is missing or refField doesn't point back at this table
+    internal static async Task<(TableDefinition? Child, List<FieldDefinition> ChildFields, ChildTableBlock? Block)> ChildTableBlockAsync(
+        AppDbContext db, FormConfig form, TableDefinition table, string childTableId)
+    {
+        var child = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.Id == childTableId);
+        if (child is null || child.IsProxy) return (null, new List<FieldDefinition>(), null);
+        var childFields = child.Fields.OrderBy(f => f.Position).ThenBy(f => f.Id).ToList();
+
+        JsonElement layout;
+        try { layout = JsonSerializer.Deserialize<JsonElement>(string.IsNullOrWhiteSpace(form.LayoutJson) ? "[]" : form.LayoutJson); }
+        catch (JsonException) { return (child, childFields, null); }
+
+        JsonElement rows;
+        if (layout.ValueKind == JsonValueKind.Object && layout.TryGetProperty("rows", out var rw) && rw.ValueKind == JsonValueKind.Array) rows = rw;
+        else if (layout.ValueKind == JsonValueKind.Array) rows = layout;
+        else return (child, childFields, null);
+
+        foreach (var row in rows.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Object) continue;
+            if ((row.TryGetProperty("t", out var tp) ? tp.GetString() : null) != "child_table") continue;
+            if ((row.TryGetProperty("table", out var tv) ? tv.GetString() : null) != child.Id) continue;
+
+            var refFieldName = row.TryGetProperty("refField", out var rf) ? rf.GetString() : null;
+            var refField = childFields.FirstOrDefault(f => f.Name == refFieldName);
+            if (refField is null || FieldValidation.NormalizeType(refField.DataType) != "reference"
+                || FieldValidation.RefTableId(refField.OptionsJson) != table.Id)
+                return (child, childFields, null);
+
+            var columns = row.TryGetProperty("columns", out var cj) && cj.ValueKind == JsonValueKind.Array
+                ? cj.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToArray()
+                : Array.Empty<string>();
+            return (child, childFields, new ChildTableBlock(refField, columns));
+        }
+        return (child, childFields, null);
     }
 
     // unpublished forms are invisible to every public route

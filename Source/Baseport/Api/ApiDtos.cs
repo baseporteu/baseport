@@ -132,7 +132,7 @@ public static class ApiDtos
     };
 
     // Public form schema handed to the embed.
-    public static object PublicFormSchema(FormConfig form, TableDefinition table, IEnumerable<FieldDefinition> visibleFields, string currency = "EUR", string timeZone = "UTC") => new
+    public static object PublicFormSchema(FormConfig form, TableDefinition table, IEnumerable<FieldDefinition> visibleFields, IEnumerable<object>? childTables = null, string currency = "EUR", string timeZone = "UTC") => new
     {
         // The embed formats subtotals, which belong to no single field, the instance default travels with the schema.
         Currency = currency,
@@ -160,7 +160,8 @@ public static class ApiDtos
                 f.Scale,
                 f.IsRequired,
                 f.IsReadOnly
-            })
+            }),
+            ChildTables = childTables ?? Enumerable.Empty<object>()
         }
     };
 }

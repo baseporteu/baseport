@@ -74,9 +74,11 @@ public static class FragmentEndpoints
             // Names the row in the delete confirmation. A lookup identifier is the closest thing a table has to a primary key an author would recognise, and validation already refuses to let one be hidden.
             var identifier = fields.FirstOrDefault(f => f.IsIdentifier);
             var sortField = fields.FirstOrDefault(f => f.Name == sort);
+            var systemSort = sortField is null && string.Equals(sort, "updatedAt", StringComparison.OrdinalIgnoreCase) ? "UpdatedAt" : null;
             var descending = !string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase);
 
-            var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 25);
+            var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 25,
+                systemSort: systemSort);
 
             var html = new StringBuilder();
             foreach (var record in result.Records)

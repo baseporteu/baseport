@@ -305,7 +305,6 @@ body {
 
 .nav-count {
     flex-shrink: 0;
-    font-family: var(--font-family-mono);
     font-size: .6875rem;
     color: hsl(var(--sidebar-muted));
 }
@@ -1373,6 +1372,10 @@ li.CodeMirror-hint-active {
     display: block;
 }
 
+.settings-content {
+    max-width: 52rem;
+}
+
 .settings-pane {
     display: flex;
     flex-direction: column;
@@ -1541,6 +1544,17 @@ li.CodeMirror-hint-active {
     font-weight: 600;
 }
 
+.muted a,
+.muted a:visited {
+    color: hsl(var(--brand-solid));
+    text-decoration: underline;
+    text-underline-offset: .15em;
+}
+
+.muted a:hover {
+    color: hsl(var(--brand));
+}
+
 .btn {
     display: inline-flex;
     align-items: center;
@@ -1702,6 +1716,18 @@ li.CodeMirror-hint-active {
     box-shadow: 0 0 0 2px hsl(var(--destructive) / .2);
 }
 
+/* native step arrows can't be themed to match this system in every browser (firefox has no shape lever at all), removed for one consistent look instead of a chromium-only reskin; arrow keys and typing still work */
+.input[type='number']::-webkit-outer-spin-button,
+.input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
 .field-hint.invalid,
 #tableApiNameHint {
     color: hsl(var(--destructive));
@@ -1837,9 +1863,9 @@ li.CodeMirror-hint-active {
 }
 
 .badge-ok {
-    background: #dcfce7;
-    color: #166534;
-    border-color: #86efac;
+    background: hsl(var(--brand-h) 35% 94%);
+    color: hsl(var(--brand-h) 40% 32%);
+    border-color: hsl(var(--brand-h) 25% 80%);
 }
 
 .badge-danger {
@@ -2343,6 +2369,10 @@ li.CodeMirror-hint-active {
     color: hsl(var(--muted-foreground));
 }
 
+.sheet-warning {
+    color: #92400e;
+}
+
 .expr-status {
     font-family: var(--font-family-mono);
     font-size: .75rem;
@@ -2581,7 +2611,7 @@ li.CodeMirror-hint-active {
 
 .setting-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+    grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
     gap: 1rem;
     align-items: start;
     padding: .875rem 0;
@@ -2595,6 +2625,10 @@ li.CodeMirror-hint-active {
 /* A field has no top margin of its own, one following a row would sit on that row's bottom border. */
 .setting-row + .field {
     margin-top: .875rem;
+}
+
+.setting-row.stack {
+    grid-template-columns: 1fr;
 }
 
 .setting-row:has(> .switch) {

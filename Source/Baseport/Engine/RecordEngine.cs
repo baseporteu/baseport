@@ -303,6 +303,41 @@ public static class RecordEngine
         return (merged, outcome);
     }
 
+    public sealed record CompositeSaveOutcome(Record Header, IReadOnlyList<Record> Lines);
+
+    // writes a header record and its child rows in one transaction, so both sides commit or neither does; lines save sequentially since there's one SQLite writer and each line's uniqueness check must see the ones before it
+    public static async Task<(CompositeSaveOutcome? Result, ValidationOutcome Outcome)> SaveCompositeAsync(
+        AppDbContext db,
+        TableDefinition header, List<FieldDefinition> headerFields, JsonObject headerData,
+        TableDefinition lineTable, List<FieldDefinition> lineFields, IReadOnlyList<JsonObject> lines,
+        string refFieldKey, CancellationToken token = default)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(token);
+
+        var headerOutcome = await PrepareAsync(db, header, headerFields, headerData);
+        if (headerOutcome.HasErrors) return (null, headerOutcome);
+
+        var headerRecord = new Record { TableId = header.Id, Id = Ids.NewShortId(12), JsonData = headerData.ToJsonString(), CreatedAt = DateTime.UtcNow };
+        db.Records.Add(headerRecord);
+        // flushed so the reference-integrity check on each line finds the header row within this same transaction
+        await db.SaveChangesAsync(token);
+
+        var lineRecords = new List<Record>();
+        foreach (var line in lines)
+        {
+            line[refFieldKey] = headerRecord.Id;
+            var lineOutcome = await PrepareAsync(db, lineTable, lineFields, line);
+            if (lineOutcome.HasErrors) return (null, lineOutcome); // tx disposes without Commit below, rolling both back
+            var lineRecord = new Record { TableId = lineTable.Id, Id = Ids.NewShortId(12), JsonData = line.ToJsonString(), CreatedAt = DateTime.UtcNow };
+            db.Records.Add(lineRecord);
+            lineRecords.Add(lineRecord);
+        }
+        await db.SaveChangesAsync(token);
+
+        await tx.CommitAsync(token);
+        return (new CompositeSaveOutcome(headerRecord, lineRecords), new ValidationOutcome(new(), new()));
+    }
+
     // Carries a field's stored values over when it is renamed. The records are keyed by field name, so without this a rename points the field at nothing: the column reads empty on every row and the values it held are orphaned under the old key. RecordIndexes moves the generated column for the same change; this moves the data under it.
     public static async Task<int> RenameFieldDataAsync(AppDbContext db, TableDefinition table, string from, string to)
     {

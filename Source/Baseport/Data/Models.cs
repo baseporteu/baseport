@@ -344,6 +344,18 @@ public class AppSettings
     public string TimeZone { get; set; } = TimeZones.HostDefault;
     public int BackupRetention { get; set; } = 5; // Maximum local backups to retain.
 
+    // pushes each snapshot to S3-compatible storage too, once configured, the local copy is never skipped
+    public bool S3ExportEnabled { get; set; } = false;
+    public string S3Bucket { get; set; } = "";
+    public string S3Region { get; set; } = "us-east-1";
+    // custom endpoint for an S3-compatible service (MinIO, Backblaze, Wasabi), blank means real AWS S3
+    public string S3ServiceUrl { get; set; } = "";
+    public string S3AccessKey { get; set; } = "";
+    // encrypted via Secrets.Protect, never returned by the settings API, see HasS3SecretKey
+    public string S3SecretKeyProtected { get; set; } = "";
+    // prepended to every object key, e.g. "prod/", lets several instances share one bucket
+    public string S3Prefix { get; set; } = "";
+
     // Preview link signing secret (generated on first boot).
     public string PreviewSecret { get; set; } = "";
 

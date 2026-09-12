@@ -1,6 +1,7 @@
 using Baseport;
 using Baseport.Providers.Postgres;
 using Baseport.Providers.Tds;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -106,6 +107,13 @@ try
     var trustForwardedHeaders = config.GetValue("TrustForwardedHeaders", false);
     FileStore.Initialize(connectionString);
 
+    // key ring lives next to the database, same rule FileStore/BackupStore already follow for operational files
+    var dbSource = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;
+    var dbFile = Path.GetFullPath(dbSource == ":memory:" ? "baseport.db" : dbSource);
+    builder.Services.AddDataProtection()
+        .SetApplicationName("Baseport")
+        .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetDirectoryName(dbFile)!, "keys")));
+
     // A second listener for the console, it can be bound to a private interface while the public API stays reachable.
     if (AdminSurface.Configure(config["AdminAddress"]) is { } adminUrl)
     {
@@ -206,6 +214,7 @@ try
     using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Secrets.Configure(scope.ServiceProvider.GetRequiredService<IDataProtectionProvider>());
         await SchemaBootstrap.ApplyAsync(db);
         await AdminAuth.EnsureAdminPasswordAsync(db);
 

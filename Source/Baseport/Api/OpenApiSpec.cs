@@ -261,7 +261,16 @@ public static class OpenApiSpec
         Param("page", "1-based page number to retrieve. Defaults to 1.", "integer"),
         Param("pageSize", $"Number of items per page (1 to {QueryEngine.MaxPageSize}). Defaults to 50.", "integer"),
         Param("cursor", "Opaque position from a previous response's `nextCursor`, for keyset paging. A deep page costs the same as the first one and rows inserted mid-walk cannot shift the window. Cannot be combined with `sort`.", "string"),
+        FilterParameter(),
         ExpandParameter());
+
+    private static JsonNode FilterParameter() => new JsonObject
+    {
+        ["name"] = "filter",
+        ["in"] = "query",
+        ["description"] = "Equality filter on a field, as field:value. Repeat the parameter to AND multiple filters, e.g. filter=OrderId:abc123.",
+        ["schema"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } }
+    };
 
     private static JsonNode ExpandParameter() => Param(ApiLinks.ExpandParameter,
         "List of relation fields to embed under `expanded`. Nested/deep expansion is not supported (1 level deep).", "string");

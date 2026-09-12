@@ -1,4 +1,6 @@
 using System.Data.Common;
+using System.Text.RegularExpressions;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Baseport;
@@ -14,8 +16,28 @@ public sealed class SqlitePragmas : DbConnectionInterceptor
         PRAGMA cache_size=-32000;
         """;
 
+    // a search box's /pattern/ ends up here; time-boxed so a catastrophic-backtracking pattern can't hang the connection
+    private static bool Regexp(string? pattern, string? input)
+    {
+        if (pattern is null || input is null) return false;
+        try
+        {
+            return Regex.IsMatch(input, pattern, RegexOptions.None, TimeSpan.FromMilliseconds(50));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static void RegisterFunctions(DbConnection connection)
+    {
+        if (connection is SqliteConnection sqlite) sqlite.CreateFunction<string?, string?, bool>("regexp", Regexp);
+    }
+
     public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData)
     {
+        RegisterFunctions(connection);
         using var command = connection.CreateCommand();
         command.CommandText = Statements;
         command.ExecuteNonQuery();
@@ -24,6 +46,7 @@ public sealed class SqlitePragmas : DbConnectionInterceptor
     public override async Task ConnectionOpenedAsync(
         DbConnection connection, ConnectionEndEventData eventData, CancellationToken cancellationToken = default)
     {
+        RegisterFunctions(connection);
         await using var command = connection.CreateCommand();
         command.CommandText = Statements;
         await command.ExecuteNonQueryAsync(cancellationToken);

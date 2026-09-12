@@ -121,6 +121,12 @@ public static class ConsoleEndpoints
                 .Select(g => new { TableId = g.Key, Count = g.Count() }).ToListAsync();
             var settings = await db.SettingsAsync() ?? new AppSettings();
 
+            // eager, same as tables above: sidebar counts need this before first render, not after a section is opened
+            var tableById = tables.ToDictionary(t => t.Id);
+            var forms = await db.FormConfigs.OrderByDescending(f => f.Id).ToListAsync();
+            var actions = await db.Actions.ToListAsync();
+            var savedQueries = await db.SavedQueries.OrderBy(q => q.Name).ToListAsync();
+
             payload = new
             {
                 authenticated = true,
@@ -130,6 +136,9 @@ public static class ConsoleEndpoints
                     t,
                     formCounts.FirstOrDefault(f => f.TableId == t.Id)?.Count ?? 0,
                     recordCounts.FirstOrDefault(r => r.TableId == t.Id)?.Count ?? 0)),
+                forms = forms.Select(f => ApiDtos.FormDto(f, tableById.GetValueOrDefault(f.TableId))),
+                actions = actions.Select(ApiDtos.ActionDto),
+                sql = savedQueries.Select(AdminEndpoints.QueryDto),
                 settings = new { settings.AppName, settings.Currency, settings.TimeZone },
                 // The field type picker paints from this, the console can never offer a type the server does not know.
                 fieldTypes = FieldTypes.All.Select(t => new { t.Name, t.Label, t.Group, t.Aliases, Shape = t.Shape.ToString().ToLowerInvariant(), t.Nestable, t.Computed }),

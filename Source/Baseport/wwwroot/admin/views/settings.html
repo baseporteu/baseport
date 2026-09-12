@@ -47,11 +47,11 @@
                         </div>
                         <div class='settings-pane hidden' data-pane='auth'>
                             <div class='card'>
-                                <div class='card-header'><div><h2>API reference</h2><p class='muted'>What consumers read at the top of <a href='/docs' target='_blank' rel='noopener'>the published reference</a>.</p></div></div>
+                                <div class='card-header'><div><h2>API reference</h2><p class='muted'>Introductory content displayed at the top of <a href='/docs' target='_blank' rel='noopener'>the published reference</a>.</p></div></div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsOpenApiEnabled'>OpenAPI document</label>
-                                        <p class='muted'>Hides the OpenAPI document, beware it does not disable the API endpoints.</p>
+                                        <p class='muted'>Hide the OpenAPI document. Note that this does not disable the underlying API endpoints.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsOpenApiEnabled'>
@@ -62,16 +62,16 @@
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsApiTitle'>Title</label>
-                                        <p class='muted'>Names the API in the reference and in generated clients.</p>
+                                        <p class='muted'>Specify the name of the API used in the reference documentation and generated clients.</p>
                                     </div>
                                     <input type='text' id='settingsApiTitle' class='input' maxlength='120' placeholder='Baseport REST API'>
                                 </div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsApiDescription'>Description</label>
-                                        <p class='muted'>The opening section of the reference.</p>
+                                        <p class='muted'>Content for the opening section of the reference.</p>
                                     </div>
-                                    <textarea id='settingsApiDescription' class='input textarea' rows='6' maxlength='8000' placeholder='What this API is for, and how to get a token.'></textarea>
+                                    <textarea id='settingsApiDescription' class='input textarea' rows='6' maxlength='8000' placeholder='Describe the purpose of this API and instructions for obtaining a token.'></textarea>
                                 </div>
                                 <div class='card-footer'>
                                     <span class='muted'></span>
@@ -79,7 +79,7 @@
                                 </div>
                             </div>
                             <div class='card'>
-                                <div class='card-header'><div><h2>API per table</h2><p class='muted'>Expose at <code>/api/v1</code>, and whether that shows up in the document above. Endpoint name, documentation and methods are configured on the table itself.</p></div></div>
+                                <div class='card-header'><div><h2>API per table</h2><p class='muted'>Expose endpoints at <code>/api/v1</code> and control whether they appear in the documentation above. Endpoint names, documentation, and methods are configured on individual tables.</p></div></div>
                                 <ul class='api-table-list' id='apiTableList'></ul>
                                 <p id='apiTablesEmpty' class='muted empty-hint'>No tables.</p>
                             </div>
@@ -87,13 +87,13 @@
                                 <div class='card-header'>
                                     <div>
                                         <h2>End-user authentication</h2>
-                                        <p class='muted'>Authentication endpoints for your application at <code>/auth</code> and <code>/api/auth/v1</code>, distinct from administrative console accounts.</p>
+                                        <p class='muted'>Configure application authentication endpoints at <code>/auth</code> and <code>/api/auth/v1</code>, separated from administrative console accounts.</p>
                                     </div>
                                 </div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsPublicAuthEnabled'>Enabled</label>
-                                        <p class='muted'>Enables public authentication pages and API endpoints. Disabling this returns 404 responses for both.</p>
+                                        <p class='muted'>Enable public authentication pages and API endpoints. When disabled, both return 404 responses.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsPublicAuthEnabled'>
@@ -104,7 +104,7 @@
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsPublicRegistrationEnabled'>Sign-up</label>
-                                        <p class='muted'>Allows new visitors to register accounts via <code>/auth/register</code>. This governs the password form only: a single sign-on provider with <em>Create accounts on first sign-in</em> turned on still provisions, because it trusts a directory you configured instead of the open internet.</p>
+                                        <p class='muted'>Allow new users to register via <code>/auth/register</code>. This applies only to the standard password form; single sign-on providers configured with automatic account creation on first sign-in remain operational.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsPublicRegistrationEnabled'>
@@ -115,7 +115,7 @@
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsAnonymousAuthEnabled'>Anonymous accounts</label>
-                                        <p class='muted'>Lets a visitor try your app before signing up. <code>POST /api/auth/v1/anonymous</code> returns a token pair for a throwaway account with no credential; signing up while carrying that token claims the account, the rows already created stay theirs.</p>
+                                        <p class='muted'>Allow visitors to test the application without creating an account. <code>POST /api/auth/v1/anonymous</code> generates a temporary token pair without credentials. Signing up while using this token converts the temporary account, preserving any existing data.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsAnonymousAuthEnabled'>
@@ -126,35 +126,35 @@
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsAnonymousRetention'>Anonymous retention (days)</label>
-                                        <p class='muted'>How long an unclaimed anonymous account is kept after its last session expired and nobody can reach it any more. Zero keeps them forever.</p>
+                                        <p class='muted'>Retention period for unclaimed anonymous accounts after their last session expires. Set to zero to retain accounts indefinitely.</p>
                                     </div>
                                     <input type='number' id='settingsAnonymousRetention' class='input' min='0' max='3650'>
                                 </div>
                                 <div class='setting-row'>
                                     <div class="setting-label">
                                         <label for="settingsAuthIssuer">Token issuer</label>
-                                        <p class="muted">The issuer identifier for the JWT. Beware, changing this value invalidates all active tokens.</p>
+                                        <p class="muted">Issuer identifier included in the JWT. Changing this value invalidates all active tokens.</p>
                                     </div>
                                     <input type='text' id='settingsAuthIssuer' class='input' maxlength='128' placeholder='baseport'>
                                 </div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsAuthTokenLifetime'>Token lifetime (seconds)</label>
-                                        <p class='muted'>Duration an access token remains valid. Accepts values between 60 and 86400 seconds.</p>
+                                        <p class='muted'>Validity duration for access tokens. Valid range is between 60 and 86400 seconds.</p>
                                     </div>
                                     <input type='number' id='settingsAuthTokenLifetime' class='input' min='60' max='86400'>
                                 </div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsAuthRefreshLifetime'>Refresh lifetime (days)</label>
-                                        <p class='muted'>Duration a refresh token can be exchanged for new access tokens. Accepts values between 1 and 365 days.</p>
+                                        <p class='muted'>Validity duration during which a refresh token can be exchanged for new access tokens. Valid range is between 1 and 365 days.</p>
                                     </div>
                                     <input type='number' id='settingsAuthRefreshLifetime' class='input' min='1' max='365'>
                                 </div>
                                 <div class='setting-row'>
                                     <div class="setting-label">
                                         <label>Signing key</label>
-                                        <p class="muted">Uses ES256. Expose <code id="settingsAuthJwks">/api/auth/v1/jwks.json</code> for JWT middleware verification. Rotating this key logs out all users.</p>
+                                        <p class="muted">Signed using ES256. Expose <code id="settingsAuthJwks">/api/auth/v1/jwks.json</code> for JWT middleware verification. Rotating this key terminates all active user sessions.</p>
                                     </div>
                                     <button class='btn btn-outline' onclick='rotateAuthKey(this)'>Rotate</button>
                                 </div>
@@ -167,7 +167,7 @@
                                 <div class='card-header'>
                                     <div>
                                         <h2>Single sign-on</h2>
-                                        <p class='muted'>OpenID Connect providers offered on the sign-in screens: Authelia, Authentik, Pocket ID, or anything else that publishes a discovery document. An account is matched on the subject the provider issues.</p>
+                                        <p class='muted'>OpenID Connect providers displayed on sign-in screens, including Authelia, Authentik, Pocket ID, or any standard discovery-compliant provider. Accounts are matched using the subject identifier issued by the provider.</p>
                                     </div>
                                     <button class='btn btn-outline' onclick='openOidcSheet()'>Add provider</button>
                                 </div>
@@ -177,16 +177,16 @@
                                         <tbody id='oidcBody'></tbody>
                                     </table>
                                 </div>
-                                <p id='oidcEmpty' class='muted empty-hint'>No providers. Both sign-in screens ask for a password only.</p>
+                                <p id='oidcEmpty' class='muted empty-hint'>No providers configured. Sign-in screens require a password only.</p>
                             </div>
                         </div>
                         <div class='settings-pane hidden' data-pane='providers'>
                             <div class='card'>
-                                <div class='card-header'><div><h2>PostgreSQL</h2><p class='muted'>Speak the Postgres wire protocol on this port.</p></div></div>
+                                <div class='card-header'><div><h2>PostgreSQL</h2><p class='muted'>Enable the PostgreSQL wire protocol on this port.</p></div></div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsPostgresEnabled'>Enabled</label>
-                                        <p class='muted'>Opens the port below.</p>
+                                        <p class='muted'>Open the configured network port.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsPostgresEnabled'>
@@ -197,14 +197,14 @@
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsPostgresPort'>Port</label>
-                                        <p class='muted'>What Postgres clients connect to.</p>
+                                        <p class='muted'>Port used by PostgreSQL clients to connect.</p>
                                     </div>
                                     <input type='number' id='settingsPostgresPort' class='input' min='1' max='65535'>
                                 </div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsPostgresBindAddress'>Bind address</label>
-                                        <p class='muted'>127.0.0.1 for local only, 0.0.0.0 to accept remote connections.</p>
+                                        <p class='muted'>Use 127.0.0.1 for local access only, or 0.0.0.0 to accept remote connections.</p>
                                     </div>
                                     <input type='text' id='settingsPostgresBindAddress' class='input' placeholder='127.0.0.1'>
                                 </div>
@@ -214,11 +214,11 @@
                                 </div>
                             </div>
                             <div class='card'>
-                                <div class='card-header'><div><h2>SQL Server (TDS)</h2><p class='muted'>Speak the TDS wire protocol on this port.</p></div></div>
+                                <div class='card-header'><div><h2>SQL Server (TDS)</h2><p class='muted'>Enable the TDS wire protocol on this port.</p></div></div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsTdsEnabled'>Enabled</label>
-                                        <p class='muted'>Opens the port below.</p>
+                                        <p class='muted'>Open the configured network port.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsTdsEnabled'>
@@ -229,14 +229,14 @@
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsTdsPort'>Port</label>
-                                        <p class='muted'>What TDS clients connect to.</p>
+                                        <p class='muted'>Port used by TDS clients to connect.</p>
                                     </div>
                                     <input type='number' id='settingsTdsPort' class='input' min='1' max='65535'>
                                 </div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsTdsBindAddress'>Bind address</label>
-                                        <p class='muted'>127.0.0.1 for local only, 0.0.0.0 to accept remote connections.</p>
+                                        <p class='muted'>Use 127.0.0.1 for local access only, or 0.0.0.0 to accept remote connections.</p>
                                     </div>
                                     <input type='text' id='settingsTdsBindAddress' class='input' placeholder='127.0.0.1'>
                                 </div>
@@ -246,11 +246,11 @@
                                 </div>
                             </div>
                             <div class='card'>
-                                <div class='card-header'><div><h2>Proxy targets</h2><p class='muted'>Where a proxy table and an OpenAPI import may fetch from.</p></div></div>
+                                <div class='card-header'><div><h2>Proxy targets</h2><p class='muted'>Allowed sources for proxy tables and OpenAPI imports.</p></div></div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsProxyPrivateTargetsEnabled'>Allow private targets</label>
-                                        <p class='muted'>Off, a proxy may only reach public addresses. On, it may also reach localhost, your LAN and the cloud metadata endpoint, only turn it on when the target really is on this network.</p>
+                                        <p class='muted'>When disabled, proxies can only reach public addresses. When enabled, proxies can access localhost, local area networks, and cloud metadata endpoints. Enable only if trusted targets reside on these networks.</p>
                                     </div>
                                     <label class='switch'>
                                         <input type='checkbox' id='settingsProxyPrivateTargetsEnabled'>
@@ -266,11 +266,11 @@
                         </div>
                         <div class='settings-pane hidden' data-pane='sites'>
                             <div class='card'>
-                                <div class='card-header'><div><h2>Allowed sites</h2><p class='muted'>Where a published form may be embedded. One origin per line. Empty allows any site.</p></div></div>
+                                <div class='card-header'><div><h2>Allowed sites</h2><p class='muted'>Origins where published forms may be embedded. Specify one origin per line. Leave empty to allow any site.</p></div></div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsAllowedOrigins'>Origins</label>
-                                        <p class='muted'>Scheme and domain, for example <code>https://shop.example.com</code>. A bare domain is read as https.</p>
+                                        <p class='muted'>Include the scheme and domain, such as <code>https://shop.example.com</code>. Bare domains default to HTTPS.</p>
                                     </div>
                                     <textarea id='settingsAllowedOrigins' class='input textarea' rows='6' spellcheck='false' placeholder='https://shop.example.com&#10;https://portal.example.org'></textarea>
                                 </div>
@@ -281,9 +281,9 @@
                                 </div>
                             </div>
                             <div class='card'>
-                                <div class='card-header'><div><h2>In use</h2><p class='muted'>Origins currently accepted, after normalisation.</p></div></div>
+                                <div class='card-header'><div><h2>In use</h2><p class='muted'>Origins currently accepted after normalization.</p></div></div>
                                 <ul class='api-table-list' id='allowedOriginList'></ul>
-                                <p id='allowedOriginsEmpty' class='muted empty-hint'>No restriction: any site may embed a form.</p>
+                                <p id='allowedOriginsEmpty' class='muted empty-hint'>No restrictions configured. Any site may embed a form.</p>
                             </div>
                         </div>
 
@@ -308,6 +308,44 @@
                                     </div>
                                     <div class='settings-form-footer'>
                                         <button class='btn' onclick='saveBackupSettings(this)'>Save</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>Export to S3</h2><p class='muted'>Push every snapshot to S3-compatible object storage too, once configured.</p></div></div>
+                                <div class='settings-form'>
+                                    <label class='switch-row'><span class='switch'><input type='checkbox' id='settingsS3ExportEnabled'><span class='track'></span><span class='thumb'></span></span><span>Export snapshots to S3</span></label>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsS3Bucket'>Bucket</label>
+                                        <input type='text' class='input' id='settingsS3Bucket' placeholder='my-backups'>
+                                    </div>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsS3Region'>Region</label>
+                                        <input type='text' class='input' id='settingsS3Region' placeholder='eu-central-1'>
+                                    </div>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsS3ServiceUrl'>Service URL</label>
+                                        <input type='text' class='input' id='settingsS3ServiceUrl' placeholder='https://s3.example.com (blank for AWS S3)'>
+                                        <p class='desc'>Set this for an S3-compatible service (Hetzner, Garage, Backblaze, ...). Falls back to AWS S3 itself.</p>
+                                    </div>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsS3AccessKey'>Access key</label>
+                                        <input type='text' class='input' id='settingsS3AccessKey' autocomplete='off' placeholder='ABC...'>
+                                        <p class='desc' id='settingsS3AccessKeyHint'>Leave blank to keep the current one.</p>
+                                    </div>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsS3SecretKey'>Secret key</label>
+                                        <input type='password' class='input' id='settingsS3SecretKey' autocomplete='new-password' placeholder='••••••••'>
+                                        <p class='desc' id='settingsS3SecretKeyHint'>Leave blank to keep the current one.</p>
+                                    </div>
+                                    <div class='settings-form-row'>
+                                        <label for='settingsS3Prefix'>Key prefix</label>
+                                        <input type='text' class='input' id='settingsS3Prefix' placeholder='prod/'>
+                                        <p class='desc'>Prepended to every object key. Allows you to split your data in the same bucket.</p>
+                                    </div>
+                                    <div class='settings-form-footer'>
+                                        <button class='btn btn-outline' id='settingsS3TestBtn' onclick='testS3Settings(this)'>Test connection</button>
+                                        <button class='btn' onclick='saveS3Settings(this)'>Save</button>
                                     </div>
                                 </div>
                             </div>

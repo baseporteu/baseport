@@ -1,8 +1,4 @@
-// Actions, rail item "Actions". An action watches one table's own record events (create/update/delete) and
-// runs an ordered list of steps against the record: runExpression (a JsExpr, no stored effect - a guard or
-// something to see land in a run's log) or updateRecord (field -> JsExpr expression, evaluated against the
-// record's current state and written back). Server-side: ActionEndpoints.cs, ActionRunner.cs, JobScheduler's
-// 30s tick. This view is the only way to author one without hand-writing StepsJson.
+// Actions rail: an action watches one table's record events (create/update/delete) and runs an ordered list of steps (runExpression, updateRecord, httpRequest) against it; server-side in ActionEndpoints.cs/ActionRunner.cs/JobScheduler, this view is the only way to author one without hand-writing StepsJson
 let actionsAll = [];
 let actionEditingId = null;
 let actionSteps = []; // [{ type: 'runExpression', expr }] | [{ type: 'updateRecord', setJson: { Field: expr, ... } }]
@@ -32,12 +28,12 @@ function renderActionsList() {
             const status = a.isEnabled ?
                 '<span class="badge badge-ok">Enabled</span>' :
                 '<span class="badge">Disabled</span>';
-            return `<tr>
-                <td><a href="#" onclick='navigate("/actions/${a.id}"); return false;'>${escapeHtml(a.name || 'Untitled action')}</a></td>
+            return `<tr class="row-link" onclick="navigate('/actions/${a.id}')">
+                <td>${escapeHtml(a.name || 'Untitled action')}</td>
                 <td>${escapeHtml(actionTableName(a.tableId))}</td>
                 <td>${TRIGGER_LABELS[a.triggerKind] || a.triggerKind}</td>
                 <td>${status}</td>
-                <td><button class="btn btn-outline btn-sm btn-danger" onclick='deleteAction("${a.id}")'>Delete</button></td>
+                <td><button class="btn btn-outline btn-sm btn-danger" onclick="event.stopPropagation(); deleteAction('${a.id}')">Delete</button></td>
             </tr>`;
         })
         .join('');
@@ -179,15 +175,19 @@ function stepsToJson() {
 }
 
 function addActionStep(type) {
-    actionSteps.push(type === 'updateRecord' ? {
-        type: 'updateRecord',
-        setJson: {}
-    } : {
-        type: 'runExpression',
-        expr: ''
-    });
+    actionSteps.push(
+        type === 'updateRecord' ? { type: 'updateRecord', setJson: {} } :
+        type === 'httpRequest' ? { type: 'httpRequest', url: '', method: 'POST', headers: {}, bodyTemplate: {} } :
+        { type: 'runExpression', expr: '' },
+    );
     renderActionSteps();
 }
+
+const STEP_LABELS = {
+    updateRecord: 'update record',
+    httpRequest: 'HTTP request',
+    runExpression: 'run expression',
+};
 
 function removeActionStep(i) {
     actionSteps.splice(i, 1);
@@ -207,7 +207,7 @@ function renderActionSteps() {
         head.className = 'brow-head';
         const type = document.createElement('span');
         type.className = 'brow-type';
-        type.innerText = step.type === 'updateRecord' ? 'update record' : 'run expression';
+        type.innerText = STEP_LABELS[step.type] || step.type;
         head.appendChild(type);
         const actions = document.createElement('div');
         actions.className = 'brow-actions';
@@ -235,7 +235,7 @@ function renderActionSteps() {
             lab.appendChild(inp);
             el.appendChild(lab);
             attachFieldExprAutocomplete(inp, () => actionTableFieldsList.map((f) => f.name));
-        } else {
+        } else if (step.type === 'updateRecord') {
             const rows = document.createElement('div');
             rows.className = 'brow-container-rows';
             Object.keys(step.setJson).forEach((fieldName) => {
@@ -258,10 +258,126 @@ function renderActionSteps() {
                 renderActionSteps();
             };
             el.appendChild(addBtn);
+        } else if (step.type === 'httpRequest') {
+            el.appendChild(actionHttpRequestEditor(step));
         }
 
         container.appendChild(el);
     });
+}
+
+// webhook step: url + method, free-form headers, and a bodyTemplate with values as expressions against the triggering record (same shape as updateRecord's setJson, but the keys are the outbound payload's own field names)
+function actionHttpRequestEditor(step) {
+    const wrap = document.createElement('div');
+    if (!step.headers) step.headers = {};
+    if (!step.bodyTemplate) step.bodyTemplate = {};
+
+    const urlLab = document.createElement('label');
+    urlLab.className = 'brow-field-label';
+    urlLab.innerText = 'URL';
+    const urlInp = document.createElement('input');
+    urlInp.className = 'input input-sm';
+    urlInp.value = step.url || '';
+    urlInp.placeholder = 'https://example.com/hook';
+    urlInp.oninput = () => {
+        step.url = urlInp.value;
+    };
+    urlLab.appendChild(urlInp);
+    wrap.appendChild(urlLab);
+
+    const methodLab = document.createElement('label');
+    methodLab.className = 'brow-field-label';
+    methodLab.innerText = 'Method';
+    const methodSel = document.createElement('select');
+    methodSel.className = 'input input-sm';
+    methodSel.innerHTML = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+        .map((m) => `<option value="${m}" ${(step.method || 'POST') === m ? 'selected' : ''}>${m}</option>`)
+        .join('');
+    methodSel.onchange = () => {
+        step.method = methodSel.value;
+    };
+    methodLab.appendChild(methodSel);
+    wrap.appendChild(methodLab);
+
+    wrap.appendChild(actionKeyValueList('Headers', step.headers, '+ Add header', 'Header name', 'Value', false));
+    wrap.appendChild(actionKeyValueList('Body', step.bodyTemplate, '+ Add field', 'Field name', "'received'", true));
+    return wrap;
+}
+
+// a free-text-key -> value row list shared by a step's headers (plain strings) and bodyTemplate (expressions)
+function actionKeyValueList(title, obj, addLabel, keyPlaceholder, valuePlaceholder, isExpression) {
+    const wrap = document.createElement('div');
+    const heading = document.createElement('label');
+    heading.className = 'brow-field-label';
+    heading.innerText = title;
+    wrap.appendChild(heading);
+
+    const rows = document.createElement('div');
+    rows.className = 'brow-container-rows';
+
+    // never rebuilds the rows on rename: blur also fires when tabbing into the value input next to it, so each row tracks its own key in a closure instead of the DOM moving under that click
+    function renderRows() {
+        rows.innerHTML = '';
+        Object.keys(obj).forEach((initialKey) => {
+            let currentKey = initialKey;
+            const row = document.createElement('div');
+            row.className = 'brow-fields';
+
+            const keyInp = document.createElement('input');
+            keyInp.className = 'input input-sm';
+            keyInp.value = currentKey;
+            keyInp.placeholder = keyPlaceholder;
+            keyInp.onchange = () => {
+                if (!keyInp.value || keyInp.value === currentKey) { keyInp.value = currentKey; return; }
+                if (keyInp.value in obj) { keyInp.value = currentKey; ui.toast(`'${keyInp.value}' is already used here.`, 'error'); return; }
+                const value = obj[currentKey];
+                delete obj[currentKey];
+                obj[keyInp.value] = value;
+                currentKey = keyInp.value;
+            };
+            row.appendChild(keyInp);
+
+            const valInp = document.createElement('input');
+            valInp.className = 'input input-sm';
+            valInp.value = obj[currentKey] || '';
+            valInp.placeholder = valuePlaceholder;
+            valInp.oninput = () => {
+                obj[currentKey] = valInp.value;
+            };
+            row.appendChild(valInp);
+            if (isExpression) attachFieldExprAutocomplete(valInp, () => actionTableFieldsList.map((f) => f.name));
+
+            const rm = document.createElement('button');
+            rm.type = 'button';
+            rm.className = 'btn btn-outline btn-sm';
+            rm.innerText = '✕';
+            rm.title = 'Remove';
+            rm.onclick = () => {
+                delete obj[currentKey];
+                renderRows();
+            };
+            row.appendChild(rm);
+
+            rows.appendChild(row);
+        });
+    }
+    renderRows();
+    wrap.appendChild(rows);
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn btn-outline btn-sm';
+    addBtn.innerText = addLabel;
+    addBtn.style.marginTop = '.5rem';
+    addBtn.onclick = () => {
+        let key = keyPlaceholder;
+        let n = 1;
+        while (key in obj) key = `${keyPlaceholder}${++n}`;
+        obj[key] = '';
+        renderRows();
+    };
+    wrap.appendChild(addBtn);
+    return wrap;
 }
 
 function actionSetFieldRow(step, fieldName) {

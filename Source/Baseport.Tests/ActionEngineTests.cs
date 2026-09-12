@@ -66,6 +66,41 @@ public class ActionDefValidationTests
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"updateRecord","setJson":{"Status":"'received'"}}]"""), Fields);
         Assert.Empty(errs);
     }
+
+    [Fact]
+    public void An_http_request_step_requires_a_url()
+    {
+        var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"httpRequest"}]"""), Fields);
+        Assert.Contains(errs, e => e.Contains("URL is required"));
+    }
+
+    [Fact]
+    public void An_http_request_step_refuses_a_private_target()
+    {
+        var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"httpRequest","url":"http://169.254.169.254/latest"}]"""), Fields);
+        Assert.Contains(errs, e => e.Contains("private", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void An_http_request_step_rejects_an_unknown_method()
+    {
+        var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"httpRequest","url":"https://example.com/hook","method":"TRACE"}]"""), Fields);
+        Assert.Contains(errs, e => e.Contains("method must be one of"));
+    }
+
+    [Fact]
+    public void An_http_request_step_validates_each_bodyTemplate_expression()
+    {
+        var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"httpRequest","url":"https://example.com/hook","bodyTemplate":{"units":"data.Ghost"}}]"""), Fields);
+        Assert.Contains(errs, e => e.Contains("Ghost"));
+    }
+
+    [Fact]
+    public void A_valid_http_request_step_is_accepted()
+    {
+        var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"httpRequest","url":"https://example.com/hook","method":"post","headers":{"X-Key":"abc"},"bodyTemplate":{"units":"Qty * 2"}}]"""), Fields);
+        Assert.Empty(errs);
+    }
 }
 
 // Exercises the full durable path: RecordChangeInterceptor enqueues on a real write, JobScheduler's own
@@ -82,6 +117,7 @@ public class ActionEngineIntegrationTests : IDisposable
         _connection.Open();
         _db = TestDb.Open(_connection);
         _db.Database.EnsureCreated();
+        ProxyTarget.Configure(new AppSettings());
     }
 
     public void Dispose()
@@ -99,6 +135,31 @@ public class ActionEngineIntegrationTests : IDisposable
         _db.SaveChanges();
         RecordIndexes.SyncAsync(_db, table).GetAwaiter().GetResult();
         return table;
+    }
+
+    // no step in these tests reaches the network; a factory that would throw if one ever did
+    private static readonly IHttpClientFactory NoHttp = new ThrowingHttpClientFactory();
+    private sealed class ThrowingHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => throw new InvalidOperationException("This test does not expect an HTTP call.");
+    }
+
+    private sealed class HttpStub : HttpMessageHandler, IHttpClientFactory
+    {
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _reply;
+        public List<HttpRequestMessage> Requests { get; } = new();
+        public List<string> Bodies { get; } = new();
+
+        public HttpStub(Func<HttpRequestMessage, HttpResponseMessage> reply) => _reply = reply;
+
+        public HttpClient CreateClient(string name) => new(this, disposeHandler: false);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            Bodies.Add(request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken));
+            return _reply(request);
+        }
     }
 
     [Fact]
@@ -129,7 +190,7 @@ public class ActionEngineIntegrationTests : IDisposable
         Assert.Equal(ActionRunStatus.Pending, run.Status);
         Assert.Equal(record.Id, run.RecordId);
 
-        await ActionRunner.RunAsync(_db, run, _log, default);
+        await ActionRunner.RunAsync(_db, run, NoHttp, _log, default);
         await _db.SaveChangesAsync();
 
         Assert.Equal(ActionRunStatus.Done, run.Status);
@@ -165,7 +226,7 @@ public class ActionEngineIntegrationTests : IDisposable
         await _db.SaveChangesAsync();
 
         var createRun = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == onCreate.Id).ToListAsync());
-        await ActionRunner.RunAsync(_db, createRun, _log, default);
+        await ActionRunner.RunAsync(_db, createRun, NoHttp, _log, default);
         await _db.SaveChangesAsync();
 
         var updateRuns = await _db.PendingActionRuns.Where(r => r.ActionDefId == onUpdate.Id).ToListAsync();
@@ -198,12 +259,98 @@ public class ActionEngineIntegrationTests : IDisposable
         await _db.SaveChangesAsync();
 
         var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.RecordId == record.Id).ToListAsync());
-        await ActionRunner.RunAsync(_db, run, _log, default);
+        await ActionRunner.RunAsync(_db, run, NoHttp, _log, default);
         await _db.SaveChangesAsync();
 
         Assert.Equal(ActionRunStatus.Pending, run.Status);
         Assert.Equal(1, run.Attempts);
         Assert.True(run.NextAttemptAt > DateTime.UtcNow);
         Assert.NotEmpty(run.LastError);
+    }
+
+    [Fact]
+    public async Task An_http_request_step_posts_the_bodyTemplate_evaluated_against_the_record()
+    {
+        var table = Seed(
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number" },
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Status", DataType = "text" });
+
+        var action = new ActionDef
+        {
+            Id = Ids.NewShortId(12), TableId = table.Id, Name = "Notify", TriggerKind = ActionTriggers.OnCreate,
+            StepsJson = """[{"type":"httpRequest","url":"https://example.com/hook","bodyTemplate":{"units":"Qty * 2"}}]"""
+        };
+        _db.Actions.Add(action);
+        await _db.SaveChangesAsync();
+        ActionDefCache.Reload(new[] { action });
+
+        var obj = (JsonObject)JsonNode.Parse("""{ "Qty": 3 }""")!;
+        var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
+        _db.Records.Add(record);
+        await _db.SaveChangesAsync();
+        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync());
+
+        var http = new HttpStub(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+        await ActionRunner.RunAsync(_db, run, http, _log, default);
+        await _db.SaveChangesAsync();
+
+        Assert.Equal(ActionRunStatus.Done, run.Status);
+        var sent = Assert.Single(http.Requests);
+        Assert.Equal(HttpMethod.Post, sent.Method);
+        Assert.Equal("https://example.com/hook", sent.RequestUri!.ToString());
+        Assert.Equal("""{"units":6}""", http.Bodies[0]);
+    }
+
+    [Fact]
+    public async Task An_http_request_step_retries_on_a_failure_status_the_same_way_updateRecord_does()
+    {
+        var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number" });
+        var action = new ActionDef
+        {
+            Id = Ids.NewShortId(12), TableId = table.Id, Name = "Notify", TriggerKind = ActionTriggers.OnCreate,
+            StepsJson = """[{"type":"httpRequest","url":"https://example.com/hook"}]"""
+        };
+        _db.Actions.Add(action);
+        await _db.SaveChangesAsync();
+        ActionDefCache.Reload(new[] { action });
+
+        var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = """{"Qty":1}""", CreatedAt = DateTime.UtcNow };
+        _db.Records.Add(record);
+        await _db.SaveChangesAsync();
+        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync());
+
+        var http = new HttpStub(_ => new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable));
+        await ActionRunner.RunAsync(_db, run, http, _log, default);
+        await _db.SaveChangesAsync();
+
+        Assert.Equal(ActionRunStatus.Pending, run.Status);
+        Assert.Equal(1, run.Attempts);
+        Assert.Contains("503", run.LastError);
+    }
+
+    [Fact]
+    public async Task An_http_request_step_refuses_a_private_target_even_if_it_passed_validation_at_save_time()
+    {
+        var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number" });
+        var action = new ActionDef
+        {
+            Id = Ids.NewShortId(12), TableId = table.Id, Name = "Notify", TriggerKind = ActionTriggers.OnCreate,
+            // never saved through FieldValidation.ValidateActionDef on purpose: this proves the runner re-checks, not just the save path
+            StepsJson = """[{"type":"httpRequest","url":"http://169.254.169.254/latest"}]"""
+        };
+        _db.Actions.Add(action);
+        await _db.SaveChangesAsync();
+        ActionDefCache.Reload(new[] { action });
+
+        var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = """{"Qty":1}""", CreatedAt = DateTime.UtcNow };
+        _db.Records.Add(record);
+        await _db.SaveChangesAsync();
+        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync());
+
+        await ActionRunner.RunAsync(_db, run, NoHttp, _log, default);
+        await _db.SaveChangesAsync();
+
+        Assert.Equal(ActionRunStatus.Pending, run.Status);
+        Assert.Contains("private", run.LastError, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -106,13 +106,7 @@ SITES = {
             "/stock": {
                 "title": "Stock on hand",
                 "forms": [
-                    ("Stock on hand", ["Products - Stock"]),
-                ],
-            },
-            "/receipts": {
-                "title": "Receipts",
-                "forms": [
-                    ("Receipts", ["Receipts - Overview"]),
+                    ("Stock on hand", ["StockLevels - By location", "Products - Stock"]),
                 ],
             },
             "/shipments": {

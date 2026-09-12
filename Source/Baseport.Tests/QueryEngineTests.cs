@@ -240,4 +240,28 @@ public class QueryEngineTests : IDisposable
         Assert.True(sorted.HasMore);
         Assert.Null(sorted.NextCursor);
     }
+
+    // an eq filter narrows the list like any other field - what a child table's reverse listing (header id -> its lines) relies on
+    [Fact]
+    public async Task An_eq_filter_narrows_the_list_to_matching_rows()
+    {
+        var customer = _fields.First(f => f.Name == "Customer");
+        var filters = new[] { new QueryEngine.Filter(customer, "eq", "Customer 7") };
+
+        var result = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 25, filters: filters);
+
+        var record = Assert.Single(result.Records);
+        Assert.Contains("Customer 7\"", record.JsonData);
+    }
+
+    [Fact]
+    public async Task An_eq_filter_matching_nothing_returns_an_empty_page()
+    {
+        var customer = _fields.First(f => f.Name == "Customer");
+        var filters = new[] { new QueryEngine.Filter(customer, "eq", "No Such Customer") };
+
+        var result = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 25, filters: filters);
+
+        Assert.Empty(result.Records);
+    }
 }

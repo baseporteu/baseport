@@ -1,4 +1,4 @@
-/* SQL console: saved queries + execution */
+/* SQL console: saved queries and execution */
 
 let currentQueryId = null;
 let currentQueryName = '';
@@ -13,7 +13,7 @@ function setSqlValue(sql) {
     else document.getElementById('sqlInput').value = sql;
 }
 
-// only fetch when needed.
+// Fetch only when needed.
 let codeMirrorLoad = null;
 
 function loadCodeMirror() {
@@ -32,7 +32,7 @@ async function initSqlEditor() {
     if (sqlEditor) return;
     const ta = document.getElementById('sqlInput');
     if (!ta) return;
-    // A failed fetch leaves the plain textarea, which still runs queries.
+    // Fall back to plain textarea if fetch fails; queries still function.
     await loadCodeMirror().catch(() => {});
     if (sqlEditor || typeof CodeMirror === 'undefined') return;
     sqlEditor = CodeMirror.fromTextArea(ta, {
@@ -160,12 +160,12 @@ async function saveSchedule() {
     if (saved) renderSchedule(saved);
 }
 
-// Proves the destination answers without waiting for the cron, a wrong url is found here instead of in tomorrow's log.
+// Tests the destination immediately rather than waiting for the scheduled cron run.
 async function runScheduleNow() {
     if (!currentQueryId) return;
     const ran = await ui.send(`/api/_admin/queries/${currentQueryId}/run`, {
         method: 'POST',
-        success: 'Query ran.',
+        success: 'Query executed.',
     });
     if (ran) renderSchedule(ran);
 }
@@ -259,8 +259,8 @@ async function runSql() {
     const sql = sqlValue();
     clearSqlOutput();
     const status = document.getElementById('sqlStatus');
-    status.innerText = 'Running…';
-    // The grid arrives rendered; the result set is the widest thing this console draws.
+    status.innerText = 'Running...';
+    // Grid arrives pre-rendered; result sets are optimized for display.
     const meta = await ui.fragment('sqlResult', '/api/_admin/fragments/sql', {
         body: {
             sql,

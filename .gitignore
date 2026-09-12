@@ -56,3 +56,4 @@ appsettings.*.json
 .*/
 !.github/
 Source/Baseport/*.key
+Source/Baseport/keys/

@@ -77,7 +77,7 @@ public static class Jobs
     private static async Task<string> BackupAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)
     {
         var settings = await db.AppSettings.FirstOrDefaultAsync(ct) ?? new AppSettings();
-        var created = await BackupStore.CreateAsync(BackupStore.Dir(db), db, settings.BackupRetention, ct);
+        var created = await BackupStore.CreateAndExportAsync(BackupStore.Dir(db), db, settings, ct);
         return $"Created {created}.";
     }
 

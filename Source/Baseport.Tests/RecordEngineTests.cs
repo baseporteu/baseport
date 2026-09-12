@@ -27,9 +27,11 @@ public class RecordEngineTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private TableDefinition Seed(params FieldDefinition[] fields)
+    private TableDefinition Seed(params FieldDefinition[] fields) => Seed("Orders", fields);
+
+    private TableDefinition Seed(string name, params FieldDefinition[] fields)
     {
-        var table = new TableDefinition { Id = Ids.NewShortId(12), Name = "Orders", Fields = fields.ToList() };
+        var table = new TableDefinition { Id = Ids.NewShortId(12), Name = name, Fields = fields.ToList() };
         _db.Tables.Add(table);
         _db.SaveChanges();
         RecordIndexes.SyncAsync(_db, table).GetAwaiter().GetResult();
@@ -316,5 +318,50 @@ public class RecordEngineTests : IDisposable
 
         var fine = await RecordEngine.PrepareAsync(_db, table, table.Fields, Json("""{ "OrderNo": "A-3", "Customer": "Cid" }"""));
         Assert.Equal(ValidationFailure.None, fine.Failure);
+    }
+
+    private (TableDefinition Header, TableDefinition Lines) SeedHeaderAndLines()
+    {
+        var header = Seed("Orders", new FieldDefinition { Id = Ids.NewShortId(12), Name = "Reference", DataType = "text", IsRequired = true });
+        var lines = Seed("OrderLines",
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "OrderId", DataType = "reference", OptionsJson = $$"""{"tableId":"{{header.Id}}"}""" },
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Sku", DataType = "text", IsRequired = true });
+        return (header, lines);
+    }
+
+    [Fact]
+    public async Task A_composite_save_commits_header_and_every_line_together()
+    {
+        var (header, lines) = SeedHeaderAndLines();
+
+        var (result, outcome) = await RecordEngine.SaveCompositeAsync(
+            _db, header, header.Fields, Json("""{ "Reference": "SO-1" }"""),
+            lines, lines.Fields, new[] { Json("""{ "Sku": "A" }"""), Json("""{ "Sku": "B" }""") },
+            "OrderId", TestContext.Current.CancellationToken);
+
+        Assert.False(outcome.HasErrors);
+        Assert.NotNull(result);
+        Assert.Equal(2, result!.Lines.Count);
+        Assert.All(result.Lines, l => Assert.Contains(result.Header.Id, l.JsonData));
+
+        Assert.Equal(1, await _db.Records.CountAsync(r => r.TableId == header.Id, TestContext.Current.CancellationToken));
+        Assert.Equal(2, await _db.Records.CountAsync(r => r.TableId == lines.Id, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_composite_save_rolls_back_the_header_when_a_line_fails_validation()
+    {
+        var (header, lines) = SeedHeaderAndLines();
+
+        var (result, outcome) = await RecordEngine.SaveCompositeAsync(
+            _db, header, header.Fields, Json("""{ "Reference": "SO-2" }"""),
+            lines, lines.Fields, new[] { Json("""{ "Sku": "A" }"""), Json("{}") }, // second line is missing the required Sku
+            "OrderId", TestContext.Current.CancellationToken);
+
+        Assert.True(outcome.HasErrors);
+        Assert.Null(result);
+
+        Assert.Equal(0, await _db.Records.CountAsync(r => r.TableId == header.Id, TestContext.Current.CancellationToken));
+        Assert.Equal(0, await _db.Records.CountAsync(r => r.TableId == lines.Id, TestContext.Current.CancellationToken));
     }
 }

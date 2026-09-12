@@ -113,10 +113,16 @@ function openAccountForm(pid) {
             type: 'select',
             value: a ? a.role : 'consumer',
             options: a
-                ? [
-                      ['consumer', 'Consumer (API token only)'],
-                      ['user', 'User (public API only)'],
-                  ]
+                ? (a.role === 'admin'
+                      ? [
+                            ['admin', 'Admin (signs in to console)'],
+                            ['consumer', 'Consumer (API token only)'],
+                            ['user', 'User (public API only)'],
+                        ]
+                      : [
+                            ['consumer', 'Consumer (API token only)'],
+                            ['user', 'User (public API only)'],
+                        ])
                 : [
                       ['admin', 'Admin (signs in to console)'],
                       ['consumer', 'Consumer (API token only)'],

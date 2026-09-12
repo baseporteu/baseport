@@ -105,7 +105,8 @@ public static class QueryEngine
         IReadOnlyList<Filter>? filters = null,
         IReadOnlyList<FieldDefinition>? accessFields = null,
         string? accessUserId = null,
-        Cursor? cursor = null)
+        Cursor? cursor = null,
+        string? systemSort = null)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize <= 0 ? 25 : pageSize, 1, MaxPageSize);
@@ -138,14 +139,23 @@ public static class QueryEngine
         {
             var slot = args.Count;
             var term = query.Trim();
+            // /pattern/ runs it through SQLite's regexp() (registered in SqlitePragmas, time-boxed against ReDoS); a bare * or % switches to a raw LIKE pattern instead of an escaped literal
+            var isRegex = term.Length > 2 && term[0] == '/' && term[^1] == '/';
+            var hasWildcard = !isRegex && (term.Contains('*') || term.Contains('%'));
+            var op = isRegex ? "REGEXP" : "LIKE";
+            var escapeClause = isRegex || hasWildcard ? "" : " ESCAPE '\\'";
+
             string? match = null;
-            if (searchFields.Count == 0 && RecordSearch.MatchExpression(table.Id, term) is { } expression && await RecordSearch.AvailableAsync(db))
+            if (!isRegex && !hasWildcard && searchFields.Count == 0 && RecordSearch.MatchExpression(table.Id, term) is { } expression && await RecordSearch.AvailableAsync(db))
                 match = expression;
 
-            args.Add(match ?? $"%{EscapeLike(term)}%");
+            var pattern = isRegex ? term[1..^1]
+                : hasWildcard ? term.Replace('*', '%')
+                : $"%{EscapeLike(term)}%";
+            args.Add(match ?? pattern);
             if (searchFields.Count > 0)
                 // restricted search: only the columns the form exposes
-                search = " AND (" + string.Join(" OR ", searchFields.Select(f => $"{Column(f)} LIKE {{{slot}}} ESCAPE '\\'")) + ")";
+                search = " AND (" + string.Join(" OR ", searchFields.Select(f => $"{Column(f)} {op} {{{slot}}}{escapeClause}")) + ")";
             else if (match is not null)
             {
                 // fts5 match: whole words and prefixes only, trade for not scanning every record
@@ -153,8 +163,8 @@ public static class QueryEngine
                 rankJoin = RecordSearch.RankJoin(slot);
             }
             else
-                // no fts5 match: json_each scan instead, a later field stays searchable with no schema change
-                search = $" AND EXISTS (SELECT 1 FROM json_each(r.\"JsonData\") je WHERE je.value LIKE {{{slot}}} ESCAPE '\\')";
+                // no fts5 match (or a regex/wildcard query, which fts5 can't run): json_each scan instead
+                search = $" AND EXISTS (SELECT 1 FROM json_each(r.\"JsonData\") je WHERE je.value {op} {{{slot}}}{escapeClause})";
         }
 
         // counting doubles the work, most callers only render it as "page 1 of n"
@@ -169,9 +179,9 @@ public static class QueryEngine
         var ranked = rankJoin is not null && sortField is null;
         var order = ranked
             ? "m.\"Rank\""
-            : sortField is null
-                ? "r.\"CreatedAt\""
-                : Column(sortField);
+            : sortField is not null
+                ? Column(sortField)
+                : systemSort == "UpdatedAt" ? "r.\"UpdatedAt\"" : "r.\"CreatedAt\"";
         var direction = ranked || !sortDescending ? "ASC" : "DESC";
 
         // walks from the last row instead of counting rows to skip, only valid on the (CreatedAt, Id) default order
@@ -198,14 +208,15 @@ public static class QueryEngine
         var hasMore = records.Count > pageSize;
         if (hasMore) records.RemoveAt(records.Count - 1);
 
-        var next = hasMore && records.Count > 0 && CursorsApply(sortField, rankJoin)
+        var next = hasMore && records.Count > 0 && CursorsApply(sortField, rankJoin, systemSort)
             ? new Cursor(records[^1].CreatedAt, records[^1].Id).Encode()
             : null;
         return new ListPage(records, total, page, pageSize, hasMore) { NextCursor = next };
     }
 
-    // cursors only match the (CreatedAt, Id) order, a sort field or relevance ranking breaks that key
-    public static bool CursorsApply(FieldDefinition? sortField, string? rankJoin) => sortField is null && rankJoin is null;
+    // cursors only match the (CreatedAt, Id) order, a sort field, a system sort other than the default, or relevance ranking all break that key
+    public static bool CursorsApply(FieldDefinition? sortField, string? rankJoin, string? systemSort = null) =>
+        sortField is null && rankJoin is null && systemSort is null or "CreatedAt";
 
     // projects a record down to the fields a public form may reveal
     public static JsonObject Project(Record record, IReadOnlyList<FieldDefinition> visible)

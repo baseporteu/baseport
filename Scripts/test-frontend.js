@@ -1474,6 +1474,49 @@ test('a line-items block only offers array fields that have line-item columns co
         'lineItemFieldCandidates no longer filters on array type + configured columns');
 });
 
+/* child_table builder block  */
+test('the palette offers a child table block', () => {
+    const html = read('admin/views/forms.html');
+    assert.ok(/data-block=['"]child_table['"]/.test(html), "no palette entry for 'child_table'");
+});
+
+test('addRow builds a child_table block with table, refField and columns', () => {
+    const forms = read('forms.js');
+    const addRow = forms.slice(forms.indexOf('function addRow('), forms.indexOf('function moveRowIn('));
+    assert.ok(/type === 'child_table'[\s\S]*?table:\s*''[\s\S]*?refField:\s*''[\s\S]*?columns:\s*\[\]/.test(addRow),
+        "child_table is not created with 'table', 'refField' and 'columns'");
+});
+
+test('a child table block only offers other tables that reference this one back', () => {
+    const forms = read('forms.js');
+    assert.ok(/function childTableCandidates\(\)\s*\{/.test(forms), 'childTableCandidates is missing');
+    assert.ok(/f\.dataType === 'reference' && refTargetId\(f\.optionsJson\) === formTableId/.test(forms),
+        'childTableCandidates no longer filters on a reference field pointing back at this table');
+});
+
+test('embed.js renders child_table blocks and stages their rows for a post-submit flush', () => {
+    const embed = read('embed.js');
+    assert.ok(embed.includes("row.t === 'child_table'"), 'embed.js does not render child_table blocks');
+    assert.ok(embed.includes('function renderChildTable('), 'renderChildTable is missing');
+    assert.ok(embed.includes('function flushChildTables('), 'flushChildTables is missing');
+    assert.ok(embed.includes('pendingChildTables.push('), 'renderChildTable does not stage its rows for the post-submit flush');
+    assert.ok(/api\/forms\/\$\{formId\}\/child\/\$\{entry\.table\}\?refId=/.test(embed),
+        'flushChildTables does not post to the per-form child-table route with the new header id');
+});
+
+// live-browser only: embed.js is a lone <script src>, so it must load Preact/htm itself or a line_items/child_table block throws "htm is not defined" (this headless suite never hits that path)
+test('embed.js loads its own Preact/htm dependencies before rendering a block that needs them', () => {
+    const embed = read('embed.js');
+    assert.ok(embed.includes('function ensurePreactHtm('), 'ensurePreactHtm is missing');
+    assert.ok(embed.includes('function loadVendorScript('), 'loadVendorScript is missing');
+    assert.ok(/js\/vendor\/preact\.min\.js/.test(embed) && /js\/vendor\/htm\.js/.test(embed),
+        'embed.js no longer points at the vendored preact/htm files');
+    assert.ok(embed.includes('function usesPreact('), 'usesPreact is missing');
+    assert.ok(/line_items\|child_table/.test(embed), 'usesPreact no longer checks for both Preact-based block types');
+    assert.ok(/usesPreact\(data\.form\.layoutJson\) \? ensurePreactHtm\(apiBase\)/.test(embed),
+        'the schema fetch no longer waits for ensurePreactHtm before rendering');
+});
+
 test('undo/redo snapshots each builder at the same choke point every one of its mutations already renders through', () => {
     const forms = read('forms.js');
     assert.ok(forms.includes('function createHistory(undoBtnId, redoBtnId)'), 'the shared history factory is missing');
@@ -2166,6 +2209,8 @@ function loadSidebar() {
     global.currentTablePublicId = null;
     global.formsAll = [];
     global.formEditingId = null;
+    global.actionsAll = [];
+    global.actionEditingId = null;
     global.savedQueries = [];
     global.currentQueryId = null;
     global.settingsCurrentPage = 'host';
@@ -2448,6 +2493,36 @@ test('New record opens a dropdown whose entries are both defined', () => {
     assert.ok(/id='newRecordMenu'/.test(html), 'the record dropdown is gone');
     assert.ok(/closeDropdown\(\); openNewRecordModal\(\)/.test(html), 'creating a record by hand is no longer offered');
     assert.ok(/closeDropdown\(\); openImportRecords\(\)/.test(html), 'importing records is not offered');
+});
+
+/* httpRequest action step */
+test('the action editor offers an HTTP request step', () => {
+    const html = read('admin/views/actions.html');
+    assert.ok(/onclick='addActionStep\("httpRequest"\)'/.test(html), 'no button adds an httpRequest step');
+});
+
+test('addActionStep builds an httpRequest step with url, method, headers and bodyTemplate', () => {
+    const js = read('js/actions.js');
+    const addStep = js.slice(js.indexOf('function addActionStep('), js.indexOf('const STEP_LABELS'));
+    assert.ok(/type:\s*'httpRequest'.*url:\s*''.*method:\s*'POST'.*headers:\s*\{\}.*bodyTemplate:\s*\{\}/.test(addStep),
+        "httpRequest is not created with url/method/headers/bodyTemplate");
+});
+
+test('the httpRequest step editor renders headers and bodyTemplate as key/value lists', () => {
+    const js = read('js/actions.js');
+    assert.ok(js.includes('function actionHttpRequestEditor('), 'actionHttpRequestEditor is missing');
+    assert.ok(js.includes('function actionKeyValueList('), 'actionKeyValueList is missing');
+    assert.ok(/actionKeyValueList\('Headers', step\.headers/.test(js), 'headers is not rendered through the key/value list');
+    assert.ok(/actionKeyValueList\('Body', step\.bodyTemplate/.test(js), 'bodyTemplate is not rendered through the key/value list');
+});
+
+// found live: renaming a key fires on blur, which also fires when tabbing into the value input next to it - rebuilding the row right then tears out the input the click was about to land in
+test('renaming a key/value row does not rebuild the row (a rename fires on blur, into the value input next to it)', () => {
+    const js = read('js/actions.js');
+    const list = js.slice(js.indexOf('function actionKeyValueList('), js.indexOf('async function saveAction('));
+    const onchange = list.slice(list.indexOf('keyInp.onchange'), list.indexOf('row.appendChild(keyInp)'));
+    assert.ok(!onchange.includes('renderRows()'), 'renaming a key still rebuilds every row in the list');
+    assert.ok(/let currentKey = initialKey/.test(list), 'each row no longer tracks its own current key across a rename');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

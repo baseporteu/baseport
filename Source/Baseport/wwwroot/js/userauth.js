@@ -100,7 +100,7 @@ async function bpRegister(event) {
     return false;
 }
 
-// /auth redirects here unconditionally, a signed-in visitor would otherwise be asked to sign in again. The session may be a cookie instead of stored tokens, which is what a console sign-in leaves behind, the server is asked when there is nothing local.
+// Redirects unconditionally from /auth; signed-in visitors would otherwise be asked to sign in again. Falls back to checking the session cookie on the server if no local tokens exist.
 async function bpGuestOnly() {
     if (bpAuth.signedIn()) {
         location.replace('/auth/profile');
@@ -112,7 +112,7 @@ async function bpGuestOnly() {
 }
 
 async function bpLoadProfile() {
-    // No stored tokens is not signed out: the cookie the sign-in set is sent with this request anyway.
+    // Missing local tokens does not imply signed out; the session cookie set during sign-in is sent with this request.
     const res = await bpAuth.authFetch('/status');
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.authenticated) {
@@ -148,7 +148,7 @@ async function bpChangePassword(event) {
 
 async function bpSignOut() {
     const current = bpAuth.tokens();
-    // Called unconditionally: a cookie session has nothing stored locally, and the server is what clears it.
+    // Called unconditionally since cookie sessions store nothing locally and the server handles clearance.
     await fetch('/api/auth/v1/logout', {
         method: 'POST',
         headers: {
@@ -165,7 +165,7 @@ async function bpSignOut() {
 async function bpDeleteAccount() {
     const ok = await ui.confirm({
         title: 'Delete your account?',
-        message: 'Your account and every session on it are removed. This cannot be undone.',
+        message: 'Your account will be deleted. This is a destructive action and cannot be undone.',
         confirmLabel: 'Delete',
         danger: true,
     });

@@ -1,14 +1,22 @@
-"""Seeds a running Baseport instance with a production-like demo workspace.
+"""Seeds a running Baseport instance with a production-like demo workspace: a distributor's sales side against a shared warehouse.
 
-  Products    catalogue lookup, referenced by order lines
-  Customers   accounts that place orders
-  Orders      references Customers
-  OrderLines  references Orders and Products
-  Portway     optional proxy table over the Portway demo API
+  Locations    warehouse bins, fixed set, not referenced elsewhere
+  Products     catalogue, referenced by order lines
+  Customers    accounts that place sales orders
+  StockLevels  Product x Location on-hand quantity, seeded with an opening balance and decremented by the shipments below
+  Orders       references Customers
+  OrderLines   references Orders and Products
+  Shipments    goods-out against an Order and the Location it left from
+  Portway      optional proxy table over the Portway demo API
 
 Tables, fields and forms go through the admin API so validation, ApiName rules
 and the generated-column DDL all run. Rows go straight into SQLite in batches,
-because a quarter million HTTP posts would outlast the rest of the seed.
+because a quarter million HTTP posts would outlast the rest of the seed. The
+one exception is stock: `StockLevels` reflects the same ledger the generator
+computes in memory while seeding opening balances and shipments, kept
+consistent by construction here since nothing at runtime maintains it across
+tables (the Action Engine only ever writes back to the record that triggered
+it).
 
 Deterministic: the RNG is seeded, two runs produce the same database.
 
@@ -28,7 +36,7 @@ import urllib.request
 from datetime import date
 
 BASE = os.environ.get("BASE_URL", "http://localhost:5000").rstrip("/")
-USER = os.environ.get("ADMIN_USER", "")
+USER = os.environ.get("ADMIN_USER") or os.environ.get("ADMIN_USERNAME", "")
 PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 NEW_PASSWORD = os.environ.get("ADMIN_NEW_PASSWORD", "baseport-dev-password")
 SPEC = os.environ.get("PORTWAY_SPEC", "")
@@ -37,7 +45,7 @@ TOKEN = os.environ.get("PORTWAY_TOKEN", "")
 DEFAULT_DB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                           "Source", "Baseport", "baseport.db")
 VOLUMES = {"products": 80, "customers": 4_000, "orders": 40_000, "lines": 250_000,
-           "receipts": 600, "shipments": 30_000}
+           "shipments": 30_000}
 SEED = 20260101
 BATCH = 5_000
 ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-"
@@ -106,17 +114,26 @@ Each line references the order it belongs to and the product it sells.
 has no effect.
 """
 
-RECEIPTS_DOC = """The stock movement log: every count that changed a product's stock level.
-
-`AfterQty` is calculated from `BeforeQty` and `DeltaQty` on write; sending it
-has no effect. `Reason` says why the count changed - a delivery, an opening
-balance, or a correction.
-"""
-
 SHIPMENTS_DOC = """Packing slips: what shipped against an order, and when.
 
-Each shipment references the order it fulfils. An order can have more than
-one shipment if it went out in separate packages.
+Each shipment references the order it fulfils and the warehouse location it
+left from. An order can have more than one shipment if it went out in
+separate packages.
+"""
+
+LOCATIONS_DOC = """The warehouse's own bins: where a shipment leaves from.
+
+A fixed set - a demo warehouse has the same handful of docks and aisles
+regardless of how much stock moves through them. `Zone` is what a picker
+reads off a bin label; `Code` is what the WMS scans.
+"""
+
+STOCK_LEVELS_DOC = """On-hand quantity, by product and by warehouse location.
+
+The ledger the shipments below draw down from an opening balance. A product
+with stock in three locations has three rows here, not one row with three
+numbers - the same reason `OrderLines` is its own table instead of an array
+on `Orders`: a location's stock needs to be queried and ruled on its own.
 """
 
 PRODUCTS_DOC = """The catalogue order lines point at.
@@ -151,8 +168,7 @@ CATEGORIES = ["Fasteners", "Bearings", "Seals", "Tooling", "Electrical", "Packag
 MATERIAL = ["Steel", "Brass", "Nylon", "Alu", "Copper", "Rubber", "Ceramic", "Titanium"]
 ARTICLE = ["Bolt", "Nut", "Washer", "Bushing", "Gasket", "Clamp", "Bracket", "Coupler",
            "Sleeve", "Spacer", "Pin", "Ring"]
-# Category-specific spec sheets, the PIM staple: attributes that vary by category live in
-# one JSON field instead of a column per possible attribute across every category.
+# category-specific attrs, one JSON field instead of a column per category
 CATEGORY_ATTRS = {
     "Fasteners": lambda: {"thread": random.choice(["M4", "M6", "M8", "M10", "M12"]),
                            "head": random.choice(["hex", "socket", "flange", "countersunk"]),
@@ -179,7 +195,7 @@ STREETS = {
     "Germany": ["Industriestrasse", "Bahnhofstrasse", "Hafenweg", "Lagerstrasse", "Gewerbering"],
     "France": ["Rue de l'Industrie", "Avenue du Port", "Rue des Entrepots", "Boulevard Gambetta"],
 }
-# Rough city centres, enough for a map pin in a demo.
+# rough city centres, enough for a map pin in a demo
 CITY_GEO = {"Amsterdam": (52.37, 4.90), "Rotterdam": (51.92, 4.48), "Utrecht": (52.09, 5.12),
             "Eindhoven": (51.44, 5.48), "Groningen": (53.22, 6.57), "Breda": (51.59, 4.78),
             "Tilburg": (51.56, 5.09), "Brussels": (50.85, 4.35), "Antwerp": (51.22, 4.40),
@@ -189,23 +205,32 @@ CITY_GEO = {"Amsterdam": (52.37, 4.90), "Rotterdam": (51.92, 4.48), "Utrecht": (
             "Paris": (48.86, 2.35), "Lyon": (45.76, 4.84), "Marseille": (43.30, 5.37),
             "Lille": (50.63, 3.06), "Toulouse": (43.60, 1.44)}
 COUNTRY_DIAL = {"Netherlands": "31", "Belgium": "32", "Germany": "49", "France": "33"}
-# 1234 AB in the Netherlands, four digits in Belgium, five everywhere else.
+# 1234 AB in the Netherlands, four digits in Belgium, five everywhere else
 POSTCODE = {
     "Netherlands": lambda: f"{random.randint(1000, 9999)} {random.choice('ABCDEGHJKLMNPRSTVWXZ')}{random.choice('ABCDEGHJKLMNPRSTVWXZ')}",
     "Belgium": lambda: str(random.randint(1000, 9999)),
     "Germany": lambda: f"{random.randint(10000, 99999)}",
     "France": lambda: f"{random.randint(10000, 95999)}",
 }
-# What the tax office would charge on a shipment to each country.
+# what the tax office would charge on a shipment to each country
 VAT_RATE = {"Netherlands": 0.21, "Belgium": 0.21, "Germany": 0.19, "France": 0.20}
 STATUSES = ["open", "picking", "shipped", "closed", "cancelled"]
 STATUS_WEIGHTS = [12, 8, 20, 55, 5]
-RECEIPT_REASONS = ["Receipt", "Opening balance", "Correction"]
-RECEIPT_REASON_WEIGHTS = [80, 5, 15]
 CHANNELS = ["web", "phone", "edi", "counter"]
 CHANNEL_WEIGHTS = [55, 15, 25, 5]
 START = date(2024, 1, 1).toordinal()
 END = date(2026, 7, 31).toordinal()
+
+# fixed bin list, same regardless of data volume; storage_bins/shipping_bin below pick from it by zone
+LOCATIONS = [
+    ("RCV-01", "Receiving", "Dock 1"), ("RCV-02", "Receiving", "Dock 2"),
+    ("BLK-A1", "Bulk storage", "Aisle A"), ("BLK-A2", "Bulk storage", "Aisle A"),
+    ("BLK-B1", "Bulk storage", "Aisle B"), ("BLK-B2", "Bulk storage", "Aisle B"),
+    ("PCK-A1", "Pick face", "Aisle A"), ("PCK-A2", "Pick face", "Aisle A"),
+    ("PCK-B1", "Pick face", "Aisle B"), ("PCK-B2", "Pick face", "Aisle B"),
+    ("PAK-01", "Pack", "Pack bench 1"), ("SHP-01", "Shipping", "Dock 3"),
+]
+ZONES = ["Receiving", "Bulk storage", "Pick face", "Pack", "Shipping"]
 
 
 def call(method, path, body=None, expect_json=True):
@@ -219,7 +244,7 @@ def call(method, path, body=None, expect_json=True):
         with urllib.request.urlopen(request) as response:
             raw = response.read().decode()
             headers = response.headers
-            # Any response may re-issue the session: changing the password ends every session.
+            # any response may re-issue the session: changing the password ends every session
             for value in headers.get_all("Set-Cookie") or []:
                 if value.startswith("baseport_auth="):
                     _cookie = value.split(";")[0]
@@ -260,7 +285,7 @@ def _auto_detect_from_log(db_path):
 
 def sign_in():
     global _cookie
-    if not PASSWORD:
+    if not USER or not PASSWORD:
         raise SystemExit(
             "Set ADMIN_USER and ADMIN_PASSWORD, or ensure the log directory is accessible.\n"
             "A fresh instance logs a one-time admin account on first start;\n"
@@ -270,7 +295,7 @@ def sign_in():
     if not _cookie:
         raise SystemExit("Signed in but no session cookie came back.")
 
-    # A session on the one-time password reaches the sign-in surface and nothing else.
+    # a session on the one-time password reaches the sign-in surface and nothing else
     if call("GET", "/api/auth/me")[0].get("mustChangePassword"):
         call("POST", "/api/auth/password",
              {"currentPassword": PASSWORD, "newPassword": NEW_PASSWORD})
@@ -368,11 +393,7 @@ class Bulk:
         return rid
 
     def flush(self):
-        # Committing here, not just at close(), is the whole point: the one BEGIN in __init__ would
-        # otherwise hold a single write transaction open for the entire run - on a large seed that is
-        # minutes with every other writer against this file (the running server's own JobScheduler tick,
-        # a live admin edit) blocked past its busy_timeout. A commit per batch bounds the lock to one
-        # batch's worth of rows, small enough that a concurrent writer's timeout comfortably covers it.
+        # commit per batch: one long-lived BEGIN would block other writers past busy_timeout
         if self.batch:
             self.conn.executemany(self.SQL, self.batch)
             self.written += len(self.batch)
@@ -405,9 +426,12 @@ def main():
     counts["lines"] = max(counts["lines"], counts["orders"])
 
     print(f"Seeding {BASE} (db {args.db}, scale {args.scale})")
-    if not USER and not PASSWORD:
+    if not USER or not PASSWORD:
         _auto_detect_from_log(args.db)
     sign_in()
+
+    locations, fresh_loc = table("Locations", "The warehouse's own bins", location_fields())
+    publish(locations, "locations", "Locations", "Warehousing", LOCATIONS_DOC, methods=("GET",))
 
     products, fresh_p = table("Products", "Catalogue the order lines sell from", product_fields())
     publish(products, "products", "Products", "Catalogue", PRODUCTS_DOC)
@@ -415,36 +439,40 @@ def main():
     customers, fresh_c = table("Customers", "Accounts that place orders", customer_fields())
     publish(customers, "customers", "Customers", "Accounts", CUSTOMERS_DOC)
 
+    stock_levels, fresh_sl = table("StockLevels", "On-hand quantity by product and location",
+                                    stock_level_fields(products, locations))
+    publish(stock_levels, "stock-levels", "Stock levels", "Warehousing", STOCK_LEVELS_DOC, methods=("GET",))
+
     orders, fresh_o = table("Orders", "Order headers taken through the portal", order_fields(customers))
     publish(orders, "sales-orders", "Sales orders", "Sales", ORDERS_DOC)
 
     lines, fresh_l = table("OrderLines", "The lines of an order", line_fields(orders, products))
     publish(lines, "order-lines", "Order lines", "Sales", LINES_DOC)
 
-    receipts, fresh_r = table("Receipts", "Stock movements against the catalogue", receipt_fields(products))
-    publish(receipts, "receipts", "Receipts", "Warehousing", RECEIPTS_DOC)
-
-    shipments, fresh_s = table("Shipments", "Packing slips against an order", shipment_fields(orders))
+    shipments, fresh_s = table("Shipments", "Packing slips against an order", shipment_fields(orders, locations))
     publish(shipments, "shipments", "Shipments", "Warehousing", SHIPMENTS_DOC)
 
+    if fresh_loc:
+        location_forms(locations)
     if fresh_p:
         product_forms(products)
     if fresh_c:
         customer_forms(customers)
+    if fresh_sl:
+        stock_level_forms(stock_levels)
     track_id = order_forms(orders) if fresh_o else None
     if fresh_l:
         line_forms(lines, track_id)
-    if fresh_r:
-        receipt_forms(receipts)
     if fresh_s:
         shipment_forms(shipments)
 
-    if fresh_p and fresh_c and fresh_o and fresh_l and fresh_r and fresh_s:
-        fill(args.db, counts, products, customers, orders, lines, receipts, shipments)
+    if fresh_loc and fresh_p and fresh_c and fresh_sl and fresh_o and fresh_l and fresh_s:
+        fill(args.db, counts, locations, products, customers, stock_levels, orders, lines, shipments)
     else:
         print("  Records: skipped, some tables already existed")
 
     seed_queries()
+    seed_actions(orders)
     seed_portway()
 
 
@@ -461,15 +489,12 @@ def product_fields():
          "defaultValue": CATEGORIES[0]},
         {"name": "UnitPrice", "label": "List price", "dataType": "currency", "min": 0},
         {"name": "Active", "dataType": "boolean", "defaultValue": "true"},
-        {"name": "StockQty", "label": "Stock on hand", "dataType": "number", "min": 0, "defaultValue": "0"},
-        {"name": "StockStatus", "dataType": "calculated",
-         "expression": 'data.StockQty > 0 ? "Available" : "Out of stock"'},
         {"name": "Body", "label": "Description (long)", "dataType": "richtext",
          "helpText": "Storefront copy. Sanitized on save."},
-        # Left free-form on purpose: the attributes differ per category, there is no one schema to declare.
+        # free-form on purpose: attributes differ per category, no one schema to declare
         {"name": "Attributes", "dataType": "json",
          "helpText": "Category-specific spec sheet, e.g. thread size or bore diameter."},
-        # Packaging is the same shape for every article, it gets a schema and the API publishes it.
+        # same shape for every article, so this one gets a schema and the API publishes it
         {"name": "Packaging", "dataType": "json", "optionsJson": json.dumps({"fields": [
             {"name": "UnitsPerBox", "label": "Units per box", "dataType": "number", "min": 1, "isRequired": True},
             {"name": "WeightKg", "label": "Weight (kg)", "dataType": "number", "min": 0},
@@ -484,15 +509,25 @@ def product_fields():
     ]
 
 
+def location_fields():
+    return [
+        {"name": "Code", "label": "Bin code", "dataType": "text",
+         "isRequired": True, "isUnique": True, "isIdentifier": True,
+         "helpText": "What the WMS scans."},
+        {"name": "Zone", "dataType": "select", "optionsJson": json.dumps(ZONES),
+         "defaultValue": ZONES[0]},
+        {"name": "Description", "dataType": "text", "helpText": "What a picker reads off the bin label."},
+    ]
+
+
 def customer_fields():
     return [
-        # dataType email replaces the hand-rolled pattern this field used before the type existed.
+        # dataType email replaces the hand-rolled pattern this field used before the type existed
         {"name": "Email", "label": "Email address", "dataType": "email",
          "isRequired": True, "isUnique": True, "isIdentifier": True,
          "helpText": "We use this to find your account."},
         {"name": "Name", "label": "Account name", "dataType": "text", "isRequired": True},
-        # City and Country stay top-level: they are reporting dimensions, they drive the list views,
-        # and only a top-level field gets an index. The rest of the address is one object.
+        # City/Country stay top-level: reports group by them, and only a top-level field is indexed
         {"name": "City", "dataType": "text"},
         {"name": "Country", "dataType": "select", "optionsJson": json.dumps(COUNTRIES),
          "defaultValue": "Netherlands"},
@@ -530,8 +565,8 @@ def order_fields(customers):
         {"name": "Status", "dataType": "select", "optionsJson": json.dumps(STATUSES),
          "defaultValue": "open"},
         {"name": "Total", "label": "Order total", "dataType": "currency", "min": 0},
-        # Copied off the account when the order is taken, not looked up later: an address that
-        # changes next year must not rewrite what shipped last year.
+        # copied off the account when the order is taken, not a live lookup: an address that
+        # changes next year must not rewrite what shipped last year
         {"name": "ShipTo", "label": "Ship to", "dataType": "json", "optionsJson": json.dumps({"fields": [
             {"name": "Street", "dataType": "text", "isRequired": True},
             {"name": "PostalCode", "label": "Postal code", "dataType": "text", "max": 12},
@@ -544,6 +579,8 @@ def order_fields(customers):
             {"name": "Gross", "dataType": "currency", "min": 0},
         ]}), "helpText": "Net, VAT and gross at the moment the order was taken."},
         {"name": "Notes", "label": "Internal notes", "dataType": "longtext", "isHidden": True},
+        # stamped by the seeded "Orders - stamp last update" action on every write, not by hand
+        {"name": "LastTouched", "label": "Last touched", "dataType": "date", "isHidden": True},
     ]
 
 
@@ -562,28 +599,24 @@ def line_fields(orders, products):
     ]
 
 
-def receipt_fields(products):
+def stock_level_fields(products, locations):
     return [
-        {"name": "ReceiptNo", "label": "Receipt number", "dataType": "text",
-         "isRequired": True, "isUnique": True, "isIdentifier": True},
         {"name": "Product", "dataType": "reference",
          "optionsJson": json.dumps({"tableId": products}), "isRequired": True},
-        {"name": "Reason", "dataType": "select", "optionsJson": json.dumps(RECEIPT_REASONS),
-         "defaultValue": RECEIPT_REASONS[0]},
-        {"name": "ReceiptDate", "label": "Date", "dataType": "date"},
-        {"name": "BeforeQty", "label": "Before", "dataType": "number"},
-        {"name": "DeltaQty", "label": "Change", "dataType": "number"},
-        {"name": "AfterQty", "label": "After", "dataType": "calculated",
-         "expression": "data.BeforeQty + data.DeltaQty"},
+        {"name": "Location", "dataType": "reference",
+         "optionsJson": json.dumps({"tableId": locations}), "isRequired": True},
+        {"name": "Qty", "label": "On hand", "dataType": "number", "min": 0, "defaultValue": "0"},
     ]
 
 
-def shipment_fields(orders):
+def shipment_fields(orders, locations):
     return [
         {"name": "PackingSlipNo", "label": "Packing slip number", "dataType": "text",
          "isRequired": True, "isUnique": True, "isIdentifier": True},
         {"name": "Order", "dataType": "reference",
          "optionsJson": json.dumps({"tableId": orders}), "isRequired": True},
+        {"name": "Location", "label": "Shipped from", "dataType": "reference",
+         "optionsJson": json.dumps({"tableId": locations}), "isRequired": True},
         {"name": "ShipDate", "label": "Ship date", "dataType": "date"},
         {"name": "Tracking", "label": "Track & trace", "dataType": "text"},
         {"name": "Notes", "dataType": "text"},
@@ -591,12 +624,11 @@ def shipment_fields(orders):
 
 
 def product_forms(products):
-    # Slug is derived server-side from Name when left blank, it has no place in a visitor-facing form.
-    # Attributes/Tags are structured PIM data, filled through the admin grid or an import, not typed by hand here.
+    # Slug derives server-side; Attributes/Tags are PIM data filled via the admin grid or import, not typed here
     form(products, kind="form", actions=["submit"], title="Products - Create new",
          description="A new article for the catalogue.",
          layoutJson=layout(["Sku", "Gtin", "Name"], ["Category", "UnitPrice", "Active"],
-                            ["StockQty"], ["Body"], ["Datasheet"]))
+                            ["Body"], ["Datasheet"]))
     form(products, kind="form", actions=["lookup"], title="Products - Look up", isReadOnly=True,
          description="Enter a SKU or scan a barcode.",
          configJson={"matchFields": ["Sku", "Gtin"], "resultFields": ["Sku", "Gtin", "Name", "Category", "UnitPrice", "Active"],
@@ -606,12 +638,14 @@ def product_forms(products):
          configJson={"columns": ["Sku", "Gtin", "Name", "Category", "UnitPrice", "Active"],
                      "searchFields": ["Sku", "Gtin", "Name"],
                      "sortField": "Name", "sortDir": "asc", "pageSize": 25})
-    # Ops-facing: same table as the catalogue above, different columns - what a warehouse worker checks, not what a customer browses.
-    form(products, kind="list", title="Products - Stock",
-         description="Stock on hand, by article.",
-         configJson={"columns": ["Sku", "Gtin", "Name", "StockQty", "StockStatus", "Active"],
-                     "searchFields": ["Sku", "Gtin", "Name"],
-                     "sortField": "StockQty", "sortDir": "asc", "pageSize": 25})
+
+
+def location_forms(locations):
+    form(locations, kind="list", title="Locations - Overview",
+         description="Every bin in the warehouse.",
+         configJson={"columns": ["Code", "Zone", "Description"],
+                     "searchFields": ["Code"],
+                     "sortField": "Code", "sortDir": "asc", "pageSize": 25})
 
 
 def customer_forms(customers):
@@ -637,8 +671,7 @@ def order_forms(orders):
              {"t": "row", "cols": [{"t": "col", "w": 12, "items": ["OrderDate", "Channel", "Status"]}]},
              {"t": "button", "label": "Place order", "action": "submit"},
          ]})
-    # Returned so line_forms() can point OrderLines - Overview's followLookup at it: the
-    # /order page embeds both, and the list should track whatever this lookup submits.
+    # returned so line_forms() can wire OrderLines - Overview's followLookup to it (the /order page embeds both)
     track_id = form(orders, kind="form", actions=["lookup"], title="Orders - Look up", isReadOnly=True,
                      description="Enter your order number.",
                      configJson={"matchFields": ["OrderNo"], "resultFields": ["OrderNo", "OrderDate", "Status", "Total"],
@@ -648,10 +681,9 @@ def order_forms(orders):
          configJson={"columns": ["OrderNo", "OrderDate", "Channel", "Total", "Status"],
                      "searchFields": ["OrderNo"],
                      "filters": [{"field": "Status", "op": "eq", "value": "open"}],
-                     # A renderer turns a bare value into markup; row data is escaped first.
+                     # a renderer turns a bare value into markup; row data is escaped first
                      "renderers": {"Status": "'<strong>' + data.Status.toUpperCase() + '</strong>'"},
-                     # Target is the /order page bootstrap-sites.py serves on customers.site.com,
-                     # which embeds "Orders - Look up" and answers a ?q= deep link on load.
+                     # targets the /order page on customers.site.com, which embeds Orders - Look up and answers ?q=
                      "actions": [{"label": "View order",
                                   "hrefExpr": "'http://127.0.0.1:8081/order?q=' + encodeURIComponent(data.OrderNo)"}],
                      "sortField": "OrderDate", "sortDir": "desc", "pageSize": 25})
@@ -662,10 +694,7 @@ def order_forms(orders):
                      "searchFields": ["OrderNo"],
                      "filters": [{"field": "Status", "op": "eq", "value": "open"}],
                      "renderers": {"Status": "'<strong>' + data.Status.toUpperCase() + '</strong>'"},
-                     # Target is the /order-lines page bootstrap-sites.py serves on wms.site.com,
-                     # which embeds "OrderLines - Overview" and answers a ?q= deep link on load.
-                     # LineNo is stamped "{OrderNo}-{n}" at seed time (see below), a
-                     # substring search on OrderNo already narrows the list to this order's lines.
+                     # targets /order-lines on wms.site.com; LineNo is "{OrderNo}-{n}" so an OrderNo search already narrows to it
                      "actions": [{"label": "View lines",
                                   "hrefExpr": "'http://127.0.0.1:8082/order-lines?q=' + encodeURIComponent(data.OrderNo)"}],
                      "sortField": "OrderDate", "sortDir": "desc", "pageSize": 25})
@@ -689,68 +718,59 @@ def line_forms(lines, track_id=None):
                      "notFoundText": "No line with that number."})
     lines_cfg = {"columns": ["LineNo", "Quantity", "UnitPrice", "LineTotal"],
                  "searchFields": ["LineNo"],
-                 # This is only ever embedded as a drill-down target (linked to from an
-                 # order's own row action, never browsed standalone), an empty query
-                 # should not dump all quarter-million lines -- it should wait for one.
+                 # drill-down only (never browsed standalone): empty query waits, doesn't dump a quarter-million lines
                  "requireQuery": True,
-                 # LineTotal is a calculated field, not a currency field, it falls
-                 # outside the built-in currency formatting UnitPrice gets automatically
-                 # -- the engine's expression grammar has no object-literal syntax for
-                 # Intl options, this rounds and lets toLocaleString's own thousands
-                 # grouping do the rest (EU locale: '.' groups, ',' would be the decimal
-                 # separator, moot here since whole euros have none).
+                 # LineTotal is calculated, not currency, so it skips the built-in formatting; toLocaleString adds EU thousands grouping
                  "renderers": {"LineTotal": "'€ ' + Number(data.LineTotal.toFixed(0)).toLocaleString('nl-NL')"},
                  "sortField": "LineNo", "sortDir": "asc", "pageSize": 25}
     if track_id:
-        # The /order page embeds both Orders - Look up and this list, this list should
-        # re-filter live whenever a visitor submits a new order number up there.
+        # the /order page embeds both Orders - Look up and this list; re-filter live on submit
         lines_cfg["followLookup"] = track_id
     form(lines, kind="list", title="OrderLines - Overview",
-         # LineNo is "{OrderNo}-{n}", searching "SO-118153" also narrows to
-         # every line on that one order -- no separate order field needed.
          description="Every line, by line number or order number.",
          configJson=lines_cfg)
 
 
-def receipt_forms(receipts):
-    form(receipts, kind="form", actions=["submit"], title="Receipts - Create new",
-         description="Record a stock movement.",
-         layoutJson=layout(["ReceiptNo", "Product"], ["Reason", "ReceiptDate"], ["BeforeQty", "DeltaQty"]))
-    form(receipts, kind="form", actions=["lookup"], title="Receipts - Look up", isReadOnly=True,
-         description="Enter a receipt number.",
-         configJson={"matchFields": ["ReceiptNo"],
-                     "resultFields": ["ReceiptNo", "Reason", "ReceiptDate", "BeforeQty", "DeltaQty", "AfterQty"],
-                     "notFoundText": "No receipt with that number."})
-    form(receipts, kind="list", title="Receipts - Overview",
-         description="Every stock movement, newest first.",
-         configJson={"columns": ["ReceiptNo", "Reason", "ReceiptDate", "BeforeQty", "DeltaQty", "AfterQty"],
-                     "searchFields": ["ReceiptNo"],
-                     "sortField": "ReceiptDate", "sortDir": "desc", "pageSize": 25})
+def stock_level_forms(stock_levels):
+    form(stock_levels, kind="list", title="StockLevels - By location",
+         description="On-hand quantity, by product and by warehouse bin.",
+         configJson={"columns": ["Product", "Location", "Qty"],
+                     "sortField": "Qty", "sortDir": "asc", "pageSize": 25})
 
 
 def shipment_forms(shipments):
     form(shipments, kind="form", actions=["submit"], title="Shipments - Create new",
          description="Record what shipped against an order.",
-         layoutJson=layout(["PackingSlipNo", "Order"], ["ShipDate", "Tracking"], ["Notes"]))
+         layoutJson=layout(["PackingSlipNo", "Order"], ["Location", "ShipDate", "Tracking"], ["Notes"]))
     form(shipments, kind="form", actions=["lookup"], title="Shipments - Look up", isReadOnly=True,
          description="Enter a packing slip number.",
          configJson={"matchFields": ["PackingSlipNo"],
-                     "resultFields": ["PackingSlipNo", "ShipDate", "Tracking"],
+                     "resultFields": ["PackingSlipNo", "Location", "ShipDate", "Tracking"],
                      "notFoundText": "No shipment with that packing slip number."})
     form(shipments, kind="list", title="Shipments - Overview",
          description="Every packing slip, newest first.",
-         configJson={"columns": ["PackingSlipNo", "ShipDate", "Tracking"],
+         configJson={"columns": ["PackingSlipNo", "Location", "ShipDate", "Tracking"],
                      "searchFields": ["PackingSlipNo"],
                      "sortField": "ShipDate", "sortDir": "desc", "pageSize": 25})
 
 
-def fill(db_path, counts, products, customers, orders, lines, receipts, shipments):
+def fill(db_path, counts, locations, products, customers, stock_levels, orders, lines, shipments):
     random.seed(SEED)  # short_id draws from the same stream, ids are stable too
     started = time.perf_counter()
     print(f"  Records: generating {sum(counts.values()):,} rows", flush=True)
     bulk = Bulk(db_path)
 
+    # warehouse bins: fixed, written once, referenced by code from here on
+    loc_id = {}
+    for code, zone, desc in LOCATIONS:
+        loc_id[code] = bulk.add(locations, {"Code": code, "Zone": zone, "Description": desc}, stamp(START))
+    storage_bins = [code for code, zone, _ in LOCATIONS if zone in ("Bulk storage", "Pick face")]
+    shipping_bin = next(code for code, zone, _ in LOCATIONS if zone == "Shipping")
+
+    # stock ledger: (product, bin) -> qty, opening balance below minus shipments; StockLevels is this dict at the end
     catalogue = []
+    home = {}
+    stock = {}
     for i in range(counts["products"]):
         price = round(random.uniform(0.45, 480.0), 2)
         material = random.choice(MATERIAL)
@@ -762,7 +782,7 @@ def fill(db_path, counts, products, customers, orders, lines, receipts, shipment
             "Sku": f"P-{i:05d}",
             "Gtin": gs1_code("20", i),
             "Name": name,
-            "Slug": f"{slugify(name)}-{i:05d}",  # size/material repeat a lot, the row index is what actually makes it unique
+            "Slug": f"{slugify(name)}-{i:05d}",  # size/material repeat a lot, the row index makes it unique
             "Category": category,
             "UnitPrice": price,
             "Active": random.random() > 0.08,
@@ -781,30 +801,11 @@ def fill(db_path, counts, products, customers, orders, lines, receipts, shipment
             "Tags": random.sample(PRODUCT_TAGS, k=random.randint(0, 3)),
             "Datasheet": f"https://cdn.example.test/datasheets/P-{i:05d}.pdf",
         }
-        # Bulk writes straight into SQLite and skips RecordEngine, so a calculated field is never computed
-        # for it - it has to arrive pre-computed, same as LineTotal below.
-        stock_qty = random.choices([0, random.randint(1, 20), random.randint(20, 500)], weights=[8, 30, 62])[0]
-        data["StockQty"] = stock_qty
-        data["StockStatus"] = "Available" if stock_qty > 0 else "Out of stock"
-        catalogue.append((bulk.add(products, data, stamp(START)), price))
-
-    # Stock movement history: scattered receipts against random articles, each a delta on top of whatever
-    # came before it - the same shape the reference warehousing screens showed (a receipt log, not a snapshot).
-    for i in range(counts["receipts"]):
-        product, _ = catalogue[random.randrange(len(catalogue))]
-        day = random.randint(START, END)
-        before = random.randint(0, 300)
-        reason = random.choices(RECEIPT_REASONS, RECEIPT_REASON_WEIGHTS)[0]
-        delta = random.randint(1, 50) if reason != "Correction" else random.randint(-20, 20)
-        bulk.add(receipts, {
-            "ReceiptNo": f"RC-{100000 + i}",
-            "Product": product,
-            "Reason": reason,
-            "ReceiptDate": str(date.fromordinal(day)),
-            "BeforeQty": before,
-            "DeltaQty": delta,
-            "AfterQty": before + delta,  # precomputed: Bulk skips RecordEngine, nothing else fills a calculated field in
-        }, stamp(day))
+        pid = bulk.add(products, data, stamp(START))
+        catalogue.append((pid, price))
+        home[pid] = random.choice(storage_bins)
+        # opening balance: every article starts somewhere, shipments below draw it down
+        stock[(pid, home[pid])] = random.choices([0, random.randint(1, 20), random.randint(20, 500)], weights=[8, 30, 62])[0]
 
     accounts = []
     for i in range(counts["customers"]):
@@ -821,7 +822,7 @@ def fill(db_path, counts, products, customers, orders, lines, receipts, shipment
             "Address": {
                 "Street": f"{random.choice(STREETS[country])} {random.randint(1, 240)}",
                 "PostalCode": POSTCODE[country](),
-                # Jittered off the city centre so a map of the demo data is not one pin per city.
+                # jittered off the city centre so a map of the demo data is not one pin per city
                 "Geo": {"Lat": round(lat + random.uniform(-0.06, 0.06), 4),
                          "Lon": round(lon + random.uniform(-0.06, 0.06), 4)},
             },
@@ -837,7 +838,7 @@ def fill(db_path, counts, products, customers, orders, lines, receipts, shipment
         }
         accounts.append((bulk.add(customers, data, stamp(signed)), signed, country, city, data["Address"]))
 
-    # Every order gets one line, then the remainder is scattered so the fan-out varies.
+    # every order gets one line, then the remainder is scattered so the fan-out varies
     per_order = [1] * counts["orders"]
     for _ in range(counts["lines"] - counts["orders"]):
         per_order[random.randrange(counts["orders"])] += 1
@@ -850,12 +851,14 @@ def fill(db_path, counts, products, customers, orders, lines, receipts, shipment
         order_id = short_id()
         status = random.choices(STATUSES, STATUS_WEIGHTS)[0]
         total = 0.0
+        order_lines = []
         for n in range(line_count):
             product, list_price = catalogue[random.randrange(len(catalogue))]
             quantity = random.choice([1, 1, 2, 2, 5, 10, 12, 25, 50, 100])
             unit_price = round(list_price * random.uniform(0.8, 1.0), 2)
             line_total = round(quantity * unit_price, 2)
             total += line_total
+            order_lines.append((product, quantity))
             bulk.add(lines, {
                 "LineNo": f"{order_no}-{n + 1:03d}",
                 "Order": order_id,
@@ -865,7 +868,7 @@ def fill(db_path, counts, products, customers, orders, lines, receipts, shipment
                 "LineTotal": line_total,
             }, stamp(day))
 
-        # Written last so the id chosen for the lines is the id the header lands on.
+        # written last so the id chosen for the lines is the id the header lands on
         net = round(total, 2)
         vat = round(net * VAT_RATE[country], 2)
         bulk.add(orders, {
@@ -881,23 +884,31 @@ def fill(db_path, counts, products, customers, orders, lines, receipts, shipment
         }, stamp(day), record_id=order_id)
         if status in ("shipped", "closed"):
             shippable_orders.append((order_id, order_no, day))
+            # decremented once per order, not per packing slip: two packages still ship the lines' quantities once
+            for product, quantity in order_lines:
+                bin_code = home[product]
+                stock[(product, bin_code)] = max(0, stock.get((product, bin_code), 0) - quantity)
 
-    # One packing slip per shipped order, occasionally two - an order that went out in separate packages.
-    # Guarded: at a tiny --scale the single generated order can land on a status that never ships.
+    # one packing slip per shipped order, occasionally two; guarded for a tiny --scale with no shippable orders
     for i in range(counts["shipments"] if shippable_orders else 0):
         order_id, order_no, order_day = shippable_orders[random.randrange(len(shippable_orders))]
         ship_day = min(order_day + random.randint(0, 3), END)
         bulk.add(shipments, {
             "PackingSlipNo": f"PS-{100000 + i}",
             "Order": order_id,
+            "Location": loc_id[shipping_bin],
             "ShipDate": str(date.fromordinal(ship_day)),
             "Tracking": f"3S{random.randint(10**11, 10**12 - 1)}",
         }, stamp(ship_day))
 
+    for (pid, bin_code), qty in stock.items():
+        bulk.add(stock_levels, {"Product": pid, "Location": loc_id[bin_code], "Qty": qty}, stamp(END))
+
     bulk.close()
-    print(f"  Records: {counts['products']} products, {counts['customers']} customers, "
+    print(f"  Records: {counts['products']} products, {len(LOCATIONS)} locations, "
+          f"{counts['customers']} customers, "
           f"{counts['orders']} orders, {counts['lines']} order lines, "
-          f"{counts['receipts']} receipts, {counts['shipments']} shipments "
+          f"{counts['shipments']} shipments, {len(stock)} stock levels "
           f"in {time.perf_counter() - started:.1f}s")
 
 
@@ -933,6 +944,36 @@ ORDER BY Revenue DESC"""
 
     call("POST", "/api/_admin/queries", {"name": "Revenue by country (virtual)", "sql": projected})
     print("  Queries: 2 saved queries")
+
+
+def seed_actions(orders):
+    """Three worked examples, one per step kind the Action Engine has (updateRecord,
+    runExpression, httpRequest) - real steps against real fields, not a placeholder
+    no-op. httpRequest ships disabled: an outbound call to a system this demo does not
+    own would either need a live receiver nobody here runs, or a real endpoint to point
+    it at - it is left as a filled-in template an operator turns on once they have one."""
+    existing = {a["name"] for a in call("GET", "/api/_admin/actions")[0]}
+    if "Orders - stamp last update" in existing:
+        print("  Actions: already present, skipping")
+        return
+
+    call("POST", "/api/_admin/actions", {
+        "tableId": orders, "name": "Orders - stamp last update", "triggerKind": "onUpdate",
+        "stepsJson": json.dumps([{"type": "updateRecord", "setJson": {"LastTouched": "GETDATE()"}}]),
+    })
+    call("POST", "/api/_admin/actions", {
+        "tableId": orders, "name": "Orders - flag large orders", "triggerKind": "onCreate",
+        "stepsJson": json.dumps([{"type": "runExpression", "expr": "Total > 5000"}]),
+    })
+    call("POST", "/api/_admin/actions", {
+        "tableId": orders, "name": "Orders - notify ERP (template, disabled)",
+        "triggerKind": "onCreate", "isEnabled": False,
+        "stepsJson": json.dumps([{
+            "type": "httpRequest", "url": "https://example.com/erp/orders", "method": "POST",
+            "bodyTemplate": {"orderNo": "OrderNo", "customer": "Customer", "total": "Total"},
+        }]),
+    })
+    print("  Actions: 3 seeded (1 updateRecord, 1 runExpression, 1 httpRequest template, disabled)")
 
 
 def seed_portway():

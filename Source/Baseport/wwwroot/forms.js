@@ -1026,6 +1026,12 @@ function addRow(type, atIndex) {
         t: 'line_items',
         field: ''
     };
+    else if (type === 'child_table') row = {
+        t: 'child_table',
+        table: '',
+        refField: '',
+        columns: []
+    };
     else if (type === 'button_bar') row = {
         t: 'button_bar',
         align: 'flex-end',
@@ -1216,6 +1222,8 @@ function rowFields(row) {
             lab.appendChild(sel);
             div.appendChild(lab);
         }
+    } else if (row.t === 'child_table') {
+        div.appendChild(childTableEditor(row));
     } else if (row.t === 'button_bar') {
         div.appendChild(buttonBarEditor(row));
     }
@@ -1234,6 +1242,92 @@ function clientArrayColumns(optionsJson) {
 
 function lineItemFieldCandidates() {
     return formTableFields.filter((f) => f.dataType === 'array' && clientArrayColumns(f.optionsJson));
+}
+
+// mirrors FieldValidation.RefTableId server-side
+function refTargetId(optionsJson) {
+    try {
+        const o = JSON.parse(optionsJson || '{}');
+        return typeof o.tableId === 'string' && o.tableId ? o.tableId : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+// other tables carrying a reference field that points back at the form's own table
+function childTableCandidates() {
+    const formTableId = document.getElementById('formTable').value;
+    return currentTables.filter(
+        (t) => t.id !== formTableId && (t.fields || []).some((f) => f.dataType === 'reference' && refTargetId(f.optionsJson) === formTableId),
+    );
+}
+
+function refFieldCandidates(childTable) {
+    const formTableId = document.getElementById('formTable').value;
+    return (childTable ? childTable.fields || [] : []).filter((f) => f.dataType === 'reference' && refTargetId(f.optionsJson) === formTableId);
+}
+
+// child table + reference field + which of the child table's own fields become grid columns
+function childTableEditor(row) {
+    const wrap = document.createElement('div');
+    const candidates = childTableCandidates();
+    if (!candidates.length) {
+        const hint = document.createElement('p');
+        hint.className = 'muted field-hint';
+        hint.innerText = 'No table has a reference field pointing back at this table yet. Add one in the table builder first.';
+        wrap.appendChild(hint);
+        return wrap;
+    }
+    if (!row.table || !candidates.some((t) => t.id === row.table)) row.table = candidates[0].id;
+
+    const tableLab = document.createElement('label');
+    tableLab.className = 'brow-field-label';
+    tableLab.innerText = 'Child table';
+    const tableSel = document.createElement('select');
+    tableSel.className = 'input input-sm';
+    tableSel.innerHTML = candidates.map((t) => `<option value="${t.id}" ${row.table === t.id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
+    tableSel.onchange = () => {
+        row.table = tableSel.value;
+        row.refField = '';
+        row.columns = [];
+        renderCanvas();
+    };
+    tableLab.appendChild(tableSel);
+    wrap.appendChild(tableLab);
+
+    const childTable = candidates.find((t) => t.id === row.table);
+    const refCandidates = refFieldCandidates(childTable);
+    if (!row.refField || !refCandidates.some((f) => f.name === row.refField)) row.refField = refCandidates[0] ? refCandidates[0].name : '';
+
+    const refLab = document.createElement('label');
+    refLab.className = 'brow-field-label';
+    refLab.innerText = 'Reference field';
+    const refSel = document.createElement('select');
+    refSel.className = 'input input-sm';
+    refSel.innerHTML = refCandidates.map((f) => `<option value="${f.name}" ${row.refField === f.name ? 'selected' : ''}>${escapeHtml(f.label || f.name)}</option>`).join('');
+    refSel.onchange = () => {
+        row.refField = refSel.value;
+    };
+    refLab.appendChild(refSel);
+    wrap.appendChild(refLab);
+
+    if (!Array.isArray(row.columns)) row.columns = [];
+    const colsLab = document.createElement('label');
+    colsLab.className = 'brow-field-label';
+    colsLab.innerText = 'Columns';
+    wrap.appendChild(colsLab);
+    (childTable ? childTable.fields || [] : [])
+        .filter((f) => !f.isHidden && f.name !== row.refField)
+        .forEach((f) => {
+            const check = document.createElement('label');
+            check.className = 'check-inline';
+            check.innerHTML = `<input type="checkbox" value="${escapeHtml(f.name)}" ${row.columns.includes(f.name) ? 'checked' : ''}> ${escapeHtml(f.label || f.name)}`;
+            check.querySelector('input').onchange = (ev) => {
+                row.columns = ev.target.checked ? [...row.columns, f.name] : row.columns.filter((c) => c !== f.name);
+            };
+            wrap.appendChild(check);
+        });
+    return wrap;
 }
 
 // A button_bar groups several buttons behind one alignment, unlike a standalone "button" block which is one-per-row.

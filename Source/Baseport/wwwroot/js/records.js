@@ -29,13 +29,23 @@ async function loadRecords(page) {
     const table = currentTables.find((t) => t.id === currentTablePublicId);
     const columns = (table ? table.fields : []).filter((f) => !f.isHidden);
     document.getElementById('recordsHead').innerHTML =
-        columns.map((f) => `<th>${escapeHtml(f.label || f.name)}</th>`).join('') + '<th>Created</th><th>Modified</th><th></th>';
+        columns.map((f) => `<th data-sort="${f.name}">${escapeHtml(f.label || f.name)}</th>`).join('') +
+        `<th data-sort="__created">Created</th><th data-sort="updatedAt">Modified</th><th></th>`;
+    const sortKey = 'records.' + currentTablePublicId;
+    initSortableHeaders('recordsHead', sortKey, '__created', () => {
+        recordPage = 1;
+        loadRecords();
+    });
+
+    // __created has no field behind it; the API already sorts by CreatedAt whenever sort is left off, so only order travels.
+    const sort = sortState(sortKey, '__created');
+    const sortParams = sort.key === '__created' ? `&order=${sort.dir}` : `&sort=${encodeURIComponent(sort.key)}&order=${sort.dir}`;
 
     // Rows arrive rendered; the browser assigns one string.
     const meta = await ui.fragment(
         'recordsBody',
         `/api/_admin/fragments/records/${currentTablePublicId}?page=${recordPage}&pageSize=25` +
-        (q ? `&q=${encodeURIComponent(q)}` : ''),
+        (q ? `&q=${encodeURIComponent(q)}` : '') + sortParams,
     );
     if (!meta) return;
 

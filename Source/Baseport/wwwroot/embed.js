@@ -1,4 +1,32 @@
 (function() {
+    // embed.js ships as the one script tag a third-party page adds; a line_items or child_table block needs
+    // Preact + htm, which are not on that page. Loaded on demand, once per page even across several mounted
+    // forms, rather than shipping them unconditionally to every embed that never uses either block.
+    const vendorLoads = (window.__baseportVendorLoads = window.__baseportVendorLoads || {});
+    function loadVendorScript(src) {
+        if (!vendorLoads[src]) {
+            vendorLoads[src] = new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.onload = () => resolve();
+                s.onerror = () => reject(new Error(`Could not load ${src}`));
+                document.head.appendChild(s);
+            });
+        }
+        return vendorLoads[src];
+    }
+    function ensurePreactHtm(apiBase) {
+        if (window.preact && window.htm) return Promise.resolve();
+        return Promise.all([
+            loadVendorScript(`${apiBase}/js/vendor/preact.min.js`),
+            loadVendorScript(`${apiBase}/js/vendor/htm.js`)
+        ]);
+    }
+    // does this layout use a block that needs Preact, without waiting on any fetch to find out
+    function usesPreact(layoutJson) {
+        return /"t"\s*:\s*"(line_items|child_table)"/.test(layoutJson || '');
+    }
+
     // one form instance, mounted into `container`; callable directly (a page composing several forms in its own
     // layout) or via the auto-bootstrap below (today's single `<script src="embed.js?id=X">` embed, unchanged)
     function mountBaseportForm(container, formId, apiBase) {
@@ -249,11 +277,15 @@
     let formIsReadOnly = false;
     let formCurrency = 'EUR';
     let readOnlyData = null;
+    // child_table blocks stage rows locally (the header record does not exist yet); each entry is flushed
+    // with one create per row once the header submit returns its new record id.
+    let pendingChildTables = [];
 
     const TEXT_LENGTH_TYPES = new Set(['text', 'longtext', 'richtext', 'slug', 'email', 'url', 'password']);
 
     fetch(`${apiBase}/api/forms/${formId}/schema`)
         .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+        .then((data) => (usesPreact(data.form.layoutJson) ? ensurePreactHtm(apiBase) : Promise.resolve()).then(() => data))
         .then((data) => {
             tableSchema = data.table;
             formIsReadOnly = !!data.form.isReadOnly;
@@ -682,6 +714,7 @@
             formEl.appendChild(title);
         }
 
+        pendingChildTables = [];
         const layout = parseLayout(formConfig.layoutJson, table);
         let hasSubmitButton = false;
 
@@ -742,16 +775,21 @@
                 }) => {
                     if (submitBtn) submitBtn.removeAttribute('aria-busy');
                     if (ok) {
-                        if (cfg.onSuccessRedirect) {
-                            const url = safeEval(cfg.onSuccessRedirect, data);
-                            if (typeof url === 'string' && url && !isUnsafeUrl(url)) {
-                                window.location.href = url;
-                                return;
+                        const afterChildRows = pendingChildTables.length ? flushChildTables(res.recordId) : Promise.resolve([]);
+                        afterChildRows.then((lineErrors) => {
+                            if (cfg.onSuccessRedirect) {
+                                const url = safeEval(cfg.onSuccessRedirect, data);
+                                if (typeof url === 'string' && url && !isUnsafeUrl(url)) {
+                                    window.location.href = url;
+                                    return;
+                                }
                             }
-                        }
-                        toast('Thanks, your submission was received.', 'success');
-                        formEl.reset();
-                        triggerReactiveUpdate();
+                            if (lineErrors.length) toast(['Saved, but some rows failed:', ...lineErrors], 'error');
+                            else toast('Thanks, your submission was received.', 'success');
+                            formEl.reset();
+                            pendingChildTables.forEach((entry) => entry.reset());
+                            triggerReactiveUpdate();
+                        });
                     } else {
                         // The server names every field that failed alongside its message, the same inputs that errored on submit are painted red immediately.
                         markInvalid(res.invalid || []);
@@ -819,15 +857,7 @@
         return 'text'; // also covers 'select': the server accepts any string for a line-item cell of that type
     }
 
-    // Renders an add/remove-row table bound to one array field. The rows live only in this closure; every
-    // mutation re-serializes into a hidden data-kind="json" input, which extractFormData()/toFormData()
-    // already know how to turn into that field's array-of-objects value, same as any other json/array field.
-    //
-    // spike (PLAN-sept-12.md): rendered with Preact + htm (js/vendor/preact.min.js, js/vendor/htm.js)
-    // instead of hand-built DOM nodes, to evaluate the vanilla-vs-framework question with a real block.
-    // A cell's own keystrokes never trigger a repaint (sync() updates the row object and the hidden
-    // input directly); only add/remove a row calls setRows(), which repaints the table. That sidesteps
-    // the caret-preservation problem sidebar.js's filter box needed a manual fix for.
+    // A Preact spike implementing a dynamic row table that serializes to a hidden JSON input and avoids repainting on keystrokes to preserve the input caret.
     function renderLineItems(rowCfg, table) {
         const field = table.fields.find((f) => f.name === rowCfg.field);
         const columns = field ? arrayColumns(field) : null;
@@ -911,6 +941,99 @@
         return wrap;
     }
 
+    // An in-memory row staging grid that flushes and links to the parent record only after the header is created.
+    function renderChildTable(row, table) {
+        const childDef = ((table && table.childTables) || []).find((c) => c.id === row.table);
+        if (!childDef || !childDef.columns.length) return null;
+
+        const html = htm.bind(preact.h);
+
+        const wrap = document.createElement('div');
+        const caption = document.createElement('label');
+        caption.innerText = childDef.name;
+        wrap.appendChild(caption);
+
+        const mount = document.createElement('div');
+        wrap.appendChild(mount);
+
+        let rows = [];
+
+        function cellInput(r, c) {
+            const type = lineItemInputType(c.dataType);
+            const onInput = (e) => {
+                r[c.name] = type === 'checkbox' ? e.target.checked
+                    : type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value))
+                    : e.target.value;
+            };
+            return type === 'checkbox'
+                ? html`<input type="checkbox" checked=${!!r[c.name]} onInput=${onInput} />`
+                : html`<input type=${type} value=${r[c.name] == null ? '' : r[c.name]} onInput=${onInput} />`;
+        }
+
+        function setRows(next) {
+            rows = next;
+            paint();
+        }
+
+        function Table() {
+            return html`
+                <div class="baserow-table-wrap">
+                    <table class="baserow-table">
+                        <thead>
+                            <tr>
+                                ${childDef.columns.map((c) => html`<th>${c.label || c.name}</th>`)}
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map((r, i) => html`
+                                <tr key=${i}>
+                                    ${childDef.columns.map((c) => html`<td>${cellInput(r, c)}</td>`)}
+                                    <td><button type="button" class="baserow-btn-custom"
+                                        onClick=${() => setRows(rows.filter((_, idx) => idx !== i))}>✕</button></td>
+                                </tr>
+                            `)}
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="baserow-btn-custom" onClick=${() => setRows([...rows, {}])}>+ Add row</button>
+            `;
+        }
+
+        function paint() {
+            preact.render(html`<${Table} />`, mount);
+        }
+
+        paint();
+        pendingChildTables.push({
+            table: childDef.id,
+            rows: () => rows.filter((r) => Object.keys(r).length > 0),
+            reset: () => setRows([])
+        });
+        return wrap;
+    }
+
+    // Saves staged child rows after header creation, collecting individual save errors without failing the entire submission.
+    async function flushChildTables(headerId) {
+        const errors = [];
+        for (const entry of pendingChildTables) {
+            for (const row of entry.rows()) {
+                const res = await fetch(`${apiBase}/api/forms/${formId}/child/${entry.table}?refId=${encodeURIComponent(headerId)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(row)
+                });
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    errors.push(...(body.errors && body.errors.length ? body.errors : ['A row failed to save.']));
+                }
+            }
+        }
+        return errors;
+    }
+
     // tags the block's own wrapper once, whatever type-specific branch below produced it, so triggerReactiveUpdate can show/hide it uniformly
     function renderLayoutRow(row, table) {
         const node = renderLayoutRowInner(row, table);
@@ -962,6 +1085,7 @@
         }
 
         if (row.t === 'line_items') return renderLineItems(row, table);
+        if (row.t === 'child_table') return renderChildTable(row, table);
 
         if (row.t !== 'row' && row.t !== 'group') return null;
 

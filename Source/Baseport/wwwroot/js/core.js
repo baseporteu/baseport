@@ -240,7 +240,9 @@ const SECTION_ROUTES = {
         applyView(parseRoute().view || 'builder');
     },
     forms: async (id) => {
-        await loadForms();
+        // Already rendered on a full load; only fetch when stale or navigating in-session.
+        if (!formsAll.length) await loadForms();
+        else renderFormsList();
         const overview = !id;
         document.getElementById('formsOverview').classList.toggle('hidden', !overview);
         document.getElementById('formEditor').classList.toggle('hidden', overview);
@@ -256,7 +258,9 @@ const SECTION_ROUTES = {
     },
     actions: async (id) => {
         if (!currentTables.length) await loadTables(); // the table picker needs the catalogue loaded
-        await loadActions();
+        // Already rendered on a full load; only fetch when stale or navigating in-session.
+        if (!actionsAll.length) await loadActions();
+        else renderActionsList();
         const overview = !id;
         document.getElementById('actionsOverview').classList.toggle('hidden', !overview);
         document.getElementById('actionEditor').classList.toggle('hidden', overview);
@@ -272,7 +276,9 @@ const SECTION_ROUTES = {
     },
     sql: async (id) => {
         await initSqlEditor();
-        await loadSavedQueries();
+        // Already rendered on a full load; only fetch when stale or navigating in-session.
+        if (!savedQueries.length) await loadSavedQueries();
+        else refreshSidebar('sql');
         const query = savedQueries.find((q) => q.id === id);
         if (query) applyQuery(query);
         else clearQuery();

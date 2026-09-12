@@ -82,6 +82,7 @@
                                     <li class='palette-item' draggable='true' data-block='group'>Group</li>
                                     <li class='palette-item' draggable='true' data-block='container'>Container</li>
                                     <li class='palette-item' draggable='true' data-block='line_items'>Line items</li>
+                                    <li class='palette-item' draggable='true' data-block='child_table'>Child table</li>
                                     <li class='palette-item' draggable='true' data-block='subtotal'>Subtotal</li>
                                     <li class='palette-item' draggable='true' data-block='button'>Button</li>
                                     <li class='palette-item' draggable='true' data-block='button_bar'>Button bar</li>
@@ -201,7 +202,7 @@
                             </div>
                             <div class='check-grid' id='listSearchFields'></div>
                         </div>
-                        <div class='setting-row'>
+                        <div class='setting-row stack'>
                             <div class='setting-label'>
                                 <label>Filters</label>
                                 <p class='muted'>Limits the records displayed in the list.</p>
@@ -211,7 +212,7 @@
                                 <button type='button' class='btn btn-outline btn-sm' onclick='addListFilter()'>Add filter</button>
                             </div>
                         </div>
-                        <div class='setting-row'>
+                        <div class='setting-row stack'>
                             <div class='setting-label'>
                                 <label>Row actions</label>
                                 <p class='muted'>A button per row, e.g. "View" or "Approve". The URL is built from that row's data.</p>

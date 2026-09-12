@@ -329,7 +329,7 @@ public static class AdminEndpoints
             var settings = await db.SettingsAsync() ?? new AppSettings();
             string created;
             // A full disk is the expected failure here, and it says what is wrong instead of arriving as a 500.
-            try { created = await BackupStore.CreateAsync(BackupStore.Dir(db), db, settings.BackupRetention); }
+            try { created = await BackupStore.CreateAndExportAsync(BackupStore.Dir(db), db, settings); }
             catch (IOException ex) { return Results.BadRequest(new { errors = new[] { ex.Message } }); }
             return Results.Ok(new { created, backups = BackupStore.List(BackupStore.Dir(db)) });
         });
@@ -373,6 +373,13 @@ public static class AdminEndpoints
                 s.Currency,
                 s.TimeZone,
                 s.BackupRetention,
+                s.S3ExportEnabled,
+                s.S3Bucket,
+                s.S3Region,
+                s.S3ServiceUrl,
+                s.S3AccessKey,
+                s.S3Prefix,
+                HasS3SecretKey = s.S3SecretKeyProtected.Length > 0,
                 s.ApiTitle,
                 s.ApiDescription,
                 s.AllowedOrigins,
@@ -426,6 +433,25 @@ public static class AdminEndpoints
                     return Results.BadRequest(new { errors = new[] { "Backup retention must be between 1 and 50 backups." } });
                 s.BackupRetention = backupRetention;
             }
+            if (body["s3ExportEnabled"] is JsonValue s3ee && s3ee.TryGetValue<bool>(out var s3Enabled))
+                s.S3ExportEnabled = s3Enabled;
+            if (body["s3Bucket"] is JsonValue s3bv && s3bv.TryGetValue<string>(out var s3Bucket))
+                s.S3Bucket = s3Bucket.Trim();
+            if (body["s3Region"] is JsonValue s3rv && s3rv.TryGetValue<string>(out var s3Region))
+                s.S3Region = s3Region.Trim();
+            if (body["s3ServiceUrl"] is JsonValue s3sv && s3sv.TryGetValue<string>(out var s3ServiceUrl))
+                s.S3ServiceUrl = s3ServiceUrl.Trim();
+            if (body["s3AccessKey"] is JsonValue s3av && s3av.TryGetValue<string>(out var s3AccessKey))
+                s.S3AccessKey = s3AccessKey.Trim();
+            if (body["s3Prefix"] is JsonValue s3pv && s3pv.TryGetValue<string>(out var s3Prefix))
+                s.S3Prefix = s3Prefix.Trim();
+            // an empty secret means leave it alone: the UI never receives the current one, it cannot echo it back to preserve it
+            if (body["s3SecretKey"] is JsonValue s3skv && s3skv.TryGetValue<string>(out var s3SecretKey) && s3SecretKey.Length > 0)
+                s.S3SecretKeyProtected = Secrets.Protect(s3SecretKey);
+            if (body["clearS3SecretKey"] is JsonValue cs3 && cs3.TryGetValue<bool>(out var clearS3) && clearS3)
+                s.S3SecretKeyProtected = "";
+            if (s.S3ExportEnabled && (s.S3Bucket.Length == 0 || s.S3AccessKey.Length == 0 || s.S3SecretKeyProtected.Length == 0))
+                return Results.BadRequest(new { errors = new[] { "S3 export needs a bucket, an access key and a secret key before it can be turned on." } });
             if (body["allowedOrigins"] is JsonValue ov && ov.TryGetValue<string>(out var origins))
             {
                 // Stored normalised, what an author typed and what a browser sends are compared as the same thing.
@@ -516,8 +542,29 @@ public static class AdminEndpoints
                 s.PublicAuthEnabled, s.PublicRegistrationEnabled, s.AnonymousAuthEnabled, s.AnonymousRetentionDays,
                 s.AuthIssuer, s.AuthTokenLifetimeSec, s.AuthRefreshLifetimeDays,
                 s.ProxyPrivateTargetsEnabled,
+                s.S3ExportEnabled, s.S3Bucket, s.S3Region, s.S3ServiceUrl, s.S3AccessKey, s.S3Prefix, HasS3SecretKey = s.S3SecretKeyProtected.Length > 0,
                 s.PostgresEnabled, s.PostgresPort, s.PostgresBindAddress, s.TdsEnabled, s.TdsPort, s.TdsBindAddress
             });
+        });
+
+        app.MapPost("/api/_admin/settings/s3-test", async (AppDbContext db, JsonObject body) =>
+        {
+            var s = await db.SettingsAsync() ?? new AppSettings();
+            string Field(string key, string fallback)
+                => body[key] is JsonValue v && v.TryGetValue<string>(out var str) && str.Trim().Length > 0 ? str.Trim() : fallback;
+
+            var bucket = Field("bucket", s.S3Bucket);
+            var region = Field("region", s.S3Region);
+            var serviceUrl = Field("serviceUrl", s.S3ServiceUrl);
+            var accessKey = Field("accessKey", s.S3AccessKey);
+            // an empty secret in the request means the form field was left blank: test with what is already saved
+            var secretKey = Field("secretKey", Secrets.Unprotect(s.S3SecretKeyProtected));
+
+            if (bucket.Length == 0 || accessKey.Length == 0 || secretKey.Length == 0)
+                return Results.Ok(new { ok = false, error = "Bucket, access key and secret key are required." });
+
+            var (ok, error) = await BackupExport.TestConnectionAsync(bucket, region, serviceUrl, accessKey, secretKey);
+            return Results.Ok(new { ok, error });
         });
 
         app.MapPost("/api/_admin/settings/auth-key", async (AppDbContext db) =>
@@ -627,7 +674,8 @@ public static class AdminEndpoints
 
     }
 
-    private static object QueryDto(SavedQuery q) => new
+    // shared with ConsoleEndpoints' bootstrap payload, one shape for a saved query wherever it's sent
+    internal static object QueryDto(SavedQuery q) => new
     {
         q.Id, q.Name, q.Sql, q.CreatedAt, q.UpdatedAt, q.LastExecutedAt,
         q.Schedule, q.ScheduleEnabled, q.WebhookUrl, q.NextRunAt, q.LastResult

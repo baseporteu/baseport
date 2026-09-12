@@ -65,6 +65,11 @@ async function boot() {
 
     if (me.user) currentAccount = me.user;
     if (me.tables) currentTables = me.tables;
+    // Server-rendered alongside the tables, so the sidebar's per-section counts are right on the very first
+    // paint instead of only after a visitor has clicked into that section at least once this session.
+    if (me.forms) formsAll = me.forms;
+    if (me.actions) actionsAll = me.actions;
+    if (me.sql) savedQueries = me.sql;
     // Server-rendered alongside the tables
     if (me.stats) summaryStats = me.stats;
     if (me.settings) settingsData = {
