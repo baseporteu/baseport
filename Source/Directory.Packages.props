@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup Label="App">
     <PackageVersion Include="AWSSDK.S3" Version="4.0.103.2" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="DiceBear.Core" Version="10.7.0" />
     <PackageVersion Include="DiceBear.Styles" Version="10.6.0" />
     <PackageVersion Include="HtmlSanitizer" Version="9.2.995" />

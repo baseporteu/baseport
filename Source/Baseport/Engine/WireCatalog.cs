@@ -81,7 +81,7 @@ public static class WireCatalog
         return (from table in tables
                 from column in table.Columns
                 where column.RefTableId is not null && byId.ContainsKey(column.RefTableId)
-                select new CatalogLink(table, column, byId[column.RefTableId])).ToList();
+                select new CatalogLink(table, column, byId[column.RefTableId!])).ToList();
     }
 
     private static void CreateRowViews(SqliteConnection conn, List<CatalogTable> tables, string? userId, bool readRules)
