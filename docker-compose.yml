@@ -6,8 +6,9 @@ services:
     container_name: baseport
     restart: unless-stopped
     environment:
-      Baseport__ConnectionString: "Data Source=/data/baseport.db"
+      Baseport__ConnectionString: "${BASEPORT_CONNECTION_STRING:-Data Source=/data/baseport.db}"
       Baseport__TrustForwardedHeaders: "${BASEPORT_TRUST_FORWARDED_HEADERS:-false}"
+      Baseport__AdminAddress: "${BASEPORT_ADMIN_ADDRESS:-}"
     ports:
       - "${BASEPORT_PORT:-5000}:5000"
     volumes:

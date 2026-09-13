@@ -19,6 +19,14 @@ Baseport__TrustForwardedHeaders=true
 Baseport__AdminAddress=0.0.0.0:5264
 ```
 
+With `docker-compose.yml`, set the same three through their shorter aliases in a `.env` file next to it instead — the compose file forwards them to the names above:
+
+```ini
+BASEPORT_CONNECTION_STRING=Data Source=/data/baseport.db
+BASEPORT_TRUST_FORWARDED_HEADERS=true
+BASEPORT_ADMIN_ADDRESS=0.0.0.0:5264
+```
+
 Everything else you would change while running lives in the console under **Settings** and is stored in the database.
 
 ## Listening address
@@ -36,9 +44,9 @@ Baseport serves plain HTTP and does not terminate TLS itself, binding `0.0.0.0` 
 
 ## Behind a reverse proxy
 
-Set `Baseport__TrustForwardedHeaders` to `true`. Rate limiting works off the client address, without this every request looks like it came from the proxy and they all share one budget.
+Set `Baseport__TrustForwardedHeaders` to `true` (`BASEPORT_TRUST_FORWARDED_HEADERS` in Docker). Rate limiting works off the client address, without this every request looks like it came from the proxy and they all share one budget.
 
-If you want the console off the public port altogether, give it its own address with `Baseport__AdminAddress` and only expose that port on loopback.
+If you want the console off the public port altogether, give it its own address with `Baseport__AdminAddress` (`BASEPORT_ADMIN_ADDRESS` in Docker) and only expose that port on loopback. In `docker-compose.yml`, that also means uncommenting the matching `127.0.0.1:PORT:PORT` line under `ports:` — the env var alone binds the port inside the container, it still needs publishing to reach it from the host.
 
 ## Running it as a service
 
