@@ -19,8 +19,8 @@ public static class RecordIndexes
     public static long EstimateIndexBytes(TableDefinition table, long recordCount)
     {
         if (table.IsProxy || recordCount <= 0) return 0;
-        var indexedFields = table.Fields.Count(f => ColumnFor(f) != null);
-        return (long)(indexedFields * recordCount * BytesPerIndexEntry);
+        var indexes = table.Fields.Count(f => ColumnFor(f) != null) + table.Fields.Count(f => f.IsUnique && ColumnFor(f) != null);
+        return (long)(indexes * recordCount * BytesPerIndexEntry);
     }
 
     public static async Task SyncAsync(AppDbContext db, TableDefinition table)
@@ -40,22 +40,45 @@ public static class RecordIndexes
             var expression = Expression(field.Name);
             if (existing.TryGetValue(column, out var current))
             {
-                if (current == expression) continue;
-                await DropAsync(db, column); // the field was renamed
+                if (current != expression)
+                {
+                    await DropAsync(db, column); // the field was renamed
+                    await CreateColumnAndIndexAsync(db, column, expression);
+                }
+            }
+            else
+            {
+                await CreateColumnAndIndexAsync(db, column, expression);
             }
 
-            await db.Database.ExecuteSqlRawAsync(
-                $"""ALTER TABLE "{Table}" ADD COLUMN "{column}" GENERATED ALWAYS AS ({expression}) VIRTUAL""");
-            // Id trails the sort key because it is the ORDER BY tiebreaker; an index that stops short of it cannot serve the page and SQLite sorts.
-            await db.Database.ExecuteSqlRawAsync(
-                $"""CREATE INDEX IF NOT EXISTS "ix_{column}" ON "{Table}" ("TableId", "{column}", "Id")""");
+            await SyncUniqueIndexAsync(db, column, field.IsUnique);
         }
+    }
+
+    private static async Task CreateColumnAndIndexAsync(AppDbContext db, string column, string expression)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            $"""ALTER TABLE "{Table}" ADD COLUMN "{column}" GENERATED ALWAYS AS ({expression}) VIRTUAL""");
+        // Id trails the sort key because it is the ORDER BY tiebreaker; an index that stops short of it cannot serve the page and SQLite sorts.
+        await db.Database.ExecuteSqlRawAsync(
+            $"""CREATE INDEX IF NOT EXISTS "ix_{column}" ON "{Table}" ("TableId", "{column}", "Id")""");
+    }
+
+    // matches CheckUniqueAsync's own COLLATE NOCASE comparison
+    private static async Task SyncUniqueIndexAsync(AppDbContext db, string column, bool isUnique)
+    {
+        if (isUnique)
+            await db.Database.ExecuteSqlRawAsync(
+                $"""CREATE INDEX IF NOT EXISTS "ix_{column}_ci" ON "{Table}" ("TableId", "{column}" COLLATE NOCASE, "Id")""");
+        else
+            await db.Database.ExecuteSqlRawAsync($"""DROP INDEX IF EXISTS "ix_{column}_ci" """);
     }
 
     // Called when a field or a whole table goes away, a dropped field does not leave a column behind for the 2000-column ceiling to count.
     public static async Task DropAsync(AppDbContext db, string column)
     {
         await db.Database.ExecuteSqlRawAsync($"""DROP INDEX IF EXISTS "ix_{column}" """);
+        await db.Database.ExecuteSqlRawAsync($"""DROP INDEX IF EXISTS "ix_{column}_ci" """);
         await db.Database.ExecuteSqlRawAsync($"""ALTER TABLE "{Table}" DROP COLUMN "{column}" """);
     }
 

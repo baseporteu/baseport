@@ -253,10 +253,6 @@ public static class TableEndpoints
         {
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.Id == publicId);
             if (table == null) return Results.NotFound();
-            var forms = await db.FormConfigs.Where(f => f.TableId == table.Id).ToListAsync();
-            var records = await db.Records.Where(r => r.TableId == table.Id).ToListAsync();
-            db.FormConfigs.RemoveRange(forms);
-            db.Records.RemoveRange(records);
             db.Tables.Remove(table);
             await db.SaveChangesAsync();
             await RecordIndexes.DropForAsync(db, table.Fields);

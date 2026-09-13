@@ -76,6 +76,30 @@ public class RecordIndexesTests : IDisposable
     }
 
     [Fact]
+    public async Task ThePlannerSeeksTheIndexForACaseInsensitiveUniquenessCheckToo()
+    {
+        var plan = await ScalarAsync(
+            $"""EXPLAIN QUERY PLAN SELECT 1 FROM "_records" r WHERE r."TableId" = 'x' AND r."g_{_reference.Id}" = 'A-1' COLLATE NOCASE""",
+            column: 3);
+
+        Assert.Contains("USING INDEX", plan!.ToString());
+        Assert.DoesNotContain("SCAN", plan.ToString());
+    }
+
+    [Fact]
+    public async Task TurningOffUniqueDropsTheCaseInsensitiveIndex()
+    {
+        _reference.IsUnique = false;
+        await RecordIndexes.SyncAsync(_db, _table);
+
+        var plan = await ScalarAsync(
+            $"""EXPLAIN QUERY PLAN SELECT 1 FROM "_records" r WHERE r."TableId" = 'x' AND r."g_{_reference.Id}" = 'A-1' COLLATE NOCASE""",
+            column: 3);
+
+        Assert.DoesNotContain($"ix_g_{_reference.Id}_ci", plan!.ToString());
+    }
+
+    [Fact]
     public async Task ARenameMovesTheColumnRatherThanOrphaningIt()
     {
         _reference.Name = "ref_no";
