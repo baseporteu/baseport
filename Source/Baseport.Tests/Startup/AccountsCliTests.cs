@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
+[Collection("Cli env var")]
 public class AccountsCliTests : IDisposable
 {
     private readonly string _directory;
