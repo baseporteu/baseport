@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// A registered maintenance job. Run returns the result message shown in the console.
 public sealed record JobDef(
     string Key,
     string Name,
@@ -14,7 +13,6 @@ public sealed record JobDef(
     string Description,
     Func<AppDbContext, Serilog.ILogger, CancellationToken, Task<string>> Run);
 
-// The fixed job registry.
 public static class Jobs
 {
     public static readonly JobDef[] All =
@@ -49,7 +47,6 @@ public static class Jobs
 
     public static JobDef? Find(string key) => ByKey.GetValueOrDefault(key);
 
-    // Returns an error message, or null when the expression is valid.
     public static string? Validate(string cron)
     {
         try { Parse(cron); return null; }
@@ -59,7 +56,6 @@ public static class Jobs
         }
     }
 
-    // Next occurrence of the schedule at or after from (UTC), or null when invalid.
     public static DateTime? NextRun(string cron, DateTime from)
     {
         try { return Parse(cron).GetNextOccurrence(from); }
@@ -88,7 +84,6 @@ public static class Jobs
         return $"Removed {sessions} session(s), {OneTimeCodes.PruneExpired(now)} code(s), {LoginGuard.PruneExpired(now)} lockout entry(ies), {OidcFlow.Prune(now)} abandoned sign-in(s).";
     }
 
-    // An anonymous account is reachable only through the token pair it was handed, once every session on it has expired nobody can ever sign back into it. Retention is the grace period after that, and rows it created keep a dead owner id: nothing here can find them, since a record is owned by a value in its own json.
     private static async Task<string> AnonymousCleanupAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)
     {
         var settings = await db.AppSettings.FirstOrDefaultAsync(ct) ?? new AppSettings();
@@ -112,7 +107,6 @@ public static class Jobs
         return $"Removed {removed} audit entry(ies).";
     }
 
-    // A bucket upload has no record to be referenced by: the storage API hands its id to the caller, who owns its life-cycle.
     private static async Task<string> FileDeletionsAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)
     {
         var stored = FileStore.AllStoredNames()
@@ -187,7 +181,7 @@ public static class Jobs
 
     private static async Task<string> QueryOptimizeAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)
     {
-        // Database is SQLite's "main", DataSource is the store file.
+
         var source = db.Database.GetDbConnection().DataSource;
         await using var conn = new SqliteConnection($"Data Source={source}");
         await conn.OpenAsync(ct);

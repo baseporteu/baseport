@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// An operator's own scheduled task: a saved query on a cron, optionally posting its result somewhere. The maintenance jobs in Jobs are the ones Baseport ships; these are the ones the operator writes, and JobScheduler runs both on the same tick.
 public static class ScheduledQueries
 {
     public static string? ScheduleProblem(string cron) => cron.Length == 0 ? null : Jobs.Validate(cron);
@@ -14,7 +13,6 @@ public static class ScheduledQueries
             .Where(q => q.ScheduleEnabled && q.Schedule != "" && q.NextRunAt != null && q.NextRunAt <= now)
             .ToListAsync(ct);
 
-    // Records its own outcome on the query instead of throwing, one broken report never stops the tick that follows it.
     public static async Task RunAsync(AppDbContext db, SavedQuery query, IHttpClientFactory http, DateTime now, CancellationToken ct)
     {
         query.NextRunAt = Jobs.NextRun(query.Schedule, now) ?? now.AddDays(1);
@@ -41,7 +39,6 @@ public static class ScheduledQueries
             return;
         }
 
-        // Checked again here, not only when it was saved: a name that resolved to a public address then can resolve to a private one now.
         if (WebhookProblem(query.WebhookUrl) is { } blocked)
         {
             query.LastResult = $"Failed: {blocked}";
@@ -52,7 +49,7 @@ public static class ScheduledQueries
         {
             using var client = http.CreateClient();
             client.Timeout = TimeSpan.FromSeconds(30);
-            // Serialized up front instead of posted as an object, the request includes a Content-Length. A JsonContent body has no known length and goes out chunked, which plenty of webhook receivers and proxies in front of them refuse.
+
             var payload = System.Text.Json.JsonSerializer.Serialize(new
             {
                 query = query.Name,

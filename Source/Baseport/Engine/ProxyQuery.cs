@@ -4,8 +4,6 @@ using System.Text.Json.Nodes;
 
 namespace Baseport;
 
-// Read path for proxy tables.
-// An upstream failure is not the caller's fault, and answering 400 said it was. RFC 9110 separates the two: 502 when the remote answered wrongly or could not be reached at all, 504 when it did not answer in time.
 public readonly record struct ProxyFailure(ApiProblem Problem, string Detail)
 {
     public static ProxyFailure Upstream(string detail) => new(ApiProblem.BadGateway, detail);
@@ -27,7 +25,6 @@ public static class ProxyQuery
         var declared = DeclaredQuery(table);
         var query = new List<string>();
 
-        // One field can be pushed down as $filter; more than one would need an `or` chain the remote may not support, those fall back to matching in memory over a wider fetch.
         if (declared.Contains("$filter") && matchFields.Count == 1)
             query.Add("$filter=" + Uri.EscapeDataString($"{matchFields[0].Name} eq {ODataLiteral(term)}"));
         else if (declared.Contains("$top"))
@@ -52,7 +49,6 @@ public static class ProxyQuery
         var declared = DeclaredQuery(table);
         var query = new List<string>();
 
-        // The remote exposes a row cap but no offset, paging is cap-and-slice here until one of them offers a cursor.
         var wanted = Math.Min(page * pageSize, QueryEngine.MaxPageSize * 5);
         if (declared.Contains("$top")) query.Add("$top=" + wanted);
 
@@ -64,11 +60,9 @@ public static class ProxyQuery
 
         var records = OpenApiProxy.Records(body);
 
-        // Author filters scope the list and a visitor cannot widen them, they are applied before anything else.
         foreach (var f in filters ?? Array.Empty<QueryEngine.Filter>())
             records = records.Where(r => MatchesFilter(r[f.Field.Name], f)).ToList();
 
-        // Re-apply the search locally either way: the remote may have ignored the filter, and a multi-field search was never pushed down.
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
@@ -77,7 +71,6 @@ public static class ProxyQuery
                 .Any(n => Text(r[n]).Contains(term, StringComparison.OrdinalIgnoreCase))).ToList();
         }
 
-        // The remote is fetched once, cap-and-sliced, sorting happens here instead of as a pushed-down query param: no OData $orderby dialect is universal enough to build blind.
         records = Sorted(records, sortField, sortDescending);
 
         var total = records.Count;
@@ -85,7 +78,6 @@ public static class ProxyQuery
         return (new Page(slice, total, declared.Count > 0), null);
     }
 
-    // A visitor's search term ends up inside a single-quoted literal in somebody else's query language. Doubling the quote is the OData escape, and a control character is dropped instead of escaped: no legitimate lookup value includes one, and an upstream that parses loosely is the one place a stray newline could still break out of the literal. Both call sites re-match locally, a term this narrows is still found.
     private static string ODataLiteral(string value) =>
         $"'{new string(value.Where(c => !char.IsControl(c)).ToArray()).Replace("'", "''")}'";
 
@@ -127,7 +119,6 @@ public static class ProxyQuery
         catch (System.Text.Json.JsonException) { return new List<string>(); }
     }
 
-    // Projects a remote record down to the fields the form may reveal.
     public static JsonObject Project(JsonObject source, IReadOnlyList<FieldDefinition> visible)
     {
         var result = new JsonObject();
@@ -136,7 +127,6 @@ public static class ProxyQuery
         return result;
     }
 
-    // Applies one author filter to a remote record.
     internal static bool MatchesFilter(JsonNode? value, QueryEngine.Filter filter)
     {
         var text = Text(value);
@@ -146,7 +136,7 @@ public static class ProxyQuery
             case "contains": return text.Contains(filter.Value, StringComparison.OrdinalIgnoreCase);
             case "gt":
             case "lt":
-                // Compared as numbers, 250 > 100 instead of sorting as text.
+
                 if (!double.TryParse(text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var left)) return false;
                 if (!double.TryParse(filter.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var right)) return false;
                 return filter.Operator == "gt" ? left > right : left < right;
@@ -162,7 +152,6 @@ public static class ProxyQuery
                             : records.OrderBy(key, NumericAwareComparer.Instance)).ToList();
     }
 
-    // Mirrors MatchesFilter's gt/lt reading: numeric if both sides parse as numbers, ordinal text otherwise.
     private sealed class NumericAwareComparer : IComparer<string>
     {
         public static readonly NumericAwareComparer Instance = new();

@@ -2,10 +2,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// `baseport accounts ...`: the three operations the console deliberately refuses on an admin account. Whoever has the shell outranks whoever merely has console access.
 public static class AccountsCli
 {
-    // What to type to run this build, instead of "baseport", which is only a command once somebody has put it on their PATH. A single-file publish runs its own apphost, the executable is the command; `dotnet Baseport.dll` runs the shared host, and the command has to name the dll.
+
     public static string Invocation()
     {
         var dll = System.Reflection.Assembly.GetEntryAssembly()?.Location ?? "";
@@ -19,7 +18,6 @@ public static class AccountsCli
 
     private static string Quote(string path) => path.Contains(' ') ? $"\"{path}\"" : path;
 
-    // Both CLIs manage what the server already made. Run from the wrong directory, "Data Source=baseport.db" resolves against the working directory, Migrate creates a fresh empty schema there, and every command then truthfully reports that the account does not exist. Refusing is the difference between a baffling answer and an obvious one.
     internal static bool MissingDatabase(string connectionString)
     {
         string source;
@@ -85,7 +83,7 @@ public static class AccountsCli
         Console.WriteLine($"{"USERNAME",-24} {"ROLE",-10} {"STATE",-10} {"SIGN-IN",-16}");
         foreach (var a in accounts)
         {
-            // What a caller may use to get in is the thing an operator is auditing when they run this.
+
             var ways = new List<string>();
             if (a.PasswordHash.Length > 0) ways.Add("password");
             if (a.OidcSubject.Length > 0) ways.Add(providers.GetValueOrDefault(a.OidcProviderId, "sso"));
@@ -104,7 +102,6 @@ public static class AccountsCli
             return 0;
         }
 
-        // The console cannot demote at all, the last admin has to be protected here or there is no way back in.
         if (role != AccountRoles.Admin && await AdminEndpoints.IsLastEnabledAdmin(db, account))
         {
             Console.Error.WriteLine($"{account.Username} is the last enabled admin. Promote another account first.");
@@ -113,7 +110,7 @@ public static class AccountsCli
 
         account.Role = role;
         account.UpdatedAt = DateTime.UtcNow;
-        // A demoted operator must not keep the console session the old role opened.
+
         await UserTokens.RevokeAllAsync(db, account.Id);
         await db.SaveChangesAsync();
 
@@ -141,7 +138,6 @@ public static class AccountsCli
         return 0;
     }
 
-    // The seeded admin username is random, the operator has to be able to make it theirs; the console refuses every field on an admin.
     private static async Task<int> RenameAsync(AppDbContext db, string username, string next)
     {
         if (await FindAsync(db, username) is not { } account) return 1;
@@ -162,7 +158,6 @@ public static class AccountsCli
             return 1;
         }
 
-        // The handle may have been an e-mail, and echoing it back reads as though an address were renamed. Report the account.
         var was = account.Username;
         account.Username = next;
         account.UpdatedAt = DateTime.UtcNow;
@@ -172,7 +167,6 @@ public static class AccountsCli
         return 0;
     }
 
-    // The deliberate half of pillar 17: an account is auto-linked on first sign-in, but never an admin, the one identity that opens the console is bound here or not at all. The subject is printed by the refused sign-in that needs it.
     private static async Task<int> LinkAsync(AppDbContext db, string username, string slug, string subject)
     {
         if (await FindAsync(db, username) is not { } account) return 1;
@@ -191,7 +185,6 @@ public static class AccountsCli
             return 1;
         }
 
-        // One provider identity maps to at most one account, or a second sign-in has two accounts to choose between.
         var taken = await db.UserAccounts.FirstOrDefaultAsync(a =>
             a.OidcProviderId == provider.Id && a.OidcSubject == subject && a.Id != account.Id);
         if (taken is not null)
@@ -203,7 +196,7 @@ public static class AccountsCli
         account.OidcProviderId = provider.Id;
         account.OidcSubject = subject;
         account.UpdatedAt = DateTime.UtcNow;
-        // A second way into the account is a change of credentials: every session opened before it is done with.
+
         await UserTokens.RevokeAllAsync(db, account.Id);
         await db.SaveChangesAsync();
 
@@ -221,7 +214,6 @@ public static class AccountsCli
             return 0;
         }
 
-        // Refused instead of silently locking the account out: without a password there is no other way in.
         if (account.PasswordHash.Length == 0)
         {
             Console.Error.WriteLine($"{account.Username} has no password, unlinking would leave no way to sign in. " +
@@ -239,7 +231,6 @@ public static class AccountsCli
         return 0;
     }
 
-    // Takes a username or an e-mail: an account reached through a provider is often known by its address, and the refusal that sends an operator here prints one. The e-mail column is unique on write, but a database that predates that constraint is not, an ambiguous handle is refused instead of resolved to whichever row came back first.
     private static async Task<UserAccount?> FindAsync(AppDbContext db, string handle)
     {
         var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Username == handle);

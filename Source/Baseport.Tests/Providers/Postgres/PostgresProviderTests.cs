@@ -1,0 +1,410 @@
+using System.Buffers.Binary;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using Baseport.Providers.Postgres;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace Baseport.Tests;
+
+public class PostgresProviderTests : IAsyncLifetime
+{
+    private const string Token = "wire-test-token";
+    private string _accountId = "";
+    private SqliteConnection _connection = null!;
+    private ServiceProvider _services = null!;
+    private TcpListener _listener = null!;
+    private Task _acceptLoop = null!;
+    private CancellationTokenSource _cts = null!;
+
+    public async ValueTask InitializeAsync()
+    {
+        _connection = new SqliteConnection("Filename=:memory:");
+        await _connection.OpenAsync();
+
+        var services = new ServiceCollection();
+        services.AddDbContext<AppDbContext>(o => o.UseSqlite(_connection));
+        _services = services.BuildServiceProvider();
+
+        using (var scope = _services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = "Orders", ApiEnabled = true, ApiName = "orders" });
+            _accountId = Ids.NewShortId(12);
+            db.UserAccounts.Add(new UserAccount
+            {
+                Id = _accountId,
+                Username = "wire-test",
+                Email = "wire@test.local",
+                ApiEnabled = true,
+                ApiTokenHash = ApiAuth.HashToken(Token),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        _listener = new TcpListener(IPAddress.Loopback, 0);
+        _listener.Start();
+        _cts = new CancellationTokenSource();
+        _acceptLoop = AcceptLoopAsync();
+    }
+
+    private async Task AcceptLoopAsync()
+    {
+        var scopes = _services.GetRequiredService<IServiceScopeFactory>();
+        try
+        {
+            while (true)
+            {
+                var socket = await _listener.AcceptSocketAsync(_cts.Token);
+                _ = PostgresConnection.HandleAsync(socket, scopes, _cts.Token);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync();
+        _listener.Stop();
+        try { await _acceptLoop; } catch { }
+        await _services.DisposeAsync();
+        await _connection.DisposeAsync();
+        _cts.Dispose();
+    }
+
+    [Fact]
+    public async Task A_query_over_the_wire_matches_SqlEngine_run_directly()
+    {
+        const string sql = "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'";
+        using var client = await ConnectAsync();
+        var (columns, rows) = await RunQueryAsync(client, sql);
+
+        using var scope = _services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Postgres, _accountId));
+
+        Assert.Equal(direct.Columns, columns);
+        Assert.Equal(direct.Rows, rows);
+        Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
+    }
+
+    [Theory]
+    [InlineData("SELECT authsigningkey FROM _settings")]
+    [InlineData("SELECT passwordhash FROM _users")]
+    [InlineData("SELECT * FROM _records")]
+    [InlineData("SELECT name FROM sqlite_master")]
+    public async Task A_read_of_a_system_table_is_refused(string sql)
+    {
+        using var client = await ConnectAsync();
+        var stream = client.GetStream();
+        await SendQueryAsync(stream, sql);
+        Assert.Equal('E', (await ReadMessageAsync(stream))!.Value.Type);
+    }
+
+    [Fact]
+    public async Task A_wrong_token_is_refused_at_the_password_message()
+    {
+        var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, Port, TestContext.Current.CancellationToken);
+        var stream = client.GetStream();
+        await SendStartupAsync(stream);
+        var auth = await ReadMessageAsync(stream);
+        Assert.Equal('R', auth!.Value.Type);
+
+        await SendPasswordAsync(stream, "not-the-token");
+        var reply = await ReadMessageAsync(stream);
+        Assert.Equal('E', reply!.Value.Type);
+        client.Dispose();
+    }
+
+    [Fact]
+    public async Task A_broken_query_reports_an_error_and_the_connection_stays_usable()
+    {
+        using var client = await ConnectAsync();
+
+        var stream = client.GetStream();
+        await SendQueryAsync(stream, "SELECT NoSuchColumn FROM \"Orders\"");
+        var errorMsg = await ReadMessageAsync(stream);
+        Assert.Equal('E', errorMsg!.Value.Type);
+        var ready = await ReadMessageAsync(stream);
+        Assert.Equal('Z', ready!.Value.Type);
+
+        var (columns, rows) = await RunQueryAsync(client, "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'");
+        Assert.Equal(new[] { "tablename" }, columns);
+        Assert.Single(rows);
+    }
+
+    [Theory]
+    [InlineData("SET extra_float_digits = 3")]
+    [InlineData("SET application_name = 'psql'")]
+    [InlineData("RESET ALL")]
+    [InlineData("begin")]
+    [InlineData("commit")]
+    public async Task A_session_configuration_statement_is_a_no_op_not_an_error(string sql)
+    {
+        using var client = await ConnectAsync();
+        var stream = client.GetStream();
+        await SendQueryAsync(stream, sql);
+
+        var reply = await ReadMessageAsync(stream);
+        Assert.Equal('C', reply!.Value.Type);
+        Assert.Equal('Z', (await ReadMessageAsync(stream))!.Value.Type);
+    }
+
+    [Theory]
+    [InlineData("SELECT table_name FROM information_schema.tables")]
+    [InlineData("SELECT relname FROM pg_catalog.pg_class WHERE relkind = 'r'")]
+    [InlineData("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'")]
+    public async Task A_catalog_probe_finds_the_authors_table(string sql)
+    {
+        using var client = await ConnectAsync();
+        var (_, rows) = await RunQueryAsync(client, sql);
+        Assert.Equal("Orders", Assert.Single(Assert.Single(rows)));
+    }
+
+    [Fact]
+    public async Task A_column_probe_reports_the_tables_fields()
+    {
+        using var client = await ConnectAsync();
+        var (_, rows) = await RunQueryAsync(client,
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'Orders' ORDER BY ordinal_position");
+        Assert.Equal(new[] { "id", "created_at", "updated_at" }, rows.Select(r => r[0]));
+    }
+
+    [Theory]
+    [InlineData("SELECT * FROM pg_stat_activity")]
+    [InlineData("SELECT * FROM pg_catalog.pg_largeobject")]
+    public async Task An_unemulated_catalog_object_still_answers_empty(string sql)
+    {
+        using var client = await ConnectAsync();
+        var (columns, rows) = await RunQueryAsync(client, sql);
+        Assert.Single(columns);
+        Assert.Empty(rows);
+    }
+
+    [Theory]
+    [InlineData("SELECT version()", "version", "PostgreSQL 15.0 (Baseport)")]
+    [InlineData("SELECT current_schema()", "current_schema", "public")]
+    [InlineData("SELECT current_database()", "current_database", "baseport")]
+    public async Task A_server_identity_function_answers_like_postgres(string sql, string column, string value)
+    {
+        using var client = await ConnectAsync();
+        var (columns, rows) = await RunQueryAsync(client, sql);
+        Assert.Equal(column, Assert.Single(columns));
+        Assert.Equal(value, Assert.Single(Assert.Single(rows)));
+    }
+
+    [Theory]
+    [InlineData("SHOW search_path", "search_path", "public")]
+    [InlineData("SHOW TRANSACTION ISOLATION LEVEL", "transaction_isolation", "read committed")]
+    [InlineData("SHOW nonsense_setting", "nonsense_setting", "")]
+    public async Task A_show_statement_answers_instead_of_erroring(string sql, string column, string value)
+    {
+        using var client = await ConnectAsync();
+        var (columns, rows) = await RunQueryAsync(client, sql);
+        Assert.Equal(column, Assert.Single(columns));
+        Assert.Equal(value, Assert.Single(Assert.Single(rows)));
+    }
+
+    [Fact]
+    public async Task An_unpublished_table_is_neither_listed_nor_selectable()
+    {
+        await SeedTableAsync("Drafts", apiEnabled: false, readRule: "");
+
+        using var client = await ConnectAsync();
+        var (_, rows) = await RunQueryAsync(client, "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'");
+        Assert.DoesNotContain("Drafts", rows.Select(r => r[0]));
+
+        var stream = client.GetStream();
+        await SendQueryAsync(stream, "SELECT * FROM \"Drafts\"");
+        Assert.Equal('E', (await ReadMessageAsync(stream))!.Value.Type);
+    }
+
+    [Fact]
+    public async Task A_read_rule_filters_the_rows_to_the_caller()
+    {
+        var tableId = await SeedTableAsync("Tickets", apiEnabled: true, readRule: "_ROW_.owner = _USER_.id", "owner", "subject");
+        await SeedRecordAsync(tableId, $$"""{"owner":"{{_accountId}}","subject":"mine"}""");
+        await SeedRecordAsync(tableId, """{"owner":"somebody-else","subject":"theirs"}""");
+
+        using var client = await ConnectAsync();
+        var (_, rows) = await RunQueryAsync(client, "SELECT subject FROM \"Tickets\" ORDER BY subject");
+        Assert.Equal("mine", Assert.Single(Assert.Single(rows)));
+    }
+
+    private async Task<string> SeedTableAsync(string name, bool apiEnabled, string readRule, params string[] fields)
+    {
+        using var scope = _services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var id = Ids.NewShortId(12);
+        db.Tables.Add(new TableDefinition { Id = id, Name = name, ApiEnabled = apiEnabled, ApiName = name.ToLowerInvariant(), ReadRule = readRule });
+        foreach (var (field, position) in fields.Select((f, i) => (f, i)))
+            db.Fields.Add(new FieldDefinition { Id = Ids.NewShortId(12), TableId = id, Name = field, Position = position });
+        await db.SaveChangesAsync();
+        return id;
+    }
+
+    private async Task SeedRecordAsync(string tableId, string json)
+    {
+        using var scope = _services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Records.Add(new Record { Id = Ids.NewShortId(12), TableId = tableId, JsonData = json, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+    }
+
+    private int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+    private async Task<TcpClient> ConnectAsync()
+    {
+        var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, Port, TestContext.Current.CancellationToken);
+        var stream = client.GetStream();
+        await SendStartupAsync(stream);
+        Assert.Equal('R', (await ReadMessageAsync(stream))!.Value.Type);
+
+        await SendPasswordAsync(stream, Token);
+        Assert.Equal('R', (await ReadMessageAsync(stream))!.Value.Type);
+        while (true)
+        {
+            var msg = (await ReadMessageAsync(stream))!.Value;
+            if (msg.Type == 'Z') break;
+        }
+        return client;
+    }
+
+    private static async Task<(List<string> Columns, List<List<string?>> Rows)> RunQueryAsync(TcpClient client, string sql)
+    {
+        var stream = client.GetStream();
+        await SendQueryAsync(stream, sql);
+
+        var rowDesc = (await ReadMessageAsync(stream))!.Value;
+        Assert.Equal('T', rowDesc.Type);
+        var i = 0;
+        var count = ReadI16(rowDesc.Payload, ref i);
+        var columns = new List<string>();
+        for (var c = 0; c < count; c++)
+        {
+            columns.Add(ReadCString(rowDesc.Payload, ref i));
+            i += 4 + 2 + 4 + 2 + 4 + 2;
+        }
+
+        var rows = new List<List<string?>>();
+        while (true)
+        {
+            var msg = (await ReadMessageAsync(stream))!.Value;
+            if (msg.Type == 'C')
+            {
+                Assert.Equal('Z', (await ReadMessageAsync(stream))!.Value.Type);
+                break;
+            }
+            Assert.Equal('D', msg.Type);
+            var j = 0;
+            var fieldCount = ReadI16(msg.Payload, ref j);
+            var row = new List<string?>();
+            for (var f = 0; f < fieldCount; f++)
+            {
+                var len = BinaryPrimitives.ReadInt32BigEndian(msg.Payload.AsSpan(j, 4));
+                j += 4;
+                if (len < 0) { row.Add(null); continue; }
+                row.Add(Encoding.UTF8.GetString(msg.Payload, j, len));
+                j += len;
+            }
+            rows.Add(row);
+        }
+        return (columns, rows);
+    }
+
+    private static async Task SendStartupAsync(NetworkStream stream)
+    {
+        using var ms = new MemoryStream();
+        WriteI32(ms, 0);
+        WriteI32(ms, 196608);
+        WriteCString(ms, "user"); WriteCString(ms, "wire-test");
+        WriteCString(ms, "database"); WriteCString(ms, "baseport");
+        ms.WriteByte(0);
+        var bytes = ms.ToArray();
+        BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(0, 4), bytes.Length);
+        await stream.WriteAsync(bytes);
+    }
+
+    private static Task SendPasswordAsync(NetworkStream stream, string password)
+    {
+        using var ms = new MemoryStream();
+        WriteCString(ms, password);
+        return WriteMessageAsync(stream, (byte)'p', ms.ToArray());
+    }
+
+    private static Task SendQueryAsync(NetworkStream stream, string sql)
+    {
+        using var ms = new MemoryStream();
+        WriteCString(ms, sql);
+        return WriteMessageAsync(stream, (byte)'Q', ms.ToArray());
+    }
+
+    private static async Task WriteMessageAsync(NetworkStream stream, byte type, byte[] payload)
+    {
+        var header = new byte[5];
+        header[0] = type;
+        BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(1), payload.Length + 4);
+        await stream.WriteAsync(header);
+        await stream.WriteAsync(payload);
+    }
+
+    private static async Task<(char Type, byte[] Payload)?> ReadMessageAsync(NetworkStream stream)
+    {
+        var typeBuf = await ReadExactAsync(stream, 1);
+        if (typeBuf is null) return null;
+        var lenBuf = await ReadExactAsync(stream, 4);
+        if (lenBuf is null) return null;
+        var length = BinaryPrimitives.ReadInt32BigEndian(lenBuf);
+        var payload = await ReadExactAsync(stream, length - 4) ?? Array.Empty<byte>();
+        return ((char)typeBuf[0], payload);
+    }
+
+    private static async Task<byte[]?> ReadExactAsync(NetworkStream stream, int count)
+    {
+        if (count <= 0) return Array.Empty<byte>();
+        var buf = new byte[count];
+        var offset = 0;
+        while (offset < count)
+        {
+            var read = await stream.ReadAsync(buf.AsMemory(offset, count - offset));
+            if (read == 0) return null;
+            offset += read;
+        }
+        return buf;
+    }
+
+    private static void WriteCString(MemoryStream ms, string s)
+    {
+        ms.Write(Encoding.UTF8.GetBytes(s));
+        ms.WriteByte(0);
+    }
+
+    private static void WriteI32(MemoryStream ms, int value)
+    {
+        Span<byte> buf = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32BigEndian(buf, value);
+        ms.Write(buf);
+    }
+
+    private static string ReadCString(byte[] buf, ref int i)
+    {
+        var start = i;
+        while (buf[i] != 0) i++;
+        var s = Encoding.UTF8.GetString(buf, start, i - start);
+        i++;
+        return s;
+    }
+
+    private static short ReadI16(byte[] buf, ref int i)
+    {
+        var v = BinaryPrimitives.ReadInt16BigEndian(buf.AsSpan(i, 2));
+        i += 2;
+        return v;
+    }
+}

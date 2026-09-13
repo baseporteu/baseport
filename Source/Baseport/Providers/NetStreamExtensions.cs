@@ -1,6 +1,5 @@
 namespace Baseport.Providers;
 
-// shared by both wire listeners: read exactly n bytes, or learn the peer hung up, instead of raw ReadAsync
 internal static class NetStreamExtensions
 {
     public static async Task<byte[]?> ReadExactAsync(this Stream stream, int count, CancellationToken ct)

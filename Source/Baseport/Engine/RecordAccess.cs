@@ -6,7 +6,6 @@ namespace Baseport;
 
 public enum Permission { Create, Read, Update, Delete }
 
-// Per-record access rules, an author writes a SQLite boolean expression over _USER_, _ROW_ and _REQ_, and SQLite evaluates it. There is no expression language here, and deliberately so.
 public static partial class RecordAccess
 {
     public static string RuleFor(TableDefinition table, Permission permission) => permission switch
@@ -40,7 +39,6 @@ public static partial class RecordAccess
         }
     }
 
-    // The only check that catches a rule SQLite itself will not accept, the author hears about it while saving instead of every caller hearing about it as a 500.
     public static async Task<string?> SqlProblemAsync(AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> fields, string rule)
     {
         if (string.IsNullOrWhiteSpace(rule)) return null;
@@ -62,7 +60,6 @@ public static partial class RecordAccess
         }
     }
 
-    // A rule that names a field the table does not have would otherwise fail at request time, as a 500, on every call.
     public static string? Problem(string? rule, IReadOnlyList<FieldDefinition> fields)
     {
         if (string.IsNullOrWhiteSpace(rule)) return null;
@@ -90,8 +87,6 @@ public static partial class RecordAccess
         return null;
     }
 
-    // Rewrites the author's rule into SQL over the shared record table, collecting the values every reference needs bound.
-    // `rowAlias` names a SQL alias to read _ROW_ from; when it is null, _ROW_ is bound from `row`, or resolves to NULL when there is no row at all (create).
     internal static string Rewrite(string rule, IReadOnlyList<FieldDefinition> fields, string? rowAlias, string? userId, JsonObject? request, JsonObject? row, List<object?> args)
     {
         return AliasReference().Replace(rule, match =>
@@ -141,12 +136,10 @@ public static partial class RecordAccess
             sql = $"""SELECT COALESCE(CAST(({expression}) AS INTEGER), 0) AS "Value" """;
         }
 
-        // A missing row yields no result at all, which is a refusal instead of an errorr:
         var results = await db.Database.SqlQueryRaw<int>(sql, args.Select(a => a ?? DBNull.Value).ToArray()).ToListAsync();
         return results.Count > 0 && results[0] != 0;
     }
 
-    // The read rule filters a listing instead of refusing it, a caller sees the rows they may see instead of a 403. 
     public static string? ListClause(TableDefinition table, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId, List<object> args)
     {
         if (!HasRule(table, Permission.Read)) return null;
@@ -154,13 +147,11 @@ public static partial class RecordAccess
         var collected = new List<object?>();
         var expression = Rewrite(table.ReadRule, fields, rowAlias, userId, null, null, collected);
 
-        // The list query numbers its own placeholders, the slots are renumbered onto the end of its argument list.
         var offset = args.Count;
         args.AddRange(collected.Select(a => a ?? (object)DBNull.Value));
         return SlotToken().Replace(expression, m => $"{{{int.Parse(m.Groups["n"].Value) + offset}}}");
     }
 
-    // The read rule as a self-contained boolean with its values inlined as SQL literals, for a context that cannot bind parameters: the wire providers build one static temp view per table. A read rule includes only _USER_.id, a system-issued short id, and it is escaped as a literal regardless. Returns null when the table has no read rule, the caller leaves the view unfiltered.
     public static string? ReadClauseLiteral(string readRule, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId)
     {
         if (string.IsNullOrWhiteSpace(readRule)) return null;

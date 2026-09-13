@@ -3,7 +3,6 @@ using System.Net.Sockets;
 
 namespace Baseport.Providers.Tds;
 
-// polls AppSettings and starts/stops the tds wire listener to match, toggling it in the admin ui or via the cli takes effect without an app restart
 public sealed class TdsServer(IServiceScopeFactory scopes) : BackgroundService
 {
     private static readonly Serilog.ILogger Log = Serilog.Log.ForContext<TdsServer>();
@@ -17,13 +16,13 @@ public sealed class TdsServer(IServiceScopeFactory scopes) : BackgroundService
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         try
         {
-            await ReconcileAsync(stoppingToken); // apply on startup, don't wait for the first tick
+            await ReconcileAsync(stoppingToken);
             while (await timer.WaitForNextTickAsync(stoppingToken))
                 await ReconcileAsync(stoppingToken);
         }
         catch (OperationCanceledException)
         {
-            // shutdown, not a failure
+
         }
         finally
         {
@@ -52,7 +51,7 @@ public sealed class TdsServer(IServiceScopeFactory scopes) : BackgroundService
         StopListener();
         if (!desired.Enabled)
         {
-            // StopListener resets _running to default, which never equals a disabled-but-configured setting, record it or every tick stops an already-stopped listener.
+
             _running = desired;
             return;
         }

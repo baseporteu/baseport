@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// The ES256 key that signs every auth token
 public static class KeyStore
 {
     private const string FileName = "baseport.key";
@@ -23,7 +22,7 @@ public static class KeyStore
         if (PathFor(db) is not { Length: > 0 } path) return;
 
         File.WriteAllText(path, pkcs8);
-        //         // Owner-only: the key is the whole authentication system, and it sits next to a database an operator may well have made group-readable
+
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 }

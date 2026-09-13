@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// `baseport providers ...`: edits the same AppSettings row the admin ui's providers pane does, a running server's PostgresServer/TdsServer pick up the change on their next poll.
 public static class ProvidersCli
 {
     public static async Task<int> RunAsync(string[] args, string bundledSettings, string localSettings)

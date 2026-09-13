@@ -6,7 +6,6 @@ namespace Baseport;
 
 public sealed record BackupInfo(string Name, long Size, DateTime CreatedAt);
 
-// Consistent SQLite snapshots kept in a local backups directory next to the store, on a rolling window.
 public static class BackupStore
 {
     public static string Dir(AppDbContext db)
@@ -17,7 +16,6 @@ public static class BackupStore
         return Path.Combine(Path.GetDirectoryName(dbFile)!, "backups");
     }
 
-    // Bytes the store occupies on disk, which is what a snapshot of it costs. The write-ahead log counts: VACUUM INTO copies the committed database it describes.
     public static long StoreBytes(AppDbContext db)
     {
         var source = db.Database.GetDbConnection().DataSource;
@@ -27,7 +25,6 @@ public static class BackupStore
         return wal.Exists ? total + wal.Length : total;
     }
 
-    // Free bytes on whichever mount stores the directory, or null when the platform will not say.
     public static long? FreeBytes(string dir)
     {
         try
@@ -35,7 +32,7 @@ public static class BackupStore
             var full = Path.GetFullPath(dir);
             return DriveInfo.GetDrives()
                 .Where(d => d.IsReady && full.StartsWith(d.RootDirectory.FullName, StringComparison.Ordinal))
-                // Longest match wins: every path on Linux starts with "/", and the store may sit on a mount of its own.
+
                 .OrderByDescending(d => d.RootDirectory.FullName.Length)
                 .FirstOrDefault()?.AvailableFreeSpace;
         }
@@ -45,12 +42,11 @@ public static class BackupStore
         }
     }
 
-    // A snapshot is a second full copy of the store, on a tight disk a backup is how an instance fills its own filesystem. Checked here instead of in the endpoint: the nightly job writes through this same door, unattended.
     public static string? SpaceProblem(string dir, AppDbContext db, long? freeBytes = null)
     {
         var free = freeBytes ?? FreeBytes(dir);
         if (free is null) return null;
-        // A tenth over the copy, since the store keeps growing while VACUUM INTO writes.
+
         var needed = (long)(StoreBytes(db) * 1.1);
         return free >= needed
             ? null
@@ -69,9 +65,9 @@ public static class BackupStore
     {
         Directory.CreateDirectory(dir);
         if (SpaceProblem(dir, db) is { } problem) throw new IOException(problem);
-        // DataSource, not Database: the latter is SQLite's schema name and is always "main", a connection built from it opened an empty database and the snapshot came out carrying nothing.
+
         var source = db.Database.GetDbConnection().DataSource;
-        // The short id keeps two snapshots from colliding in the same millisecond.
+
         var target = Path.Combine(dir, $"baseport-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Ids.NewShortId(4)}.db");
         await using (var conn = new SqliteConnection($"Data Source={source}"))
         {
@@ -84,7 +80,6 @@ public static class BackupStore
         return Path.GetFileName(target);
     }
 
-    // shared entry point for manual and cron backups; creates a local snapshot and optional export, ignoring export errors
     public static async Task<string> CreateAndExportAsync(string dir, AppDbContext db, AppSettings settings, CancellationToken ct = default)
     {
         var name = await CreateAsync(dir, db, settings.BackupRetention, ct);
@@ -109,7 +104,6 @@ public static class BackupStore
             .ToList();
     }
 
-    // Resolves a backup name to a path, refusing anything that escapes the directory.
     public static string? Resolve(string dir, string name)
     {
         if (string.IsNullOrEmpty(name) || name != Path.GetFileName(name)) return null;
@@ -125,7 +119,6 @@ public static class BackupStore
         return true;
     }
 
-    // Keeps the newest retention snapshots, deleting the rest. Returns the count removed.
     public static int Prune(string dir, int retention)
     {
         if (!Directory.Exists(dir)) return 0;
@@ -139,7 +132,7 @@ public static class BackupStore
         {
             if (keep.Contains(file)) continue;
             try { File.Delete(file); removed++; }
-            catch (IOException) { } // a snapshot someone is reading should not fail the prune
+            catch (IOException) { }
         }
         return removed;
     }

@@ -3,16 +3,12 @@ using System.Net.Sockets;
 
 namespace Baseport;
 
-// Every outbound call Baseport makes on somebody's behalf goes through here first. A proxy target is a URL an operator types into the console, and the server fetches it from inside the network the server sits in: without a check that reaches cloud metadata (169.254.169.254), a neighbour's admin port, or anything else the operator's browser could not have reached itself.
-//
-// Private and loopback targets are refused by default and opened by one setting, because the intended target often is local (a Portway on the same host, an internal API on the LAN). Turning it on is the operator saying the server's own network is in scope, metadata endpoint included.
 public static class ProxyTarget
 {
     private static volatile bool _allowPrivate;
 
     public static void Configure(AppSettings settings) => _allowPrivate = settings.ProxyPrivateTargetsEnabled;
 
-    // Returns null when the URL may be fetched, or the message to hand back when it may not.
     public static string? Problem(string? url)
     {
         if (!Uri.TryCreate((url ?? "").Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -24,7 +20,7 @@ public static class ProxyTarget
         if (IPAddress.TryParse(uri.IdnHost, out var literal)) addresses = [literal];
         else
         {
-            // A name resolved here can resolve to something else when the request is made, this narrows the surface instead of sealing it; the setting behind it is the real decision.
+
             try { addresses = Dns.GetHostAddresses(uri.IdnHost); }
             catch (SocketException) { return "The host could not be resolved."; }
             catch (ArgumentException) { return "The host could not be resolved."; }

@@ -6,8 +6,6 @@ using Baseport.Providers;
 
 namespace Baseport.Providers.Postgres;
 
-// one postgres wire-protocol (v3) session: startup, cleartext-password auth against an api token, then simple-query and extended-query (parse/bind/describe/execute/sync) messages answered from SqlEngine.ReadAsync
-// ponytail: no ssl, catalog emulated from WireCatalog instead of real (an object it does not cover answers empty), bound parameters inlined as literals and only in text format, results always sent in text format even if a client asks for binary
 public static class PostgresConnection
 {
     public static async Task HandleAsync(Socket socket, IServiceScopeFactory scopes, CancellationToken ct)
@@ -17,7 +15,7 @@ public static class PostgresConnection
 
         if (await ReadStartupAsync(stream, ct) is null) return;
 
-        await WriteAuthAsync(stream, 3, ct); // authtype 3: cleartext password
+        await WriteAuthAsync(stream, 3, ct);
         var passwordMessage = await ReadMessageAsync(stream, ct);
         if (passwordMessage is not { Type: 'p' } pm)
         {
@@ -33,7 +31,7 @@ public static class PostgresConnection
             return;
         }
 
-        await WriteAuthAsync(stream, 0, ct); // authtype 0: ok
+        await WriteAuthAsync(stream, 0, ct);
         await WriteParameterStatusAsync(stream, "server_version", "15.0 (Baseport)", ct);
         await WriteParameterStatusAsync(stream, "client_encoding", "UTF8", ct);
         await WriteBackendKeyDataAsync(stream, ct);
@@ -60,12 +58,12 @@ public static class PostgresConnection
 
                 case 'P' when !hadError:
                     HandleParse(m.Payload, statements);
-                    await WriteMessageAsync(stream, (byte)'1', [], ct); // parsecomplete
+                    await WriteMessageAsync(stream, (byte)'1', [], ct);
                     break;
 
                 case 'B' when !hadError:
                     var bindError = HandleBind(m.Payload, statements, portals);
-                    if (bindError is null) await WriteMessageAsync(stream, (byte)'2', [], ct); // bindcomplete
+                    if (bindError is null) await WriteMessageAsync(stream, (byte)'2', [], ct);
                     else { await WriteErrorAsync(stream, "ERROR", "0A000", bindError, ct); hadError = true; }
                     break;
 
@@ -79,11 +77,11 @@ public static class PostgresConnection
 
                 case 'C':
                     HandleClose(m.Payload, statements, portals);
-                    await WriteMessageAsync(stream, (byte)'3', [], ct); // closecomplete
+                    await WriteMessageAsync(stream, (byte)'3', [], ct);
                     break;
 
                 case 'H':
-                    break; // flush: nothing buffered on our side to flush
+                    break;
 
                 case 'S':
                     hadError = false;
@@ -91,7 +89,7 @@ public static class PostgresConnection
                     break;
 
                 case 'P' or 'B' or 'D' or 'E':
-                    break; // already in an error state: skip until sync, per the extended-query protocol
+                    break;
 
                 default:
                     await WriteErrorAsync(stream, "ERROR", "0A000", $"unsupported message type '{m.Type}'", ct);
@@ -108,7 +106,6 @@ public static class PostgresConnection
         return await ApiAuth.ResolveByTokenAsync(db, token);
     }
 
-    // every real driver (pg8000, psycopg2, jdbc, dbeaver) wraps queries in begin/commit by default, and most also send session-configuration statements (set/reset) on connect or per query; there is nothing to commit, roll back, or configure against a read-only, always-autocommit, session-less engine, these are accepted as no-ops instead of tripping the read-only allowlist
     private static readonly (Regex Pattern, string Tag)[] NoOpStatements =
     [
         (new Regex(@"^\s*(BEGIN|START\s+TRANSACTION)\b", RegexOptions.IgnoreCase), "BEGIN"),
@@ -119,10 +116,8 @@ public static class PostgresConnection
 
     private static string? NoOpTag(string sql) => NoOpStatements.FirstOrDefault(x => x.Pattern.IsMatch(sql)).Tag;
 
-    // WireCatalog answers the catalog objects a browser actually reads; this is the net under it, an unemulated pg_* object still answers empty instead of aborting the client with a sqlite error
     private static readonly Regex CatalogQuery = new(@"\b(FROM|JOIN)\s+(pg_catalog\.|information_schema\.|pg_\w+\b)", RegexOptions.IgnoreCase);
 
-    // pgjdbc asks for these during connection setup, before a client ever browses anything; SHOW is neither a no-op nor on SqlEngine's allowlist, it used to come back as an error and abort dbeaver's connect
     private static readonly Regex ShowStatement = new(@"^\s*SHOW\s+(?<name>[A-Za-z_][A-Za-z0-9_\s]*?)\s*;?\s*$", RegexOptions.IgnoreCase);
 
     private static readonly Dictionary<string, (string Column, string Value)> Settings = new(StringComparer.OrdinalIgnoreCase)
@@ -144,13 +139,12 @@ public static class PostgresConnection
         if (!match.Success) return null;
 
         var name = Regex.Replace(match.Groups["name"].Value.Trim(), @"\s+", " ");
-        // an unknown setting answers empty instead of erroring: a client probing one it can live without must not lose the connection over it
+
         return Settings.TryGetValue(name, out var setting)
             ? new SqlEngine.Result([setting.Column], [[setting.Value]], false, null)
             : new SqlEngine.Result([name], [[""]], false, null);
     }
 
-    // sqlite has no version()/current_schema()/current_database(); dbeaver reads all three to identify the server and pick the schema to hang its tree under, and a client with no current database has nothing to browse
     private static void RegisterCompatibilityFunctions(Microsoft.Data.Sqlite.SqliteConnection conn)
     {
         conn.CreateFunction("version", () => "PostgreSQL 15.0 (Baseport)");
@@ -161,7 +155,6 @@ public static class PostgresConnection
         conn.CreateFunction("pg_backend_pid", () => 0);
     }
 
-    // sqlite names a result column after the expression that produced it, version() comes back as "version()"; postgres calls it "version", and a client reading that column by name finds nothing otherwise
     private static readonly Regex ZeroArgumentCall = new(@"^(?<name>[A-Za-z_][A-Za-z0-9_]*)\(\)$");
 
     private static SqlEngine.Result NameColumnsLikePostgres(SqlEngine.Result result) =>
@@ -190,7 +183,6 @@ public static class PostgresConnection
             WireCatalog.Apply(conn, WireDialect.Postgres, userId);
         });
 
-        // the catalog covers what a browser reads; anything else under pg_catalog still answers empty instead of handing back a sqlite error
         return result.Error is not null && CatalogQuery.IsMatch(sql)
             ? new SqlEngine.Result(["?column?"], [], false, null)
             : NameColumnsLikePostgres(result);
@@ -213,8 +205,6 @@ public static class PostgresConnection
         await WriteCommandCompleteAsync(stream, $"SELECT {result.Rows.Count}", ct);
     }
 
-    // extended query protocol (parse/bind/describe/execute/sync/close)
-
     private sealed class Portal
     {
         public required string Sql;
@@ -223,7 +213,6 @@ public static class PostgresConnection
         public SqlEngine.Result? Result;
     }
 
-    // the parameter type oids arrive here, not on bind, and a binary value cannot be decoded without them
     private sealed record PreparedStatement(string Sql, int[] ParameterTypes);
 
     private static void HandleParse(byte[] payload, Dictionary<string, PreparedStatement> statements)
@@ -263,7 +252,6 @@ public static class PostgresConnection
             i += 4;
             if (length < 0) { values.Add(null); continue; }
 
-            // one format code applies to every parameter, none at all means text
             var format = formatCodeCount == 0 ? 0 : formatCodes[formatCodeCount == 1 ? 0 : p];
             var typeOid = p < statement.ParameterTypes.Length ? statement.ParameterTypes[p] : 0;
 
@@ -280,7 +268,6 @@ public static class PostgresConnection
         return null;
     }
 
-    // pgjdbc binds ints in binary, which is what dbeaver's table and column queries pass their namespace and relation oids as
     private static string? DecodeBinary(ReadOnlySpan<byte> value, int typeOid) => typeOid switch
     {
         21 when value.Length == 2 => BinaryPrimitives.ReadInt16BigEndian(value).ToString(),
@@ -293,7 +280,6 @@ public static class PostgresConnection
         _ => null,
     };
 
-    // The engine takes one finished statement, a bound value becomes a literal in it. Everything here is read-only and already allowlisted, and the value is escaped on the way in.
     internal static string Inline(string sql, List<string?> values)
     {
         if (values.Count == 0) return sql;
@@ -306,17 +292,15 @@ public static class PostgresConnection
 
             var value = values[index];
             if (value is null) return "NULL";
-            // sqlite compares a number to a text column as unequal, and the catalog's oids are numbers, a numeric parameter must not arrive quoted
+
             return long.TryParse(value, out _) || double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)
                 ? value
                 : $"'{value.Replace("'", "''")}'";
         });
     }
 
-    // dbeaver casts all over its metadata queries ('pg_namespace'::regclass, nspname::text); sqlite has no :: operator, and the cast is noise once the value is already the right shape
     internal static string StripCasts(string sql) => Rewrite(sql, token => token.StartsWith("::", StringComparison.Ordinal) ? "" : null);
 
-    // Walks the statement outside string literals, quoted identifiers and comments, a value that happens to contain :: or $1 is left alone.
     private static string Rewrite(string sql, Func<string, string?> replace)
     {
         var output = new StringBuilder(sql.Length);
@@ -360,7 +344,7 @@ public static class PostgresConnection
                     if (i < sql.Length) i++;
                 }
                 else while (i < sql.Length && (char.IsAsciiLetterOrDigit(sql[i]) || sql[i] == '_')) i++;
-                // a type name can be two words (character varying, double precision) and can carry an array suffix
+
                 var trailing = i;
                 while (i < sql.Length && char.IsWhiteSpace(sql[i])) i++;
                 var word = i;
@@ -403,9 +387,9 @@ public static class PostgresConnection
 
         if (target != 'P')
         {
-            // describing a statement (not yet bound to a portal): we don't type-infer placeholders ahead of bind
+
             await WriteMessageAsync(stream, (byte)'t', BuildEmptyParameterDescription(), ct);
-            await WriteMessageAsync(stream, (byte)'n', [], ct); // nodata
+            await WriteMessageAsync(stream, (byte)'n', [], ct);
             return;
         }
 
@@ -417,12 +401,11 @@ public static class PostgresConnection
 
         await EnsureExecutedAsync(portal, scopes, userId, ct);
         if (portal.NoOpCommandTag is not null || portal.Result is not { Columns.Count: > 0 })
-            await WriteMessageAsync(stream, (byte)'n', [], ct); // nodata
+            await WriteMessageAsync(stream, (byte)'n', [], ct);
         else
             await WriteRowDescriptionAsync(stream, portal.Result.Columns, ct);
     }
 
-    // returns whether the connection is now in an error state (pending a sync to clear)
     private static async Task<bool> HandleExecuteAsync(NetworkStream stream, byte[] payload, IServiceScopeFactory scopes, Dictionary<string, Portal> portals, string userId, CancellationToken ct)
     {
         var i = 0;
@@ -458,7 +441,6 @@ public static class PostgresConnection
         if (target == 'S') statements.Remove(name); else portals.Remove(name);
     }
 
-    // reads (or, for a no-op statement, tags) the portal's outcome the first time it's touched by describe or execute, either can come first
     private static async Task EnsureExecutedAsync(Portal portal, IServiceScopeFactory scopes, string userId, CancellationToken ct)
     {
         if (portal.Executed) return;
@@ -476,7 +458,6 @@ public static class PostgresConnection
         return ms.ToArray();
     }
 
-    // reads (and answers) sslrequest/gssencrequest probes until the real startup message arrives
     private static async Task<Dictionary<string, string>?> ReadStartupAsync(NetworkStream stream, CancellationToken ct)
     {
         while (true)
@@ -488,7 +469,7 @@ public static class PostgresConnection
             if (payload is null) return null;
 
             var code = BinaryPrimitives.ReadInt32BigEndian(payload.AsSpan(0, 4));
-            if (code == 80877103 || code == 80877104) // sslrequest / gssencrequest
+            if (code == 80877103 || code == 80877104)
             {
                 await stream.WriteAsync((byte[])[(byte)'N'], ct);
                 continue;
@@ -505,8 +486,6 @@ public static class PostgresConnection
             return parms;
         }
     }
-
-    // message framing
 
     private static async Task<(char Type, byte[] Payload)?> ReadMessageAsync(NetworkStream stream, CancellationToken ct)
     {
@@ -572,8 +551,6 @@ public static class PostgresConnection
         ms.Write(buf);
     }
 
-    // backend messages
-
     private static Task WriteAuthAsync(NetworkStream stream, int authType, CancellationToken ct)
     {
         using var ms = new MemoryStream();
@@ -593,7 +570,7 @@ public static class PostgresConnection
     {
         using var ms = new MemoryStream();
         WriteI32(ms, Environment.ProcessId);
-        WriteI32(ms, 0); // secret key: unused, we don't support cancelrequest
+        WriteI32(ms, 0);
         return WriteMessageAsync(stream, (byte)'K', ms.ToArray(), ct);
     }
 
@@ -617,12 +594,12 @@ public static class PostgresConnection
         foreach (var col in columns)
         {
             WriteCStr(ms, col);
-            WriteI32(ms, 0);   // table oid: none
-            WriteI16(ms, 0);   // column attr number: none
-            WriteI32(ms, 25);  // type oid: text
-            WriteI16(ms, -1);  // type size: variable
-            WriteI32(ms, -1);  // type modifier: none
-            WriteI16(ms, 0);   // format code: text
+            WriteI32(ms, 0);
+            WriteI16(ms, 0);
+            WriteI32(ms, 25);
+            WriteI16(ms, -1);
+            WriteI32(ms, -1);
+            WriteI16(ms, 0);
         }
         return WriteMessageAsync(stream, (byte)'T', ms.ToArray(), ct);
     }

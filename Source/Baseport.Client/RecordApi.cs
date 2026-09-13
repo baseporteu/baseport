@@ -8,7 +8,6 @@ public sealed record BaseportRecord(string Id, DateTime CreatedAt, DateTime Upda
 {
     public T? As<T>() => Data.Deserialize<T>(BaseportClient.Json);
 
-    // Version of the record as the server returned it. Pass it back on a write to make the update conditional.
     public string? ETag { get; init; }
 }
 
@@ -20,7 +19,7 @@ public sealed record RecordPage(
     int TotalPages,
     bool HasMore)
 {
-    // Position to resume a keyset walk from. Null on the last page, and on any listing that named a sort field.
+
     public string? NextCursor { get; init; }
 }
 
@@ -38,7 +37,6 @@ public interface IRecordApi
     Task DeleteAsync(string id, CancellationToken cancellationToken = default);
     IAsyncEnumerable<RecordChange> SubscribeAsync(CancellationToken cancellationToken = default);
 
-    // Overloads rather than extra optional parameters: an optional parameter bakes its default into the caller's assembly, so adding one to a shipped method is a binary break.
     Task<RecordPage> ListFromCursorAsync(string? cursor, string? query = null, int pageSize = 50, CancellationToken cancellationToken = default);
     IAsyncEnumerable<BaseportRecord> WalkAsync(string? query = null, int pageSize = 200, CancellationToken cancellationToken = default);
     Task<BaseportRecord> UpdateAsync(string id, object patch, string? ifMatch, CancellationToken cancellationToken = default);
@@ -92,7 +90,6 @@ internal sealed class RecordApi : IRecordApi
         return ReadPage(document.RootElement);
     }
 
-    // The whole table, one keyset page at a time. Streamed rather than returned as a list: a caller that wants every row of a large table should not have to hold every row of a large table.
     public async IAsyncEnumerable<BaseportRecord> WalkAsync(string? query = null, int pageSize = 200,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {

@@ -6,15 +6,13 @@ using Baseport.Providers;
 
 namespace Baseport.Providers.Tds;
 
-// one tds (sql server wire protocol) session: prelogin, login7 with the password field carrying an api token, then sqlbatch requests answered from SqlEngine.ReadAsync as colmetadata/row/done tokens
-// ponytail: sql-auth login only (no windows/sspi), no tls, sqlbatch only (no rpc/prepared statements), fixed 4096-byte response packets, columns reported as nvarchar(4000) with values truncated past that — upgrade to plp/nvarchar(max) streaming if a client needs longer values
 public static class TdsConnection
 {
     private const byte PtPreLogin = 0x12;
     private const byte PtLogin7 = 0x10;
     private const byte PtSqlBatch = 0x01;
     private const byte PtTabularResult = 0x04;
-    private const int MaxPacketPayload = 4088; // 4096-byte default packet size minus the 8-byte header
+    private const int MaxPacketPayload = 4088;
 
     public static async Task HandleAsync(Socket socket, IServiceScopeFactory scopes, CancellationToken ct)
     {
@@ -34,7 +32,7 @@ public static class TdsConnection
         {
             using var fail = new MemoryStream();
             WriteError(fail, "Login failed.");
-            WriteDone(fail, 0x0002, 0, 0); // done_error
+            WriteDone(fail, 0x0002, 0, 0);
             await WriteTdsMessageAsync(stream, PtTabularResult, fail.ToArray(), ct);
             return;
         }
@@ -71,7 +69,6 @@ public static class TdsConnection
         return await ApiAuth.ResolveByTokenAsync(db, token);
     }
 
-    // real clients (pytds, sqlcmd, ssms) send these on connect or per statement: use [db] to pick a database, set ... to configure session options; there is only one database and no session state to configure, both are accepted as no-ops instead of tripping the read-only allowlist
     private static readonly Regex NoOpStatement = new(@"^\s*(USE\b|SET\s+\w)", RegexOptions.IgnoreCase);
 
     private static readonly Regex CatalogQuery = new(@"\b(FROM|JOIN)\s+(sys\.|INFORMATION_SCHEMA\.)", RegexOptions.IgnoreCase);
@@ -97,19 +94,16 @@ public static class TdsConnection
         ["identity"] = "NULL",
     };
 
-    // sqlite's tokenizer rejects @ outright, @@version cannot be a registered function the way DB_NAME() can; the reference is substituted before the statement is parsed
     private static string RewriteServerVariables(string sql) =>
         sql.Contains("@@", StringComparison.Ordinal)
             ? ServerVariable.Replace(sql, m => ServerVariables.GetValueOrDefault(m.Groups["name"].Value, "NULL"))
             : sql;
 
-    // t-sql caps a result set at the front of the statement and sqlite at the end; without this every browser's "select the first n rows" is a syntax error
     private static string RewriteTop(string sql) =>
         TopClause.Match(sql) is { Success: true } m
             ? $"SELECT {sql[m.Length..].TrimEnd().TrimEnd(';')} LIMIT {m.Groups["n"].Value}"
             : sql;
 
-    // ssms and sqlclient read these to identify the server and pick the database to browse; sqlite has none of them
     private static void RegisterCompatibilityFunctions(Microsoft.Data.Sqlite.SqliteConnection conn)
     {
         conn.CreateFunction("db_name", () => "baseport");
@@ -170,7 +164,6 @@ public static class TdsConnection
             })
             : new SqlEngine.Result([], [], false, invalid);
 
-        // WireCatalog answers the catalog objects a browser reads; an unemulated sys.* object answers empty here instead of returning raw sqlite error text to the client
         if (result.Error is not null && CatalogQuery.IsMatch(sql))
             result = new SqlEngine.Result([""], [], false, null);
 
@@ -178,18 +171,17 @@ public static class TdsConnection
         if (result.Error is not null)
         {
             WriteError(ms, result.Error);
-            WriteDone(ms, 0x0002, 0xC1, 0); // done_error
+            WriteDone(ms, 0x0002, 0xC1, 0);
         }
         else
         {
             WriteColMetadata(ms, result.Columns);
             foreach (var row in result.Rows) WriteRow(ms, row);
-            WriteDone(ms, 0x0010, 0xC1, (ulong)result.Rows.Count); // done_count, curcmd = select
+            WriteDone(ms, 0x0010, 0xC1, (ulong)result.Rows.Count);
         }
         await WriteTdsMessageAsync(stream, PtTabularResult, ms.ToArray(), ct);
     }
 
-    // sqlbatch payload is, on tds 7.2+, an optional all_headers block (its own total byte length as the first dword) followed by the utf-16le query text
     private static string ExtractBatchText(byte[] payload)
     {
         var start = 0;
@@ -202,8 +194,6 @@ public static class TdsConnection
         var byteCount = payload.Length - start;
         return byteCount <= 0 ? "" : Encoding.Unicode.GetString(payload, start, byteCount);
     }
-
-    // login7
 
     private static (string Username, string Password) ParseLogin7(byte[] payload)
     {
@@ -221,7 +211,6 @@ public static class TdsConnection
         return Encoding.Unicode.GetString(buf, offset, charCount * 2);
     }
 
-    // tds obfuscates login7 passwords by swapping each byte's nibbles then xoring with 0xa5, decoding undoes it in reverse: xor first, then swap back
     private static string DecodePassword(byte[] buf, int offset, int charCount)
     {
         if (charCount == 0 || offset < 0 || offset + charCount * 2 > buf.Length) return "";
@@ -234,8 +223,6 @@ public static class TdsConnection
         }
         return Encoding.Unicode.GetString(bytes);
     }
-
-    // packet framing: header fields are big-endian, everything inside tds payloads is little-endian
 
     private static async Task<(byte Type, byte[] Payload)?> ReadTdsMessageAsync(NetworkStream stream, CancellationToken ct)
     {
@@ -254,7 +241,7 @@ public static class TdsConnection
 
             messageType ??= type;
             buffer.Write(payload);
-            if ((status & 0x01) != 0) break; // eom
+            if ((status & 0x01) != 0) break;
         }
         return (messageType!.Value, buffer.ToArray());
     }
@@ -313,20 +300,18 @@ public static class TdsConnection
         ms.Write(buf);
     }
 
-    // prelogin response
-
     private static byte[] BuildPreloginResponse()
     {
         (byte Token, byte[] Data)[] options =
         [
-            (0x00, [0, 0, 0, 0, 0, 0]), // version
-            (0x01, [0x02]),             // encryption: not supported
-            (0x02, [0x00]),             // instopt
-            (0x03, [0, 0, 0, 0]),       // threadid
-            (0x04, [0x00]),             // mars: off
+            (0x00, [0, 0, 0, 0, 0, 0]),
+            (0x01, [0x02]),
+            (0x02, [0x00]),
+            (0x03, [0, 0, 0, 0]),
+            (0x04, [0x00]),
         ];
 
-        var tableSize = options.Length * 5 + 1; // 5 bytes per entry + 1 terminator byte
+        var tableSize = options.Length * 5 + 1;
         using var ms = new MemoryStream();
         var offset = tableSize;
         foreach (var (token, data) in options)
@@ -341,22 +326,20 @@ public static class TdsConnection
         return ms.ToArray();
     }
 
-    // response tokens
-
     private static void WriteLoginAck(MemoryStream ms)
     {
         using var body = new MemoryStream();
-        body.WriteByte(0x01); // interface: tds
-        WriteU32BE(body, 0x74000004); // tdsversion: 7.4 — this one field is network byte order, unlike the rest of tds
+        body.WriteByte(0x01);
+        WriteU32BE(body, 0x74000004);
         var progName = Encoding.Unicode.GetBytes("Baseport");
         body.WriteByte((byte)"Baseport".Length);
         body.Write(progName);
-        body.WriteByte(0); // majorver
-        body.WriteByte(1); // minorver
-        body.WriteByte(0); // buildnumhi
-        body.WriteByte(0); // buildnumlo
+        body.WriteByte(0);
+        body.WriteByte(1);
+        body.WriteByte(0);
+        body.WriteByte(0);
 
-        ms.WriteByte(0xAD); // loginack token
+        ms.WriteByte(0xAD);
         WriteU16LE(ms, (ushort)body.Length);
         body.WriteTo(ms);
     }
@@ -364,26 +347,26 @@ public static class TdsConnection
     private static void WriteError(MemoryStream ms, string message)
     {
         using var body = new MemoryStream();
-        WriteU32LE(body, 50000); // number: user error range
-        body.WriteByte(1);  // state
-        body.WriteByte(16); // class (severity)
+        WriteU32LE(body, 50000);
+        body.WriteByte(1);
+        body.WriteByte(16);
         var msgBytes = Encoding.Unicode.GetBytes(message);
         WriteU16LE(body, (ushort)message.Length);
         body.Write(msgBytes);
         const string serverName = "Baseport";
         body.WriteByte((byte)serverName.Length);
         body.Write(Encoding.Unicode.GetBytes(serverName));
-        body.WriteByte(0); // procname length: none
-        WriteU32LE(body, 0); // linenumber
+        body.WriteByte(0);
+        WriteU32LE(body, 0);
 
-        ms.WriteByte(0xAA); // error token
+        ms.WriteByte(0xAA);
         WriteU16LE(ms, (ushort)body.Length);
         body.WriteTo(ms);
     }
 
     private static void WriteDone(MemoryStream ms, ushort status, ushort curCmd, ulong rowCount)
     {
-        ms.WriteByte(0xFD); // done token
+        ms.WriteByte(0xFD);
         WriteU16LE(ms, status);
         WriteU16LE(ms, curCmd);
         WriteU64LE(ms, rowCount);
@@ -391,17 +374,17 @@ public static class TdsConnection
 
     private static void WriteColMetadata(MemoryStream ms, List<string> columns)
     {
-        ms.WriteByte(0x81); // colmetadata token
+        ms.WriteByte(0x81);
         if (columns.Count == 0) { WriteU16LE(ms, 0xFFFF); return; }
 
         WriteU16LE(ms, (ushort)columns.Count);
         foreach (var col in columns)
         {
-            WriteU32LE(ms, 0);      // usertype
-            WriteU16LE(ms, 0x0001); // flags: nullable
-            ms.WriteByte(0xE7);     // typeid: nvarchartype
-            WriteU16LE(ms, 8000);   // maxlength: 4000 chars
-            ms.Write((byte[])[0x09, 0x04, 0x00, 0x00, 0x00]); // collation: sql_latin1_general_cp1_ci_as
+            WriteU32LE(ms, 0);
+            WriteU16LE(ms, 0x0001);
+            ms.WriteByte(0xE7);
+            WriteU16LE(ms, 8000);
+            ms.Write((byte[])[0x09, 0x04, 0x00, 0x00, 0x00]);
             var name = col.Length > 128 ? col[..128] : col;
             var nameBytes = Encoding.Unicode.GetBytes(name);
             ms.WriteByte((byte)name.Length);
@@ -411,7 +394,7 @@ public static class TdsConnection
 
     private static void WriteRow(MemoryStream ms, List<string?> row)
     {
-        ms.WriteByte(0xD1); // row token
+        ms.WriteByte(0xD1);
         foreach (var value in row)
         {
             if (value is null) { WriteU16LE(ms, 0xFFFF); continue; }

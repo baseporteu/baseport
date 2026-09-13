@@ -22,19 +22,15 @@ public sealed class BaseportException : Exception
     public HttpStatusCode StatusCode { get; }
     public string Body { get; }
 
-    // RFC 9457 members, when the server sent a problem document. Null against an older server, or a failure that produced no body at all.
     public string? ProblemType { get; }
     public string? Title { get; }
     public string? Detail { get; }
 
-    // Storage names of the fields a 422 rejected, so a caller can point at them without parsing prose.
     public IReadOnlyList<string> InvalidFields { get; } = Array.Empty<string>();
 
-    // A duplicate is worth retrying with a different value; a validation failure never is. They were one status before.
     public bool IsConflict => StatusCode == HttpStatusCode.Conflict;
     public bool IsValidationFailure => (int)StatusCode == 422;
 
-    // The record moved on since the version this caller held.
     public bool IsPreconditionFailure => StatusCode == HttpStatusCode.PreconditionFailed;
 
     private static (string?, string?, string?, IReadOnlyList<string>) ReadProblem(string body)
@@ -132,7 +128,6 @@ public sealed class BaseportClient : IBaseportClient
         return Tokens!;
     }
 
-    // Sent authenticated, because registering while holding an anonymous token claims that account instead of opening a second one. With no token held it is an ordinary sign-up.
     public async Task<BaseportTokens> RegisterAsync(string email, string password, string? username = null, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Post, $"{AuthApi}/register",

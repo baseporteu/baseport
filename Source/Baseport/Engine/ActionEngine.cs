@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// Caches enabled ActionDefs indexed by (table, trigger) to avoid hot-path queries.
 public static class ActionDefCache
 {
     private static volatile Dictionary<(string TableId, string Trigger), List<ActionDef>> _byTrigger = new();
@@ -26,7 +25,6 @@ public static class ActionDefCache
         db.Actions.AsNoTracking().ToListAsync(ct).ContinueWith(t => Reload(t.Result), ct, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
 }
 
-// Uses AsyncLocal to prevent recursive action runs from internal writes.
 public static class ActionTriggerGuard
 {
     private static readonly AsyncLocal<bool> _suppressed = new();
@@ -45,7 +43,6 @@ public static class ActionTriggerGuard
     }
 }
 
-// Enqueues durable work for committed record events.
 public static class ActionEngine
 {
     public static async Task EnqueueTriggeredRunsAsync(AppDbContext db, IReadOnlyList<RecordEvent> events, CancellationToken ct = default)

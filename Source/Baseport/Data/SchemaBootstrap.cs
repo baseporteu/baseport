@@ -14,12 +14,12 @@ public static class SchemaBootstrap
             db.UserAccounts.Add(new UserAccount
             {
                 Id = Ids.NewShortId(12),
-                // Not "admin": a known handle is a free half of every credential-stuffing attempt, and LoginGuard's per-account lockout is trippable by anyone who knows the name, which turns a delay into a permanent lockout. Logged once beside the password, and `baseport accounts rename` makes it the operator's own.
+
                 Username = AdminAuth.SeededUsername(),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 Role = AccountRoles.Admin,
-                // Tokens are issued on-demand via Auth UI, not during seeding.
+
                 ApiTokenHash = "",
                 ApiEnabled = false
             });
@@ -41,13 +41,11 @@ public static class SchemaBootstrap
         EmbedOrigins.Set(settings.AllowedOrigins);
         ProxyTarget.Configure(settings);
 
-        // Guarantees all dynamic table indexes exist.
         foreach (var table in await db.Tables.Include(t => t.Fields).ToListAsync())
             await RecordIndexes.SyncAsync(db, table);
 
         await RecordSearch.EnsureAsync(db);
 
-        // Seed missing system job defaults and schedule initial runs.
         var now = DateTime.UtcNow;
         var addedJobs = false;
         foreach (var def in Jobs.All)
@@ -66,7 +64,6 @@ public static class SchemaBootstrap
         if (addedJobs) await db.SaveChangesAsync();
     }
 
-    // Enables WAL mode for concurrent reads/writes.
     private static async Task EnableWalAsync(AppDbContext db)
     {
         var conn = db.Database.GetDbConnection();
@@ -80,16 +77,14 @@ public static class SchemaBootstrap
         }
         finally
         {
-            // Only close connection if opened locally (prevents destroying in-memory DBs).
+
             if (wasClosed) await conn.CloseAsync();
         }
     }
 
-
-    // Applies any migration the file has not seen. A fresh file gets the whole schema; an existing one only what is new.
     private static async Task MigrateAsync(AppDbContext db)
     {
-        // A database built by EnsureCreated has the tables but no history row, Migrate would try to create what is already there.
+
         if (!(await db.Database.GetAppliedMigrationsAsync()).Any() && await HasTablesAsync(db))
             throw new InvalidOperationException(
                 "This database predates migrations and cannot be upgraded in place. " +
@@ -111,7 +106,7 @@ public static class SchemaBootstrap
         }
         finally
         {
-            // Closing a connection the caller opened destroys an in-memory database.
+
             if (wasClosed) await conn.CloseAsync();
         }
     }

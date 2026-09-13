@@ -8,17 +8,14 @@ using System.Xml.Linq;
 
 namespace Baseport;
 
-// Reads a CSV, JSON or XML file into rows, then infers a field schema from them. The inference is column-wise on purpose: a CSV hands every cell over as a string, typing a column off a single sample row types the whole file as text.
 public static class DefinitionImport
 {
-    // ponytail: a file is read whole into memory, so both caps are what keeps one import from being the whole process's working set. Stream the delimited path (the only one that multiplies rows) before raising them.
+
     public const int MaxRows = 5000;
     public const int MaxBytes = 8 * 1024 * 1024;
 
-    // How many rows a column's type is decided from. The whole file would be no more accurate and every import pays for it.
     private const int SampleRows = 200;
 
-    // Above this a column is a free-text field instead of a set of choices.
     private const int MaxSelectOptions = 12;
 
     private static readonly Regex Email = new(@"^[^@\s]+@[^@\s.]+\.[^@\s]+$", RegexOptions.Compiled);
@@ -52,13 +49,11 @@ public static class DefinitionImport
         try { node = JsonNode.Parse(text); }
         catch (Exception ex) { error = $"The file is not valid JSON: {ex.Message}"; return new(); }
 
-        // The same collection envelopes the proxy import already unwraps.
         var records = OpenApiProxy.Records(node);
         if (records.Count == 0) { error = "The JSON stores no array of objects to import."; return new(); }
         return records;
     }
 
-    // How deep a row element is flattened. Past this a document is a tree, not a table.
     private const int MaxXmlDepth = 4;
 
     private static List<JsonObject> ParseXml(string text, out string? error)
@@ -67,7 +62,7 @@ public static class DefinitionImport
         XDocument doc;
         try
         {
-            // XDocument.Parse processes the DTD: a few hundred bytes of nested internal entities expand to gigabytes, and an author uploads this file.
+
             using var reader = System.Xml.XmlReader.Create(new StringReader(text), new System.Xml.XmlReaderSettings
             {
                 DtdProcessing = System.Xml.DtdProcessing.Prohibit,
@@ -79,8 +74,6 @@ public static class DefinitionImport
         catch (Exception ex) { error = $"The file is not valid XML: {ex.Message}"; return new(); }
         if (doc.Root is null) { error = "The XML has no root element."; return new(); }
 
-        // Candidates are grouped by local name across the whole document, not per parent: the records of a grouped document (two categories holding two templates each) are four siblings of one name spread over two parents, and grouping under each parent finds two groups of two and picks the wrapper instead.
-        // The winner transports the most values overall, a repeated leaf like <body> loses to the record that stores it.
         var candidates = new List<(List<XElement> Els, List<JsonObject> Rows, int Keys)>();
         foreach (var group in doc.Root.DescendantsAndSelf().GroupBy(e => e.Name.LocalName))
         {
@@ -93,7 +86,6 @@ public static class DefinitionImport
 
         var pick = candidates.OrderByDescending(c => c.Rows.Count * c.Keys).FirstOrDefault();
 
-        // A wrapper holding exactly one record each scores higher than the record, because every one of the record's columns is also its own, only prefixed. Same count and nested inside means wrapper; carrying at least half the columns is what separates the record from the thinner elements further down inside it, which would otherwise be descended into all the way to the deepest leaf pair.
         while (pick.Rows is not null)
         {
             var inner = candidates.FirstOrDefault(c =>
@@ -111,7 +103,6 @@ public static class DefinitionImport
         return best;
     }
 
-    // One element as one row: its attributes, plus every descendant leaf keyed by its path below the element. A namespace prefix is dropped, tmpl:name and name are one column.
     private static JsonObject Flatten(XElement el)
     {
         var row = new JsonObject();
@@ -136,12 +127,11 @@ public static class DefinitionImport
             foreach (var attr in child.Attributes())
                 if (!attr.IsNamespaceDeclaration && !string.IsNullOrWhiteSpace(attr.Value))
                     Put(row, key + "_" + attr.Name.LocalName, attr.Value);
-            // CDATA reads through Value like any other text.
+
             if (!string.IsNullOrWhiteSpace(child.Value)) Put(row, key, child.Value.Trim());
         }
     }
 
-    // Two siblings of one name are two values of one column, not one value overwriting the other.
     private static void Put(JsonObject row, string key, string value)
     {
         if (!row.TryGetPropertyValue(key, out var existing) || existing is null) { row[key] = JsonValue.Create(value); return; }
@@ -163,7 +153,7 @@ public static class DefinitionImport
         {
             var name = header[i].Trim();
             if (name.Length == 0) name = "column" + (i + 1);
-            // A duplicate header would otherwise overwrite the column before it and silently drop a whole column of data.
+
             if (used.TryGetValue(name, out var seen)) { used[name] = seen + 1; name = $"{name}_{seen + 1}"; }
             else used[name] = 1;
             names.Add(name);
@@ -181,7 +171,6 @@ public static class DefinitionImport
         return rows;
     }
 
-    // Counts candidates outside quotes on the header line; the one that appears most often separates the columns.
     private static char SniffDelimiter(string text)
     {
         var best = ',';
@@ -201,7 +190,6 @@ public static class DefinitionImport
         return best;
     }
 
-    // RFC 4180: doubled quotes escape a quote, and a quoted field may hold the delimiter and newlines.
     private static List<List<string>> ReadGrid(string text, char delimiter, int maxRows)
     {
         var rows = new List<List<string>>();
@@ -227,7 +215,7 @@ public static class DefinitionImport
                 row.Add(cell.ToString());
                 cell.Clear();
                 rows.Add(row);
-                // One past the header plus the cap is enough to know the file is over it; reading the rest only costs memory.
+
                 if (rows.Count > maxRows + 1) break;
                 row = new List<string>();
                 continue;
@@ -238,7 +226,6 @@ public static class DefinitionImport
         return rows;
     }
 
-    // Reads every column across a sample of the rows and decides one type for it. Also what a proxy sample is inferred from, an endpoint whose first record happens to hold a null is not typed off that one row.
     public static List<OpenApiProxy.FieldProp> InferFields(IReadOnlyList<JsonObject> rows, bool detectChoices = true)
     {
         var props = new List<OpenApiProxy.FieldProp>();
@@ -259,10 +246,10 @@ public static class DefinitionImport
                 present++;
                 values.Add(v);
             }
-            // A column present in every sampled row and never blank is what "required" means for a file: nothing else in a CSV says so.
+
             var required = present > 0 && present == Math.Min(rows.Count, SampleRows);
             var prop = Classify(column, values, required, detectChoices);
-            // Never for a boolean, whichever way it was recognised: FieldValidation reads a required false as "not provided", the way an unchecked box is, a column holding one false would make a schema that refuses the very file it was inferred from.
+
             if (required && OpenApiProxy.MapFieldType(prop) == "boolean") prop = prop with { Required = false };
             props.Add(prop);
         }
@@ -283,13 +270,11 @@ public static class DefinitionImport
         var strings = values.Select(AsText).ToList();
         if (strings.All(s => s is "true" or "false" or "True" or "False" or "TRUE" or "FALSE")) return new OpenApiProxy.FieldProp(name, "boolean", "", none, required);
 
-        // Numbers are settled before dates: "20240101" parses as both, and a column of those is an identifier far more often than a day.
         if (strings.All(s => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out _))) return new OpenApiProxy.FieldProp(name, "number", "", none, required);
         if (strings.All(IsDate)) return new OpenApiProxy.FieldProp(name, "string", strings.All(s => s.Length <= 10) ? "date" : "date-time", none, required);
         if (strings.All(s => Email.IsMatch(s))) return new OpenApiProxy.FieldProp(name, "string", "email", none, required);
         if (strings.All(s => s.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || s.StartsWith("https://", StringComparison.OrdinalIgnoreCase))) return new OpenApiProxy.FieldProp(name, "string", "uri", none, required);
 
-        // A small, repeating set of short values is a choice list; anything wider is free text.
         var distinct = strings.Distinct(StringComparer.Ordinal).ToList();
         if (detectChoices && distinct.Count > 1 && distinct.Count <= MaxSelectOptions && distinct.Count * 2 <= strings.Count && distinct.All(s => s.Length <= 48))
             return new OpenApiProxy.FieldProp(name, "string", "", distinct.OrderBy(s => s, StringComparer.Ordinal).ToList(), required);
@@ -306,7 +291,6 @@ public static class DefinitionImport
     private static string AsText(JsonNode? v) =>
         v is JsonValue jv && jv.TryGetValue<string>(out var s) ? s.Trim() : v?.ToJsonString().Trim('"') ?? "";
 
-    // A column header is a label, not an identifier: FieldValidation only accepts letters, digits and underscores.
     public static string SafeName(string header, int ordinal)
     {
         var sb = new StringBuilder();
@@ -318,7 +302,6 @@ public static class DefinitionImport
         return name.Length > 64 ? name[..64] : name;
     }
 
-    // Which of the file's columns feeds which field, decided once for the whole file. Deciding it per row meant re-deriving every header for every field of every row, with a string rebuild inside the innermost loop.
     public sealed class ColumnMap
     {
         private readonly List<(string Header, FieldDefinition Field)> _pairs;
@@ -330,7 +313,6 @@ public static class DefinitionImport
             MatchedFields = pairs.Select(p => p.Item2.Name).ToList();
         }
 
-        // A header matches a field by its name, by its label, or by what the header sanitizes to, a file exported with "First Name" still lands in First_Name.
         public static ColumnMap For(IReadOnlyList<JsonObject> rows, IReadOnlyList<FieldDefinition> fields)
         {
             var headers = new List<string>();
@@ -343,7 +325,7 @@ public static class DefinitionImport
             var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var f in fields)
             {
-                // First match wins: two headers reaching one field would otherwise have the later one silently overwrite the earlier.
+
                 var header = headers.FirstOrDefault(h =>
                     string.Equals(h, f.Name, StringComparison.OrdinalIgnoreCase) ||
                     (!string.IsNullOrWhiteSpace(f.Label) && string.Equals(h, f.Label, StringComparison.OrdinalIgnoreCase)) ||
@@ -360,9 +342,9 @@ public static class DefinitionImport
             foreach (var (header, f) in _pairs)
             {
                 if (!row.TryGetPropertyValue(header, out var val) || val is null) continue;
-                // A blank cell is left out entirely, the field's own default still applies.
+
                 if (IsBlank(val)) continue;
-                // A CSV or XML cell is always text; a JSON file already transports its own types.
+
                 mapped[f.Name] = val is JsonValue v && v.TryGetValue<string>(out var text)
                     ? RecordEngine.CoerceText(f.DataType, text)
                     : val.DeepClone();
@@ -371,21 +353,17 @@ public static class DefinitionImport
         }
     }
 
-    // One row against one set of fields, for a preview and for the tests. A whole file goes through ColumnMap instead.
     public static JsonObject MapRow(JsonObject row, IReadOnlyList<FieldDefinition> fields) =>
         ColumnMap.For(new[] { row }, fields).Apply(row);
 
-    // What went wrong on one row of the file, numbered the way the file numbers it so the author can go and look.
     public sealed record RowError(int Row, List<string> Errors);
 
-    // Runs every row of a file through the one write path before a single one is stored. An import that saved as it went would announce rows to live subscribers (RecordChangeInterceptor flushes on save, not on commit) and then leave a half-loaded table behind when row 900 turned out to be bad.
     public static async Task<(List<JsonObject> Prepared, List<RowError> Errors)> PrepareRowsAsync(
         AppDbContext db, TableDefinition table, List<FieldDefinition> fields, IReadOnlyList<JsonObject> rows, int maxErrors = 20)
     {
         var prepared = new List<JsonObject>();
         var errors = new List<RowError>();
 
-        // PrepareAsync checks uniqueness against what is stored; nothing in this batch is stored yet, duplicates inside one file would otherwise all pass.
         var uniques = fields.Where(f => f.IsUnique && !f.IsHidden).ToList();
         var claimed = uniques.ToDictionary(f => f.Name, _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
@@ -413,7 +391,6 @@ public static class DefinitionImport
         return (prepared, errors);
     }
 
-    // Turns inferred columns into fields, keeping the original header as the label so a name the validator refuses is still readable in the console.
     public static List<FieldDefinition> ToFields(IReadOnlyList<OpenApiProxy.FieldProp> props)
     {
         var fields = new List<FieldDefinition>();
@@ -422,7 +399,7 @@ public static class DefinitionImport
         {
             var prop = props[i];
             var name = SafeName(prop.Name, i + 1);
-            // Two headers can sanitize to one name ("a b" and "a-b"), and two fields with one name is refused on save.
+
             for (var dupe = 2; !used.Add(name); dupe++) name = $"{SafeName(prop.Name, i + 1)}_{dupe}";
             fields.Add(new FieldDefinition
             {

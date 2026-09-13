@@ -5,20 +5,16 @@ using System.Text.Json.Nodes;
 
 namespace Baseport;
 
-// read paths for lookup and list forms
 public static class QueryEngine
 {
     public const int MaxPageSize = 200;
 
-    // rows counted before the total stops being exact
     public const int CountCeiling = 2000;
 
-    // an author-defined condition baked into a list form
     public sealed record Filter(FieldDefinition Field, string Operator, string Value);
 
     public static readonly string[] FilterOperators = { "eq", "ne", "gt", "lt", "contains" };
 
-    // reads a form's stored filters, dropping any whose field no longer exists
     public static List<Filter> ParseFilters(IReadOnlyList<FieldDefinition> fields, JsonNode? node)
     {
         var result = new List<Filter>();
@@ -38,14 +34,11 @@ public static class QueryEngine
     {
         public int TotalPages => PageSize <= 0 ? 1 : (int)Math.Ceiling(Total / (double)PageSize);
 
-        // false once match count passed CountCeiling, Total is then a floor
         public bool CountExact => Total < CountCeiling;
 
-        // set only on a keyset read, null means page-number paging or the last page of a walk
         public string? NextCursor { get; init; }
     }
 
-    // ponytail: keyset only covers the (CreatedAt, Id) default order, widen for a sorted-column walk if needed
     public readonly record struct Cursor(DateTime CreatedAt, string Id)
     {
         public string Encode() => Base64Url(JsonSerializer.SerializeToUtf8Bytes(new CursorDto(CreatedAt.ToString("O", CultureInfo.InvariantCulture), Id)));
@@ -74,12 +67,10 @@ public static class QueryEngine
 
     private sealed record CursorDto(string C, string I);
 
-    // exact, case-insensitive match of term against any identifier field
     public static async Task<Record?> LookupAsync(AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> matchFields, string term)
     {
         if (matchFields.Count == 0 || string.IsNullOrWhiteSpace(term)) return null;
 
-        // LIKE without wildcards is exact but case-insensitive in SQLite, matches a human-typed identifier
         var conditions = string.Join(" OR ", matchFields.Select(f => $"{Column(f)} LIKE {{1}} ESCAPE '\\'"));
         var sql = $$"""
             SELECT r."Id", r."TableId", r."JsonData", r."CreatedAt", r."UpdatedAt"
@@ -92,7 +83,6 @@ public static class QueryEngine
         return rows.FirstOrDefault();
     }
 
-    // paged, optionally searched and sorted overview for a list form or the records grid
     public static async Task<ListPage> ListAsync(
         AppDbContext db,
         TableDefinition table,
@@ -114,11 +104,9 @@ public static class QueryEngine
         var args = new List<object> { table.Id };
         var where = "r.\"TableId\" = {0}";
 
-        // access rule applies first, a filter or search term can only narrow it further
         if (accessFields is not null && RecordAccess.ListClause(table, accessFields, "r", accessUserId, args) is { } clause)
             where += $" AND ({clause})";
 
-        // form-defined filters apply before the search box narrows further
         foreach (var f in filters ?? Array.Empty<Filter>())
         {
             var slot = args.Count;
@@ -139,7 +127,7 @@ public static class QueryEngine
         {
             var slot = args.Count;
             var term = query.Trim();
-            // /pattern/ runs it through SQLite's regexp() (registered in SqlitePragmas, time-boxed against ReDoS); a bare * or % switches to a raw LIKE pattern instead of an escaped literal
+
             var isRegex = term.Length > 2 && term[0] == '/' && term[^1] == '/';
             var hasWildcard = !isRegex && (term.Contains('*') || term.Contains('%'));
             var op = isRegex ? "REGEXP" : "LIKE";
@@ -154,20 +142,19 @@ public static class QueryEngine
                 : $"%{EscapeLike(term)}%";
             args.Add(match ?? pattern);
             if (searchFields.Count > 0)
-                // restricted search: only the columns the form exposes
+
                 search = " AND (" + string.Join(" OR ", searchFields.Select(f => $"{Column(f)} {op} {{{slot}}}{escapeClause}")) + ")";
             else if (match is not null)
             {
-                // fts5 match: whole words and prefixes only, trade for not scanning every record
+
                 search = RecordSearch.Clause("r", slot);
                 rankJoin = RecordSearch.RankJoin(slot);
             }
             else
-                // no fts5 match (or a regex/wildcard query, which fts5 can't run): json_each scan instead
+
                 search = $" AND EXISTS (SELECT 1 FROM json_each(r.\"JsonData\") je WHERE je.value {op} {{{slot}}}{escapeClause})";
         }
 
-        // counting doubles the work, most callers only render it as "page 1 of n"
         var countSql = $"""
             SELECT COUNT(*) AS "Value" FROM (
                 SELECT 1 FROM "_records" r WHERE {where}{search} LIMIT {CountCeiling}
@@ -175,7 +162,6 @@ public static class QueryEngine
             """;
         var total = await db.Database.SqlQueryRaw<int>(countSql, args.ToArray()).SingleAsync();
 
-        // a named sort field always wins, relevance ranking only fills in the default order
         var ranked = rankJoin is not null && sortField is null;
         var order = ranked
             ? "m.\"Rank\""
@@ -184,7 +170,6 @@ public static class QueryEngine
                 : systemSort == "UpdatedAt" ? "r.\"UpdatedAt\"" : "r.\"CreatedAt\"";
         var direction = ranked || !sortDescending ? "ASC" : "DESC";
 
-        // walks from the last row instead of counting rows to skip, only valid on the (CreatedAt, Id) default order
         var keyset = "";
         if (cursor is { } from)
         {
@@ -204,7 +189,6 @@ public static class QueryEngine
             """;
         var records = await db.Records.FromSqlRaw(pageSql, args.ToArray()).AsNoTracking().ToListAsync();
 
-        // one row past the page size signals there is a next page
         var hasMore = records.Count > pageSize;
         if (hasMore) records.RemoveAt(records.Count - 1);
 
@@ -214,11 +198,9 @@ public static class QueryEngine
         return new ListPage(records, total, page, pageSize, hasMore) { NextCursor = next };
     }
 
-    // cursors only match the (CreatedAt, Id) order, a sort field, a system sort other than the default, or relevance ranking all break that key
     public static bool CursorsApply(FieldDefinition? sortField, string? rankJoin, string? systemSort = null) =>
         sortField is null && rankJoin is null && systemSort is null or "CreatedAt";
 
-    // projects a record down to the fields a public form may reveal
     public static JsonObject Project(Record record, IReadOnlyList<FieldDefinition> visible)
     {
         var source = JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject ?? new JsonObject();
@@ -228,13 +210,11 @@ public static class QueryEngine
         return result;
     }
 
-    // prefers RecordIndexes' generated column, falls back to json_extract for types with none
     private static string Column(FieldDefinition field) =>
         RecordIndexes.ColumnFor(field) is { } column
             ? $"r.\"{column}\""
             : JsonPath(field.Name);
 
-    // access rules read JSON directly, the generated column may not exist yet on an unsynced table
     internal static string JsonPathFor(string fieldName, string alias) => JsonPath(fieldName, alias);
 
     private static string JsonPath(string fieldName, string alias = "r") =>
@@ -243,7 +223,6 @@ public static class QueryEngine
     private static string EscapeLike(string term) =>
         term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
-    // resolves stored field names to live fields, dropping anything stale
     public static List<FieldDefinition> Resolve(IReadOnlyList<FieldDefinition> fields, JsonNode? names)
     {
         if (names is not JsonArray arr) return new List<FieldDefinition>();

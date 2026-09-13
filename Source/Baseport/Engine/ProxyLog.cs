@@ -3,10 +3,9 @@ using Serilog;
 
 namespace Baseport;
 
-// One line per proxied call.
 public static class ProxyLog
 {
-    // Times a proxied call and logs its outcome. Never logs the token.
+
     public static async Task<T> TraceAsync<T>(string operation, string table, string method, string url, Func<Task<T>> call, Func<T, string> describe)
     {
         var started = Stopwatch.GetTimestamp();
@@ -25,7 +24,6 @@ public static class ProxyLog
         }
     }
 
-    // A target URL can carry credentials in its query string, and these lines land in a file an operator may share.
     public static string Redact(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.Query)) return url;

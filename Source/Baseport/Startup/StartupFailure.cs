@@ -3,10 +3,9 @@ using Microsoft.Data.Sqlite;
 
 namespace Baseport;
 
-// Turns the startup failures an operator actually causes into one actionable line; a wrong port or a locked database file is a configuration mistake, not a defect.
 public static class StartupFailure
 {
-    // Returns an actionable message for a known failure, or null when the cause is unrecognised.
+
     public static string? Describe(Exception ex)
     {
         foreach (var e in Unwrap(ex))
@@ -23,7 +22,6 @@ public static class StartupFailure
                 case SocketException { SocketErrorCode: SocketError.AddressNotAvailable }:
                     return $"{Address(ex)} is not an address on this machine. Check the host in --urls.";
 
-                // The schema guard already explains itself and how to fix it.
                 case InvalidOperationException when e.Message.Contains("delete the database file", StringComparison.OrdinalIgnoreCase):
                     return e.Message;
 
@@ -49,7 +47,6 @@ public static class StartupFailure
             yield return e;
     }
 
-    // Kestrel puts the address in its message ("Failed to bind to address http://127.0.0.1:5000: ..."), which is the only place it survives to.
     private static string Address(Exception ex)
     {
         foreach (var e in Unwrap(ex))
@@ -58,7 +55,6 @@ public static class StartupFailure
             var start = e.Message.IndexOf(marker, StringComparison.Ordinal);
             if (start < 0) continue;
 
-            // "Failed to bind to address http://127.0.0.1:5000: address already in use." The address runs to the first space; Kestrel's trailing colon separates it from the reason and is not part of it.
             var rest = e.Message[(start + marker.Length)..];
             var end = rest.IndexOf(' ');
             return (end > 0 ? rest[..end] : rest).Trim().TrimEnd(':', '.');

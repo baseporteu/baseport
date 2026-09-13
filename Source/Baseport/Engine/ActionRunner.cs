@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// runs a queued PendingActionRun against the current record state; called by JobScheduler
 public static class ActionRunner
 {
     public const int MaxAttempts = 5;
@@ -18,7 +17,7 @@ public static class ActionRunner
         var record = await db.Records.FirstOrDefaultAsync(r => r.Id == run.RecordId && r.TableId == run.TableId, ct);
         if (table is null || record is null)
         {
-            // deleted before the run was picked up (onDelete triggers always land here with the record already gone)
+
             run.Status = ActionRunStatus.Done;
             run.UpdatedAt = DateTime.UtcNow;
             return;
@@ -51,7 +50,7 @@ public static class ActionRunner
             }
             else
             {
-                // Backs off geometrically: 1, 2, 4, 8 minutes. A step that fails because a webhook target is briefly down should not hammer it.
+
                 run.NextAttemptAt = DateTime.UtcNow.AddMinutes(Math.Pow(2, run.Attempts - 1));
                 log.Debug("Action {ActionId} run {RunId} failed, attempt {Attempts}/{Max}: {Error}", def.Id, run.Id, run.Attempts, MaxAttempts, ex.Message);
             }
@@ -59,7 +58,6 @@ public static class ActionRunner
         run.UpdatedAt = DateTime.UtcNow;
     }
 
-    // No side effect of its own; a guard step for the ones after it, or a way to make a value observable in logs later. Its failure (a bad expression) still fails the run - the definition was already validated, but a field it reads may have changed shape since.
     private static Task RunExpressionStepAsync(JsonElement step, Record record)
     {
         var expr = step.GetProperty("expr").GetString() ?? "";
@@ -84,8 +82,6 @@ public static class ActionRunner
             };
         }
 
-        // This write must not enqueue another run: an onUpdate action that updates its own record would
-        // otherwise re-trigger itself forever.
         using (ActionTriggerGuard.Suppress())
         {
             var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, table.Fields, record, patch, replace: false);
@@ -95,7 +91,6 @@ public static class ActionRunner
         }
     }
 
-    // outbound webhook step; a bad status, a timeout, or an SSRF-blocked target throws like the other two step kinds, landing on RunAsync's retry/backoff path
     private static async Task HttpRequestStepAsync(IHttpClientFactory http, Record record, JsonElement step, CancellationToken ct)
     {
         var url = step.GetProperty("url").GetString() ?? "";
@@ -124,7 +119,7 @@ public static class ActionRunner
         if (step.TryGetProperty("headers", out var headers) && headers.ValueKind == JsonValueKind.Object)
             foreach (var h in headers.EnumerateObject())
                 if (h.Value.ValueKind == JsonValueKind.String) request.Headers.TryAddWithoutValidation(h.Name, h.Value.GetString());
-        // JsonContent has no known length and goes out chunked, which many webhook receivers refuse; serialize up front instead
+
         if (method != "GET")
             request.Content = new StringContent(body.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
 

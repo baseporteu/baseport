@@ -6,20 +6,17 @@ namespace Baseport;
 
 public enum WireDialect { Postgres, Tds }
 
-// Records reside as JSON in _records, hiding author schemas from SQL clients; rebuilt per-query connection (2 metadata reads per statement), cache per session if profiling shows impact.
 public static class WireCatalog
 {
-    // RefTableId is set on a reference field and reported as a foreign key.
+
     private sealed record CatalogColumn(string Name, string DataType, bool Required, string? RefTableId = null);
     private sealed record CatalogTable(string Id, string Name, int Oid, long Rows, List<CatalogColumn> Columns, string ReadRule);
 
-    // A reference column pointing at Target.id. Both ends are in the catalog, a client can draw the join.
     private sealed record CatalogLink(CatalogTable Table, CatalogColumn Column, CatalogTable Target)
     {
         public string Name => $"fk_{Table.Name}_{Column.Name}";
     }
 
-    // userId is the account the wire session authenticated as. It scopes the row views to the same rows the REST api would return that account (pillar 15), the wire is not a way around a table's read rule.
     public static void Apply(SqliteConnection conn, WireDialect dialect, string? userId)
     {
         var tables = Read(conn, publishedOnly: true);
@@ -29,10 +26,8 @@ public static class WireCatalog
         else BuildTds(conn, tables);
     }
 
-    // The same row views for the admin sql console: every table instead of only the published ones, no read rule, and no dialect catalog, because the console already runs on an unrestricted handle that can read main._records directly.
     public static void Views(SqliteConnection conn) => CreateRowViews(conn, Read(conn, publishedOnly: false), null, readRules: false);
 
-    // A wire client authenticates with an api token but must only ever see the projected author tables, never the storage schema behind them: _users stores password hashes and _settings stores the jwt signing key, a raw SELECT there is a full-instance compromise. The temp views and the emulated pg_catalog/information_schema are the whole intended surface. This denies every direct read of the main schema (the system tables and the raw _records store) while leaving those views readable; a view's own read of main._records reports the view as the innermost object, projected author data still resolves. Installed only on the untrusted wire connection, and cleared before that connection returns to the pool.
     private static readonly delegate_authorizer DenyMainReads = (_, action, _, _, dbName, viaObject) =>
         action == raw.SQLITE_READ && dbName.utf8_to_string() == "main" && string.IsNullOrEmpty(viaObject.utf8_to_string())
             ? raw.SQLITE_DENY
@@ -53,7 +48,7 @@ public static class WireCatalog
             while (reader.Read())
             {
                 var name = reader.GetString(1);
-                // a name outside this set would have to be escaped into both a json path and an identifier; the authoring side already refuses them, anything else is skipped instead of trusted
+
                 if (!IsPlainIdentifier(name)) continue;
                 var dataType = reader.IsDBNull(2) ? "text" : reader.GetString(2);
                 var refTableId = FieldValidation.NormalizeType(dataType) == "reference" && !reader.IsDBNull(4)
@@ -65,14 +60,13 @@ public static class WireCatalog
 
         var tables = new List<CatalogTable>();
         var oid = 16384;
-        
-        // The wire exposes only published tables (ApiEnabled), the same set a token reaches over REST, never an author's unpublished working table. The console, already inside the operator's own handle, sees them all.
+
         using (var reader = Query(conn, $"SELECT Id, Name, ReadRule FROM _tables WHERE IsProxy = 0{(publishedOnly ? " AND ApiEnabled = 1" : "")} ORDER BY Name"))
             while (reader.Read())
             {
                 var id = reader.GetString(0);
                 var name = reader.GetString(1);
-                // a leading underscore is the storage schema's own prefix, and a temp view takes precedence over main, projecting one would shadow _records or _users out from under the console. sqlite_ is sqlite's own prefix and it refuses to create any object under it, projecting one throws while the catalog is being built and every query on that connection answers that error instead of its own result
+
                 if (!IsPlainIdentifier(name) || name[0] == '_' || name.StartsWith("sqlite_", StringComparison.OrdinalIgnoreCase)) continue;
                 var readRule = reader.IsDBNull(2) ? "" : reader.GetString(2);
                 tables.Add(new CatalogTable(id, name, oid, counts.GetValueOrDefault(id), columns.GetValueOrDefault(id) ?? new List<CatalogColumn>(), readRule));
@@ -81,7 +75,6 @@ public static class WireCatalog
         return tables;
     }
 
-    // An unpublished, proxied or deleted target yields no link instead of a dangling one.
     private static List<CatalogLink> Links(List<CatalogTable> tables)
     {
         var byId = tables.ToDictionary(t => t.Id, StringComparer.Ordinal);
@@ -91,7 +84,6 @@ public static class WireCatalog
                 select new CatalogLink(table, column, byId[column.RefTableId])).ToList();
     }
 
-    // The view is what makes the catalog honest: every object it lists can actually be selected from.
     private static void CreateRowViews(SqliteConnection conn, List<CatalogTable> tables, string? userId, bool readRules)
     {
         foreach (var table in tables)
@@ -102,7 +94,6 @@ public static class WireCatalog
                 projection.Append($", json_extract(r.JsonData, '$.{column.Name}') AS {Quote(column.Name)}");
             projection.Append($" FROM main._records r WHERE r.TableId = {Literal(table.Id)}");
 
-            // A rule naming a field this catalog skipped rewrites to NULL, which reads as a refusal, an unprojectable field closes the view instead of opening it.
             var fields = table.Columns.Select(c => new FieldDefinition { Name = c.Name }).ToList();
             if (readRules && RecordAccess.ReadClauseLiteral(table.ReadRule, fields, "r", userId) is { } clause)
                 projection.Append($" AND COALESCE(({clause}), 0)");
@@ -156,7 +147,6 @@ public static class WireCatalog
             "'TimeZone', 'UTC', 'Client Connection Defaults', 'Sets the time zone.', 'string', 'default'",
         ]);
 
-        // Emulated as empty instead of left missing: a browser that joins one of these gets no rows instead of a failed statement.
         Empty(conn, "pg_catalog", "pg_views", "schemaname, viewname, viewowner, definition");
         Empty(conn, "pg_catalog", "pg_indexes", "schemaname, tablename, indexname, tablespace, indexdef");
         Empty(conn, "pg_catalog", "pg_index", "indexrelid, indrelid, indnatts, indisunique, indisprimary, indisexclusion, indimmediate, indisclustered, indisvalid, indkey");
@@ -190,7 +180,6 @@ public static class WireCatalog
 
         Empty(conn, "information_schema", "views", "table_catalog, table_schema, table_name, view_definition, check_option, is_updatable");
 
-        // Primary key on id per table, foreign key per reference field, a client can draw the joins.
         var links = Links(tables);
 
         Fill(conn, "information_schema", "table_constraints",
@@ -203,7 +192,6 @@ public static class WireCatalog
             tables.Select(t => $"'baseport', 'public', {Literal($"pk_{t.Name}")}, 'baseport', 'public', {Literal(t.Name)}, 'id', 1")
                 .Concat(links.Select(l => $"'baseport', 'public', {Literal(l.Name)}, 'baseport', 'public', {Literal(l.Table.Name)}, {Literal(l.Column.Name)}, 1")));
 
-        // Nothing cascades: a reference is resolved by the API, not the store.
         Fill(conn, "information_schema", "referential_constraints",
             "constraint_catalog, constraint_schema, constraint_name, unique_constraint_catalog, unique_constraint_schema, unique_constraint_name, match_option, update_rule, delete_rule",
             links.Select(l => $"'baseport', 'public', {Literal(l.Name)}, 'baseport', 'public', {Literal($"pk_{l.Target.Name}")}, 'NONE', 'NO ACTION', 'NO ACTION'"));
@@ -253,7 +241,6 @@ public static class WireCatalog
             "name, system_type_id, user_type_id, schema_id, principal_id, max_length, precision, scale, collation_name, is_nullable, is_user_defined, is_assembly_type, default_object_id, rule_object_id, is_table_type",
             TdsTypes.Select(t => $"{Literal(t.Name)}, {t.SystemTypeId}, {t.SystemTypeId}, 4, NULL, {t.MaxLength}, {t.Precision}, {t.Scale}, NULL, 1, 0, 0, 0, 0, 0"));
 
-        // Same relationships, TDS shapes. id is column 1 of every table (SystemColumns).
         var links = Links(tables);
         var linkOid = 90000;
         var linkRows = links.Select(l => (Link: l, Oid: linkOid += 16)).ToList();
@@ -268,7 +255,6 @@ public static class WireCatalog
             "object_id, index_id, index_column_id, column_id, key_ordinal, partition_ordinal, is_descending_key, is_included_column",
             tables.Select(t => $"{t.Oid}, 1, 1, 1, 1, 0, 0, 0"));
 
-        // 0 is NO_ACTION.
         Fill(conn, "sys", "foreign_keys",
             "name, object_id, principal_id, schema_id, parent_object_id, type, type_desc, referenced_object_id, key_index_id, is_disabled, is_not_trusted, delete_referential_action, update_referential_action",
             linkRows.Select(r => $"{Literal(r.Link.Name)}, {r.Oid}, 1, 1, {r.Link.Table.Oid}, 'F ', 'FOREIGN_KEY_CONSTRAINT', {r.Link.Target.Oid}, 1, 0, 0, 0, 0"));
@@ -324,7 +310,6 @@ public static class WireCatalog
         Empty(conn, "INFORMATION_SCHEMA", "ROUTINES", "SPECIFIC_CATALOG, SPECIFIC_SCHEMA, SPECIFIC_NAME, ROUTINE_CATALOG, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DATA_TYPE");
     }
 
-    // id, created_at and updated_at are real columns of the view, they belong in the catalog beside the author's fields.
     private static IEnumerable<CatalogColumn> Attributes(CatalogTable table) =>
         SystemColumns.Concat(table.Columns);
 
@@ -355,7 +340,7 @@ public static class WireCatalog
 
     private static void Attach(SqliteConnection conn, string schema)
     {
-        // sqlite refuses a second attach under the same name, and the in-memory store reuses one connection for the life of the process
+
         using var reader = Query(conn, "PRAGMA database_list");
         while (reader.Read())
             if (string.Equals(reader.GetString(1), schema, StringComparison.OrdinalIgnoreCase)) return;

@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Baseport;
 
-// SQLite's defaults are a desktop file's, not a server's: FULL is an fsync per write, and without busy_timeout a second writer gets SQLITE_BUSY immediately.
 public sealed class SqlitePragmas : DbConnectionInterceptor
 {
     private const string Statements = """
@@ -16,7 +15,6 @@ public sealed class SqlitePragmas : DbConnectionInterceptor
         PRAGMA cache_size=-32000;
         """;
 
-    // a search box's /pattern/ ends up here; time-boxed so a catastrophic-backtracking pattern can't hang the connection
     private static bool Regexp(string? pattern, string? input)
     {
         if (pattern is null || input is null) return false;

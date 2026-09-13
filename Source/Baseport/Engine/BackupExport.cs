@@ -4,7 +4,6 @@ using Amazon.S3.Model;
 
 namespace Baseport;
 
-// Single backup export operation, easily mockable in tests instead of the full S3 client.
 public interface IBackupUploader
 {
     Task PutAsync(string bucket, string key, Stream content, CancellationToken ct);
@@ -19,7 +18,7 @@ public sealed class S3BackupUploader(AppSettings settings) : IBackupUploader
         var config = new AmazonS3Config { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(region) };
         if (!string.IsNullOrWhiteSpace(settings.S3ServiceUrl))
         {
-            // most S3-compatible services (MinIO, Backblaze, Wasabi) need path-style addressing, real AWS S3 does not care
+
             config.ServiceURL = settings.S3ServiceUrl;
             config.ForcePathStyle = true;
         }
@@ -28,7 +27,6 @@ public sealed class S3BackupUploader(AppSettings settings) : IBackupUploader
     }
 }
 
-// pushes one backup snapshot to S3-compatible object storage, when an operator has configured one
 public static class BackupExport
 {
     public static bool IsConfigured(AppSettings settings) =>
@@ -46,7 +44,6 @@ public static class BackupExport
         await uploader.PutAsync(settings.S3Bucket, ObjectKey(settings, Path.GetFileName(filePath)), stream, ct);
     }
 
-    // puts and immediately deletes a zero-byte marker: the same call shape a real backup makes, so a pass here means backups will actually go through
     public static async Task<(bool Ok, string? Error)> TestConnectionAsync(
         string bucket, string region, string serviceUrl, string accessKey, string secretKey, CancellationToken ct = default)
     {

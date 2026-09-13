@@ -2,14 +2,12 @@ using System.Reflection;
 
 namespace Baseport;
 
-// One shape for every command list the binary and its wrapper print, a caller who mistypes gets the same answer wherever they were.
 public static class CliHelp
 {
     public static string Version =>
         (Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
          ?? "unknown").Split('+')[0];
 
-    // Handled by the wrapper script the installer writes, never by the binary; listed here so both print one menu.
     public static readonly string[] WrapperCommands =
     {
         "logs", "update", "service", "start", "stop", "restart", "status", "doctor", "uninstall"

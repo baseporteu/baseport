@@ -6,19 +6,16 @@ using Ganss.Xss;
 
 namespace Baseport;
 
-// The single write path.
 public static class RecordEngine
 {
-    // shared instance, Sanitize() is safe to call concurrently
+
     private static readonly HtmlSanitizer Sanitizer = new();
 
-    // A write path verdict: the messages to show a visitor and, alongside them, the storage names of every field that failed, a form renders exactly the offending inputs red instead of asking the visitor to guess.
     public sealed record ValidationOutcome(List<string> Errors, List<string> InvalidFields, ValidationFailure Failure = ValidationFailure.None)
     {
         public bool HasErrors => Errors.Count > 0;
     }
 
-    // Converts text to its target type, or leaves it unchanged for validation to fail.
     public static JsonNode? CoerceText(string? type, string text) => FieldValidation.NormalizeType(type) switch
     {
         "number" or "currency" => double.TryParse(text, FieldValidation.Numeric, CultureInfo.InvariantCulture, out var n) ? JsonValue.Create(n) : JsonValue.Create(text),
@@ -39,10 +36,9 @@ public static class RecordEngine
         catch (JsonException) { return null; }
     }
 
-    // Sanitizes, validates, default-populates, and calculates server-side record values.
     public static async Task<ValidationOutcome> PrepareAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, JsonObject obj, string? excludeRecordId = null)
     {
-        // Unknown keys are dropped instead of rejected: a stale embed sending a removed field should still submit, not hard-fail for the visitor.
+
         foreach (var kv in obj.ToList())
             if (fields.All(f => f.Name != kv.Key)) obj.Remove(kv.Key);
 
@@ -70,12 +66,11 @@ public static class RecordEngine
         }
         if (errors.Count > 0) return new ValidationOutcome(errors, invalid, ValidationFailure.Invalid);
 
-        // same expression engine as a calculated field, but boolean and cross-field: runs against the whole record, not one value
         foreach (var f in fields.Where(f => !string.IsNullOrWhiteSpace(f.ValidationExpr)))
         {
             bool ok;
             try { ok = JsExpr.EvaluateBool(f.ValidationExpr, name => obj.TryGetPropertyValue(name, out var v) ? v : null); }
-            catch (FormatException) { continue; } // malformed expressions are rejected at field-definition time, not here
+            catch (FormatException) { continue; }
             if (ok) continue;
             errors.Add(string.IsNullOrWhiteSpace(f.ValidationMessage) ? $"{FieldValidation.DisplayName(f)} is not valid." : f.ValidationMessage);
             invalid.Add(f.Name);
@@ -88,11 +83,9 @@ public static class RecordEngine
         SanitizeRichText(fields, obj);
         HashPasswords(fields, obj);
 
-        // System ids are generated server-side only.
         foreach (var f in fields.Where(f => FieldValidation.NormalizeType(f.DataType) == "systemid"))
             obj[f.Name] = Ids.NewShortId();
 
-        // Recompute calculated fields server-side so stored data stays consistent.
         foreach (var f in fields.Where(f => FieldValidation.NormalizeType(f.DataType) == "calculated"))
         {
             if (!TryCompute(f, obj, out var err, out var jv))
@@ -100,7 +93,6 @@ public static class RecordEngine
             if (jv != null) obj[f.Name] = jv;
         }
 
-        // Derived fields are computed at submit time and always overwrite any client-supplied value; never rendered in forms.
         foreach (var f in fields.Where(f => FieldValidation.NormalizeType(f.DataType) == "derived"))
         {
             if (!TryCompute(f, obj, out var err, out var jv))
@@ -111,7 +103,6 @@ public static class RecordEngine
         return new ValidationOutcome(errors, invalid);
     }
 
-    // Fills in configured defaults for values the caller left out entirely.
     private static void ApplyDefaults(List<FieldDefinition> fields, JsonObject obj)
     {
         foreach (var f in fields)
@@ -134,7 +125,6 @@ public static class RecordEngine
         }
     }
 
-    // runs before validation, a required slug with a source never fails required-ness
     private static void DeriveSlugs(List<FieldDefinition> fields, JsonObject obj)
     {
         foreach (var f in fields.Where(f => FieldValidation.NormalizeType(f.DataType) == "slug"))
@@ -163,7 +153,6 @@ public static class RecordEngine
         }
     }
 
-    // idempotent: pbkdf2$ is not a password anyone typed
     private static void HashPasswords(List<FieldDefinition> fields, JsonObject obj)
     {
         foreach (var f in fields.Where(f => FieldTypes.Of(f).Secret))
@@ -181,7 +170,7 @@ public static class RecordEngine
         {
             if (JsonNode.Parse(raw) is JsonArray arr) return arr;
         }
-        catch (JsonException) { /* fall through to the single-value form */ }
+        catch (JsonException) { }
         return new JsonArray(JsonValue.Create(raw));
     }
 
@@ -190,11 +179,9 @@ public static class RecordEngine
             ? n
             : text;
 
-    // Uniqueness requires instead of a SQL constraint: fields are rows in Fields, not columns, there is no column to constrain.
-    // ponytail: check-then-write, so two concurrent writes of one value can both pass. A partial unique index on the generated column would close it, but SchemaBootstrap reconciles every table on start and creating one would then refuse to open a database that already holds duplicates. Add it behind a repair step, never on its own.
     private static async Task CheckUniqueAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, JsonObject obj, string? excludeRecordId, List<string> errors, List<string> invalid)
     {
-        if (table.IsProxy) return; // nothing is stored locally, there is nothing to collide with
+        if (table.IsProxy) return;
 
         foreach (var f in fields.Where(f => f.IsUnique && !f.IsHidden))
         {
@@ -202,7 +189,6 @@ public static class RecordEngine
             var text = val is JsonValue v && v.GetValueKind() == JsonValueKind.String ? v.GetValue<string>() : val.ToJsonString().Trim('"');
             if (string.IsNullOrWhiteSpace(text)) continue;
 
-            // The indexed generated column turns this from a scan of the table into a seek.
             var column = RecordIndexes.ColumnFor(f) is { } generated
                 ? $"r.\"{generated}\""
                 : $"json_extract(r.\"JsonData\", '$.\"{f.Name.Replace("'", "''").Replace("\"", "\"\"")}\"')";
@@ -267,7 +253,6 @@ public static class RecordEngine
         return errors;
     }
 
-    // Merges a partial update onto the stored record, then runs the full write path over the result.
     public static async Task<(JsonObject Merged, ValidationOutcome Outcome)> ApplyUpdateAsync(
         AppDbContext db, TableDefinition table, List<FieldDefinition> fields, Record record, JsonObject patch, bool replace)
     {
@@ -281,14 +266,13 @@ public static class RecordEngine
             merged = (JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject) ?? new JsonObject();
             foreach (var kv in patch)
             {
-                // Member by member, patching does not drop residuals.
+
                 var nested = fields.FirstOrDefault(f => f.Name == kv.Key) is { } f2 && FieldTypes.Of(f2).Shape == FieldShape.Object;
                 if (nested && merged[kv.Key] is JsonObject target && kv.Value is JsonObject source) MergeInto(target, source);
                 else merged[kv.Key] = kv.Value?.DeepClone();
             }
         }
 
-        // System ids are regenerated on every write, which would hand a record a new identity on each edit.
         var stored = (JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject) ?? new JsonObject();
         var systemIds = fields
             .Where(f => FieldValidation.NormalizeType(f.DataType) == "systemid")
@@ -305,7 +289,6 @@ public static class RecordEngine
 
     public sealed record CompositeSaveOutcome(Record Header, IReadOnlyList<Record> Lines);
 
-    // writes a header record and its child rows in one transaction, so both sides commit or neither does; lines save sequentially since there's one SQLite writer and each line's uniqueness check must see the ones before it
     public static async Task<(CompositeSaveOutcome? Result, ValidationOutcome Outcome)> SaveCompositeAsync(
         AppDbContext db,
         TableDefinition header, List<FieldDefinition> headerFields, JsonObject headerData,
@@ -319,7 +302,7 @@ public static class RecordEngine
 
         var headerRecord = new Record { TableId = header.Id, Id = Ids.NewShortId(12), JsonData = headerData.ToJsonString(), CreatedAt = DateTime.UtcNow };
         db.Records.Add(headerRecord);
-        // flushed so the reference-integrity check on each line finds the header row within this same transaction
+
         await db.SaveChangesAsync(token);
 
         var lineRecords = new List<Record>();
@@ -327,7 +310,7 @@ public static class RecordEngine
         {
             line[refFieldKey] = headerRecord.Id;
             var lineOutcome = await PrepareAsync(db, lineTable, lineFields, line);
-            if (lineOutcome.HasErrors) return (null, lineOutcome); // tx disposes without Commit below, rolling both back
+            if (lineOutcome.HasErrors) return (null, lineOutcome);
             var lineRecord = new Record { TableId = lineTable.Id, Id = Ids.NewShortId(12), JsonData = line.ToJsonString(), CreatedAt = DateTime.UtcNow };
             db.Records.Add(lineRecord);
             lineRecords.Add(lineRecord);
@@ -338,7 +321,6 @@ public static class RecordEngine
         return (new CompositeSaveOutcome(headerRecord, lineRecords), new ValidationOutcome(new(), new()));
     }
 
-    // Carries a field's stored values over when it is renamed. The records are keyed by field name, so without this a rename points the field at nothing: the column reads empty on every row and the values it held are orphaned under the old key. RecordIndexes moves the generated column for the same change; this moves the data under it.
     public static async Task<int> RenameFieldDataAsync(AppDbContext db, TableDefinition table, string from, string to)
     {
         if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to) || from == to) return 0;
@@ -350,7 +332,7 @@ public static class RecordEngine
             var obj = (JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject) ?? new JsonObject();
             if (!obj.TryGetPropertyValue(from, out var value)) continue;
             obj.Remove(from);
-            // The field's own value wins over anything already sitting under the new key, which can only be an orphan of some earlier field.
+
             obj[to] = value?.DeepClone();
             record.JsonData = obj.ToJsonString();
             moved++;
@@ -359,7 +341,6 @@ public static class RecordEngine
         return moved;
     }
 
-    // Removes a deleted field's values from every record. The console's confirmation says deleting a field "will irreversibly delete all the data contained in this field", and until this ran it did not: the values stayed in the record json, invisible to every read that projects by field but reachable from the SQL console and a backup, stripped a row at a time by PrepareAsync as records happened to be written, and inherited whole by any later field that reused the name. The counterpart of RecordIndexes.DropForAsync.
     public static async Task<int> DropFieldDataAsync(AppDbContext db, TableDefinition table, string name)
     {
         if (string.IsNullOrEmpty(name)) return 0;
@@ -377,17 +358,6 @@ public static class RecordEngine
         return cleared;
     }
 
-    // Brings stored records back in line with the table's computed fields.
-    //
-    // A computed field is server owned: the server, not the writer, decides its value, so the promise is that every stored record has one. PrepareAsync keeps that promise at write time, which is the only time it was ever kept: adding the field to a table that already stores rows left every one of them empty, and ApplyUpdateAsync then filled them one at a time as records happened to be edited, so the column was silently part-filled instead of plainly empty.
-    //
-    // This is RecordIndexes.SyncAsync's counterpart. That reconciles the schema objects a field change implies; this reconciles the record data it implies. Both are called from the same places for the same reason, and neither is optional after a field is created or retyped.
-    //
-    // A system id is filled only where it is missing, never replaced: it is the record's identity, and regenerating it is the bug ApplyUpdateAsync already guards against.
-    //
-    // `stale` names the fields whose stored values were never this field's to begin with, and for those the identity rule does not apply because there is no identity there to keep. A field retyped into a system id holds leftovers of the old type, and a newly created one holds whatever an earlier field of that name left behind, since deleting a field does not strip its data from the records. Retyping a Y/N column into a system id otherwise left every row reading "Y".
-    //
-    // A calculated or derived value is recomputed outright either way, because it is a pure function of the record and an edited expression makes every stored value stale in exactly the same sense.
     public static async Task<int> ReconcileComputedAsync(AppDbContext db, TableDefinition table, IReadOnlyCollection<string>? stale = null)
     {
         var computed = table.Fields.Where(f => FieldTypes.Of(f).Computed).ToList();
@@ -411,12 +381,11 @@ public static class RecordEngine
                     continue;
                 }
 
-                // A bad expression is refused when the field is saved, so a failure here is a record the expression cannot read. Leave that one alone instead of failing the whole table.
                 if (!TryCompute(f, obj, out _, out var value)) continue;
                 var current = obj.TryGetPropertyValue(f.Name, out var existing) ? existing : null;
                 if (value is null)
                 {
-                    // A derived value that computes to nothing is not stored, the same as at write time.
+
                     if (current is null) continue;
                     obj.Remove(f.Name);
                     touched = true;
@@ -440,7 +409,6 @@ public static class RecordEngine
         !obj.TryGetPropertyValue(name, out var v) || v is null ||
         (v is JsonValue jv && jv.GetValueKind() == JsonValueKind.String && string.IsNullOrWhiteSpace(jv.GetValue<string>()));
 
-    // Objects merge, everything else is replaced whole.
     private static void MergeInto(JsonObject target, JsonObject source)
     {
         foreach (var kv in source)

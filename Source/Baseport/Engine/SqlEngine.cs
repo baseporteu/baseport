@@ -5,7 +5,6 @@ using System.Text.RegularExpressions;
 
 namespace Baseport;
 
-// Shared read-only SQL validation/execution for the console and saved queries.
 public static class SqlEngine
 {
     private static readonly Regex Allowed = new(@"^\s*(SELECT|PRAGMA|EXPLAIN|WITH|VALUES)\b", RegexOptions.IgnoreCase);
@@ -20,7 +19,6 @@ public static class SqlEngine
         return null;
     }
 
-    // At most this many rows come back; the caller reports the cut.
     public const int MaxRows = 200;
 
     public sealed record Result(List<string> Columns, List<List<string?>> Rows, bool Truncated, string? Error);
@@ -32,39 +30,36 @@ public static class SqlEngine
         cmd.ExecuteNonQuery();
     }
 
-    // Runs a validated query and hands back the grid. configure runs against the connection before the query, for dialect compatibility functions a wire provider needs.
     public static async Task<Result> ReadAsync(AppDbContext db, string sql, Action<SqliteConnection>? configure = null, bool restrict = true)
     {
         var owned = db.Database.GetDbConnection();
         var source = new SqliteConnectionStringBuilder(owned.ConnectionString);
 
-        // an in-memory db lives only inside the connection that made it, a read-only one would open an empty database instead
         var inMemory = source.Mode == SqliteOpenMode.Memory || source.DataSource == ":memory:";
         var conn = inMemory
             ? owned
             : new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = source.DataSource,
-                // configure builds temp views and attached catalog schemas, and sqlite opens attached databases with the main database's flags, a read-only handle cannot write even to :memory:. The statement itself is locked down with query_only below, which covers main, temp and attached alike.
+
                 Mode = configure is null ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWrite
             }.ToString());
 
-        // Closing a connection the caller opened destroys an in-memory SQLite database.
         var wasOpen = conn.State == System.Data.ConnectionState.Open;
         try
         {
             if (!wasOpen) await conn.OpenAsync();
             if (configure is not null && conn is SqliteConnection sqlite)
             {
-                // sqlite connections are pooled, and query_only rides along on a pooled handle, the lockdown from the last statement has to be lifted before this one can build its catalog
+
                 if (!inMemory) Pragma(conn, "query_only = 0");
                 configure(sqlite);
-                // the owned connection belongs to the app and must stay writable; the ones opened here are ours to lock down before the caller's statement runs
+
                 if (!inMemory) Pragma(conn, "query_only = 1");
             }
-            // The wire providers run an untrusted, api-token-authenticated statement, it is confined to the projected catalog: no direct read of the system tables or the raw record store. The admin console and saved queries project the same row views but pass restrict: false, they keep reading the storage schema too.
+
             if (restrict && configure is not null && conn is SqliteConnection guarded) WireCatalog.Restrict(guarded);
-            
+
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql.TrimEnd().TrimEnd(';');
             using var reader = await cmd.ExecuteReaderAsync();
@@ -86,7 +81,7 @@ public static class SqlEngine
         }
         finally
         {
-            // Clear the authorizer before the handle returns to the pool (or, for an in-memory db, before the owned connection is reused by the app), the restriction never rides along on the next borrow.
+
             if (configure is not null && conn is SqliteConnection guarded) WireCatalog.Unrestrict(guarded);
             if (!wasOpen) await conn.CloseAsync();
             if (!inMemory) await conn.DisposeAsync();

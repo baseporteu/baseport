@@ -3,12 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// Takes the audit write off the request's critical path: written inline it is a second durable write, with its own commit, before the response goes out.
 public sealed class AuditLogWriter : BackgroundService
 {
     private const int BatchSize = 128;
 
-    // Bounded, because an unbounded queue turns a request flood into an OOM.
     private readonly Channel<AuditLog> _queue = Channel.CreateBounded<AuditLog>(
         new BoundedChannelOptions(4096) { FullMode = BoundedChannelFullMode.DropWrite });
 
@@ -34,13 +32,13 @@ public sealed class AuditLogWriter : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            // Shutdown, not a failure.
+
         }
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        // base.StopAsync cancels the loop's token; flush before calling it. DrainAsync takes one batch, and the queue stores 4096 entries, this loop is bounded.
+
         _queue.Writer.TryComplete();
         while (_queue.Reader.TryPeek(out _)) await DrainAsync();
         await base.StopAsync(cancellationToken);
@@ -58,7 +56,7 @@ public sealed class AuditLogWriter : BackgroundService
             using var scope = _scopes.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             db.AuditLogs.AddRange(batch);
-            // Not cancellable: these rows exist nowhere else once dequeued.
+
             await db.SaveChangesAsync();
         }
         catch (Exception ex)

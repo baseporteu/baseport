@@ -4,10 +4,9 @@ using System.Text.Json.Nodes;
 
 namespace Baseport;
 
-// turns JSON or multipart/form-data into the JsonObject RecordEngine expects, both reach the same one write path
 public static class MultipartRecord
 {
-    // Whether the last read refused a file for its size, so the caller can answer 413 instead of folding it into a generic 400. Read from the size itself rather than from the message, which is prose and drifts.
+
     public static bool Oversize(HttpContext ctx) =>
         ctx.Items.TryGetValue(OversizeKey, out var flag) && flag is true;
 
@@ -39,7 +38,7 @@ public static class MultipartRecord
             if (type == "file")
             {
                 var file = form.Files[f.Name];
-                if (file is null) continue; // not part of this submission; existing/default value applies
+                if (file is null) continue;
                 if (file.Length > FileStore.MaxBytes) ctx.Items[OversizeKey] = true;
                 var (stored, error) = await FileStore.SaveAsync(file, ctx.RequestAborted);
                 if (error is not null) errors.Add($"{f.Name}: {error}");
@@ -49,7 +48,6 @@ public static class MultipartRecord
 
             if (!form.TryGetValue(f.Name, out var values) || values.Count == 0) continue;
 
-            // A multiselect arrives as one form value per choice; every other type is a single value the write path coerces the same way it coerces an imported one.
             if (type == "multiselect")
                 obj[f.Name] = new JsonArray(values.Where(v => !string.IsNullOrEmpty(v)).Select(v => (JsonNode)v!).ToArray());
             else

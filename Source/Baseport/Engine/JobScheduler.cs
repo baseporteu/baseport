@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-// Runs due maintenance jobs and the operator's own scheduled queries on a 30-second tick.
 public sealed class JobScheduler : BackgroundService
 {
     private readonly IServiceScopeFactory _scopes;
@@ -26,7 +25,7 @@ public sealed class JobScheduler : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            // Shutdown, not a failure.
+
         }
     }
 
@@ -48,7 +47,7 @@ public sealed class JobScheduler : BackgroundService
             try
             {
                 job.LastResult = await def.Run(db, _log, ct);
-                // A job doing its job is not news; LastRunAt already records it.
+
                 _log.Debug("Job {Key} ran: {Result}", job.Key, job.LastResult);
             }
             catch (Exception ex)
@@ -63,7 +62,6 @@ public sealed class JobScheduler : BackgroundService
         await RunDueActionRunsAsync(scope, db, now, ct);
     }
 
-    // Durable action runs: a batch cap keeps one tick from running unboundedly long if a burst of writes queued a lot of work at once, the rest picks up on the next tick.
     private const int ActionRunBatchSize = 50;
 
     private async Task RunDueActionRunsAsync(IServiceScope scope, AppDbContext db, DateTime now, CancellationToken ct)
@@ -80,7 +78,7 @@ public sealed class JobScheduler : BackgroundService
             try { await ActionRunner.RunAsync(db, run, http, _log, ct); }
             catch (Exception ex)
             {
-                // ActionRunner already turns a step failure into a retry/failed state; reaching here something broke outside that (a bad record read), not the action itself.
+
                 run.LastError = ex.Message;
                 run.Attempts++;
                 run.Status = run.Attempts >= ActionRunner.MaxAttempts ? ActionRunStatus.Failed : ActionRunStatus.Pending;
@@ -91,7 +89,6 @@ public sealed class JobScheduler : BackgroundService
         }
     }
 
-    // The operator's own tasks. Kept separate from the fixed registry because one of them failing is their business, not a fault in the instance: it is recorded on the query and read in the console.
     private async Task RunScheduledQueriesAsync(IServiceScope scope, AppDbContext db, DateTime now, CancellationToken ct)
     {
         var http = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();

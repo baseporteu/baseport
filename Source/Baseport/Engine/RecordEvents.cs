@@ -6,13 +6,11 @@ namespace Baseport;
 
 public sealed record RecordEvent(string Action, string TableId, string RecordId, string? Json);
 
-// Broadcast to live subscribers.
 public static class RecordEvents
 {
-    // In process, a subscriber only sees writes from its own instance. See "Single node, on purpose" in AGENTS.md.
+
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Channel<RecordEvent>, byte> Subscribers = new();
 
-    // DropOldest, because one client on hotel wifi must not hold events for everyone.
     public static Channel<RecordEvent> Subscribe()
     {
         var channel = Channel.CreateBounded<RecordEvent>(
@@ -35,10 +33,9 @@ public static class RecordEvents
     internal static int SubscriberCount => Subscribers.Count;
 }
 
-// The one choke point every record write passes through, whichever endpoint made it.
 public sealed class RecordChangeInterceptor : SaveChangesInterceptor
 {
-    // Keyed by context: the interceptor is a singleton shared by the whole DbContext pool, a field would let two concurrent saves overwrite each other's pending list.
+
     private readonly System.Collections.Concurrent.ConcurrentDictionary<DbContext, List<RecordEvent>> _pending = new();
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
@@ -60,7 +57,6 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor
         return result;
     }
 
-    // Async only: enqueueing is a write; sync override exists only for untracked test seeding.
     public override async ValueTask<int> SavedChangesAsync(
         SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
     {
@@ -94,7 +90,6 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor
             };
             if (action is null) continue;
 
-            // Stamped here so every write passes through it; ensures change tracking marks it modified.
             if (entry.State is EntityState.Added or EntityState.Modified)
                 entry.Property(r => r.UpdatedAt).CurrentValue =
                     entry.State is EntityState.Added && entry.Entity.CreatedAt != default
@@ -111,7 +106,6 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor
         if (SchemaEntriesChanged(eventData.Context.ChangeTracker)) OpenApiCache.Invalidate();
     }
 
-    // a table or field write can change what the openapi document says, a record write cannot
     internal static bool SchemaEntriesChanged(Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker tracker) =>
         tracker.Entries<TableDefinition>().Any(e => e.State != EntityState.Unchanged)
         || tracker.Entries<FieldDefinition>().Any(e => e.State != EntityState.Unchanged);
