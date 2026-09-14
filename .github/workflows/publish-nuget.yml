@@ -1,0 +1,53 @@
+name: Publish to NuGet
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  DOTNET_VERSION: '11.0.x'
+  SOLUTION_PATH: 'Source/Baseport.slnx'
+  PROJECT_PATH: 'Source/Baseport.Client/Baseport.Client.csproj'
+
+jobs:
+  publish:
+    name: "Publish NuGet Package"
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write     # Required for OIDC token (NuGet trusted publishing)
+      contents: read
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Install .NET"
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-quality: 'preview'
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION_PATH }}
+
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION_PATH }} -c Release --no-restore
+
+      - name: Test
+        run: dotnet test ${{ env.SOLUTION_PATH }} -c Release --no-build
+
+      - name: Pack
+        run: dotnet pack ${{ env.PROJECT_PATH }} -c Release --no-build --include-symbols -p:SymbolPackageFormat=snupkg -o ./artifacts
+
+      - name: "NuGet login (OIDC)"
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}  # nuget.org profile name, NOT email
+
+      - name: "Push to NuGet"
+        run: dotnet nuget push './artifacts/*.nupkg' --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
