@@ -265,6 +265,22 @@ def main():
         random.shuffle(mixed)
         scenarios["mixed 90/10, 100 conns"] = (mixed, 100, False)
 
+    tx_api = "/api/transaction/v1/execute"
+
+    def tx_body(count, transactional):
+        return {"operations": [{"op": "create", "apiName": args.api_name, "value": new_record()} for _ in range(count)],
+                "transaction": transactional}
+
+    tx_small_n = max(n // 10, 20)
+    scenarios["transaction 10 ops, sequential"] = (
+        [("POST", tx_api, tx_body(10, False)) for _ in range(tx_small_n)], args.concurrency, False)
+    scenarios["transaction 10 ops, atomic"] = (
+        [("POST", tx_api, tx_body(10, True)) for _ in range(tx_small_n)], args.concurrency, False)
+
+    tx_big_n = max(n // 50, 10)
+    scenarios["transaction 128 ops, atomic"] = (
+        [("POST", tx_api, tx_body(128, True)) for _ in range(tx_big_n)], args.concurrency, False)
+
     results = []
     for name, (requests, concurrency, anonymous) in scenarios.items():
         result = measure(args.base, token, client.cookie, name, requests, concurrency, anonymous)
@@ -277,10 +293,65 @@ def main():
         else:
             print(f"{name:<24} all requests refused: {result['failed']} failed, {result['rejected']} rate-limited")
 
+    transaction_contention_check(args.base, token, client.cookie, args.api_name)
+
     if args.out:
         with open(args.out, "w") as handle:
             json.dump({"label": args.label, "rows": args.rows, "results": results}, handle, indent=2)
         print(f"wrote {args.out}")
+
+
+def transaction_contention_check(base, token, cookie, api_name, contenders=20, ops_per_batch=5):
+    """Not a latency scenario: correctness under real concurrency. `contenders`
+    threads each submit an atomic (transaction: true) batch whose *first* op
+    creates a record with the same unique `reference`. SQLite's unique index
+    lets exactly one of those inserts land; every other batch must come back
+    409 with none of its other ops applied. Prints PASS/FAIL rather than
+    timings, and exits non-zero on failure so it can gate CI later."""
+    shared_reference = f"RACE-{short_id(8)}"
+    tag = short_id(6)
+
+    def batch(i):
+        ops = [{"op": "create", "apiName": api_name,
+                "value": {"reference": shared_reference, "customer": f"contender-{i}", "city": "Utrecht",
+                          "status": "new", "amount": 1, "note": "race"}}]
+        for j in range(ops_per_batch - 1):
+            ops.append({"op": "create", "apiName": api_name,
+                        "value": {"reference": f"RACE-{tag}-{i}-{j}", "customer": f"contender-{i}",
+                                  "city": "Utrecht", "status": "new", "amount": 1, "note": "race"}})
+        return {"operations": ops, "transaction": True}
+
+    def send(i):
+        client = Client(base)
+        client.token, client.cookie = token, cookie
+        status, data = client.request("POST", "/api/transaction/v1/execute", batch(i))
+        client.conn.close()
+        return status, data
+
+    with ThreadPoolExecutor(max_workers=contenders) as pool:
+        outcomes = list(pool.map(send, range(contenders)))
+
+    api = f"/api/v1/{api_name}/records"
+    client = Client(base)
+    client.token, client.cookie = token, cookie
+    winners = [s for s, _ in outcomes if s < 300]
+    losers = [s for s, _ in outcomes if s >= 300]
+    won_ref = client.json("GET", f"{api}?q={shared_reference}")
+    lost_refs = client.json("GET", f"{api}?q=RACE-{tag}")
+
+    ok = (
+        len(winners) == 1
+        and all(s == 409 for s in losers)
+        and won_ref["total"] == 1
+        and lost_refs["total"] == ops_per_batch - 1  # only the winner's other ops
+    )
+    print(f"\ntransaction contention ({contenders} concurrent atomic batches racing one unique field):")
+    print(f"  winners={len(winners)} (want 1)  loser statuses={sorted(set(losers))} (want [409])  "
+          f"winning-ref rows={won_ref['total']} (want 1)  winner's-other-rows={lost_refs['total']} (want {ops_per_batch - 1})")
+    print("  PASS: every losing batch rolled back cleanly, no partial writes, no 500s"
+          if ok else "  FAIL: see counts above")
+    if not ok:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

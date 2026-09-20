@@ -211,7 +211,7 @@ try
     app.MapActionEndpoints();
     app.MapAdminEndpoints();
     app.MapPublicApiEndpoints();
-
+    app.MapTransactionEndpoints();
     app.MapFragmentEndpoints();
     app.MapConsoleEndpoints();
 
