@@ -46,6 +46,8 @@ public static class AdminAuthMiddleware
 
         || path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase)
 
+        || path.StartsWith("/api/transaction/", StringComparison.OrdinalIgnoreCase)
+
         || path.StartsWith("/api/forms/", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/api/openapi.json", StringComparison.OrdinalIgnoreCase)
 

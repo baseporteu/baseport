@@ -47,6 +47,9 @@ public class RecordTransactionsTests : IDisposable
     private static RecordTransactions.Operation Delete(string apiName, string id) =>
         new("delete", apiName, id, null);
 
+    private static UserAccount Caller(string id = "tester", string role = AccountRoles.Consumer, string apiTokenMethods = ApiMethods.Default) =>
+        new() { Id = id, Role = role, ApiTokenMethods = apiTokenMethods };
+
     [Fact]
     public async Task Sequential_operations_apply_and_return_one_id_per_operation()
     {
@@ -56,7 +59,7 @@ public class RecordTransactionsTests : IDisposable
         {
             Create("notes", "first"),
             Create("notes", "second")
-        }, transactional: false, userId: null, TestContext.Current.CancellationToken);
+        }, transactional: false, Caller(), TestContext.Current.CancellationToken);
 
         Assert.False(outcome.HasErrors);
         Assert.Equal(2, outcome.Ids!.Count);
@@ -72,7 +75,7 @@ public class RecordTransactionsTests : IDisposable
         {
             Create("notes", "kept"),
             new("create", "no-such-table", null, new JsonObject())
-        }, transactional: false, userId: null, TestContext.Current.CancellationToken);
+        }, transactional: false, Caller(), TestContext.Current.CancellationToken);
 
         Assert.True(outcome.HasErrors);
         Assert.Equal(ApiProblem.NotFound, outcome.Problem);
@@ -88,7 +91,7 @@ public class RecordTransactionsTests : IDisposable
         {
             Create("notes", "rolled-back"),
             new("create", "no-such-table", null, new JsonObject())
-        }, transactional: true, userId: null, TestContext.Current.CancellationToken);
+        }, transactional: true, Caller(), TestContext.Current.CancellationToken);
 
         Assert.True(outcome.HasErrors);
         Assert.Equal(0, await _db.Records.CountAsync(r => r.TableId == table.Id, TestContext.Current.CancellationToken));
@@ -100,14 +103,14 @@ public class RecordTransactionsTests : IDisposable
         await NotesAsync();
         var ops = new List<RecordTransactions.Operation> { Create("notes", "v1") };
 
-        var first = await RecordTransactions.ExecuteAsync(_db, ops, transactional: true, userId: null, TestContext.Current.CancellationToken);
+        var first = await RecordTransactions.ExecuteAsync(_db, ops, transactional: true, Caller(), TestContext.Current.CancellationToken);
         var id = first.Ids![0];
 
         var second = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
         {
             Update("notes", id, "v2"),
             Delete("notes", id)
-        }, transactional: true, userId: null, TestContext.Current.CancellationToken);
+        }, transactional: true, Caller(), TestContext.Current.CancellationToken);
 
         Assert.False(second.HasErrors);
         Assert.Equal(0, await _db.Records.CountAsync(TestContext.Current.CancellationToken));
@@ -119,7 +122,7 @@ public class RecordTransactionsTests : IDisposable
         await NotesAsync();
         var ops = Enumerable.Range(0, 129).Select(i => Create("notes", i.ToString())).ToList();
 
-        var outcome = await RecordTransactions.ExecuteAsync(_db, ops, transactional: false, userId: null, TestContext.Current.CancellationToken);
+        var outcome = await RecordTransactions.ExecuteAsync(_db, ops, transactional: false, Caller(), TestContext.Current.CancellationToken);
 
         Assert.True(outcome.HasErrors);
         Assert.Equal(ApiProblem.BadRequest, outcome.Problem);
@@ -134,10 +137,26 @@ public class RecordTransactionsTests : IDisposable
         var outcome = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
         {
             Create("notes", "denied")
-        }, transactional: false, userId: "someone", TestContext.Current.CancellationToken);
+        }, transactional: false, Caller("someone"), TestContext.Current.CancellationToken);
 
         Assert.True(outcome.HasErrors);
         Assert.Equal(ApiProblem.Forbidden, outcome.Problem);
+        Assert.Equal(0, await _db.Records.CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_read_only_key_cannot_delete_even_when_the_table_allows_it()
+    {
+        await NotesAsync();
+        var readOnly = Caller(apiTokenMethods: "GET");
+
+        var outcome = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
+        {
+            Create("notes", "should be refused")
+        }, transactional: false, readOnly, TestContext.Current.CancellationToken);
+
+        Assert.True(outcome.HasErrors);
+        Assert.Equal(ApiProblem.MethodNotAllowed, outcome.Problem);
         Assert.Equal(0, await _db.Records.CountAsync(TestContext.Current.CancellationToken));
     }
 
@@ -160,7 +179,7 @@ public class RecordTransactionsTests : IDisposable
         var outcome = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
         {
             Delete("notes", "whatever")
-        }, transactional: false, userId: null, TestContext.Current.CancellationToken);
+        }, transactional: false, Caller(), TestContext.Current.CancellationToken);
 
         Assert.True(outcome.HasErrors);
         Assert.Equal(ApiProblem.MethodNotAllowed, outcome.Problem);

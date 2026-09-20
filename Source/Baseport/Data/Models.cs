@@ -123,8 +123,17 @@ public static class ApiMethods
     public static string Serialize(IEnumerable<string> methods) =>
         string.Join(",", methods.Select(m => m.ToUpperInvariant()).Where(All.Contains).Distinct());
 
+    public const string Default = "GET,POST,PATCH,PUT,DELETE";
+
     public static bool Allows(TableDefinition table, string method) =>
         Parse(table.ApiMethods).Contains(method.ToUpperInvariant());
+
+    // Table ApiMethods AND caller ApiTokenMethods; either narrows a verb independently.
+    public static bool Allows(TableDefinition table, UserAccount caller, string method)
+    {
+        var m = method.ToUpperInvariant();
+        return Parse(table.ApiMethods).Contains(m) && Parse(caller.ApiTokenMethods).Contains(m);
+    }
 }
 
 public static class AccountRoles
@@ -233,6 +242,7 @@ public class UserAccount
     public string ApiTokenHash { get; set; } = "";
     public bool ApiEnabled { get; set; } = false;
     public DateTime? ApiTokenExpiresAt { get; set; }
+    public string ApiTokenMethods { get; set; } = ApiMethods.Default;
     public string PasswordHash { get; set; } = "";
     public bool MustChangePassword { get; set; } = false;
     public DateTime? LastLoginAt { get; set; }
@@ -364,6 +374,7 @@ public class AuditLog
     public int Status { get; set; }
     public string TableName { get; set; } = "";
     public string Message { get; set; } = "";
+    public string ClientIp { get; set; } = "";
 }
 
 public class JobConfig

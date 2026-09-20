@@ -63,8 +63,10 @@ public static partial class RecordAccess
     public static string? Problem(string? rule, IReadOnlyList<FieldDefinition> fields)
     {
         if (string.IsNullOrWhiteSpace(rule)) return null;
-        if (rule.Length > 2000) return "An access rule must be 2000 characters or fewer.";
-        if (rule.Contains(';')) return "An access rule is a single expression and cannot contain ';'.";
+        if (rule.Length > 2000) 
+            return "An access rule must be 2000 characters or fewer.";
+        if (rule.Contains(';')) 
+            return "An access rule is a single expression and cannot contain ';'.";
 
         foreach (Match match in AliasReference().Matches(rule))
         {
@@ -73,7 +75,8 @@ public static partial class RecordAccess
 
             if (alias == "_USER_")
             {
-                if (name != "id") return $"_USER_ has no '{name}'. Only _USER_.id is available.";
+                if (name is not ("id" or "role")) 
+                    return $"_USER_ has no '{name}'. Only _USER_.id and _USER_.role are available.";
                 continue;
             }
             if (fields.All(f => f.Name != name))
@@ -87,19 +90,24 @@ public static partial class RecordAccess
         return null;
     }
 
-    internal static string Rewrite(string rule, IReadOnlyList<FieldDefinition> fields, string? rowAlias, string? userId, JsonObject? request, JsonObject? row, List<object?> args)
+    internal static string Rewrite(string rule, IReadOnlyList<FieldDefinition> fields, string? rowAlias, string? userId, JsonObject? request, JsonObject? row, List<object?> args, string? callerRole = null)
     {
         return AliasReference().Replace(rule, match =>
         {
             var alias = match.Groups["alias"].Value;
             var name = match.Groups["quoted"].Success ? match.Groups["quoted"].Value : match.Groups["bare"].Value;
 
-            if (alias == "_USER_") return Slot(args, userId);
-            if (alias == "_REQ_") return Slot(args, Value(request, name));
+            if (alias == "_USER_") 
+                return Slot(args, name == "role" ? callerRole : userId);
+            if (alias == "_REQ_") 
+                return Slot(args, Value(request, name));
 
             var field = fields.FirstOrDefault(f => f.Name == name);
-            if (field is null) return "NULL";
-            if (rowAlias is not null) return QueryEngine.JsonPathFor(field.Name, rowAlias);
+            if (field is null) 
+                return "NULL";
+            if (rowAlias is not null) 
+                return QueryEngine.JsonPathFor(field.Name, rowAlias);
+            
             return row is null ? "NULL" : Slot(args, Value(row, name));
         });
     }
@@ -112,14 +120,15 @@ public static partial class RecordAccess
         string? userId,
         string? recordId = null,
         JsonObject? request = null,
-        JsonObject? row = null)
+        JsonObject? row = null,
+        string? callerRole = null)
     {
         var rule = RuleFor(table, permission);
         if (string.IsNullOrWhiteSpace(rule)) return true;
 
         var args = new List<object?>();
         var fromRow = recordId is not null;
-        var expression = Rewrite(rule, fields, fromRow ? "r" : null, userId, request, row, args);
+        var expression = Rewrite(rule, fields, fromRow ? "r" : null, userId, request, row, args, callerRole);
 
         string sql;
         if (fromRow)

@@ -24,7 +24,7 @@ public static class TransactionEndpoints
 
             var transactional = body["transaction"] is JsonValue tv && tv.TryGetValue<bool>(out var t) && t;
 
-            var outcome = await RecordTransactions.ExecuteAsync(db, ops, transactional, caller.Id, ctx.RequestAborted);
+            var outcome = await RecordTransactions.ExecuteAsync(db, ops, transactional, caller, ctx.RequestAborted);
             if (outcome.Problem is { } problem) 
                 return ApiProblems.Write(ctx, problem, outcome.Detail ?? problem.Title);
 

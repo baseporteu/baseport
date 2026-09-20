@@ -63,7 +63,7 @@ public static class AdminAuth
     public static string? UserIdFor(HttpContext ctx) =>
         ctx.Items[ResolvedKey] as string ?? UserTokens.Verify(ctx.Request.Cookies[AuthCookie], DateTime.UtcNow)?.Sub;
 
-    private const string ResolvedKey = "baseport.uid";
+    internal const string ResolvedKey = "baseport.uid";
 
     private static UserAccount Remember(HttpContext ctx, UserAccount user)
     {

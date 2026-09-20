@@ -17,7 +17,10 @@ public static class ApiAuth
 
         var presented = header["Bearer ".Length..].Trim();
         if (presented.Length == 0) return null;
-        return await ResolveByTokenAsync(db, presented) ?? await ResolveJwtAsync(db, presented);
+
+        var account = await ResolveByTokenAsync(db, presented) ?? await ResolveJwtAsync(db, presented);
+        if (account is not null) ctx.Items[AdminAuth.ResolvedKey] = account.Id;
+        return account;
     }
 
     public static async Task<UserAccount?> ResolveJwtAsync(AppDbContext db, string token)

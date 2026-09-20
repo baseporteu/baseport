@@ -56,6 +56,27 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
+    public async Task A_rule_can_refer_to_the_callers_role_not_just_their_id()
+    {
+        var (table, fields) = await NotesAsync(createRule: "_USER_.role = 'consumer'");
+
+        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, "acct-1", callerRole: "consumer"));
+        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, "acct-2", callerRole: "user"));
+    }
+
+    [Fact]
+    public void A_rule_referencing_USER_role_is_accepted_by_validation()
+    {
+        Assert.Null(RecordAccess.Problem("_USER_.role = 'admin'", new List<FieldDefinition>()));
+    }
+
+    [Fact]
+    public void A_rule_referencing_any_other_USER_field_is_still_refused()
+    {
+        Assert.NotNull(RecordAccess.Problem("_USER_.email = 'x'", new List<FieldDefinition>()));
+    }
+
+    [Fact]
     public async Task A_table_with_no_rule_is_open_to_every_caller_the_switches_let_through()
     {
         var (table, fields) = await NotesAsync();

@@ -16,8 +16,9 @@ public static class AuditLogMiddleware
             await next();
 
             var note = context.Items[NoteKey] as string;
+            var isConsoleRead = path.StartsWith("/api/_admin", StringComparison.Ordinal);
 
-            if (method is "GET" or "HEAD" or "OPTIONS" && note is null) return;
+            if (method is "GET" or "HEAD" or "OPTIONS" && note is null && !isConsoleRead) return;
 
             if (!path.StartsWith("/api", StringComparison.Ordinal) || path == "/api/_admin/logs" || path == ClientErrorEndpoints.Route) return;
 
@@ -30,7 +31,8 @@ public static class AuditLogMiddleware
                 Status = context.Response.StatusCode,
                 Message = note ?? "",
 
-                UserId = AdminAuth.UserIdFor(context) ?? ""
+                UserId = AdminAuth.UserIdFor(context) ?? "",
+                ClientIp = RateLimit.ClientKey(context)
             });
         });
 }

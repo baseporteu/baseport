@@ -129,6 +129,20 @@ def seed_form(client, table_id, match_field="reference"):
     return form["id"]
 
 
+def make_account(client, role, methods=None):
+    """new account, issues its own API token, optionally scopes it"""
+    username = f"stress-{role}-{short_id(8)}"
+    account = client.json("POST", f"{ADMIN}/accounts", {"username": username, "email": "", "role": role})
+    expiry = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 86400))
+    issued = client.json("POST", f"{ADMIN}/accounts/{account['id']}/token", {"expiresAt": expiry})
+    if methods is not None:
+        client.json("PATCH", f"{ADMIN}/accounts/{account['id']}", {"apiTokenMethods": methods})
+    token = issued.get("token") or issued.get("apiToken")
+    if not token:
+        sys.exit(f"No raw token in the issue response: {issued}")
+    return account["id"], token
+
+
 def fill(db_path, table_id, rows):
     """straight into SQLite. _records is five stable columns (Id, TableId,
     JsonData, CreatedAt, UpdatedAt) and the write path is not what this
@@ -294,6 +308,9 @@ def main():
             print(f"{name:<24} all requests refused: {result['failed']} failed, {result['rejected']} rate-limited")
 
     transaction_contention_check(args.base, token, client.cookie, args.api_name)
+    api_token_methods_check(args.base, client, args.api_name)
+    user_role_rule_check(args.base, client, args.api_name)
+    audit_attribution_check(args.base, client, args.api_name)
 
     if args.out:
         with open(args.out, "w") as handle:
@@ -349,6 +366,146 @@ def transaction_contention_check(base, token, cookie, api_name, contenders=20, o
     print(f"  winners={len(winners)} (want 1)  loser statuses={sorted(set(losers))} (want [409])  "
           f"winning-ref rows={won_ref['total']} (want 1)  winner's-other-rows={lost_refs['total']} (want {ops_per_batch - 1})")
     print("  PASS: every losing batch rolled back cleanly, no partial writes, no 500s"
+          if ok else "  FAIL: see counts above")
+    if not ok:
+        sys.exit(1)
+
+
+def api_token_methods_check(base, admin_client, api_name, concurrency=20):
+    """A GET-only key must never create, concurrently, even though the table itself
+    allows every verb. RecordTransactions.ApplyAsync runs the same check independently
+    of MethodGate, so both call sites get exercised here."""
+    _, read_only_token = make_account(admin_client, "consumer", methods=["GET"])
+    _, full_token = make_account(admin_client, "consumer")
+    api = f"/api/v1/{api_name}/records"
+
+    def create_with(token):
+        client = Client(base)
+        client.token = token
+        status, _ = client.request("POST", api, {"reference": f"ROK-{short_id(8)}", "customer": "x",
+                                                   "city": "Utrecht", "status": "new", "amount": 1, "note": "x"})
+        client.conn.close()
+        return status
+
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        blocked = list(pool.map(create_with, [read_only_token] * concurrency))
+
+    allowed_status = create_with(full_token)
+
+    tx_client = Client(base)
+    tx_client.token = read_only_token
+    tx_status, _ = tx_client.request("POST", "/api/transaction/v1/execute", {
+        "operations": [{"op": "create", "apiName": api_name, "value": {"reference": f"ROKTX-{short_id(8)}"}}],
+        "transaction": False,
+    })
+    tx_client.conn.close()
+
+    read_client = Client(base)
+    read_client.token = read_only_token
+    read_status, _ = read_client.request("GET", api)
+    read_client.conn.close()
+
+    ok = all(s == 405 for s in blocked) and allowed_status < 300 and tx_status == 405 and read_status < 300
+    print(f"\napi token methods ({concurrency} concurrent POSTs with a GET-only key):")
+    print(f"  blocked statuses={sorted(set(blocked))} (want [405])  full-access-key create={allowed_status} (want 2xx)  "
+          f"transaction endpoint, same key={tx_status} (want 405)  GET, same key={read_status} (want 2xx)")
+    print("  PASS: per-key method scope holds under concurrency, in MethodGate and the transaction endpoint"
+          if ok else "  FAIL: see statuses above")
+    if not ok:
+        sys.exit(1)
+
+
+def user_role_rule_check(base, admin_client, api_name, concurrency=20):
+    """_USER_.role in a CreateRule must hold under concurrent callers of both roles."""
+    table = next(t for t in admin_client.json("GET", f"{ADMIN}/tables") if t.get("apiName") == api_name)
+    original_rule = table.get("createRule", "")
+    admin_client.json("PATCH", f"{ADMIN}/tables/{table['id']}", {"createRule": "_USER_.role = 'consumer'"})
+
+    _, consumer_token = make_account(admin_client, "consumer")
+    _, user_token = make_account(admin_client, "user")
+    api = f"/api/v1/{api_name}/records"
+
+    def create_with(token):
+        client = Client(base)
+        client.token = token
+        status, _ = client.request("POST", api, {"reference": f"ROLE-{short_id(8)}", "customer": "x",
+                                                   "city": "Utrecht", "status": "new", "amount": 1, "note": "x"})
+        client.conn.close()
+        return status
+
+    tokens = [consumer_token] * concurrency + [user_token] * concurrency
+    with ThreadPoolExecutor(max_workers=concurrency * 2) as pool:
+        statuses = list(pool.map(create_with, tokens))
+
+    admin_client.json("PATCH", f"{ADMIN}/tables/{table['id']}", {"createRule": original_rule})
+
+    consumer_statuses, user_statuses = statuses[:concurrency], statuses[concurrency:]
+    ok = all(s < 300 for s in consumer_statuses) and all(s == 403 for s in user_statuses)
+    print(f"\n_USER_.role rule ({concurrency} consumer + {concurrency} user callers, CreateRule: _USER_.role = 'consumer'):")
+    print(f"  consumer statuses={sorted(set(consumer_statuses))} (want 2xx)  user statuses={sorted(set(user_statuses))} (want [403])")
+    print("  PASS: role-based rule holds under concurrent mixed-role load, no 500s"
+          if ok else "  FAIL: see statuses above")
+    if not ok:
+        sys.exit(1)
+
+
+def audit_attribution_check(base, admin_client, api_name, concurrency=20):
+    """Two API keys fire concurrent, interleaved writes against the same table.
+    ctx.Items is per-request, so there is nothing to lock, but that is exactly
+    the claim under test: prove no cross-request bleed under real concurrency,
+    not just read the code. Also checks admin console GETs now attribute, and
+    that ClientIp landed."""
+    audit_api = f"{api_name}-audit-{short_id(6).lower()}"
+    table = admin_client.json("POST", f"{ADMIN}/tables", {"Name": f"Stress {audit_api}", "ApiName": audit_api})
+    for field in FIELDS:
+        admin_client.json("POST", f"{ADMIN}/tables/{table['id']}/fields", field)
+    admin_client.json("PATCH", f"{ADMIN}/tables/{table['id']}", {"apiEnabled": True, "apiName": audit_api})
+
+    acct_a, token_a = make_account(admin_client, "consumer")
+    acct_b, token_b = make_account(admin_client, "consumer")
+    api = f"/api/v1/{audit_api}/records"
+
+    def create_with(token):
+        client = Client(base)
+        client.token = token
+        status, _ = client.request("POST", api, {"reference": f"AUD-{short_id(8)}", "customer": "x",
+                                                   "city": "Utrecht", "status": "new", "amount": 1, "note": "x"})
+        client.conn.close()
+        return status
+
+    tokens = [token_a] * concurrency + [token_b] * concurrency
+    with ThreadPoolExecutor(max_workers=concurrency * 2) as pool:
+        statuses = list(pool.map(create_with, tokens))
+
+    # a few admin console reads too, now that they are meant to attribute
+    for _ in range(3):
+        admin_client.request("GET", f"{ADMIN}/tables")
+
+    time.sleep(0.3)  # writer batches on a channel; give it one drain cycle
+
+    logs = admin_client.json("GET", f"{ADMIN}/logs?page=1&perPage=200&filter={audit_api}")["logs"]
+    write_rows = [l for l in logs if l["method"] == "POST"]
+    by_a = sum(1 for l in write_rows if l["userId"] == acct_a)
+    by_b = sum(1 for l in write_rows if l["userId"] == acct_b)
+    blank_or_other = [l["userId"] for l in write_rows if l["userId"] not in (acct_a, acct_b)]
+    ips = {l["clientIp"] for l in write_rows}
+
+    console_logs = admin_client.json("GET", f"{ADMIN}/logs?page=1&perPage=50&filter=_admin/tables")["logs"]
+    console_gets = [l for l in console_logs if l["method"] == "GET"]
+
+    ok = (
+        all(s < 300 for s in statuses)
+        and by_a == concurrency and by_b == concurrency
+        and len(blank_or_other) == 0
+        and ips == {"127.0.0.1"}
+        and len(console_gets) > 0
+        and all(l["userId"] for l in console_gets)
+    )
+    print(f"\naudit attribution ({concurrency} + {concurrency} concurrent interleaved writers, two API keys):")
+    print(f"  writes by key A={by_a} (want {concurrency})  writes by key B={by_b} (want {concurrency})  "
+          f"unattributed/wrong={len(blank_or_other)} (want 0)  client ips seen={ips}  "
+          f"console GETs logged={len(console_gets)} (want >0), all attributed={all(l['userId'] for l in console_gets)}")
+    print("  PASS: every write attributed to the key that made it, no cross-request bleed, console reads now audited"
           if ok else "  FAIL: see counts above")
     if not ok:
         sys.exit(1)

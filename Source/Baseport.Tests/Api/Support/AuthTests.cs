@@ -24,6 +24,7 @@ public class AuthTests
     [InlineData("/api/v1/files/avatars", true)]
     [InlineData("/api/v1/tables/abc/records", true)]
     [InlineData("/api/openapi.json", true)]
+    [InlineData("/api/transaction/v1/execute", true)]
 
     [InlineData("/api/_admin/forms", false)]
     [InlineData("/api/_admin/forms/abc123", false)]

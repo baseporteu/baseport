@@ -2,7 +2,7 @@
                 <div class='page-header'>
                     <div>
                         <h1>Activity Log</h1>
-                        <p class='page-sub'>Recent mutating API requests.</p>
+                        <p class='page-sub'>Recent API requests: every mutation, plus console reads.</p>
                     </div>
                     <div class='page-actions'>
                         <button class='btn btn-outline' onclick='loadLogs()'>Refresh</button>
@@ -19,6 +19,7 @@
                     <table class='table logs-table'>
                         <thead><tr>
                             <th class='th-sort' data-sort='createdAt' onclick='sortLogs("createdAt")'>When</th>
+                            <th class='th-sort' data-sort='userId' onclick='sortLogs("userId")'>Actor</th>
                             <th class='th-sort' data-sort='method' onclick='sortLogs("method")'>Method</th>
                             <th class='th-sort' data-sort='path' onclick='sortLogs("path")'>Path</th>
                             <th class='th-sort' data-sort='status' onclick='sortLogs("status")'>Status</th>

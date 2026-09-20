@@ -14,7 +14,7 @@ public static class RecordTransactions
         public bool HasErrors => Problem is not null;
     }
 
-    public static async Task<Outcome> ExecuteAsync(AppDbContext db, IReadOnlyList<Operation> ops, bool transactional, string? userId, CancellationToken ct)
+    public static async Task<Outcome> ExecuteAsync(AppDbContext db, IReadOnlyList<Operation> ops, bool transactional, UserAccount caller, CancellationToken ct)
     {
         if (ops.Count == 0) return new Outcome([], null, null);
         if (ops.Count > MaxOperations)
@@ -26,7 +26,7 @@ public static class RecordTransactions
             var ids = new List<string>();
             foreach (var op in ops)
             {
-                var result = await ApplyAsync(db, op, userId, ct);
+                var result = await ApplyAsync(db, op, caller, ct);
                 if (result.Problem is not null)
                 {
                     if (tx is not null) await tx.RollbackAsync(ct);
@@ -44,20 +44,21 @@ public static class RecordTransactions
         }
     }
 
-    private static async Task<Outcome> ApplyAsync(AppDbContext db, Operation op, string? userId, CancellationToken ct)
+    private static async Task<Outcome> ApplyAsync(AppDbContext db, Operation op, UserAccount caller, CancellationToken ct)
     {
         var verb = op.Op switch { "create" => "POST", "update" => "PATCH", "delete" => "DELETE", _ => null };
-        if (verb is null) 
+        if (verb is null)
             return Fail(ApiProblem.BadRequest, $"'{op.Op}' must be create, update or delete.");
 
         var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == op.ApiName && t.ApiEnabled, ct);
-        if (table is null) 
+        if (table is null)
             return Fail(ApiProblem.NotFound, $"'{op.ApiName}' is not a published table.");
 
-        if (table.IsProxy) 
+        if (table.IsProxy)
             return Fail(ApiProblem.BadRequest, $"'{op.ApiName}' is a proxy table and cannot be written to by a transaction.");
-            
-        if (!ApiMethods.Allows(table, verb)) 
+
+        // Same check as MethodGate: table ApiMethods AND caller ApiTokenMethods. Done here because this resolves a table per op, not once per request.
+        if (!ApiMethods.Allows(table, caller, verb))
             return Fail(ApiProblem.MethodNotAllowed, $"{verb} is not enabled for '{op.ApiName}'.");
 
         var fields = table.Fields.OrderBy(f => f.Position).ThenBy(f => f.Id).ToList();
@@ -71,7 +72,7 @@ public static class RecordTransactions
                 if (outcome.HasErrors) 
                     return FailFrom(outcome, op.ApiName);
 
-                if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, userId, request: obj))
+                if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, caller.Id, request: obj, callerRole: caller.Role))
                     return Fail(ApiProblem.Forbidden, $"That record is not yours to create in '{op.ApiName}'.");
 
                 var record = new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
@@ -92,7 +93,7 @@ public static class RecordTransactions
                     return Fail(ApiProblem.NotFound, $"Record '{op.RecordId}' not found in '{op.ApiName}'.");
 
                 var obj = op.Value ?? new JsonObject();
-                if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Update, userId, op.RecordId, request: obj))
+                if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Update, caller.Id, op.RecordId, request: obj, callerRole: caller.Role))
                     return Fail(ApiProblem.Forbidden, $"Record '{op.RecordId}' is not yours to change.");
 
                 var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, obj, replace: false);
@@ -114,7 +115,7 @@ public static class RecordTransactions
                 if (record is null) 
                     return Fail(ApiProblem.NotFound, $"Record '{op.RecordId}' not found in '{op.ApiName}'.");
 
-                if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Delete, userId, op.RecordId))
+                if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Delete, caller.Id, op.RecordId, callerRole: caller.Role))
                     return Fail(ApiProblem.Forbidden, $"Record '{op.RecordId}' is not yours to delete.");
 
                 db.Records.Remove(record);

@@ -153,6 +153,22 @@ public class StartupGuardTests : IDisposable
         Assert.False((await AdminAuth.ResolveAsync(_db, await SignedInAsync(user)))!.MustChangePassword);
     }
 
+    [Fact]
+    public async Task ABearerTokenResolutionIsVisibleToUserIdForTheSameWayACookieSessionIs()
+    {
+        var account = await AccountAsync("k1", AccountRoles.Consumer);
+        account.ApiTokenHash = ApiAuth.HashToken("plain-token-k1");
+        account.ApiEnabled = true;
+        account.ApiTokenExpiresAt = DateTime.UtcNow.AddDays(1);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers.Authorization = "Bearer plain-token-k1";
+
+        Assert.Equal(account.Id, (await ApiAuth.ResolveAsync(_db, ctx))!.Id);
+        Assert.Equal(account.Id, AdminAuth.UserIdFor(ctx));
+    }
+
     private async Task<UserAccount> AccountAsync(string id, string role, bool mustChange = false)
     {
         await SchemaBootstrap.ApplyAsync(_db);

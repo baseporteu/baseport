@@ -195,6 +195,8 @@ public static class FragmentEndpoints
             {
                 ("createdAt", false) => query.OrderBy(l => l.CreatedAt),
                 ("createdAt", true) => query.OrderByDescending(l => l.CreatedAt),
+                ("userId", false) => query.OrderBy(l => l.UserId),
+                ("userId", true) => query.OrderByDescending(l => l.UserId),
                 ("method", false) => query.OrderBy(l => l.Method),
                 ("method", true) => query.OrderByDescending(l => l.Method),
                 ("path", false) => query.OrderBy(l => l.Path),
@@ -215,6 +217,7 @@ public static class FragmentEndpoints
             {
                 html.Append("<tr>")
                     .Append(Html.Cell(l.CreatedAt.ToLocalTime(), "muted"))
+                    .Append(Html.Cell(l.UserId.Length > 8 ? l.UserId[..8] + "…" : (l.UserId.Length > 0 ? l.UserId : "-"), "mono-id"))
                     .Append(Html.RawCell($"<code>{Html.Text(l.Method)}</code>"))
                     .Append(Html.RawCell($"<code>{Html.Text(l.Path)}</code>"))
 

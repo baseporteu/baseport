@@ -49,6 +49,35 @@ public class ApiMethodTests
     }
 
     [Fact]
+    public void A_key_scoped_to_read_only_cannot_write_even_when_the_table_allows_it()
+    {
+        var table = Table("GET,POST,PATCH,PUT,DELETE");
+        var readOnlyKey = new UserAccount { Id = "acct-1", ApiTokenMethods = "GET" };
+
+        Assert.True(ApiMethods.Allows(table, readOnlyKey, "GET"));
+        Assert.False(ApiMethods.Allows(table, readOnlyKey, "POST"));
+        Assert.False(ApiMethods.Allows(table, readOnlyKey, "DELETE"));
+    }
+
+    [Fact]
+    public void A_full_access_key_still_cannot_exceed_what_the_table_publishes()
+    {
+        var table = Table("GET,POST");
+        var fullAccessKey = new UserAccount { Id = "acct-2" };
+
+        Assert.True(ApiMethods.Allows(table, fullAccessKey, "POST"));
+        Assert.False(ApiMethods.Allows(table, fullAccessKey, "DELETE"));
+    }
+
+    [Fact]
+    public void A_freshly_issued_account_defaults_to_every_method_so_existing_keys_are_unaffected()
+    {
+        var fresh = new UserAccount();
+
+        Assert.Equal(ApiMethods.All, ApiMethods.Parse(fresh.ApiTokenMethods));
+    }
+
+    [Fact]
     public void Publishing_a_table_that_answers_nothing_is_rejected()
     {
         var table = Table("");

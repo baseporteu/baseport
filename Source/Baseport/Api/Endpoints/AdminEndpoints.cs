@@ -25,7 +25,7 @@ public static class AdminEndpoints
             {
                 a.Id, a.Username, a.Email, a.Role, a.IsDisabled,
                 a.CreatedAt, a.UpdatedAt, a.LastLoginAt,
-                a.ApiEnabled, a.ApiTokenExpiresAt,
+                a.ApiEnabled, a.ApiTokenExpiresAt, a.ApiTokenMethods,
                 HasApiToken = !string.IsNullOrEmpty(a.ApiTokenHash),
                 ApiTokenExpired = a.ApiTokenExpiresAt is { } e && e <= DateTime.UtcNow
             }));
@@ -62,7 +62,7 @@ public static class AdminEndpoints
             {
                 account.Id, account.Username, account.Email, account.Role, account.IsDisabled,
                 account.CreatedAt, account.UpdatedAt, account.LastLoginAt,
-                account.ApiEnabled, account.ApiTokenExpiresAt,
+                account.ApiEnabled, account.ApiTokenExpiresAt, account.ApiTokenMethods,
                 HasApiToken = !string.IsNullOrEmpty(account.ApiTokenHash)
             });
         });
@@ -130,6 +130,9 @@ public static class AdminEndpoints
                 account.ApiEnabled = apiEnabled;
             }
 
+            if (body["apiTokenMethods"] is JsonArray tokenMethods)
+                account.ApiTokenMethods = ApiMethods.Serialize(tokenMethods.Select(m => m?.GetValue<string>() ?? ""));
+
             if (body.ContainsKey("apiTokenExpiresAt"))
             {
                 var raw = body["apiTokenExpiresAt"]?.GetValue<string>();
@@ -159,7 +162,7 @@ public static class AdminEndpoints
             {
                 account.Id, account.Username, account.Email, account.Role, account.IsDisabled,
                 account.CreatedAt, account.UpdatedAt, account.LastLoginAt,
-                account.ApiEnabled, account.ApiTokenExpiresAt,
+                account.ApiEnabled, account.ApiTokenExpiresAt, account.ApiTokenMethods,
                 HasApiToken = !string.IsNullOrEmpty(account.ApiTokenHash)
             });
         });
@@ -262,7 +265,7 @@ public static class AdminEndpoints
                 total,
                 page,
                 perPage,
-                logs = logs.Select(l => new { l.Id, l.CreatedAt, l.Method, l.Path, l.Status, l.TableName, l.Message })
+                logs = logs.Select(l => new { l.Id, l.CreatedAt, l.Method, l.Path, l.Status, l.TableName, l.Message, l.UserId, l.ClientIp })
             });
         });
 
