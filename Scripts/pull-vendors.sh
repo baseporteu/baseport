@@ -1,36 +1,47 @@
 #!/usr/bin/env bash
 # Refreshes the third-party assets served from wwwroot.
 #
-# They are vendored, not linked: this instance is meant to be exposed to the
-# internet, and a CDN script tag would put a third party in the request path of
-# a page we publish. Run this deliberately, read the diff, commit the result.
+# Vendors third-party scripts locally so internet-facing pages stay independent.
+# To update: bump a version below, run, review diff, and commit (SRI hashes verified).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR_DIR="$ROOT/Source/Baseport/wwwroot/js/vendor"
 mkdir -p "$VENDOR_DIR"
 
-latest_npm_version() {
-    curl -fsSL "https://registry.npmjs.org/$1/latest" \
-        | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])"
+SCALAR_VERSION="1.64.0"
+PREACT_VERSION="10.29.8"
+HTM_VERSION="3.1.1"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+vendor() {
+    local name="$1" version="$2" path="$3" out="$4" tarball integrity
+    read -r tarball integrity < <(curl -fsSL "https://registry.npmjs.org/$name/$version" \
+        | python3 -c "import sys,json; d=json.load(sys.stdin)['dist']; print(d['tarball'], d.get('integrity', ''))")
+    curl -fsSL "$tarball" -o "$TMP/package.tgz"
+    python3 - "$TMP/package.tgz" "$integrity" <<'PY'
+import base64, hashlib, sys
+algorithm, _, expected = sys.argv[2].partition("-")
+if algorithm != "sha512":
+    sys.exit(f"no sha512 integrity published, refusing: {sys.argv[2]!r}")
+actual = base64.b64encode(hashlib.sha512(open(sys.argv[1], "rb").read()).digest()).decode()
+if actual != expected:
+    sys.exit("tarball does not match the registry integrity, refusing")
+PY
+    tar -xzf "$TMP/package.tgz" -C "$TMP" "package/$path"
+    mv "$TMP/package/$path" "$VENDOR_DIR/$out"
+    rm -rf "$TMP/package" "$TMP/package.tgz"
+    echo "   $name@$version verified, saved wwwroot/js/vendor/$out"
 }
 
 echo "[Scalar API Reference]"
-VERSION="$(latest_npm_version "@scalar/api-reference")"
-echo "   version: $VERSION"
-curl -fsSL "https://cdn.jsdelivr.net/npm/@scalar/api-reference@${VERSION}" \
-    -o "$VENDOR_DIR/scalar-api-reference.js"
-echo "   saved:   wwwroot/js/vendor/scalar-api-reference.js"
+vendor "@scalar/api-reference" "$SCALAR_VERSION" "dist/browser/standalone.js" "scalar-api-reference.js"
 
 echo "[Preact + htm]"
-PREACT_VERSION="$(latest_npm_version preact)"
-HTM_VERSION="$(latest_npm_version htm)"
-echo "   versions: preact@$PREACT_VERSION, htm@$HTM_VERSION"
-curl -fsSL "https://cdn.jsdelivr.net/npm/preact@${PREACT_VERSION}/dist/preact.min.js" \
-    -o "$VENDOR_DIR/preact.min.js"
-curl -fsSL "https://cdn.jsdelivr.net/npm/htm@${HTM_VERSION}/dist/htm.js" \
-    -o "$VENDOR_DIR/htm.js"
-echo "   saved:   wwwroot/js/vendor/preact.min.js, wwwroot/js/vendor/htm.js"
+vendor preact "$PREACT_VERSION" "dist/preact.min.js" "preact.min.js"
+vendor htm "$HTM_VERSION" "dist/htm.js" "htm.js"
 
 echo "[Onest font]"
 FONTS_DIR="$ROOT/Source/Baseport/wwwroot/fonts"
