@@ -43,6 +43,17 @@ public static class AdminAuth
         return CryptographicOperations.FixedTimeEquals(actual, expected);
     }
 
+    private static readonly Lazy<string> DecoyHash = new(() => HashPassword("constant-time-decoy"));
+
+    public static bool CheckPassword(string password, UserAccount? user)
+    {
+        if (user is { IsDisabled: false, PasswordHash.Length: > 0 }) return VerifyPassword(password, user.PasswordHash);
+
+        // timing decoy, result ignored
+        _ = VerifyPassword(password, DecoyHash.Value);
+        return false;
+    }
+
     public static async Task<UserAccount?> ResolveAsync(AppDbContext db, HttpContext ctx)
     {
         var now = DateTime.UtcNow;

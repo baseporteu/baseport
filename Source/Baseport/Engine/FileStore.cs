@@ -28,21 +28,35 @@ public static class FileStore
 
     public static async Task<(string? StoredName, string? Error)> SaveAsync(IFormFile file, string bucket, CancellationToken ct = default)
     {
-        if (file.Length == 0) return (null, "The uploaded file is empty.");
-        if (file.Length > MaxBytes) return (null, $"The uploaded file exceeds the {MaxBytes / 1024 / 1024} MB limit.");
+        if (Problem(file, bucket) is { } error) return (null, error);
+        var name = Reserve(file, bucket);
+        await WriteAsync(file, name, ct);
+        return (name, null);
+    }
+
+    public static string? Problem(IFormFile file, string bucket = "")
+    {
+        if (file.Length == 0) return "The uploaded file is empty.";
+        if (file.Length > MaxBytes) return $"The uploaded file exceeds the {MaxBytes / 1024 / 1024} MB limit.";
         if (bucket.Length > 0 && !IsBucket(bucket))
-            return (null, "A bucket name is 1 to 32 characters of lower-case letters, digits and hyphens.");
+            return "A bucket name is 1 to 32 characters of lower-case letters, digits and hyphens.";
 
         var ext = Path.GetExtension(file.FileName);
-        if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
-            return (null, $"Files of type '{ext}' are not allowed.");
+        return string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext) ? $"Files of type '{ext}' are not allowed." : null;
+    }
 
-        var target = bucket.Length == 0 ? Directory : Path.Combine(Directory, bucket);
-        System.IO.Directory.CreateDirectory(target);
-        var name = $"{Ids.NewShortId(NameLength)}{ext.ToLowerInvariant()}";
-        await using var stream = File.Create(Path.Combine(target, name));
+    public static string Reserve(IFormFile file, string bucket = "")
+    {
+        var name = $"{Ids.NewShortId(NameLength)}{Path.GetExtension(file.FileName).ToLowerInvariant()}";
+        return bucket.Length == 0 ? name : $"{bucket}/{name}";
+    }
+
+    public static async Task WriteAsync(IFormFile file, string storedName, CancellationToken ct = default)
+    {
+        var path = Resolve(storedName) ?? throw new ArgumentException("Not a stored file name.", nameof(storedName));
+        System.IO.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await using var stream = File.Create(path);
         await file.CopyToAsync(stream, ct);
-        return (bucket.Length == 0 ? name : $"{bucket}/{name}", null);
     }
 
     public static void Delete(string storedName)

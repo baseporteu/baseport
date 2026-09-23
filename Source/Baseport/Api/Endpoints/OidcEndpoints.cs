@@ -293,9 +293,6 @@ public static class OidcEndpoints
         var user = await db.UserAccounts.FirstOrDefaultAsync(u =>
             u.OidcProviderId == provider.Id && u.OidcSubject == identity.Subject);
 
-        if (user is null && identity.Username.Length > 0)
-            user = await Linkable(db, u => u.Username == identity.Username);
-
         if (user is null && identity.EmailVerified && identity.Email.Length > 0)
             user = await Linkable(db, u => u.Email == identity.Email);
 
@@ -320,7 +317,6 @@ public static class OidcEndpoints
                     "Link it manually using: {Command}",
                     provider.Name, identity.Subject,
                     identity.Username is { Length: > 0 } ? identity.Username : "no name claim", command);
-                if (UnusableNameNote(provider, identity) is { Length: > 0 } note) Serilog.Log.Warning("{Note}", note);
                 Serilog.Log.Warning("{Note}", await WhyNoEmailMatchAsync(db, provider, identity));
                 return (null, OidcFlow.NoAccount);
             }
@@ -341,11 +337,15 @@ public static class OidcEndpoints
 
         var holder = await db.UserAccounts.FirstOrDefaultAsync(u => u.Email == identity.Email && u.Email != "");
         if (holder is null)
-            return $"No Baseport account includes the e-mail {identity.Email}. Put it on the non-admin account you want matched, and the next sign-in links itself.";
+            return $"No Baseport account includes the e-mail {identity.Email}. Put it on the non-admin account without a password you want matched, and the next sign-in links itself.";
 
         if (holder.Role == AccountRoles.Admin)
             return $"{holder.Username} includes {identity.Email} but is an admin, and an admin is never linked automatically: " +
                 "console access must not follow from a name in somebody else's directory. Link it by hand, once.";
+
+        if (holder.PasswordHash.Length > 0)
+            return $"{holder.Username} includes {identity.Email} but has a password, and an account with a password is never linked by e-mail: " +
+                "whoever registered it may not own the address. Link it by hand, once.";
 
         return $"{holder.Username} includes {identity.Email} but is already linked to another provider identity. Unlink it first.";
     }
@@ -359,18 +359,9 @@ public static class OidcEndpoints
             $"If the account you mean is an admin, sign in to the console and use Link my account under Settings > Authentication, or run: {command}";
     }
 
-    internal static string UnusableNameNote(OidcProvider provider, OidcIdentity identity)
-    {
-        if (identity.Username.Length == 0) return "";
-        if (AccountValidation.Validate(identity.Username, "").Count == 0) return "";
-
-        return $"{provider.Name} {provider.UsernameClaim} claim \"{identity.Username}\" is invalid for Baseport. " +
-            "Auto-matching skipped. Link manually, or update the provider's claim to a plain username that a non-admin account transports.";
-    }
-
     private static Task<UserAccount?> Linkable(AppDbContext db, System.Linq.Expressions.Expression<Func<UserAccount, bool>> match) =>
         db.UserAccounts
-            .Where(u => u.OidcSubject == "" && u.Role != AccountRoles.Admin)
+            .Where(u => u.OidcSubject == "" && u.Role != AccountRoles.Admin && u.PasswordHash == "")
             .Where(match)
             .FirstOrDefaultAsync();
 

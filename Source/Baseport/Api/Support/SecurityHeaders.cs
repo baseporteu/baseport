@@ -14,6 +14,8 @@ public static class SecurityHeaders
         "base-uri 'self'; " +
         "form-action 'self'";
 
+    private const string UploadPolicy = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+
     private const string PermissionsPolicy =
         "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), " +
         "fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), " +
@@ -25,6 +27,10 @@ public static class SecurityHeaders
         || path.StartsWith("/api/forms/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/f/", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/embed.js", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsUpload(string path) =>
+        path.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/api/v1/files/", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsCrossOriginFetchable(string path) =>
         IsEmbeddable(path) || path.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase);
@@ -54,7 +60,7 @@ public static class SecurityHeaders
 
             if (!embeddable)
             {
-                headers["Content-Security-Policy"] = ConsolePolicy;
+                headers["Content-Security-Policy"] = IsUpload(path) ? UploadPolicy : ConsolePolicy;
                 headers["X-Frame-Options"] = "DENY";
             }
             else

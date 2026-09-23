@@ -41,6 +41,7 @@ public static class SqlEngine
             : new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = source.DataSource,
+                Pooling = false,
 
                 Mode = configure is null ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWrite
             }.ToString());

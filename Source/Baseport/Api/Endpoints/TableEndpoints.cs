@@ -21,9 +21,7 @@ public static class TableEndpoints
 
         app.MapPost("/api/_admin/tables", async (AppDbContext db, TableDefinition table) =>
         {
-            var names = await db.Tables.Select(t => t.Name).ToListAsync();
-            var errs = FieldValidation.ValidateTable(table, names);
-            errs.AddRange(FieldErrors(db, table));
+            var errs = await CreateProblemsAsync(db, table);
             if (errs.Count > 0) return Results.BadRequest(new { errors = errs });
             table.Id = Ids.NewShortId(12);
             table.CreatedAt = table.UpdatedAt = DateTime.UtcNow;
@@ -63,10 +61,8 @@ public static class TableEndpoints
             {
                 if (patch[key] is not JsonValue rv || !rv.TryGetValue<string>(out var rule)) continue;
                 rule = rule.Trim();
-                if (RecordAccess.Problem(rule, table.Fields.ToList()) is { } ruleProblem)
+                if (await RecordAccess.RuleProblemAsync(db, table, table.Fields.ToList(), rule) is { } ruleProblem)
                     return Results.BadRequest(new { errors = new[] { ruleProblem } });
-                if (await RecordAccess.SqlProblemAsync(db, table, table.Fields.ToList(), rule) is { } sqlProblem)
-                    return Results.BadRequest(new { errors = new[] { sqlProblem } });
                 RecordAccess.Assign(table, permission, rule);
             }
 
@@ -543,6 +539,7 @@ public static class TableEndpoints
             if (formErrors.Count > 0) return Results.BadRequest(new { errors = formErrors });
             var outcome = await RecordEngine.PrepareAsync(db, table, fields, body);
             if (outcome.HasErrors) return Results.BadRequest(new { errors = outcome.Errors, invalid = outcome.InvalidFields });
+            await MultipartRecord.SaveFilesAsync(ctx, body);
 
             var record = new Record
             {
@@ -570,6 +567,7 @@ public static class TableEndpoints
             if (formErrors.Count > 0) return Results.BadRequest(new { errors = formErrors });
             var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, patch, replace: false);
             if (outcome.HasErrors) return Results.BadRequest(new { errors = outcome.Errors });
+            await MultipartRecord.SaveFilesAsync(ctx, merged);
 
             record.JsonData = merged.ToJsonString();
             await db.SaveChangesAsync();
@@ -586,6 +584,22 @@ public static class TableEndpoints
             await db.SaveChangesAsync();
             return Results.Ok(new { deleted = record.Id });
         });
+    }
+
+    internal static async Task<List<string>> CreateProblemsAsync(AppDbContext db, TableDefinition table)
+    {
+        var names = await db.Tables.Select(t => t.Name).ToListAsync();
+        var errs = FieldValidation.ValidateTable(table, names);
+        errs.AddRange(FieldErrors(db, table));
+        if (errs.Count > 0) return errs;
+
+        foreach (var (_, permission) in RecordAccess.RuleKeys)
+        {
+            var rule = RecordAccess.RuleFor(table, permission)?.Trim() ?? "";
+            if (await RecordAccess.RuleProblemAsync(db, table, table.Fields.ToList(), rule) is { } problem) errs.Add(problem);
+            RecordAccess.Assign(table, permission, rule);
+        }
+        return errs;
     }
 
     private static List<string> FieldErrors(AppDbContext db, TableDefinition table)

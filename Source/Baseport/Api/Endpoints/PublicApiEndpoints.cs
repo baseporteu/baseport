@@ -172,6 +172,7 @@ public static class PublicApiEndpoints
                 return ApiError(ctx, ApiProblem.BadRequest, "Proxy tables forward to a remote API and cannot be written via the REST API.");
             if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, caller.Id, request: obj, callerRole: caller.Role))
                 return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to create.");
+            await MultipartRecord.SaveFilesAsync(ctx, obj);
             var record = new Record
             {
                 TableId = table.Id,
@@ -213,6 +214,7 @@ public static class PublicApiEndpoints
 
             var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, obj, replace);
             if (outcome.HasErrors) return ApiProblems.FromOutcome(ctx, outcome);
+            await MultipartRecord.SaveFilesAsync(ctx, merged);
 
             record.JsonData = merged.ToJsonString();
             try { await db.SaveChangesAsync(); }
@@ -260,12 +262,12 @@ public static class PublicApiEndpoints
             {
                 if (e.TableId != tableId) continue;
                 if (recordId is not null && e.RecordId != recordId) continue;
-                if (!await AllowsEventAsync(scopes, tableId, userId, callerRole, e, token)) continue;
+                if (await AllowedFieldsAsync(scopes, tableId, userId, callerRole, e, token) is not { } fields) continue;
                 yield return new
                 {
                     action = e.Action,
                     id = e.RecordId,
-                    record = e.Json is null ? null : JsonNode.Parse(e.Json)
+                    record = EventRecord(e.Json, fields)
                 };
             }
         }
@@ -275,20 +277,23 @@ public static class PublicApiEndpoints
         }
     }
 
-    private static async Task<bool> AllowsEventAsync(
+    private static async Task<List<FieldDefinition>?> AllowedFieldsAsync(
         IServiceScopeFactory scopes, string tableId, string userId, string callerRole, RecordEvent e, CancellationToken token)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var table = await db.Tables.FirstOrDefaultAsync(t => t.Id == tableId && t.ApiEnabled, token);
-        if (table is null) return false;
-        if (!RecordAccess.HasRule(table, Permission.Read)) return true;
+        if (table is null) return null;
 
         var fields = await db.Fields.Where(f => f.TableId == tableId).ToListAsync(token);
+        if (!RecordAccess.HasRule(table, Permission.Read)) return fields;
         return await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, userId,
-            row: e.Json is null ? null : JsonNode.Parse(e.Json) as JsonObject, callerRole: callerRole);
+            row: e.Json is null ? null : JsonNode.Parse(e.Json) as JsonObject, callerRole: callerRole) ? fields : null;
     }
+
+    internal static JsonNode? EventRecord(string? json, IEnumerable<FieldDefinition> fields) =>
+        json is null ? null : JsonNode.Parse(json) is JsonObject data ? ApiDtos.WithoutSecrets(data, fields) : null;
 
     private static IResult ApiError(HttpContext ctx, ApiProblem problem, string detail) =>
         ApiProblems.Write(ctx, problem, detail);

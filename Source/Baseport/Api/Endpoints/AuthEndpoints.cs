@@ -5,9 +5,6 @@ namespace Baseport;
 
 public static class AuthEndpoints
 {
-
-    private static readonly string DummyHash = AdminAuth.HashPassword("constant-time-decoy");
-
     public static void MapAuthEndpoints(this WebApplication app)
     {
         app.MapPost("/api/auth/login", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
@@ -29,9 +26,7 @@ public static class AuthEndpoints
 
             var ok = otp.Length > 0
                 ? usable && OneTimeCodes.Consume(username, otp)
-                : usable && !string.IsNullOrEmpty(user!.PasswordHash)
-                    ? AdminAuth.VerifyPassword(password, user.PasswordHash)
-                    : AdminAuth.VerifyPassword(password, DummyHash);
+                : AdminAuth.CheckPassword(password, user);
 
             var credential = otp.Length > 0 ? "one-time code" : "password";
 

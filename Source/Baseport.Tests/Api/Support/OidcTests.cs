@@ -155,19 +155,34 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_first_sign_in_links_the_account_that_already_transports_the_username()
+    public async Task A_username_claim_never_links_an_existing_account()
     {
         var provider = Provider();
-        var existing = Account("jane", role: AccountRoles.Consumer);
+        Account("jane", role: AccountRoles.Consumer);
 
-        var (user, _) = await OidcEndpoints.ResolveAccountAsync(_db, provider,
+        var (user, problem) = await OidcEndpoints.ResolveAccountAsync(_db, provider,
             new OidcIdentity("sub-1", "jane", "", false));
 
-        Assert.Equal(existing.Id, user!.Id);
-        Assert.Equal(provider.Id, user.OidcProviderId);
-        Assert.Equal("sub-1", user.OidcSubject);
+        Assert.Null(user);
+        Assert.Equal(OidcFlow.NoAccount, problem);
+        Assert.Equal("", (await _db.UserAccounts.SingleAsync(TestContext.Current.CancellationToken)).OidcSubject);
+    }
 
-        Assert.Equal(AccountRoles.Consumer, user.Role);
+    [Fact]
+    public async Task A_verified_email_never_links_an_account_that_has_a_password()
+    {
+        var provider = Provider();
+        var existing = Account("someone", email: "jane@example.com");
+        existing.PasswordHash = "hash";
+        _db.SaveChanges();
+
+        var (user, problem) = await OidcEndpoints.ResolveAccountAsync(_db, provider,
+            new OidcIdentity("sub-1", "", "jane@example.com", EmailVerified: true));
+
+        Assert.Null(user);
+        Assert.Equal(OidcFlow.NoAccount, problem);
+        Assert.Contains("has a password", await OidcEndpoints.WhyNoEmailMatchAsync(_db, provider,
+            new OidcIdentity("sub-1", "", "jane@example.com", EmailVerified: true)));
     }
 
     [Theory]
@@ -439,21 +454,6 @@ public class OidcTests : IDisposable
         var note = await OidcEndpoints.WhyNoEmailMatchAsync(_db, provider, new OidcIdentity("s", "n", "a@b.com", true));
         Assert.Contains("is an admin", note);
         Assert.Contains("admin", note);
-    }
-
-    [Theory]
-
-    [InlineData("danny.nijenhuis@protonmail.com", true)]
-    [InlineData("has spaces", true)]
-    [InlineData("danny", false)]
-    [InlineData("danny.nijenhuis", false)]
-    [InlineData("", false)]
-    public void A_name_claim_that_can_never_match_says_so(string claimed, bool noted)
-    {
-        var note = OidcEndpoints.UnusableNameNote(Provider(), new OidcIdentity("sub-1", claimed, "", false));
-
-        Assert.Equal(noted, note.Length > 0);
-        if (noted) Assert.Contains("preferred_username", note);
     }
 
     [Theory]

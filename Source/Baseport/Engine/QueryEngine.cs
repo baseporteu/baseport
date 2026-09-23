@@ -96,7 +96,8 @@ public static class QueryEngine
         IReadOnlyList<FieldDefinition>? accessFields = null,
         string? accessUserId = null,
         Cursor? cursor = null,
-        string? systemSort = null)
+        string? systemSort = null,
+        bool literal = false)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize <= 0 ? 25 : pageSize, 1, MaxPageSize);
@@ -128,22 +129,32 @@ public static class QueryEngine
             var slot = args.Count;
             var term = query.Trim();
 
-            var isRegex = term.Length > 2 && term[0] == '/' && term[^1] == '/';
+            var isRegex = !literal && term.Length > 2 && term[0] == '/' && term[^1] == '/';
             var hasWildcard = !isRegex && (term.Contains('*') || term.Contains('%'));
             var op = isRegex ? "REGEXP" : "LIKE";
             var escapeClause = isRegex || hasWildcard ? "" : " ESCAPE '\\'";
 
+            var scope = searchFields;
+            if (scope.Count == 0)
+            {
+                var all = await db.Fields.AsNoTracking().Where(f => f.TableId == table.Id).ToListAsync();
+                if (all.Any(f => FieldTypes.Of(f).Secret)) scope = all;
+            }
+            var named = scope.Count > 0;
+            scope = scope.Where(f => !FieldTypes.Of(f).Secret).ToList();
+
             string? match = null;
-            if (!isRegex && !hasWildcard && searchFields.Count == 0 && RecordSearch.MatchExpression(table.Id, term) is { } expression && await RecordSearch.AvailableAsync(db))
+            if (!isRegex && !hasWildcard && !named && RecordSearch.MatchExpression(table.Id, term) is { } expression && await RecordSearch.AvailableAsync(db))
                 match = expression;
 
             var pattern = isRegex ? term[1..^1]
                 : hasWildcard ? term.Replace('*', '%')
                 : $"%{EscapeLike(term)}%";
             args.Add(match ?? pattern);
-            if (searchFields.Count > 0)
-
-                search = " AND (" + string.Join(" OR ", searchFields.Select(f => $"{Column(f)} {op} {{{slot}}}{escapeClause}")) + ")";
+            if (named)
+                search = scope.Count == 0
+                    ? " AND 0"
+                    : " AND (" + string.Join(" OR ", scope.Select(f => $"{Column(f)} {op} {{{slot}}}{escapeClause}")) + ")";
             else if (match is not null)
             {
 

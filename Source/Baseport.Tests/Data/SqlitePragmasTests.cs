@@ -7,6 +7,14 @@ namespace Baseport.Tests;
 public class SqlitePragmasTests
 {
     [Fact]
+    public void A_regexp_that_times_out_aborts_instead_of_reading_as_no_match() =>
+        Assert.Throws<System.Text.RegularExpressions.RegexMatchTimeoutException>(
+            () => SqlitePragmas.Regexp("^(a+)+$", new string('a', 32) + "!"));
+
+    [Fact]
+    public void An_invalid_regexp_is_no_match() => Assert.False(SqlitePragmas.Regexp("(", "a"));
+
+    [Fact]
     public async Task ConnectionOpensWithTheTunedSettings()
     {
         var path = Path.Combine(Path.GetTempPath(), $"baseport-pragma-{Guid.NewGuid():N}.db");

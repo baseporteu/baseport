@@ -116,6 +116,43 @@ public class FormEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Public_submit_cannot_set_hidden_read_only_or_computed_fields()
+    {
+        var table = Seed("Cases",
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Subject", DataType = "text" },
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Status", DataType = "text", IsHidden = true, DefaultValue = "pending" },
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Owner", DataType = "text", IsReadOnly = true },
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Ref", DataType = "systemid" });
+        var obj = new System.Text.Json.Nodes.JsonObject
+        {
+            ["Subject"] = "Broken", ["Status"] = "approved", ["Owner"] = "mallory", ["Ref"] = "chosen"
+        };
+
+        FormEndpoints.DropUnrendered(obj, table.Fields.ToList());
+        var outcome = await RecordEngine.PrepareAsync(_db, table, table.Fields.ToList(), obj);
+
+        Assert.False(outcome.HasErrors);
+        Assert.Equal("Broken", (string?)obj["Subject"]);
+        Assert.Equal("pending", (string?)obj["Status"]);
+        Assert.False(obj.ContainsKey("Owner"));
+        Assert.NotEqual("chosen", (string?)obj["Ref"]);
+    }
+
+    [Fact]
+    public void Child_rows_are_refused_on_a_form_without_the_submit_action()
+    {
+        var (header, _) = SeedHeaderAndLines();
+        var lookup = Form(header.Id, "[]");
+        lookup.Actions = FormActions.Lookup;
+        var list = Form(header.Id, "[]");
+        list.Kind = FormKinds.List;
+
+        Assert.False(FormEndpoints.AcceptsSubmissions(lookup));
+        Assert.False(FormEndpoints.AcceptsSubmissions(list));
+        Assert.True(FormEndpoints.AcceptsSubmissions(Form(header.Id, "[]")));
+    }
+
+    [Fact]
     public async Task Refuses_a_proxy_table_as_a_child_table()
     {
         var header = Seed("Orders", new FieldDefinition { Id = Ids.NewShortId(12), Name = "Reference", DataType = "text" });
@@ -128,5 +165,42 @@ public class FormEndpointsTests : IDisposable
 
         Assert.Null(child);
         Assert.Null(block);
+    }
+
+    private TableDefinition SeedCustomer()
+    {
+        var customers = Seed("Customers",
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Name", DataType = "text", Position = 0 },
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Code", DataType = "text", IsIdentifier = true, Position = 1 },
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Note", DataType = "text", IsHidden = true, Position = 2 },
+            new FieldDefinition { Id = Ids.NewShortId(12), Name = "Pin", DataType = "password", Position = 3 });
+        _db.Records.Add(new Record
+        {
+            Id = Ids.NewShortId(12), TableId = customers.Id, CreatedAt = DateTime.UtcNow,
+            JsonData = """{"Note":"internal-only","Pin":"hunter2","Name":"Acme","Code":"AC-1"}"""
+        });
+        _db.SaveChanges();
+        return customers;
+    }
+
+    [Theory]
+    [InlineData("internal-only")]
+    [InlineData("hunter2")]
+    [InlineData("\"")]
+    public async Task A_reference_search_does_not_match_hidden_or_secret_content(string q)
+    {
+        var customers = SeedCustomer();
+
+        Assert.Empty(await FormEndpoints.ReferenceRowsAsync(_db, customers.Id, q));
+    }
+
+    [Fact]
+    public async Task A_reference_row_is_labelled_by_its_identifier_field()
+    {
+        var customers = SeedCustomer();
+
+        var row = Assert.Single(await FormEndpoints.ReferenceRowsAsync(_db, customers.Id, "AC-1"));
+
+        Assert.Equal("AC-1", row.Label);
     }
 }

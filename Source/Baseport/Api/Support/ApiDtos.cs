@@ -68,11 +68,16 @@ public static class ApiDtos
         f.IsReadOnly
     };
 
-    public static JsonObject RecordDto(Record r, IEnumerable<FieldDefinition> fields, JsonObject? links = null, JsonObject? expanded = null)
+    public static JsonObject WithoutSecrets(JsonObject data, IEnumerable<FieldDefinition> fields)
     {
-        var data = (JsonNode.Parse(string.IsNullOrWhiteSpace(r.JsonData) ? "{}" : r.JsonData) as JsonObject) ?? new JsonObject();
         foreach (var f in fields)
             if (FieldTypes.Of(f).Secret) data.Remove(f.Name);
+        return data;
+    }
+
+    public static JsonObject RecordDto(Record r, IEnumerable<FieldDefinition> fields, JsonObject? links = null, JsonObject? expanded = null)
+    {
+        var data = WithoutSecrets((JsonNode.Parse(string.IsNullOrWhiteSpace(r.JsonData) ? "{}" : r.JsonData) as JsonObject) ?? new JsonObject(), fields);
 
         var dto = new JsonObject
         {

@@ -8,8 +8,6 @@ public static class UserAuthEndpoints
     private const string ApiBase = "/api/auth/v1";
     private const string UiBase = "/auth";
 
-    private static readonly string DummyHash = AdminAuth.HashPassword("constant-time-decoy");
-
     public static void MapUserAuthEndpoints(this WebApplication app)
     {
         var webRoot = app.Environment.WebRootPath;
@@ -108,10 +106,7 @@ public static class UserAuthEndpoints
             var user = await db.UserAccounts.FirstOrDefaultAsync(u =>
                 u.Username == handle || (u.Email == handle && handle != ""));
 
-            var usable = user is not null && !user.IsDisabled && user.PasswordHash.Length > 0;
-            var ok = usable
-                ? AdminAuth.VerifyPassword(password, user!.PasswordHash)
-                : AdminAuth.VerifyPassword(password, DummyHash);
+            var ok = AdminAuth.CheckPassword(password, user);
 
             if (!ok)
             {

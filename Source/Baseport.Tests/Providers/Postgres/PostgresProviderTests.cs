@@ -60,10 +60,17 @@ public class PostgresProviderTests : IAsyncLifetime
             while (true)
             {
                 var socket = await _listener.AcceptSocketAsync(_cts.Token);
-                _ = PostgresConnection.HandleAsync(socket, scopes, _cts.Token);
+                _ = ServeAsync(socket, scopes);
             }
         }
         catch (OperationCanceledException) { }
+    }
+
+    private async Task ServeAsync(Socket socket, IServiceScopeFactory scopes)
+    {
+        using (socket)
+            try { await PostgresConnection.HandleAsync(socket, scopes, _cts.Token); }
+            catch (Exception) { }
     }
 
     public async ValueTask DisposeAsync()
@@ -85,7 +92,7 @@ public class PostgresProviderTests : IAsyncLifetime
 
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Postgres, _accountId));
+        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Postgres, new UserAccount { Id = _accountId }));
 
         Assert.Equal(direct.Columns, columns);
         Assert.Equal(direct.Rows, rows);
@@ -234,6 +241,75 @@ public class PostgresProviderTests : IAsyncLifetime
         using var client = await ConnectAsync();
         var (_, rows) = await RunQueryAsync(client, "SELECT subject FROM \"Tickets\" ORDER BY subject");
         Assert.Equal("mine", Assert.Single(Assert.Single(rows)));
+    }
+
+    [Fact]
+    public async Task A_declared_length_over_the_cap_closes_the_connection_before_reading_it()
+    {
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, Port, TestContext.Current.CancellationToken);
+        var stream = client.GetStream();
+        var header = new byte[4];
+        BinaryPrimitives.WriteInt32BigEndian(header, (1 << 20) + 5);
+        await stream.WriteAsync(header, TestContext.Current.CancellationToken);
+
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        wait.CancelAfter(TimeSpan.FromSeconds(2));
+        Assert.Equal(0, await stream.ReadAsync(new byte[1], wait.Token));
+    }
+
+    [Fact]
+    public async Task A_revoked_token_is_refused_on_the_next_query()
+    {
+        using var client = await ConnectAsync();
+        await UpdateAccountAsync(a => a.ApiEnabled = false);
+
+        var stream = client.GetStream();
+        await SendQueryAsync(stream, "SELECT 1");
+        Assert.Equal('E', (await ReadMessageAsync(stream))!.Value.Type);
+    }
+
+    [Fact]
+    public async Task A_table_with_get_switched_off_is_not_published()
+    {
+        var tableId = await SeedTableAsync("Inbox", apiEnabled: true, readRule: "");
+        using (var scope = _services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            (await db.Tables.SingleAsync(t => t.Id == tableId, TestContext.Current.CancellationToken)).ApiMethods = "POST";
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        using var client = await ConnectAsync();
+        var (_, rows) = await RunQueryAsync(client, "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'");
+        Assert.Equal(new[] { "Orders" }, rows.Select(r => r[0]));
+    }
+
+    [Fact]
+    public async Task A_key_without_get_sees_no_tables()
+    {
+        await UpdateAccountAsync(a => a.ApiTokenMethods = "POST");
+
+        using var client = await ConnectAsync();
+        var (_, rows) = await RunQueryAsync(client, "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'");
+        Assert.Empty(rows);
+    }
+
+    [Fact]
+    public async Task A_pragma_from_a_wire_client_is_refused()
+    {
+        using var client = await ConnectAsync();
+        var stream = client.GetStream();
+        await SendQueryAsync(stream, "PRAGMA locking_mode = EXCLUSIVE");
+        Assert.Equal('E', (await ReadMessageAsync(stream))!.Value.Type);
+    }
+
+    private async Task UpdateAccountAsync(Action<UserAccount> change)
+    {
+        using var scope = _services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        change(await db.UserAccounts.SingleAsync(a => a.Id == _accountId, TestContext.Current.CancellationToken));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     private async Task<string> SeedTableAsync(string name, bool apiEnabled, string readRule, params string[] fields)

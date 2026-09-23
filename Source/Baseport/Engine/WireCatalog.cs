@@ -17,10 +17,12 @@ public static class WireCatalog
         public string Name => $"fk_{Table.Name}_{Column.Name}";
     }
 
-    public static void Apply(SqliteConnection conn, WireDialect dialect, string? userId)
+    public static void Apply(SqliteConnection conn, WireDialect dialect, UserAccount? caller)
     {
-        var tables = Read(conn, publishedOnly: true);
-        CreateRowViews(conn, tables, userId, readRules: true);
+        var tables = caller is null || ApiMethods.Parse(caller.ApiTokenMethods).Contains("GET")
+            ? Read(conn, publishedOnly: true)
+            : [];
+        CreateRowViews(conn, tables, caller?.Id, readRules: true);
 
         if (dialect == WireDialect.Postgres) BuildPostgres(conn, tables);
         else BuildTds(conn, tables);
@@ -28,12 +30,13 @@ public static class WireCatalog
 
     public static void Views(SqliteConnection conn) => CreateRowViews(conn, Read(conn, publishedOnly: false), null, readRules: false);
 
-    private static readonly delegate_authorizer DenyMainReads = (_, action, _, _, dbName, viaObject) =>
-        action == raw.SQLITE_READ && dbName.utf8_to_string() == "main" && string.IsNullOrEmpty(viaObject.utf8_to_string())
+    private static readonly delegate_authorizer WireAuthorizer = (_, action, _, _, dbName, viaObject) =>
+        action == raw.SQLITE_PRAGMA
+        || action == raw.SQLITE_READ && dbName.utf8_to_string() == "main" && string.IsNullOrEmpty(viaObject.utf8_to_string())
             ? raw.SQLITE_DENY
             : raw.SQLITE_OK;
 
-    public static void Restrict(SqliteConnection conn) => raw.sqlite3_set_authorizer(conn.Handle, DenyMainReads, null);
+    public static void Restrict(SqliteConnection conn) => raw.sqlite3_set_authorizer(conn.Handle, WireAuthorizer, null);
 
     public static void Unrestrict(SqliteConnection conn) => raw.sqlite3_set_authorizer(conn.Handle, (delegate_authorizer?)null, null);
 
@@ -51,6 +54,7 @@ public static class WireCatalog
 
                 if (!IsPlainIdentifier(name)) continue;
                 var dataType = reader.IsDBNull(2) ? "text" : reader.GetString(2);
+                if (FieldTypes.Find(dataType)?.Secret == true) continue;
                 var refTableId = FieldValidation.NormalizeType(dataType) == "reference" && !reader.IsDBNull(4)
                     ? FieldValidation.RefTableId(reader.GetString(4))
                     : null;
@@ -61,13 +65,14 @@ public static class WireCatalog
         var tables = new List<CatalogTable>();
         var oid = 16384;
 
-        using (var reader = Query(conn, $"SELECT Id, Name, ReadRule FROM _tables WHERE IsProxy = 0{(publishedOnly ? " AND ApiEnabled = 1" : "")} ORDER BY Name"))
+        using (var reader = Query(conn, $"SELECT Id, Name, ReadRule, ApiMethods FROM _tables WHERE IsProxy = 0{(publishedOnly ? " AND ApiEnabled = 1" : "")} ORDER BY Name"))
             while (reader.Read())
             {
                 var id = reader.GetString(0);
                 var name = reader.GetString(1);
 
                 if (!IsPlainIdentifier(name) || name[0] == '_' || name.StartsWith("sqlite_", StringComparison.OrdinalIgnoreCase)) continue;
+                if (publishedOnly && !ApiMethods.Parse(reader.GetString(3)).Contains("GET")) continue;
                 var readRule = reader.IsDBNull(2) ? "" : reader.GetString(2);
                 tables.Add(new CatalogTable(id, name, oid, counts.GetValueOrDefault(id), columns.GetValueOrDefault(id) ?? new List<CatalogColumn>(), readRule));
                 oid += 16;
@@ -86,6 +91,11 @@ public static class WireCatalog
 
     private static void CreateRowViews(SqliteConnection conn, List<CatalogTable> tables, string? userId, bool readRules)
     {
+        var stale = new List<string>();
+        using (var reader = Query(conn, "SELECT name FROM temp.sqlite_master WHERE type = 'view'"))
+            while (reader.Read()) stale.Add(reader.GetString(0));
+        foreach (var name in stale) Exec(conn, $"DROP VIEW temp.{Quote(name)}");
+
         foreach (var table in tables)
         {
             var projection = new StringBuilder(

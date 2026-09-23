@@ -85,7 +85,7 @@ public class TdsProviderTests : IAsyncLifetime
 
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Tds, _accountId));
+        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Tds, new UserAccount { Id = _accountId }));
 
         Assert.Equal(direct.Columns, columns);
         Assert.Equal(direct.Rows, rows);

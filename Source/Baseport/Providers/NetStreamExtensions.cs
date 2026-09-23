@@ -2,9 +2,12 @@ namespace Baseport.Providers;
 
 internal static class NetStreamExtensions
 {
+    public const int MaxMessageBytes = 1 << 20;
+
     public static async Task<byte[]?> ReadExactAsync(this Stream stream, int count, CancellationToken ct)
     {
         if (count <= 0) return Array.Empty<byte>();
+        if (count > MaxMessageBytes) return null;
         var buf = new byte[count];
         var offset = 0;
         while (offset < count)

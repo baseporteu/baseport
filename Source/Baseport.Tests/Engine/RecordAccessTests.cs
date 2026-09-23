@@ -210,6 +210,38 @@ public class RecordAccessTests : IDisposable
         Assert.Null(RecordAccess.Problem("_ROW_.\"user id\" = _USER_.id", fields));
     }
 
+    [Theory]
+    [InlineData("readRule", "1); SELECT (1")]
+    [InlineData("createRule", "_ROW_.missing = 1")]
+    [InlineData("updateRule", "_USER_.id = ")]
+    [InlineData("deleteRule", "_OTHER_.id = 1")]
+    public async Task Creating_a_table_validates_its_access_rules_like_patch_does(string key, string rule)
+    {
+        await SchemaBootstrap.ApplyAsync(_db);
+        var table = new TableDefinition
+        {
+            Name = "Drafts",
+            Fields = [new FieldDefinition { Name = "owner", DataType = "text" }]
+        };
+        RecordAccess.Assign(table, RecordAccess.RuleKeys.Single(k => k.Key == key).Permission, rule);
+
+        Assert.NotEmpty(await TableEndpoints.CreateProblemsAsync(_db, table));
+    }
+
+    [Fact]
+    public async Task Creating_a_table_with_a_valid_rule_is_accepted()
+    {
+        await SchemaBootstrap.ApplyAsync(_db);
+        var table = new TableDefinition
+        {
+            Name = "Drafts",
+            ReadRule = "_ROW_.owner = _USER_.id",
+            Fields = [new FieldDefinition { Name = "owner", DataType = "text" }]
+        };
+
+        Assert.Empty(await TableEndpoints.CreateProblemsAsync(_db, table));
+    }
+
     public void Dispose()
     {
         _db.Dispose();

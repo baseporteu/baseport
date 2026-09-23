@@ -43,10 +43,13 @@ public static class ConsoleEndpoints
         });
     }
 
-    private static async Task RenderAsync(AppDbContext db, HttpContext ctx, string webRoot, bool authPage)
+    private static async Task<UserAccount?> ConsoleAccountAsync(AppDbContext db, HttpContext ctx) =>
+        await AdminAuth.ResolveAsync(db, ctx) is { Role: AccountRoles.Admin } user ? user : null;
+
+    internal static async Task RenderAsync(AppDbContext db, HttpContext ctx, string webRoot, bool authPage)
     {
 
-        var user = await AdminAuth.ResolveAsync(db, ctx);
+        var user = await ConsoleAccountAsync(db, ctx);
         var signedIn = user is not null;
         var mustChange = signedIn && user!.MustChangePassword;
         if (signedIn && !mustChange)
@@ -88,11 +91,11 @@ public static class ConsoleEndpoints
         }
     }
 
-    private static async Task<string> BootstrapAsync(AppDbContext db, HttpContext ctx, bool authPage)
+    internal static async Task<string> BootstrapAsync(AppDbContext db, HttpContext ctx, bool authPage)
     {
         object payload;
 
-        var user = await AdminAuth.ResolveAsync(db, ctx);
+        var user = await ConsoleAccountAsync(db, ctx);
 
         if (user is null)
         {

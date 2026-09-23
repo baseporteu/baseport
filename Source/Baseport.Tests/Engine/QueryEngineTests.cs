@@ -53,6 +53,19 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task A_literal_search_treats_slashes_as_text_not_a_pattern()
+    {
+        _connection.CreateFunction<string?, string?, bool>("regexp", SqlitePragmas.Regexp);
+        var customer = _fields.Where(f => f.Name == "Customer").ToList();
+
+        var pattern = await QueryEngine.ListAsync(_db, _table, customer, null, false, "/Customer 7/", 1, 50);
+        var literal = await QueryEngine.ListAsync(_db, _table, customer, null, false, "/Customer 7/", 1, 50, literal: true);
+
+        Assert.Single(pattern.Records);
+        Assert.Empty(literal.Records);
+    }
+
+    [Fact]
     public async Task Lookup_matches_an_identifier_exactly()
     {
         var match = _fields.Where(f => f.Name == "OrderNo").ToList();

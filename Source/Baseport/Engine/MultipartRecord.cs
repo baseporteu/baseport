@@ -12,6 +12,18 @@ public static class MultipartRecord
 
     private const string OversizeKey = "baseport.oversize";
 
+    private const string PendingKey = "baseport.pending-files";
+
+    public static async Task SaveFilesAsync(HttpContext ctx, JsonObject saved)
+    {
+        if (ctx.Items[PendingKey] is not List<(IFormFile File, string Name)> pending) return;
+        ctx.Items.Remove(PendingKey);
+        var kept = saved.Select(kv => kv.Value is JsonValue v && v.TryGetValue<string>(out var s) ? s : null).ToHashSet();
+        foreach (var (file, name) in pending)
+            if (kept.Contains($"{ctx.Request.Scheme}://{ctx.Request.Host}/uploads/{name}"))
+                await FileStore.WriteAsync(file, name, ctx.RequestAborted);
+    }
+
     public static async Task<(JsonObject Obj, List<string> Errors)> FromRequestAsync(HttpContext ctx, List<FieldDefinition> fields)
     {
         if (!ctx.Request.HasFormContentType)
@@ -31,6 +43,8 @@ public static class MultipartRecord
         var form = await ctx.Request.ReadFormAsync(ctx.RequestAborted);
         var obj = new JsonObject();
         var errors = new List<string>();
+        var pending = new List<(IFormFile File, string Name)>();
+        ctx.Items[PendingKey] = pending;
 
         foreach (var f in fields)
         {
@@ -40,9 +54,10 @@ public static class MultipartRecord
                 var file = form.Files[f.Name];
                 if (file is null) continue;
                 if (file.Length > FileStore.MaxBytes) ctx.Items[OversizeKey] = true;
-                var (stored, error) = await FileStore.SaveAsync(file, ctx.RequestAborted);
-                if (error is not null) errors.Add($"{f.Name}: {error}");
-                else obj[f.Name] = $"{ctx.Request.Scheme}://{ctx.Request.Host}/uploads/{stored}";
+                if (FileStore.Problem(file) is { } error) { errors.Add($"{f.Name}: {error}"); continue; }
+                var stored = FileStore.Reserve(file);
+                pending.Add((file, stored));
+                obj[f.Name] = $"{ctx.Request.Scheme}://{ctx.Request.Host}/uploads/{stored}";
                 continue;
             }
 

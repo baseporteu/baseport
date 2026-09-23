@@ -15,14 +15,14 @@ public sealed class SqlitePragmas : DbConnectionInterceptor
         PRAGMA cache_size=-32000;
         """;
 
-    private static bool Regexp(string? pattern, string? input)
+    internal static bool Regexp(string? pattern, string? input)
     {
         if (pattern is null || input is null) return false;
         try
         {
             return Regex.IsMatch(input, pattern, RegexOptions.None, TimeSpan.FromMilliseconds(50));
         }
-        catch (Exception)
+        catch (ArgumentException)
         {
             return false;
         }

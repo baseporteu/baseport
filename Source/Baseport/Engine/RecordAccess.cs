@@ -39,6 +39,9 @@ public static partial class RecordAccess
         }
     }
 
+    public static async Task<string?> RuleProblemAsync(AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> fields, string rule) =>
+        Problem(rule, fields) ?? await SqlProblemAsync(db, table, fields, rule);
+
     public static async Task<string?> SqlProblemAsync(AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> fields, string rule)
     {
         if (string.IsNullOrWhiteSpace(rule)) return null;

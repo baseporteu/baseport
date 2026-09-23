@@ -79,6 +79,35 @@ public class AuthTests
         Assert.False(AdminAuth.VerifyPassword("", hash));
     }
 
+    [Theory]
+    [InlineData(AccountRoles.Admin)]
+    [InlineData(AccountRoles.Consumer)]
+    [InlineData(AccountRoles.User)]
+    public void The_timing_decoy_never_signs_in_an_account_without_a_password(string role)
+    {
+        var account = new UserAccount { Id = "acct00000001", Username = "jane", Role = role, PasswordHash = "" };
+        Assert.False(AdminAuth.CheckPassword("constant-time-decoy", account));
+    }
+
+    [Fact]
+    public void The_timing_decoy_never_signs_in_an_unknown_account() =>
+        Assert.False(AdminAuth.CheckPassword("constant-time-decoy", null));
+
+    [Fact]
+    public void A_disabled_account_is_refused_even_with_its_own_password()
+    {
+        var account = new UserAccount { Id = "acct00000001", Username = "jane", IsDisabled = true, PasswordHash = AdminAuth.HashPassword("hunter2hunter2") };
+        Assert.False(AdminAuth.CheckPassword("hunter2hunter2", account));
+    }
+
+    [Fact]
+    public void An_enabled_account_signs_in_with_its_own_password_only()
+    {
+        var account = new UserAccount { Id = "acct00000001", Username = "jane", PasswordHash = AdminAuth.HashPassword("hunter2hunter2") };
+        Assert.True(AdminAuth.CheckPassword("hunter2hunter2", account));
+        Assert.False(AdminAuth.CheckPassword("constant-time-decoy", account));
+    }
+
     [Fact]
     public void The_stored_hash_never_contains_the_password()
     {

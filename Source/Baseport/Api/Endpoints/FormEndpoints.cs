@@ -180,9 +180,7 @@ $$"""
             var targetId = FieldValidation.RefTableId(field.OptionsJson);
             if (targetId is null || string.IsNullOrWhiteSpace(q)) return Results.Ok(new { rows = Array.Empty<object>() });
 
-            var records = await db.Records.Where(r => r.TableId == targetId && r.JsonData.Contains(q))
-                .OrderByDescending(r => r.Id).Take(20).ToListAsync();
-            return Results.Ok(new { rows = records.Select(r => new { r.Id, Label = RecordLabel(r) }) });
+            return Results.Ok(new { rows = await ReferenceRowsAsync(db, targetId, q) });
         }).RequireRateLimiting(RateLimit.Schema);
 
         app.MapPost("/api/forms/{fpid}/form", SubmitAsync).RequireRateLimiting(RateLimit.Submit);
@@ -191,17 +189,19 @@ $$"""
         {
             var (form, table, fields) = await LoadAsync(db, fpid);
             if (form is null || table is null) return Results.NotFound();
-            if (form.Kind != FormKinds.Form || !FormActions.Parse(form.Actions).Contains(FormActions.Submit))
+            if (!AcceptsSubmissions(form))
                 return Results.BadRequest(new { errors = new[] { "This form does not accept submissions." } });
             if (form.IsReadOnly)
                 return Results.BadRequest(new { errors = new[] { "This form is read-only." } });
 
             var (obj, formErrors) = await MultipartRecord.FromRequestAsync(ctx, fields);
             if (formErrors.Count > 0) return Results.BadRequest(new { errors = formErrors });
+            DropUnrendered(obj, fields);
 
             var outcome = await RecordEngine.PrepareAsync(db, table, fields, obj);
             if (outcome.HasErrors)
                 return Results.BadRequest(new { errors = outcome.Errors, invalid = outcome.InvalidFields });
+            await MultipartRecord.SaveFilesAsync(ctx, obj);
 
             if (table.IsProxy)
                 return await ForwardAsync(http, table, obj);
@@ -239,6 +239,7 @@ $$"""
         {
             var (form, table, _) = await LoadAsync(db, fpid);
             if (form is null || table is null) return Results.NotFound();
+            if (!AcceptsSubmissions(form)) return Results.BadRequest(new { errors = new[] { "This form does not accept submissions." } });
             if (form.IsReadOnly) return Results.BadRequest(new { errors = new[] { "This form is read-only." } });
             if (string.IsNullOrWhiteSpace(refId)) return Results.BadRequest(new { errors = new[] { "refId is required." } });
 
@@ -250,10 +251,12 @@ $$"""
 
             var (obj, formErrors) = await MultipartRecord.FromRequestAsync(ctx, childFields);
             if (formErrors.Count > 0) return Results.BadRequest(new { errors = formErrors });
+            DropUnrendered(obj, childFields);
             obj[block.RefField.Name] = refId;
 
             var outcome = await RecordEngine.PrepareAsync(db, child, childFields, obj);
             if (outcome.HasErrors) return Results.BadRequest(new { errors = outcome.Errors, invalid = outcome.InvalidFields });
+            await MultipartRecord.SaveFilesAsync(ctx, obj);
 
             var record = new Record { TableId = child.Id, Id = Ids.NewShortId(12), JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
             db.Records.Add(record);
@@ -353,7 +356,7 @@ $$"""
             var configured = (int?)(config["pageSize"] as JsonValue)?.GetValue<double?>() ?? 25;
             var effective = configured > 0 ? configured : QueryEngine.MaxPageSize;
 
-            var result = await QueryEngine.ListAsync(db, table, searchFields, sortField, descending, q, page ?? 1, effective, filters);
+            var result = await QueryEngine.ListAsync(db, table, searchFields, sortField, descending, q, page ?? 1, effective, filters, literal: true);
 
             var head = Html.Row([.. columns.Select(c => $"<th>{Html.Text(string.IsNullOrWhiteSpace(c.Label) ? c.Name : c.Label)}</th>")]);
             var rows = result.Records
@@ -428,7 +431,7 @@ $$"""
                 });
             }
 
-            var result = await QueryEngine.ListAsync(db, table, searchFields, sortField, descending, q, page ?? 1, effective, filters);
+            var result = await QueryEngine.ListAsync(db, table, searchFields, sortField, descending, q, page ?? 1, effective, filters, literal: true);
             return Results.Ok(new
             {
                 columns = columnDtos,
@@ -445,26 +448,31 @@ $$"""
         }
     }
 
-    private static string RecordLabel(Record r)
+    internal static bool AcceptsSubmissions(FormConfig form) =>
+        form.Kind == FormKinds.Form && FormActions.Parse(form.Actions).Contains(FormActions.Submit);
+
+    internal static void DropUnrendered(JsonObject obj, List<FieldDefinition> fields)
     {
-        try
+        foreach (var f in fields.Where(f => f.IsHidden || f.IsReadOnly || FieldTypes.Of(f).Computed))
+            obj.Remove(f.Name);
+    }
+
+    internal sealed record ReferenceRow(string Id, string Label);
+
+    internal static async Task<List<ReferenceRow>> ReferenceRowsAsync(AppDbContext db, string targetId, string q)
+    {
+        var target = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.Id == targetId);
+        var shown = target?.Fields.Where(f => !f.IsHidden && !FieldTypes.Of(f).Secret)
+            .OrderBy(f => f.Position).ThenBy(f => f.Id).ToList() ?? [];
+        var label = shown.FirstOrDefault(f => f.IsIdentifier) ?? shown.FirstOrDefault();
+        if (target is null || label is null) return [];
+
+        var page = await QueryEngine.ListAsync(db, target, [label], null, true, q, 1, 20, literal: true);
+        return page.Records.Select(r =>
         {
-            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(r.JsonData) ? "{}" : r.JsonData);
-            foreach (var prop in doc.RootElement.EnumerateObject())
-            {
-                var s = prop.Value.ValueKind switch
-                {
-                    JsonValueKind.String => prop.Value.GetString(),
-                    JsonValueKind.Number => prop.Value.GetRawText(),
-                    JsonValueKind.True => "true",
-                    JsonValueKind.False => "false",
-                    _ => null
-                };
-                if (!string.IsNullOrEmpty(s)) return s.Length > 40 ? s[..40] : s;
-            }
-        }
-        catch (JsonException) { }
-        return "Record";
+            var text = QueryEngine.Project(r, [label])[label.Name]?.ToString();
+            return new ReferenceRow(r.Id, string.IsNullOrEmpty(text) ? "Record" : text.Length > 40 ? text[..40] : text);
+        }).ToList();
     }
 
     internal static List<string> ChildTableIdsInLayout(string layoutJson)

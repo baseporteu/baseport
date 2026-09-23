@@ -58,7 +58,9 @@ public static class TdsConnection
                 continue;
             }
 
-            await RunQueryAsync(stream, scopes, ExtractBatchText(m.Payload), account.Id, ct);
+            account = await ResolveAccountAsync(scopes, password, ct);
+            if (account is null) return;
+            await RunQueryAsync(stream, scopes, ExtractBatchText(m.Payload), account, ct);
         }
     }
 
@@ -141,7 +143,7 @@ public static class TdsConnection
         _ => null,
     };
 
-    private static async Task RunQueryAsync(NetworkStream stream, IServiceScopeFactory scopes, string sql, string userId, CancellationToken ct)
+    private static async Task RunQueryAsync(NetworkStream stream, IServiceScopeFactory scopes, string sql, UserAccount caller, CancellationToken ct)
     {
         if (NoOpStatement.IsMatch(sql))
         {
@@ -160,7 +162,7 @@ public static class TdsConnection
             ? await SqlEngine.ReadAsync(db, sql, conn =>
             {
                 RegisterCompatibilityFunctions(conn);
-                WireCatalog.Apply(conn, WireDialect.Tds, userId);
+                WireCatalog.Apply(conn, WireDialect.Tds, caller);
             })
             : new SqlEngine.Result([], [], false, invalid);
 
@@ -240,6 +242,7 @@ public static class TdsConnection
             if (payload is null) return null;
 
             messageType ??= type;
+            if (buffer.Length + payload.Length > NetStreamExtensions.MaxMessageBytes) return null;
             buffer.Write(payload);
             if ((status & 0x01) != 0) break;
         }

@@ -44,7 +44,4 @@ public static class ApiAuth
         if (account.ApiTokenExpiresAt is { } expiry && expiry <= DateTime.UtcNow) return null;
         return account;
     }
-
-    public static async Task<bool> AuthorizeAsync(AppDbContext db, HttpContext ctx) =>
-        await ResolveAsync(db, ctx) is not null;
 }
