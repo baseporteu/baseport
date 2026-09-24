@@ -9,6 +9,26 @@ public sealed record BaseportTokens(string AuthToken, string? RefreshToken, long
 
 public sealed record BaseportUser(string Sub, string? Email, string? Username, string Role);
 
+public sealed record RecordOperation
+{
+    private RecordOperation(string op, string apiName, string? recordId, object? value)
+    {
+        Op = op;
+        ApiName = apiName;
+        RecordId = recordId;
+        Value = value;
+    }
+
+    public string Op { get; }
+    public string ApiName { get; }
+    public string? RecordId { get; }
+    public object? Value { get; }
+
+    public static RecordOperation Create(string apiName, object record) => new("create", apiName, null, record);
+    public static RecordOperation Update(string apiName, string id, object patch) => new("update", apiName, id, patch);
+    public static RecordOperation Delete(string apiName, string id) => new("delete", apiName, id, null);
+}
+
 public sealed class BaseportException : Exception
 {
     public BaseportException(HttpStatusCode statusCode, string body)
@@ -85,8 +105,12 @@ public interface IBaseportClient
     void UseApiToken(string apiToken);
     Task<BaseportTokens> LoginAsync(string emailOrUsername, string password, CancellationToken cancellationToken = default);
     Task<BaseportTokens> RegisterAsync(string email, string password, string? username = null, CancellationToken cancellationToken = default);
+    Task<BaseportTokens> SignInAnonymouslyAsync(CancellationToken cancellationToken = default);
     Task<bool> RefreshAsync(bool force = false, CancellationToken cancellationToken = default);
     Task LogoutAsync(CancellationToken cancellationToken = default);
+    Task<BaseportTokens> ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken = default);
+    Task DeleteAccountAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<string>> ExecuteAsync(IEnumerable<RecordOperation> operations, bool transaction = false, CancellationToken cancellationToken = default);
 }
 
 public sealed class BaseportClient : IBaseportClient
@@ -186,6 +210,30 @@ public sealed class BaseportClient : IBaseportClient
         Adopt(null);
     }
 
+    public async Task<BaseportTokens> ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"{AuthApi}/change_password",
+            JsonContent.Create(new { current_password = currentPassword, new_password = newPassword }), cancellationToken);
+        Adopt(await ReadTokensAsync(response, cancellationToken));
+        return Tokens!;
+    }
+
+    public async Task DeleteAccountAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Delete, $"{AuthApi}/delete", null, cancellationToken);
+        Adopt(null);
+    }
+
+    public async Task<IReadOnlyList<string>> ExecuteAsync(IEnumerable<RecordOperation> operations, bool transaction = false, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, "api/transaction/v1/execute",
+            JsonContent.Create(new { operations, transaction }, options: Json), cancellationToken);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        return document.RootElement.GetProperty("results").EnumerateArray()
+            .Select(r => r.GetProperty("id").GetString() ?? "")
+            .ToList();
+    }
+
     internal async Task<HttpResponseMessage> SendAsync(
         HttpMethod method,
         string path,
@@ -193,7 +241,7 @@ public sealed class BaseportClient : IBaseportClient
         CancellationToken cancellationToken,
         bool authenticate = true,
         bool throwOnError = true,
-        IDictionary<string, string?>? query = null,
+        IEnumerable<KeyValuePair<string, string?>>? query = null,
         HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead,
         string? ifMatch = null)
     {
@@ -268,7 +316,7 @@ public sealed class BaseportClient : IBaseportClient
         return Convert.FromBase64String(padded.PadRight(padded.Length + (4 - padded.Length % 4) % 4, '='));
     }
 
-    private static string QueryString(IDictionary<string, string?>? query)
+    private static string QueryString(IEnumerable<KeyValuePair<string, string?>>? query)
     {
         if (query is null) return "";
         var pairs = query

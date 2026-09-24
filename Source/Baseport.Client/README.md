@@ -17,7 +17,14 @@ var client = new BaseportClient("https://your-baseport-site.example");
 await client.LoginAsync("user@example.com", "password");
 
 var records = client.Records("orders");
+var open = await records.ListAsync(filter: new Dictionary<string, string> { ["status"] = "open" });
 var storage = client.Storage;
+
+var ids = await client.ExecuteAsync(
+[
+    RecordOperation.Create("orders", new { status = "open" }),
+    RecordOperation.Delete("orders", "abc123def456")
+], transaction: true);
 ```
 
 ### With dependency injection

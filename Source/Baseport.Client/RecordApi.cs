@@ -29,16 +29,17 @@ public interface IRecordApi
 {
     string ApiName { get; }
 
-    Task<RecordPage> ListAsync(string? query = null, string? sort = null, string? order = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);
+    Task<RecordPage> ListAsync(string? query = null, string? sort = null, string? order = null, int page = 1, int pageSize = 50, IReadOnlyDictionary<string, string>? filter = null, CancellationToken cancellationToken = default);
     Task<BaseportRecord> ReadAsync(string id, CancellationToken cancellationToken = default);
     Task<string> CreateAsync(object record, CancellationToken cancellationToken = default);
     Task<BaseportRecord> UpdateAsync(string id, object patch, CancellationToken cancellationToken = default);
     Task<BaseportRecord> ReplaceAsync(string id, object record, CancellationToken cancellationToken = default);
     Task DeleteAsync(string id, CancellationToken cancellationToken = default);
     IAsyncEnumerable<RecordChange> SubscribeAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<RecordChange> SubscribeAsync(string id, CancellationToken cancellationToken = default);
 
-    Task<RecordPage> ListFromCursorAsync(string? cursor, string? query = null, int pageSize = 50, CancellationToken cancellationToken = default);
-    IAsyncEnumerable<BaseportRecord> WalkAsync(string? query = null, int pageSize = 200, CancellationToken cancellationToken = default);
+    Task<RecordPage> ListFromCursorAsync(string? cursor, string? query = null, int pageSize = 50, IReadOnlyDictionary<string, string>? filter = null, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<BaseportRecord> WalkAsync(string? query = null, int pageSize = 200, IReadOnlyDictionary<string, string>? filter = null, CancellationToken cancellationToken = default);
     Task<BaseportRecord> UpdateAsync(string id, object patch, string? ifMatch, CancellationToken cancellationToken = default);
     Task<BaseportRecord> ReplaceAsync(string id, object record, string? ifMatch, CancellationToken cancellationToken = default);
     Task DeleteAsync(string id, string? ifMatch, CancellationToken cancellationToken = default);
@@ -58,45 +59,41 @@ internal sealed class RecordApi : IRecordApi
 
     private string Base => $"api/v1/{ApiName}/records";
 
-    public async Task<RecordPage> ListAsync(string? query = null, string? sort = null, string? order = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default)
+    public Task<RecordPage> ListAsync(string? query = null, string? sort = null, string? order = null, int page = 1, int pageSize = 50, IReadOnlyDictionary<string, string>? filter = null, CancellationToken cancellationToken = default) =>
+        ListPageAsync(
+        [
+            new("q", query),
+            new("sort", sort),
+            new("order", order),
+            new("page", page.ToString()),
+            new("pageSize", pageSize.ToString())
+        ], filter, cancellationToken);
+
+    public Task<RecordPage> ListFromCursorAsync(string? cursor, string? query = null, int pageSize = 50, IReadOnlyDictionary<string, string>? filter = null, CancellationToken cancellationToken = default) =>
+        ListPageAsync(
+        [
+            new("q", query),
+            new("pageSize", pageSize.ToString()),
+            new("cursor", cursor)
+        ], filter, cancellationToken);
+
+    private async Task<RecordPage> ListPageAsync(List<KeyValuePair<string, string?>> parameters, IReadOnlyDictionary<string, string>? filter, CancellationToken cancellationToken)
     {
-        var parameters = new Dictionary<string, string?>
-        {
-            ["q"] = query,
-            ["sort"] = sort,
-            ["order"] = order,
-            ["page"] = page.ToString(),
-            ["pageSize"] = pageSize.ToString()
-        };
-
-        using var response = await _client.SendAsync(HttpMethod.Get, Base, null, cancellationToken, query: parameters);
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        var root = document.RootElement;
-
-        return ReadPage(root);
-    }
-
-    public async Task<RecordPage> ListFromCursorAsync(string? cursor, string? query = null, int pageSize = 50, CancellationToken cancellationToken = default)
-    {
-        var parameters = new Dictionary<string, string?>
-        {
-            ["q"] = query,
-            ["pageSize"] = pageSize.ToString(),
-            ["cursor"] = cursor
-        };
+        if (filter is not null)
+            parameters.AddRange(filter.Select(f => new KeyValuePair<string, string?>("filter", $"{f.Key}:{f.Value}")));
 
         using var response = await _client.SendAsync(HttpMethod.Get, Base, null, cancellationToken, query: parameters);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
         return ReadPage(document.RootElement);
     }
 
-    public async IAsyncEnumerable<BaseportRecord> WalkAsync(string? query = null, int pageSize = 200,
+    public async IAsyncEnumerable<BaseportRecord> WalkAsync(string? query = null, int pageSize = 200, IReadOnlyDictionary<string, string>? filter = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         string? cursor = null;
         do
         {
-            var page = await ListFromCursorAsync(cursor, query, pageSize, cancellationToken);
+            var page = await ListFromCursorAsync(cursor, query, pageSize, filter, cancellationToken);
             foreach (var row in page.Rows) yield return row;
             cursor = page.NextCursor;
         }

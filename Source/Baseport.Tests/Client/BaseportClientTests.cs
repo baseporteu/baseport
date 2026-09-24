@@ -107,7 +107,7 @@ public class BaseportClientTests
         handler.Reply(HttpStatusCode.OK,
             """{"rows":[{"id":"rec1","createdAt":"2026-08-13T10:00:00Z","updatedAt":"2026-08-13T10:00:00Z","data":{"title":"x"}}],"page":2,"pageSize":5,"total":6,"totalPages":2,"hasMore":false}""");
 
-        var page = await client.Records("notes").ListAsync("term", "title", "asc", 2, 5, TestContext.Current.CancellationToken);
+        var page = await client.Records("notes").ListAsync("term", "title", "asc", 2, 5, cancellationToken: TestContext.Current.CancellationToken);
 
         var uri = handler.Requests[0].RequestUri!;
         Assert.Equal("/api/v1/notes/records", uri.AbsolutePath);
@@ -148,5 +148,80 @@ public class BaseportClientTests
 
         Assert.Equal("/api/v1/files/avatars/f1.png", handler.Requests[0].RequestUri!.AbsolutePath);
         Assert.Equal(HttpMethod.Delete, handler.Requests[0].Method);
+    }
+    [Fact]
+    public async Task A_filter_is_sent_as_one_field_value_pair_per_entry()
+    {
+        var (client, handler) = Build();
+        client.UseApiToken("static-token");
+        handler.Reply(HttpStatusCode.OK, """{"rows":[],"page":1,"pageSize":50,"total":0,"totalPages":0,"hasMore":false}""");
+
+        await client.Records("notes").ListAsync(
+            filter: new Dictionary<string, string> { ["status"] = "open", ["owner"] = "a&b" },
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var query = handler.Requests[0].RequestUri!.Query;
+        Assert.Contains("filter=status%3Aopen", query);
+        Assert.Contains("filter=owner%3Aa%26b", query);
+    }
+
+    [Fact]
+    public async Task A_transaction_posts_every_operation_and_returns_the_ids()
+    {
+        var (client, handler) = Build();
+        client.UseApiToken("static-token");
+        handler.Reply(HttpStatusCode.OK, """{"results":[{"id":"new1"},{"id":"rec2"},{"id":"rec3"}]}""");
+
+        var ids = await client.ExecuteAsync(
+        [
+            RecordOperation.Create("notes", new { title = "a" }),
+            RecordOperation.Update("notes", "rec2", new { title = "b" }),
+            RecordOperation.Delete("tasks", "rec3")
+        ], transaction: true, TestContext.Current.CancellationToken);
+
+        Assert.Equal("/api/transaction/v1/execute", handler.Requests[0].RequestUri!.AbsolutePath);
+        var body = System.Text.Json.JsonDocument.Parse(handler.Bodies[0]).RootElement;
+        Assert.True(body.GetProperty("transaction").GetBoolean());
+        var ops = body.GetProperty("operations");
+        Assert.Equal("create", ops[0].GetProperty("op").GetString());
+        Assert.Equal("a", ops[0].GetProperty("value").GetProperty("title").GetString());
+        Assert.Equal("rec2", ops[1].GetProperty("recordId").GetString());
+        Assert.Equal("tasks", ops[2].GetProperty("apiName").GetString());
+        Assert.Equal(["new1", "rec2", "rec3"], ids);
+    }
+
+    [Fact]
+    public async Task Changing_the_password_adopts_the_fresh_session()
+    {
+        var (client, handler) = Build();
+        var expires = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
+        handler.Reply(HttpStatusCode.OK, TokenResponse(Token("user1", expires), "refresh-1", expires));
+        handler.Reply(HttpStatusCode.OK, TokenResponse(Token("user1", expires), "refresh-2", expires));
+        await client.LoginAsync("jane", "supersecret1", TestContext.Current.CancellationToken);
+
+        await client.ChangePasswordAsync("supersecret1", "supersecret2", TestContext.Current.CancellationToken);
+
+        Assert.Equal("/api/auth/v1/change_password", handler.Requests[1].RequestUri!.AbsolutePath);
+        Assert.Contains("\"current_password\":\"supersecret1\"", handler.Bodies[1]);
+        Assert.Contains("\"new_password\":\"supersecret2\"", handler.Bodies[1]);
+        Assert.StartsWith("Bearer ", handler.Requests[1].Headers.Authorization!.ToString());
+        Assert.Equal("refresh-2", client.Tokens!.RefreshToken);
+    }
+
+    [Fact]
+    public async Task Deleting_the_account_signs_the_client_out()
+    {
+        var (client, handler) = Build();
+        var expires = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
+        handler.Reply(HttpStatusCode.OK, TokenResponse(Token("user1", expires), "refresh-1", expires));
+        handler.Reply(HttpStatusCode.OK, """{"deleted":true}""");
+        await client.LoginAsync("jane", "supersecret1", TestContext.Current.CancellationToken);
+
+        await client.DeleteAccountAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpMethod.Delete, handler.Requests[1].Method);
+        Assert.Equal("/api/auth/v1/delete", handler.Requests[1].RequestUri!.AbsolutePath);
+        Assert.Null(client.Tokens);
+        Assert.Null(client.User);
     }
 }
