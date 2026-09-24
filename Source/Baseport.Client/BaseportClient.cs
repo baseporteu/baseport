@@ -61,15 +61,16 @@ public sealed class BaseportException : Exception
         try
         {
             using var document = JsonDocument.Parse(body);
-            if (document.RootElement.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
-                return string.Join(" ", errors.EnumerateArray().Select(e => e.GetString()));
-            if (document.RootElement.TryGetProperty("detail", out var detail) && detail.ValueKind == JsonValueKind.String)
-                return detail.GetString() ?? body;
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return body;
+            if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
+                return string.Join(" ", errors.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()));
+            return Text(root, "detail") ?? body;
         }
         catch (JsonException)
         {
+            return body;
         }
-        return body;
     }
 }
 

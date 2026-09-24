@@ -210,7 +210,7 @@ public static class TableEndpoints
                     {
                         foreach (var row in rows.EnumerateArray())
                         {
-                            if (row.ValueKind == JsonValueKind.Object && row.TryGetProperty("cols", out var cols))
+                            if (row.ValueKind == JsonValueKind.Object && row.TryGetProperty("cols", out var cols) && cols.ValueKind == JsonValueKind.Array)
                                 foreach (var col in cols.EnumerateArray())
                                 {
                                     if (col.ValueKind == JsonValueKind.Object && col.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
@@ -221,7 +221,10 @@ public static class TableEndpoints
                         }
                     }
                 }
-                catch { }
+                catch (JsonException)
+                {
+                    blocked.Add($"Form '{form.Title}' has an unreadable layout.");
+                }
             }
             if (blocked.Count > 0) return Results.Conflict(new { errors = blocked });
 

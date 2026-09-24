@@ -481,11 +481,11 @@ public static class JsExpr
                 try
                 {
                     var opts = JsonNode.Parse(string.IsNullOrWhiteSpace(optionsJson) ? "[]" : optionsJson) as JsonArray;
-                    if (opts is { Count: > 0 } && opts[0] is JsonValue ov && ov.TryGetValue<string>(out var o))
-                        return JsonValue.Create(o);
+                    return opts is { Count: > 0 } && opts[0] is JsonValue ov && ov.TryGetValue<string>(out var o)
+                        ? JsonValue.Create(o)
+                        : JsonValue.Create("Sample");
                 }
-                catch { }
-                return JsonValue.Create("Sample");
+                catch (JsonException) { return JsonValue.Create("Sample"); }
             default:
                 return JsonValue.Create("Sample");
         }

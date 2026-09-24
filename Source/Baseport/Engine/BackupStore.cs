@@ -132,7 +132,10 @@ public static class BackupStore
         {
             if (keep.Contains(file)) continue;
             try { File.Delete(file); removed++; }
-            catch (IOException) { }
+            catch (IOException ex)
+            {
+                Serilog.Log.Warning(ex, "Backup {File} could not be pruned", Path.GetFileName(file));
+            }
         }
         return removed;
     }

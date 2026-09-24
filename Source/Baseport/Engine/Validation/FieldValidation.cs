@@ -28,9 +28,9 @@ public static class FieldValidation
                 var s = sf.GetString();
                 if (!string.IsNullOrWhiteSpace(s)) return s;
             }
+            return null;
         }
-        catch { }
-        return null;
+        catch (JsonException) { return null; }
     }
 
     public static string Slugify(string source)
@@ -83,9 +83,9 @@ public static class FieldValidation
             if (o.ValueKind == JsonValueKind.Array)
                 return o.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String)
                     .Select(x => x.GetString() ?? "").Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+            return [];
         }
-        catch { }
-        return new List<string>();
+        catch (JsonException) { return []; }
     }
 
     public static string? RefTableId(string optionsJson)
@@ -98,9 +98,9 @@ public static class FieldValidation
                 var s = tid.GetString();
                 if (!string.IsNullOrWhiteSpace(s)) return s;
             }
+            return null;
         }
-        catch { }
-        return null;
+        catch (JsonException) { return null; }
     }
 
     public const int MaxNestingDepth = 3;
@@ -278,14 +278,9 @@ public static class FieldValidation
                 if (!Regex.IsMatch(Str(v), f.Pattern, RegexOptions.None, PatternTimeout))
                     errs.Add($"{f.Name} does not match the required format.");
             }
-            catch (RegexMatchTimeoutException)
+            catch (Exception ex) when (ex is RegexMatchTimeoutException or ArgumentException)
             {
-
                 errs.Add($"{f.Name} could not be validated.");
-            }
-            catch (ArgumentException)
-            {
-
             }
         }
         return errs;

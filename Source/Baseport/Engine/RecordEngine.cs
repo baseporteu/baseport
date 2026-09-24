@@ -168,10 +168,9 @@ public static class RecordEngine
     {
         try
         {
-            if (JsonNode.Parse(raw) is JsonArray arr) return arr;
+            return JsonNode.Parse(raw) as JsonArray ?? new JsonArray(JsonValue.Create(raw));
         }
-        catch (JsonException) { }
-        return new JsonArray(JsonValue.Create(raw));
+        catch (JsonException) { return new JsonArray(JsonValue.Create(raw)); }
     }
 
     private static object UniqueKey(JsonNode value, string text) =>

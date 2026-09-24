@@ -16,15 +16,17 @@ public static class OpenApiProxy
         try
         {
             using var doc = JsonDocument.Parse(specJson ?? "{}");
-            if (doc.RootElement.TryGetProperty("servers", out var servers) && servers.ValueKind == JsonValueKind.Array)
+            if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("servers", out var servers) && servers.ValueKind == JsonValueKind.Array)
                 foreach (var s in servers.EnumerateArray())
                     if (s.ValueKind == JsonValueKind.Object && s.TryGetProperty("url", out var u) && u.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(u.GetString()))
                         return u.GetString()!.TrimEnd('/');
+            return SpecOrigin(specUrl);
         }
-        catch { }
-        if (Uri.TryCreate(specUrl, UriKind.Absolute, out var uri)) return $"{uri.Scheme}://{uri.Authority}";
-        return "";
+        catch (JsonException) { return SpecOrigin(specUrl); }
     }
+
+    private static string SpecOrigin(string specUrl) =>
+        Uri.TryCreate(specUrl, UriKind.Absolute, out var uri) ? $"{uri.Scheme}://{uri.Authority}" : "";
 
     public static async Task<(List<OpInfo> Ops, string BaseUrl, string? Error)> FetchOperationsAsync(HttpClient http, string specUrl)
     {
@@ -213,32 +215,32 @@ public static class OpenApiProxy
 
     public static JsonNode? TryParseJson(string raw)
     {
-        try { return JsonNode.Parse(raw); } catch { return null; }
+        try { return JsonNode.Parse(raw); } catch (JsonException) { return null; }
     }
 
     public static string? TryParseError(string raw)
     {
         try
         {
-            var n = JsonNode.Parse(raw);
+            if (JsonNode.Parse(raw) is not JsonObject n) return null;
             var candidates = new[] { "error", "message", "detail", "title" };
             foreach (var c in candidates)
             {
-                var v = n?[c];
+                var v = n[c];
                 if (v != null)
                 {
                     var s = StrOf(v);
                     if (!string.IsNullOrWhiteSpace(s)) return s;
                 }
             }
-            if (n is JsonObject jo && jo["errors"] is JsonObject eo)
+            if (n["errors"] is JsonObject eo)
             {
                 var parts = eo.Select(kv => $"{kv.Key}: {StrOf(kv.Value)}").Where(x => x != null).ToList();
                 if (parts.Count > 0) return string.Join("; ", parts);
             }
+            return null;
         }
-        catch { }
-        return null;
+        catch (JsonException) { return null; }
     }
 
     static JsonNode? ResolveRef(JsonNode? node, JsonObject root)

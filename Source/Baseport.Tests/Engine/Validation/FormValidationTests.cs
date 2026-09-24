@@ -176,6 +176,14 @@ public class FormValidationTests
     }
 
     [Fact]
+    public void A_stored_pattern_that_does_not_compile_refuses_the_value()
+    {
+        var field = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Code", DataType = "text", Pattern = "(?<" };
+        var errors = FieldValidation.ValidateFieldValue(field, System.Text.Json.Nodes.JsonValue.Create("anything"), (_, _) => false);
+        Assert.Contains(errors, e => e.Contains("could not be validated"));
+    }
+
+    [Fact]
     public void A_list_keeps_its_column_order()
     {
 
