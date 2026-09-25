@@ -90,39 +90,7 @@ public static class UserAuthEndpoints
             return Results.Created($"{ApiBase}/status", TokenPayload(tokens));
         }).RequireRateLimiting(RateLimit.Auth);
 
-        app.MapPost($"{ApiBase}/login", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
-        {
-            if (!await EnabledAsync(db)) return Results.NotFound();
-
-            var handle = Text(body, "email_or_username").Trim();
-            var password = Text(body, "password");
-
-            if (!LoginGuard.Allowed(LoginGuard.Key($"user:{handle}", ctx)))
-            {
-                ctx.Response.Headers.RetryAfter = "300";
-                return Error(429, "Too many sign-in attempts. Wait a few minutes and try again.");
-            }
-
-            var user = await db.UserAccounts.FirstOrDefaultAsync(u =>
-                u.Username == handle || (u.Email == handle && handle != ""));
-
-            var ok = AdminAuth.CheckPassword(password, user);
-
-            if (!ok)
-            {
-                LoginGuard.Failed(LoginGuard.Key($"user:{handle}", ctx));
-                AuditLogMiddleware.Note(ctx, $"Failed end-user sign-in as \"{handle}\" with a password");
-                return Error(401, "Incorrect credentials.");
-            }
-
-            LoginGuard.Succeeded(LoginGuard.Key($"user:{handle}", ctx));
-            var now = DateTime.UtcNow;
-            user!.LastLoginAt = now;
-            await db.SaveChangesAsync();
-
-            AuditLogMiddleware.Note(ctx, $"End-user sign-in as {user.Username} with a password");
-            return Results.Ok(TokenPayload(await UserTokens.IssueAsync(db, user, now)));
-        }).RequireRateLimiting(RateLimit.Auth);
+        app.MapPost($"{ApiBase}/login", LoginAsync).RequireRateLimiting(RateLimit.Auth);
 
         app.MapPost($"{ApiBase}/refresh", async (AppDbContext db, JsonObject body) =>
         {
@@ -280,6 +248,50 @@ public static class UserAuthEndpoints
         return cleaned.Length >= AccountValidation.UsernameMin
             ? cleaned[..Math.Min(cleaned.Length, AccountValidation.UsernameMax - 7)] + "-" + Ids.NewShortId(6)
             : "user-" + Ids.NewShortId(8);
+    }
+
+    internal static async Task<IResult> LoginAsync(AppDbContext db, HttpContext ctx, JsonObject body)
+    {
+        if (!await EnabledAsync(db)) return Results.NotFound();
+
+        var handle = Text(body, "email_or_username").Trim();
+        var password = Text(body, "password");
+
+        if (!LoginGuard.Allowed(LoginGuard.Key($"user:{handle}", ctx)))
+        {
+            ctx.Response.Headers.RetryAfter = "300";
+            return Error(429, "Too many sign-in attempts. Wait a few minutes and try again.");
+        }
+
+        var user = await db.UserAccounts.FirstOrDefaultAsync(u =>
+            u.Username == handle || (u.Email == handle && handle != ""));
+
+        var ok = AdminAuth.CheckPassword(password, user);
+
+        if (!ok)
+        {
+            LoginGuard.Failed(LoginGuard.Key($"user:{handle}", ctx));
+            AuditLogMiddleware.Note(ctx, $"Failed end-user sign-in as \"{handle}\" with a password");
+            return Error(401, "Incorrect credentials.");
+        }
+
+        var now = DateTime.UtcNow;
+        var second = Totp.Check(user!, Text(body, "totp_code"), now);
+        if (second == SecondFactor.Required)
+            return Results.Json(new { errors = new[] { Totp.CodeNeeded }, totp = true }, statusCode: StatusCodes.Status401Unauthorized);
+        if (second == SecondFactor.Invalid)
+        {
+            LoginGuard.Failed(LoginGuard.Key($"user:{handle}", ctx));
+            AuditLogMiddleware.Note(ctx, $"Failed end-user sign-in as \"{handle}\" with an authenticator code");
+            return Results.Json(new { errors = new[] { "That authenticator code is not valid." }, totp = true }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        LoginGuard.Succeeded(LoginGuard.Key($"user:{handle}", ctx));
+        user!.LastLoginAt = now;
+        await db.SaveChangesAsync();
+
+        AuditLogMiddleware.Note(ctx, $"End-user sign-in as {user.Username} with a password");
+        return Results.Ok(TokenPayload(await UserTokens.IssueAsync(db, user, now)));
     }
 
     private static async Task<bool> EnabledAsync(AppDbContext db) =>

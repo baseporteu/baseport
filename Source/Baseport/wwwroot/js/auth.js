@@ -107,6 +107,7 @@ function showLogin() {
 // Password or one-time code. Both submit the same form; the button says which one the next press does.
 function switchAuthMode(mode) {
     const otp = mode === 'otp';
+    hideTotpField();
     document.getElementById('tabPassword').classList.toggle('active', !otp);
     document.getElementById('tabOtp').classList.toggle('active', otp);
 
@@ -305,13 +306,16 @@ async function signIn(ev) {
                 } :
                 {
                     username,
-                    password: document.getElementById('loginPass').value
+                    password: document.getElementById('loginPass').value,
+                    code: document.getElementById('totpCode').value
                 },
             ),
         });
+        const reply = await res.clone().json().catch(() => null);
         if (!(await ui.handle(res, {
                 failure: 'Sign-in failed.'
             }))) {
+            if (reply?.totp) showTotpField();
             // A wrong or stale code is spent, the next attempt needs a new one.
             if (authMode() === 'otp') {
                 expireOtpFlow();
@@ -327,6 +331,99 @@ async function signIn(ev) {
         btn.disabled = false;
     }
     return false;
+}
+
+// Shown after the password was accepted and the account asks for a second factor.
+function showTotpField() {
+    document.getElementById('loginUser').readOnly = true;
+    document.getElementById('totpContainer').hidden = false;
+    const code = document.getElementById('totpCode');
+    code.value = '';
+    code.focus();
+}
+
+function hideTotpField() {
+    const row = document.getElementById('totpContainer');
+    if (!row) return;
+    row.hidden = true;
+    document.getElementById('totpCode').value = '';
+    lockUsername(false);
+}
+
+async function openTwoFactor() {
+    const me = await ui.send('/api/auth/me', { failure: 'Could not read your account.' });
+    if (!me) return;
+    if (me.totp) twoFactorOffSheet();
+    else twoFactorIntroSheet();
+}
+
+function twoFactorIntroSheet() {
+    const body = ui.el('div', 'token-panel');
+    body.append(ui.el('p', 'muted', {
+        textContent: 'Ask for a code from an authenticator app after your password, at every sign-in.'
+    }));
+    const actions = ui.el('div', 'form-actions');
+    const start = ui.button('Set up', () => ui.busy(start, twoFactorSetup));
+    actions.append(ui.button('Cancel', ui.closeSheet, { variant: 'btn-outline' }), start);
+    ui.sheet('Two-factor', body, actions);
+}
+
+async function twoFactorSetup() {
+    const setup = await ui.send('/api/auth/totp/setup', { method: 'POST', failure: 'Could not start the setup.' });
+    if (!setup) return;
+
+    const body = ui.el('div', 'token-panel');
+    body.append(ui.el('p', 'muted', {
+        textContent: 'Add this key to your authenticator app, then enter the code it shows.'
+    }));
+    const key = ui.el('pre', 'code-block', { textContent: setup.secret });
+    body.append(ui.copyable(key, setup.secret));
+    const uri = ui.el('pre', 'code-block', { textContent: setup.uri });
+    body.append(ui.copyable(uri, setup.uri));
+    const code = ui.field('Code', { id: 'totpConfirmCode', placeholder: '123456' });
+    code.ctrl.inputMode = 'numeric';
+    code.ctrl.autocomplete = 'one-time-code';
+    body.append(code);
+
+    const actions = ui.el('div', 'form-actions');
+    const confirm = ui.button('Turn on', () => ui.busy(confirm, async () => {
+        const done = await ui.send('/api/auth/totp/confirm', {
+            method: 'POST',
+            body: { code: code.ctrl.value.trim() },
+            success: 'Two-factor sign-in is on. Other sessions were signed out.',
+            failure: 'Could not turn on two-factor sign-in.'
+        });
+        if (done) ui.closeSheet();
+    }));
+    actions.append(ui.button('Cancel', ui.closeSheet, { variant: 'btn-outline' }), confirm);
+    ui.sheet('Two-factor', body, actions);
+    code.ctrl.focus();
+}
+
+function twoFactorOffSheet() {
+    const body = ui.el('div', 'token-panel');
+    body.append(ui.el('p', 'muted', {
+        textContent: 'Two-factor sign-in is on. Turning it off needs your password and a current code.'
+    }));
+    const password = ui.field('Password', { id: 'totpOffPassword', type: 'password' });
+    password.ctrl.autocomplete = 'current-password';
+    const code = ui.field('Code', { id: 'totpOffCode', placeholder: '123456' });
+    code.ctrl.inputMode = 'numeric';
+    code.ctrl.autocomplete = 'one-time-code';
+    body.append(password, code);
+
+    const actions = ui.el('div', 'form-actions');
+    const off = ui.button('Turn off', () => ui.busy(off, async () => {
+        const done = await ui.send('/api/auth/totp', {
+            method: 'DELETE',
+            body: { password: password.ctrl.value, code: code.ctrl.value.trim() },
+            success: 'Two-factor sign-in is off.',
+            failure: 'Could not turn off two-factor sign-in.'
+        });
+        if (done) ui.closeSheet();
+    }), { variant: 'btn-danger' });
+    actions.append(off, ui.button('Cancel', ui.closeSheet, { variant: 'btn-outline' }));
+    ui.sheet('Two-factor', body, actions);
 }
 
 async function signOut() {

@@ -108,6 +108,27 @@ public class AccountsCliTests : IDisposable
     }
 
     [Fact]
+    public async Task The_cli_reset_clears_totp()
+    {
+        var jane = await SeedAsync("jane", AccountRoles.Admin);
+        using (var db = Open())
+        {
+            var account = await db.UserAccounts.FirstAsync(a => a.Id == jane.Id, TestContext.Current.CancellationToken);
+            account.TotpSecretProtected = "protected";
+            account.TotpEnabledAt = DateTime.UtcNow;
+            account.TotpLastStep = 42;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(0, await RunAsync("totp-reset", "jane"));
+
+        var updated = await ReadAsync("jane");
+        Assert.Null(updated.TotpEnabledAt);
+        Assert.Equal("", updated.TotpSecretProtected);
+        Assert.Equal(0, updated.TotpLastStep);
+    }
+
+    [Fact]
     public async Task A_password_that_fails_the_policy_is_refused()
     {
         await SeedAsync("jane", AccountRoles.Admin);

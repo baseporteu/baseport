@@ -91,6 +91,22 @@ baseport accounts unlink <username>
 
 The subject id is in the log line from the sign-in that was rejected.
 
+## Two-factor sign-in
+
+Admin accounts can ask for a code from an authenticator app after the password. Open the account menu at the bottom of the sidebar, choose **Two-factor**, add the key (or the `otpauth://` link) to your authenticator app, and enter the code it shows. Turning it on signs out every other session on that account.
+
+Once it is on, both password sign-ins ask for the code: the console (`code`) and `POST /api/auth/v1/login` (`totp_code`). A reply of `401` with `"totp": true` means the password was right and the code is missing or wrong. Each code works once, and a wrong code counts toward the sign-in lockout.
+
+One-time codes and single sign-on do not ask for it. A one-time code needs access to the server log, and your identity provider handles its own second factor.
+
+Turning it off needs your password and a current code. If the device is lost, remove it from the shell:
+
+```bash
+baseport accounts totp-reset <account>
+```
+
+That also revokes every session on the account.
+
 ## CLI-only operations
 
 The console does not allow operations that would let one operator take over another's account. Those are in the CLI, which needs shell access:
@@ -101,6 +117,7 @@ baseport accounts promote <account>
 baseport accounts demote <account>
 baseport accounts password <account> <pw>
 baseport accounts rename <account> <new>
+baseport accounts totp-reset <account>
 ```
 
 Use `rename` to replace the generated `admin-xxxxxxxx` username with your own. A password you set for somebody else is always single use: they have to change it on first sign-in, and every session on that account is revoked.

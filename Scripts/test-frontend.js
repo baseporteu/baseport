@@ -35,15 +35,11 @@ const read = f => fs.readFileSync(path.join(wwwroot, f), 'utf8');
 let passed = 0,
     failed = 0;
 
+const queue = [];
+
+// queued so async cases finish before the next one swaps the stubbed globals
 function test(name, fn) {
-    try {
-        fn();
-        console.log(`  ok   ${name}`);
-        passed++;
-    } catch (e) {
-        console.log(`  FAIL ${name}\n       ${e.message}`);
-        failed++;
-    }
+    queue.push([name, fn]);
 }
 
 /* forms.js: which panel the editor shows */
@@ -500,7 +496,7 @@ function loadAuthModule() {
     const dom = install(['curPass', 'newPass', 'newPass2', 'changeHint',
         'loginScreen', 'loginForm', 'forgotCard', 'changeCard',
         'tabPassword', 'tabOtp', 'passwordContainer', 'otpContainer',
-        'loginUser', 'loginPass', 'otpCode', 'otpCodeRow', 'loginBtn'
+        'loginUser', 'loginPass', 'otpCode', 'otpCodeRow', 'loginBtn', 'totpContainer', 'totpCode'
     ]);
     global.ui = {
         toast() {},
@@ -511,12 +507,33 @@ function loadAuthModule() {
     global.ssoProviders = () => [];
     const module = {};
     eval(read('js/auth.js').replace(/\bboot\(\);\s*$/, '') +
-        '\n;module.changeProblem = changeProblem; module.refreshChangeState = refreshChangeState;');
+        '\n;module.changeProblem = changeProblem; module.refreshChangeState = refreshChangeState; module.signIn = signIn;');
     return {
         dom,
         module
     };
 }
+
+test('an account with two-factor gets a code field after its password is accepted', async () => {
+    const { dom, module } = loadAuthModule();
+    dom.byId.totpContainer.hidden = true;
+    const sent = [];
+    global.fetch = async (url, init) => {
+        sent.push(JSON.parse(init.body));
+        const reply = { errors: ['Enter the code from your authenticator app.'], totp: true };
+        return { ok: false, status: 401, clone: () => ({ json: async () => reply }), json: async () => reply };
+    };
+    await module.signIn({ preventDefault() {} });
+    assert.strictEqual(dom.byId.totpContainer.hidden, false, 'the code field stayed hidden');
+    assert.ok('code' in sent[0], 'the sign-in does not send the code');
+    assert.ok(read('admin/_auth.html').includes("id='totpContainer' hidden"), 'the code field is visible before it is asked for');
+});
+
+test('the account menu offers two-factor', () => {
+    const shell = read('admin/_shell.html');
+    assert.ok(/id='accountMenu'[\s\S]*onclick='openTwoFactor\(\)'/.test(shell), 'the menu has no two-factor item');
+    assert.ok(/function openTwoFactor/.test(read('js/auth.js')), 'the two-factor handler is not defined');
+});
 
 test('the login card never tells a visitor where the code went', () => {
     const page = read('admin/_auth.html');
@@ -2564,5 +2581,17 @@ test('setSafeHtml strips style attributes', () => {
     assert.ok(/name === 'style'/.test(body), 'setSafeHtml keeps style attributes');
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+(async () => {
+    for (const [name, fn] of queue) {
+        try {
+            await fn();
+            console.log(`  ok   ${name}`);
+            passed++;
+        } catch (e) {
+            console.log(`  FAIL ${name}\n       ${e.message}`);
+            failed++;
+        }
+    }
+    console.log(`\n${passed} passed, ${failed} failed`);
+    process.exit(failed ? 1 : 0);
+})();

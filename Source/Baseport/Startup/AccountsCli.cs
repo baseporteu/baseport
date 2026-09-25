@@ -71,6 +71,7 @@ public static class AccountsCli
         if (rest is ["rename", var from, var to]) return await RenameAsync(db, from, to);
         if (rest is ["link", var linkUser, var slug, var subject]) return await LinkAsync(db, linkUser, slug, subject);
         if (rest is ["unlink", var unlinkUser]) return await UnlinkAsync(db, unlinkUser);
+        if (rest is ["totp-reset", var resetUser]) return await TotpResetAsync(db, resetUser);
 
         PrintUsage();
         return rest.Length == 0 ? 0 : 1;
@@ -87,6 +88,7 @@ public static class AccountsCli
             var ways = new List<string>();
             if (a.PasswordHash.Length > 0) ways.Add("password");
             if (a.OidcSubject.Length > 0) ways.Add(providers.GetValueOrDefault(a.OidcProviderId, "sso"));
+            if (a.TotpEnabledAt is not null) ways.Add("totp");
             Console.WriteLine($"{a.Username,-24} {a.Role,-10} {(a.IsDisabled ? "disabled" : "enabled"),-10} {(ways.Count > 0 ? string.Join("+", ways) : "none"),-16}");
         }
         return 0;
@@ -231,6 +233,25 @@ public static class AccountsCli
         return 0;
     }
 
+    private static async Task<int> TotpResetAsync(AppDbContext db, string username)
+    {
+        if (await FindAsync(db, username) is not { } account) return 1;
+
+        if (account.TotpSecretProtected.Length == 0)
+        {
+            Console.WriteLine($"{account.Username} has no two-factor sign-in.");
+            return 0;
+        }
+
+        Totp.Clear(account);
+        account.UpdatedAt = DateTime.UtcNow;
+        await UserTokens.RevokeAllAsync(db, account.Id);
+        await db.SaveChangesAsync();
+
+        Console.WriteLine($"Two-factor sign-in removed from {account.Username}. Every existing session is revoked.");
+        return 0;
+    }
+
     private static async Task<UserAccount?> FindAsync(AppDbContext db, string handle)
     {
         var account = await db.UserAccounts.FirstOrDefaultAsync(a => a.Username == handle);
@@ -256,6 +277,7 @@ public static class AccountsCli
         "password <account> <pw>",
         "rename <account> <new>",
         "link <account> <key> <subject>",
-        "unlink <account>"
+        "unlink <account>",
+        "totp-reset <account>"
     });
 }

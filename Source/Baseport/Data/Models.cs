@@ -251,6 +251,10 @@ public class UserAccount
 
     public string OidcProviderId { get; set; } = "";
     public string OidcSubject { get; set; } = "";
+
+    public string TotpSecretProtected { get; set; } = "";
+    public DateTime? TotpEnabledAt { get; set; }
+    public long TotpLastStep { get; set; }
 }
 
 public class OidcProvider
