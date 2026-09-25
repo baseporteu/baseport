@@ -1,5 +1,5 @@
-/* Activity log and instance settings. */
-/* Logs: server-side filter / sort / pagination */
+/* activity log and instance settings. */
+/* logs: server-side filter / sort / pagination */
 
 let logsPage = 1;
 let logsPerPage = 25;
@@ -22,7 +22,6 @@ function sortLogs(field) {
 async function loadLogs(page) {
     logsPage = page || logsPage;
     const filter = (document.getElementById('logsFilter').value || '').trim();
-    // Rows arrive rendered; paging comes back in headers.
     const meta = await ui.fragment(
         'logsList',
         `/api/_admin/fragments/logs?page=${logsPage}&perPage=${logsPerPage}&sort=${logsSort}&order=${logsOrder}` +
@@ -43,7 +42,7 @@ async function loadLogs(page) {
     });
 }
 
-/* Settings: Host / Auth / Jobs / Backups */
+/* settings: Host / Auth / Jobs / Backups */
 
 let settingsData = null;
 
@@ -51,7 +50,6 @@ function settingsPage(page) {
     navigate(`/settings/${page}`);
 }
 
-// A link round trip comes back here instead of to a sign-in screen, the console reports its own outcome. Taken out of the address bar so a reload does not repeat it.
 function reportLinkOutcome() {
     const code = new URLSearchParams(location.search).get('sso');
     if (!code) return;
@@ -97,7 +95,6 @@ async function loadSettings() {
     document.getElementById('settingsUploadsMax').value = settingsData.uploadsMaxMegabytes ?? 10240;
     document.getElementById('settingsUploadsUsed').textContent =
         `${fmtSize(settingsData.uploadsUsedBytes || 0)} in use. Uploads past this limit are refused.`;
-    // The browser ships ISO 4217 and the IANA zone list, neither is ours to carry or keep current.
     ui.fillOptions(document.getElementById('settingsCurrency'), ui.currencyOptions(), settingsData.currency || 'EUR');
     ui.fillOptions(document.getElementById('settingsTimeZone'), ui.timeZoneOptions(), settingsData.timeZone || 'UTC');
     ui.timeZone(settingsData.timeZone || 'UTC');
@@ -207,7 +204,6 @@ async function submitSettings(btn) {
     });
 }
 
-// Separate from the instance settings save: this group is published to anyone who opens /docs, and saving it should not depend on the Host page being valid.
 async function submitApiInfo(btn) {
     await ui.busy(btn, async () => {
         const saved = await ui.send('/api/_admin/settings', {
@@ -308,7 +304,6 @@ function apiSwitch(id, checked, onChange) {
     return sw;
 }
 
-// just the two live/docs toggles plus a way into the endpoint sheet; name, docs and methods live there
 async function loadApiTables() {
     const tables = await fetch('/api/_admin/tables').then((r) => r.json());
     const list = document.getElementById('apiTableList');
@@ -347,7 +342,6 @@ async function loadApiTables() {
     });
 }
 
-// refreshes currentTables too, opening the table right after doesn't show stale data until a hard refresh
 async function toggleTableApi(pid, enabled) {
     const res = await fetch(`/api/_admin/tables/${pid}/api`, {
         method: 'PUT',
@@ -384,7 +378,7 @@ async function toggleTableApiDocs(pid, enabled) {
     await loadTables();
 }
 
-/* Jobs: cron schedules, run now, enabled toggle */
+/* jobs: cron schedules, run now, enabled toggle */
 
 function formatWhen(iso) {
     return iso ? ui.when(iso) : 'never';
@@ -501,7 +495,7 @@ async function runJobNow(key, name, btn) {
     });
 }
 
-/* Backups: stored snapshots on a rolling window */
+/* backups: stored snapshots on a rolling window */
 
 function fmtSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
@@ -544,7 +538,6 @@ async function triggerBackup() {
     const free = settingsData && settingsData.freeDiskBytes != null ? fmtSize(settingsData.freeDiskBytes) : null;
     const retention = (settingsData && settingsData.backupRetention) || 5;
     const ok = await ui.confirm({
-        // A snapshot is a second full copy of the store, and on a tight disk that is the number worth seeing before pressing the button.
         title: 'Trigger backup',
         message: [
             size ? `Copies the whole database, about ${size}${free ? `, with ${free} free` : ''}.` : 'Copies the whole database.',
@@ -590,7 +583,6 @@ async function saveS3Settings(btn) {
             s3AccessKey: document.getElementById('settingsS3AccessKey').value.trim(),
             s3Prefix: document.getElementById('settingsS3Prefix').value.trim(),
         };
-        // blank means "leave the current one alone", the server never echoes it back for us to resend
         const secret = document.getElementById('settingsS3SecretKey').value;
         if (secret) body.s3SecretKey = secret;
         const res = await ui.send('/api/_admin/settings', {
@@ -613,7 +605,6 @@ function s3TestBody() {
         serviceUrl: document.getElementById('settingsS3ServiceUrl').value.trim(),
         accessKey: document.getElementById('settingsS3AccessKey').value.trim(),
     };
-    // blank means "use the saved secret", same convention as Save
     const secret = document.getElementById('settingsS3SecretKey').value;
     if (secret) body.secretKey = secret;
     return body;
@@ -686,7 +677,6 @@ function deleteCurrentTable() {
     });
 }
 
-
 function renderAllowedOrigins(stored) {
     const list = document.getElementById('allowedOriginList');
     const empty = document.getElementById('allowedOriginsEmpty');
@@ -712,14 +702,12 @@ async function saveAllowedOrigins(btn) {
             ok: 'Allowed sites saved.',
         });
         if (!saved) return;
-        // Re-read instead of echo the textarea: the server normalises what was typed, and an author should see what is actually in force.
         document.getElementById('settingsAllowedOrigins').value = saved.allowedOrigins || '';
         renderAllowedOrigins(saved.allowedOrigins || '');
     });
 }
 
-
-/* Single sign-on: OpenID Connect providers */
+/* single sign-on: OpenID Connect providers */
 
 let oidcData = [];
 
@@ -747,11 +735,9 @@ async function loadOidcProviders() {
         authority.textContent = p.authority;
         tr.append(authority);
 
-        // Which sign-in screens offer it; a provider enabled for neither is configured but unreachable.
         const doors = document.createElement('td');
         doors.className = 'muted';
         const offered = [p.consoleEnabled && 'Console', p.publicEnabled && 'End users'].filter(Boolean);
-        // Switched off, the surfaces are remembered but nothing is offered; saying "Nowhere" would read as a misconfiguration instead of a parked provider.
         doors.textContent = !p.isEnabled ? 'Off' : offered.join(', ');
         tr.append(doors);
 
@@ -764,7 +750,6 @@ async function loadOidcProviders() {
 
         const actions = document.createElement('td');
         actions.className = 'cell-actions end';
-        // Offered only where it can work: an account already linked has to be unlinked first, and a provider not offered on the console cannot complete a console round trip.
         if (p.isEnabled && p.consoleEnabled && !currentAccount?.linked)
             actions.append(ui.button('Link my account', () => linkMyAccount(p), {
                 size: 'btn-sm',
@@ -780,7 +765,6 @@ async function loadOidcProviders() {
     });
 }
 
-// Binds this provider's identity to the account already signed in here. The account is fixed by the session before the redirect, nothing the provider sends chooses who gets linked.
 async function linkMyAccount(p) {
     const password = await ui.ask({
         title: `Link my account to ${p.name}`,
@@ -827,7 +811,6 @@ function openOidcSheet(id) {
         placeholder: 'authelia',
         help: 'Appears in the callback URL below. Lowercase letters, digits and hyphens.',
     });
-    // Shaped as it is typed instead of policed on save, the way an API name is.
     slug.ctrl.addEventListener('input', () => {
         slug.ctrl.value = slug.ctrl.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
         redirect.ctrl.value = callbackFor(slug.ctrl.value);
@@ -873,8 +856,6 @@ function openOidcSheet(id) {
         value: p ? p.emailClaim : 'email'
     });
 
-    // A new provider is on and offered on the console: that is why an operator is
-    // adding one, and the server refuses an enabled provider offered nowhere anyway.
     const enabled = ui.switchRow('Enabled', {
         id: 'oidcIsEnabled',
         checked: p ? p.isEnabled : true
@@ -900,7 +881,6 @@ function openOidcSheet(id) {
         slug: slug.ctrl.value.trim(),
         authority: authority.ctrl.value.trim(),
         clientId: clientId.ctrl.value.trim(),
-        // An untouched field leaves the stored secret alone; the server only reads the key when it is sent.
         ...(clientSecret.ctrl.value ? { clientSecret: clientSecret.ctrl.value } : {}),
         scopes: scopes.ctrl.value.trim(),
         usernameClaim: usernameClaim.ctrl.value.trim(),
@@ -912,7 +892,6 @@ function openOidcSheet(id) {
     });
 
     const actions = ui.el('div', 'form-actions');
-    // Deletion sits with the provider it removes, and never next to the button that saves.
     if (p) {
         actions.append(ui.button('Delete', async () => {
             const ok = await ui.confirm({

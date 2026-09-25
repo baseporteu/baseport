@@ -1,9 +1,3 @@
-/* A DOM small enough to run the admin scripts headlessly.
-
-   Not a browser: it exists so the pure decision logic (which panel is shown,
-   which renderer a schema selects, whether a preference persists) is testable
-   without one. Two blank-render bugs shipped because that logic had no test at
-   all while the C# suite stayed green. */
 
 function element(tag = 'div') {
     const node = {
@@ -111,7 +105,6 @@ function element(tag = 'div') {
     return node;
 }
 
-/** Installs globals and returns a registry so a test can assert on elements by id. */
 function install(ids = []) {
     const byId = {};
     ids.forEach(id => {

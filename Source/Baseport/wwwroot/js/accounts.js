@@ -1,11 +1,8 @@
-/* user accounts, API tokens and access: a filterable, paginated table */
 
-// Global pagination and cached account state for form references.
 let accountsData = [];
 let accountsPage = 1;
 let accountsPerPage = 10;
 
-// Builds pagination controls and row-count selectors for tabular views.
 function makePager(container, opts) {
     container.innerHTML = '';
     if (!opts.total) return;
@@ -61,13 +58,11 @@ function makePager(container, opts) {
     container.appendChild(right);
 }
 
-// Fetches raw account dataset to back edit sheets and triggers page render.
 async function loadAccounts() {
     accountsData = await fetch('/api/_admin/accounts').then((r) => r.json());
     renderAccounts();
 }
 
-// Fetches rendered HTML table fragment and updates pagination state.
 async function renderAccounts() {
     const term = (document.getElementById('accountsFilter').value || '').trim();
     const query = new URLSearchParams({
@@ -97,7 +92,6 @@ async function renderAccounts() {
     });
 }
 
-// Constructs and presents the account creation or edit form sheet.
 function openAccountForm(pid) {
     const a = pid ? accountsData.find((x) => x.id === pid) : null;
     const locked = !!a && a.role === 'admin';
@@ -106,7 +100,6 @@ function openAccountForm(pid) {
     body.appendChild(fieldInputRow('Username', 'accUsername', a ? a.username : '', 'e.g. jane', false, 'username'));
     body.appendChild(fieldInputRow('Email', 'accEmail', a ? a.email || '' : '', 'e.g. jane@example.com', false, 'email'));
 
-    // Existing accounts cannot be promoted to admin via the UI.
     body.appendChild(
         ui.field('Role', {
             id: 'accRole',
@@ -148,12 +141,11 @@ function openAccountForm(pid) {
             disabled: locked,
         }));
 
-        // Token operations remain accessible for admin accounts.
+        // token operations remain accessible for admin accounts.
         body.appendChild(apiTokenPanel(a));
     }
 
     if (locked) {
-        // Disables fields that the API locks for admin accounts.
         ['accRole', 'accPassword', 'accDisabled']
             .forEach((id) => {
                 const input = body.querySelector(`#${id}`);
@@ -179,14 +171,12 @@ function openAccountForm(pid) {
     setTimeout(() => document.getElementById('accUsername')?.focus(), 50);
 }
 
-// 10 to 12 characters, because AccountValidation.PasswordMin is 10 and the command would refuse anything shorter.
 function randomPassword() {
     const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
     const bytes = crypto.getRandomValues(new Uint8Array(12));
     return [...bytes].map((b) => alphabet[b % alphabet.length]).join('').slice(0, 10 + (bytes[0] % 3));
 }
 
-// Explains restricted fields and directs privileged changes to the CLI.
 function adminNotice(a) {
     const wrap = ui.el('div', 'token-panel');
     
@@ -194,7 +184,7 @@ function adminNotice(a) {
         textContent: 'Password, role, and status changes are disabled for admin accounts to prevent console takeovers. Use the shell commands below. Name, address, and API token remain editable here.',
     }));
 
-    // Pre-populates runnable commands with the targeted username.
+    // pre-populates runnable commands with the targeted username.
     const commands = ui.el('pre', 'code-block');
     commands.textContent = [
         `baseport accounts password ${a.username} ${randomPassword()}`,
@@ -205,7 +195,6 @@ function adminNotice(a) {
     return wrap;
 }
 
-// Manages API token lifecycle including generation, expiration, and revocation.
 function apiTokenPanel(a) {
     const wrap = ui.el('div', 'token-panel');
     wrap.append(ui.el('h4', null, { textContent: 'REST API access' }));
@@ -220,7 +209,6 @@ function apiTokenPanel(a) {
         : 'Token has no expiration date. Regenerate to set one.';
     wrap.append(state);
 
-    // Date picker defaults to 90 days with a 1-day minimum and 10-year maximum.
     const expiry = ui.field('Expires on', {
         id: 'accTokenExpiry',
         type: 'date',
@@ -277,7 +265,6 @@ function apiTokenPanel(a) {
     return wrap;
 }
 
-// Displays the secret token once; it cannot be retrieved from the server later.
 function showGeneratedToken(token, expiresAt) {
     const body = ui.el('div');
     body.append(
@@ -296,14 +283,12 @@ function showGeneratedToken(token, expiresAt) {
     ui.sheet('API token', body, ui.button('Done', ui.closeSheet));
 }
 
-// Prepares account payload, omitting fields that admins are restricted from updating via UI.
 async function submitAccount(pid) {
     const body = {
         username: document.getElementById('accUsername').value.trim(),
         email: document.getElementById('accEmail').value.trim(),
     };
 
-    // Prevents sending restricted field mutations when targeting an admin account.
     const locked = pid && accountsData.find((x) => x.id === pid)?.role === 'admin';
     if (!locked) {
         body.role = document.getElementById('accRole').value;
@@ -313,7 +298,6 @@ async function submitAccount(pid) {
         if (password?.value) body.password = password.value;
     }
 
-    // Sends payload to the REST API and reports backend validation results.
     const saved = await ui.send(pid ? `/api/_admin/accounts/${pid}` : '/api/_admin/accounts', {
         method: pid ? 'PATCH' : 'POST',
         body,
@@ -326,7 +310,6 @@ async function submitAccount(pid) {
     await loadAccounts();
 }
 
-// Requests account deletion and displays server-side validation feedback.
 async function deleteAccount(pid, username) {
     const confirmed = await ui.confirm({
         title: 'Delete account',
@@ -336,7 +319,6 @@ async function deleteAccount(pid, username) {
     });
     if (!confirmed) return;
 
-    // Server rejects deletion if this is the last enabled account.
     const deleted = await ui.send(`/api/_admin/accounts/${pid}`, {
         method: 'DELETE',
         success: 'Account deleted.',

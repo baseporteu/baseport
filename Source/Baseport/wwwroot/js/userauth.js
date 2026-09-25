@@ -100,7 +100,6 @@ async function bpRegister(event) {
     return false;
 }
 
-// Redirects unconditionally from /auth; signed-in visitors would otherwise be asked to sign in again. Falls back to checking the session cookie on the server if no local tokens exist.
 async function bpGuestOnly() {
     if (bpAuth.signedIn()) {
         location.replace('/auth/profile');
@@ -112,7 +111,6 @@ async function bpGuestOnly() {
 }
 
 async function bpLoadProfile() {
-    // Missing local tokens does not imply signed out; the session cookie set during sign-in is sent with this request.
     const res = await bpAuth.authFetch('/status');
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.authenticated) {
@@ -148,7 +146,6 @@ async function bpChangePassword(event) {
 
 async function bpSignOut() {
     const current = bpAuth.tokens();
-    // Called unconditionally since cookie sessions store nothing locally and the server handles clearance.
     await fetch('/api/auth/v1/logout', {
         method: 'POST',
         headers: {

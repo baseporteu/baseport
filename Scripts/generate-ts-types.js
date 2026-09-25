@@ -1,22 +1,4 @@
 #!/usr/bin/env node
-/* Typed access to a Baseport instance's own tables, from TypeScript.
-
-   There is no fixed Baseport API surface to publish a client for: every
-   instance's /api/v1 describes whatever tables that instance's author
-   defined, which is why the .NET SDK (Source/Baseport.Client) is hand-written
-   but this side is generated instead. Run this against your own running
-   instance whenever its schema changes; it is developer tooling, not
-   something the binary ships or runs itself.
-
-   Requires network access to fetch openapi-typescript through npx (nothing
-   is installed into node_modules or committed as a dependency), and a
-   running Baseport instance with Settings > API > "Publish OpenAPI document"
-   turned on.
-
-   Usage:
-       node Scripts/generate-ts-types.js
-       node Scripts/generate-ts-types.js --baseport-url http://localhost:5000 --out Source/Baseport.Client.TS/types.d.ts
-*/
 
 const { spawnSync } = require('child_process');
 const fs = require('fs');

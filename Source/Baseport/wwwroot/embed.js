@@ -1,7 +1,4 @@
 (function() {
-    // embed.js ships as the one script tag a third-party page adds; a line_items or child_table block needs
-    // Preact + htm, which are not on that page. Loaded on demand, once per page even across several mounted
-    // forms, rather than shipping them unconditionally to every embed that never uses either block.
     const vendorLoads = (window.__baseportVendorLoads = window.__baseportVendorLoads || {});
     function loadVendorScript(src) {
         if (!vendorLoads[src]) {
@@ -22,13 +19,10 @@
             loadVendorScript(`${apiBase}/js/vendor/htm.js`)
         ]);
     }
-    // does this layout use a block that needs Preact, without waiting on any fetch to find out
     function usesPreact(layoutJson) {
         return /"t"\s*:\s*"(line_items|child_table)"/.test(layoutJson || '');
     }
 
-    // one form instance, mounted into `container`; callable directly (a page composing several forms in its own
-    // layout) or via the auto-bootstrap below (today's single `<script src="embed.js?id=X">` embed, unchanged)
     function mountBaseportForm(container, formId, apiBase) {
     container.classList.add('baserow-embed');
 
@@ -37,7 +31,6 @@
         style.id = 'baserow-embed-style';
         style.innerText = `
             .baserow-embed {
-                /* Override any of these on .baserow-embed (or a parent) to restyle the whole embed without touching a single rule. */
                 --baserow-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
                 --baserow-fg: #1a1a1a;
                 --baserow-muted: #6b7280;
@@ -214,7 +207,6 @@
         document.head.appendChild(style);
     }
 
-    // Feedback is a toast here too, a host page's layout is never disturbed by a message box appearing inside the form.
     function toastHost() {
         let host = document.querySelector('.baserow-toasts');
         if (!host) {
@@ -227,12 +219,10 @@
         return host;
     }
 
-    // Toasts stack newest at the bottom, capped at eight on screen.
     function toast(message, kind) {
         const text = Array.isArray(message) ? message.join(' ') : String(message || '');
         if (!text.trim()) return;
         const host = toastHost();
-        // The oldest sits at the top, trimming the first child keeps the freshest eight.
         while (host.children.length >= 8) host.firstChild.remove();
         const el = document.createElement('div');
         el.className = 'baserow-toast baserow-toast-' + (kind || 'info');
@@ -243,7 +233,6 @@
         setTimeout(() => el.remove(), kind === 'error' ? 8000 : 4500);
     }
 
-    // navigator.clipboard is only offered on secure contexts, a plain-http host falls back to a hidden textarea and execCommand, which still works there.
     function copyToast(el, text) {
         const flash = () => {
             const original = el.textContent;
@@ -277,8 +266,6 @@
     let formIsReadOnly = false;
     let formCurrency = 'EUR';
     let readOnlyData = null;
-    // child_table blocks stage rows locally (the header record does not exist yet); each entry is flushed
-    // with one create per row once the header submit returns its new record id.
     let pendingChildTables = [];
 
     const TEXT_LENGTH_TYPES = new Set(['text', 'longtext', 'richtext', 'slug', 'email', 'url', 'password']);
@@ -290,7 +277,6 @@
             tableSchema = data.table;
             formIsReadOnly = !!data.form.isReadOnly;
             formCurrency = data.currency || 'EUR';
-            // One script tag, three behaviours; the server decides the kind, and both actions may be on, both render: one RMA form can look an existing case up and raise a new one.
             if (data.form.kind === 'list') {
                 renderList(data.form, data.table, container);
             } else {
@@ -298,7 +284,6 @@
                 if (actions.includes('lookup')) renderLookup(data.form, data.table, container);
                 if (actions.includes('submit')) renderForm(data.form, data.table, container);
             }
-            // The hosted page at /f/{id} ships its rows in the html so a crawler and a scriptless reader get them. It stays on screen until this render replaces it, or the page would blank for the length of the fetch.
             document.getElementById('baseport-ssr')?.remove();
         })
         .catch(() => {
@@ -317,10 +302,8 @@
         return f.label || f.name;
     }
 
-    // Parses to an inert document first: nothing runs and nothing loads while we prune.
     const BANNED = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'SVG']);
 
-    // javascript: and data: are script in a URL; shared by the markup sanitizer and every href built from an expression.
     function isUnsafeUrl(v) {
         const s = String(v == null ? '' : v).replace(/[\s\u0000-\u001f]/g, '').toLowerCase();
         return s.startsWith('javascript:') || s.startsWith('data:text/html');
@@ -344,7 +327,6 @@
         target.replaceChildren(...parsed.body.childNodes);
     }
 
-    // Evaluates an author expression against raw (unescaped) row data -- used to build a URL, never to inject markup.
     function safeEval(expression, data) {
         try {
             return new Function('data', 'return ' + expression)(data || {});
@@ -442,7 +424,6 @@
 
         function runLookup(term) {
             input.value = term;
-            // A "follow" list widget elsewhere on the page (config: followLookup) mirrors whatever gets looked up here.
             window.dispatchEvent(new CustomEvent('baseport:lookup', {
                 detail: {
                     formId,
@@ -484,7 +465,6 @@
         wrap.appendChild(result);
         parent.appendChild(wrap);
 
-        // A row-action link elsewhere can deep-link straight into a result via ?q=.
         const qs = (new URLSearchParams(window.location.search).get('q') || '').trim();
         if (qs) runLookup(qs);
     }
@@ -543,7 +523,6 @@
             }, 250);
         });
 
-        // re-filters live when the linked lookup widget (cfg.followLookup names its form id) submits a new value
         if (cfg.followLookup) {
             window.addEventListener('baseport:lookup', (e) => {
                 if (e.detail.formId !== cfg.followLookup) return;
@@ -578,7 +557,6 @@
         }
 
         function buildListTable(data) {
-            // Wrapped so a wide table scrolls inside the embed, not the host page.
             const wrapper = document.createElement('div');
             wrapper.className = 'baserow-table-wrap';
             const t = document.createElement('table');
@@ -600,7 +578,6 @@
                 data.columns.forEach((c) => {
                     const td = document.createElement('td');
                     const raw = row.data ? row.data[c.name] : null;
-                    // A render expression emits markup on purpose, it cannot be text. It is author-written, and this runs on the customer's page.
                     if (c.render) setSafeHtml(td, renderCell(c.render, row.data));
                     else if (c.dataType === 'currency' && raw !== null && raw !== undefined && raw !== '') td.innerText = fmtCurrency(raw, c.currency);
                     else td.innerText = displayValue(raw);
@@ -613,7 +590,6 @@
                         b.type = 'button';
                         b.className = 'baserow-btn';
                         b.innerText = a.label;
-                        // Builds a URL from the row's real data, never the HTML-escaped copy renderCell uses for markup.
                         b.onclick = () => {
                             const url = safeEval(a.hrefExpr, row.data);
                             if (typeof url === 'string' && url && !isUnsafeUrl(url)) window.location.href = url;
@@ -666,7 +642,6 @@
         wrap.appendChild(pager);
         parent.appendChild(wrap);
 
-        // A row-action link elsewhere can deep-link straight into a filtered list via ?q=.
         const qs = (new URLSearchParams(window.location.search).get('q') || '').trim();
         if (qs) search.value = qs;
         load();
@@ -755,7 +730,6 @@
             if (submitBtn) submitBtn.setAttribute('aria-busy', 'true');
             const data = extractFormData();
 
-            // A file field's value is a File object; sending one forces multipart/form-data for the whole submission.
             const hasFile = Object.values(data).some((v) => typeof File !== 'undefined' && v instanceof File);
             const fetchOptions = hasFile ? {
                 method: 'POST',
@@ -795,7 +769,6 @@
                             triggerReactiveUpdate();
                         });
                     } else {
-                        // The server names every field that failed alongside its message, the same inputs that errored on submit are painted red immediately.
                         markInvalid(res.invalid || []);
                         toast(res && res.errors && res.errors.length ? res.errors : ['Submit failed. Please try again.'], 'error');
                     }
@@ -809,7 +782,6 @@
         parent.appendChild(formEl);
     }
 
-    // Shared by a standalone "button" block and every button inside a "button_bar".
     function buildActionButton(row) {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -836,7 +808,6 @@
                 const url = safeEval(row.hrefExpr, extractFormData());
                 if (typeof url === 'string' && url && !isUnsafeUrl(url)) window.location.href = url;
             } else if (row.action === 'run') {
-                // A blank button: no fixed outcome, just this expression's result surfaced as a toast.
                 const result = safeEval(row.expr, extractFormData());
                 if (result !== '' && result !== null && result !== undefined) toast(String(result), 'info');
             }
@@ -844,7 +815,6 @@
         return btn;
     }
 
-    // The sub-schema of an array field; null means a plain scalar-list array field.
     function arrayColumns(field) {
         try {
             const o = JSON.parse(field.optionsJson || '{}');
@@ -861,7 +831,6 @@
         return 'text'; // also covers 'select': the server accepts any string for a line-item cell of that type
     }
 
-    // A Preact spike implementing a dynamic row table that serializes to a hidden JSON input and avoids repainting on keystrokes to preserve the input caret.
     function renderLineItems(rowCfg, table) {
         const field = table.fields.find((f) => f.name === rowCfg.field);
         const columns = field ? arrayColumns(field) : null;
@@ -945,7 +914,6 @@
         return wrap;
     }
 
-    // An in-memory row staging grid that flushes and links to the parent record only after the header is created.
     function renderChildTable(row, table) {
         const childDef = ((table && table.childTables) || []).find((c) => c.id === row.table);
         if (!childDef || !childDef.columns.length) return null;
@@ -1017,7 +985,6 @@
         return wrap;
     }
 
-    // Saves staged child rows after header creation, collecting individual save errors without failing the entire submission.
     async function flushChildTables(headerId) {
         const errors = [];
         for (const entry of pendingChildTables) {
@@ -1038,7 +1005,6 @@
         return errors;
     }
 
-    // tags the block's own wrapper once, whatever type-specific branch below produced it, so triggerReactiveUpdate can show/hide it uniformly
     function renderLayoutRow(row, table) {
         const node = renderLayoutRowInner(row, table);
         if (node && row.showIf) node.dataset.showIf = row.showIf;
@@ -1119,7 +1085,6 @@
         if (field.isHidden || field.dataType === 'derived') return;
         field.options = parseOptions(field);
 
-        // Read-only renders the value, never an input: a disabled input still invites editing.
         if (formIsReadOnly || field.isReadOnly) {
             const row = document.createElement('div');
             row.className = 'baserow-readonly';
@@ -1287,7 +1252,6 @@
 
         el.dataset.name = field.name;
 
-        // Native constraints give immediate browser feedback; the server re-checks every one.
         if (field.isRequired && type !== 'calculated' && type !== 'systemid') el.required = true;
         if (field.pattern && el.tagName === 'INPUT' && ['text', 'url', 'search', 'email', 'tel'].includes(el.type))
             el.pattern = field.pattern;
@@ -1305,7 +1269,6 @@
         return el;
     }
 
-    // searches server-side as the visitor types; dataset.name lives on the hidden input so extractFormData needs no special case
     function createReferenceCombobox(field) {
         const wrap = document.createElement('div');
         wrap.className = 'baserow-combobox';
@@ -1320,8 +1283,6 @@
         hidden.type = 'hidden';
         hidden.dataset.name = field.name;
 
-        // a single chosen value renders as a removable chip, not editable text: there is only ever one reference, there
-        // is nothing to reselect until the current pick is explicitly cleared
         const chip = document.createElement('div');
         chip.className = 'baserow-combobox-chip';
         chip.hidden = true;
@@ -1393,7 +1354,6 @@
                 rows.forEach((r) => {
                     const li = document.createElement('li');
                     li.innerText = r.label;
-                    // mousedown, not click: it fires before the search input's blur, the list is still open to read from.
                     li.addEventListener('mousedown', (e) => {
                         e.preventDefault();
                         selectOption(r.id, r.label);
@@ -1496,7 +1456,6 @@
         return data;
     }
 
-    // multiselect arrays become repeated keys, json/array fields become one JSON-stringified entry, rest as-is
     function toFormData(data) {
         const fd = new FormData();
         const compound = new Set((tableSchema.fields || []).filter((f) => f.dataType === 'json' || f.dataType === 'array').map((f) => f.name));
@@ -1511,8 +1470,6 @@
         return fd;
     }
 
-    // SUM(Field, 'Column') mirrors the server-side JsExpr grammar: a bare field-name argument, not data.Field.
-    // Rewritten to a normal property access here so a plain `new Function` sees it, not a free identifier.
     function sumOverColumn(arr, col) {
         return (Array.isArray(arr) ? arr : []).reduce((total, row) => total + (Number(row && row[col]) || 0), 0);
     }
@@ -1531,7 +1488,6 @@
         }
     }
 
-    // Intl places the symbol where locale and currency demand, amounts read correctly.
     function fmtCurrency(n, code) {
         const num = Number(n);
         if (isNaN(num)) return '';
@@ -1566,7 +1522,6 @@
         });
     }
 
-    // The validation result pairs each message with the storage name of the field it belongs to, a failing field can be painted red, not just complained about.
     function markInvalid(names) {
         (names || []).forEach((name) => {
             formEl.querySelectorAll('input, select, textarea').forEach((el) => {
@@ -1598,7 +1553,6 @@
             }
             const empty = group.every((el) => (el.type === 'checkbox' ? !el.checked : el.value === ''));
             if (empty) {
-                // a slug with a source field auto-fills server-side when left blank
                 const slugAutoFills = field.dataType === 'slug' && slugSourceField(field);
                 if (field.isRequired && !slugAutoFills) {
                     errors.push(field.name + ' is required.');
@@ -1678,8 +1632,6 @@
     window.Baseport = window.Baseport || {};
     window.Baseport.mountForm = mountBaseportForm;
 
-    // today's embed: a bare <script src="/embed.js?id=X"> mounts itself into a fresh div right after its own tag.
-    // No id means a caller only wanted the library loaded, to call window.Baseport.mountForm itself.
     const script = document.currentScript;
     if (script && new URL(script.src).searchParams.get('id')) {
         const urlParams = new URL(script.src);

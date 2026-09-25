@@ -1,8 +1,3 @@
-/* Frontend checks: node Scripts/test-frontend.js
-
-   Covers the decision logic that has actually broken in production, each case
-   named after the bug it would have caught. Not a browser test: no layout, no
-   real events, just the branches that decide what gets rendered. */
 
 const assert = require('assert');
 const fs = require('fs');
@@ -12,22 +7,24 @@ const {
     element
 } = require('./dom-stub');
 
-const wwwroot = path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot');
-// The console is split across files that share one scope; tests read them all.
+const SRC = path.join(__dirname, '..', 'Source', 'Baseport');
+const wwwroot = path.join(SRC, 'wwwroot');
+const readSource = (...parts) => {
+    const file = path.join(SRC, ...parts);
+    if (!fs.existsSync(file)) throw new Error(`missing ${path.relative(SRC, file)}; update the path in this test`);
+    return fs.readFileSync(file, 'utf8');
+};
 const ADMIN_SCRIPTS = ['ui.js', 'js/core.js', 'js/proxy.js', 'js/tables.js', 'js/records.js', 'js/import.js',
     'js/sidebar.js', 'js/schema.js', 'js/sql.js', 'js/accounts.js', 'js/actions.js',
     'js/settings.js', 'forms.js', 'js/auth.js'
 ];
 const readAll = () => ADMIN_SCRIPTS.map(read).join('\n');
 
-// The console page is composed server-side from these parts, in this order.
-// Tests read the same list, a part added to one and not the other shows up.
 const HTML_PARTS = ['admin/_shell.html', 'admin/views/tables.html', 'admin/views/forms.html',
     'admin/views/sql.html', 'admin/views/schema.html', 'admin/views/auth.html',
     'admin/views/logs.html', 'admin/views/settings.html', 'admin/views/actions.html',
     'admin/_footer.html'
 ];
-// The login card is a separate page that never loads the console scripts.
 const AUTH_PART = ['admin/_auth.html'];
 const readHtml = () => [...HTML_PARTS, ...AUTH_PART].map(read).join('\n');
 const read = f => fs.readFileSync(path.join(wwwroot, f), 'utf8');
@@ -37,7 +34,6 @@ let passed = 0,
 
 const queue = [];
 
-// queued so async cases finish before the next one swaps the stubbed globals
 function test(name, fn) {
     queue.push([name, fn]);
 }
@@ -109,9 +105,6 @@ module.redoLookupResult = redoLookupResult;
 }
 
 test('a lookup-only form still shows its builder, flagged inactive instead of hidden', () => {
-    // A form's layout belongs to the form, not to whichever action happens to be on: it's built once and
-    // takes effect the moment "Create records" is turned on, hiding it entirely used to also mean saving
-    // it as '[]' - silently discarding whatever the author had already built. Both bugs, fixed together.
     const {
         dom,
         module
@@ -196,7 +189,6 @@ test('enabling a second action repopulates its panel instead of leaving it blank
     module.applyFormShape('form', ['submit', 'lookup']);
     assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'), 'submit panel hidden');
     assert.ok(!dom.byId.kindLookup.classList.contains('hidden'), 'lookup panel hidden');
-    // Both pickers must have been rendered for the panel to be usable.
     assert.ok(dom.byId.lookupMatchFields.innerHTML !== undefined, 'lookup pickers never rendered');
 });
 
@@ -211,7 +203,6 @@ test('a form is never left with no action', () => {
 
 /* embed.js: which renderer a schema selects */
 
-// Mirrors the dispatch in embed.js. Kept in step by the assertion below, which fails if the source stops branching this way.
 function chooseRenderer(form) {
     if (form.kind === 'list') return 'list';
     const actions = form.actions || ['submit'];
@@ -283,7 +274,8 @@ test('an explicit theme choice survives a reload and outranks the system', () =>
         const dark = stored ? stored === 'dark' : window.matchMedia().matches;
         document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     };
-    const ui = eval(read('ui.js').replace(/if \(typeof window[^\n]*\n/g, '') + '; ui');
+    const quiet = { ...console, error() {} };
+    const ui = eval('(function (console) {' + read('ui.js').replace(/if \(typeof window[^\n]*\n/g, '') + '; return ui; })')(quiet);
 
     boot();
     assert.strictEqual(document.documentElement.dataset.theme, 'dark', 'should follow the system');
@@ -369,7 +361,7 @@ test('a feature stylesheet never redefines a ui primitive', () => {
 
 function loadRouter(pathname) {
     const core = read('js/core.js');
-    const slice = core.slice(core.indexOf("const BASE = "), core.indexOf('// Each section owns its route'));
+    const slice = core.slice(core.indexOf("const BASE = "), core.indexOf('const SECTION_ROUTES'));
     const module = {};
     const written = [];
     global.location = {
@@ -380,7 +372,6 @@ function loadRouter(pathname) {
         replaceState: (s, t, u) => written.push(u)
     };
     global.render = () => {};
-    // navigate() gates on hasUnsavedChanges(), which needs these two and a document stub
     global.tableDirty = false;
     global.fieldsDirty = false;
     global.document = {
@@ -394,8 +385,6 @@ function loadRouter(pathname) {
 }
 
 test('the console is mounted under /_/admin and routes are still written from the root', () => {
-    // The bug it guards: a route string that forgets the prefix silently
-    // navigates out of the console, and a deep link parses as the root section.
     assert.deepStrictEqual(loadRouter('/_/admin').module.parseRoute(), {
         section: 'tables'
     });
@@ -415,7 +404,6 @@ test('the console is mounted under /_/admin and routes are still written from th
 });
 
 /* the API name guard */
-// Now lives in openEndpointSheet's own Save button, not the removed main-panel tableApiName field.
 
 function loadApiNameGuard() {
     const tables = read('js/tables.js');
@@ -428,7 +416,6 @@ function loadApiNameGuard() {
 }
 
 test('a name is required while the table\'s API is published', () => {
-    // bug prevent: clearing the API name of a published table sent a save the API rejected.
     const module = loadApiNameGuard();
     assert.strictEqual(module.apiNameIsValid('', true), false, 'a published table with no API name was accepted');
 });
@@ -444,16 +431,13 @@ test('an unpublished table may have no API name at all', () => {
 });
 
 test('the endpoint sheet wires the guard into its own Save button', () => {
-    // The guard lives with the field it guards: the sheet that owns sheetApiName also owns disabling its own Save.
     const tables = read('js/tables.js');
     const fn = tables.slice(tables.indexOf('function openEndpointSheet'), tables.indexOf('const OPTIONS_SHOWN'));
-    // Against the switch as it stands in the sheet, not the saved value: turning Expose on has to red the empty name straight away.
     assert.ok(/apiNameIsValid\(name, exposed\.ctrl\.checked\)/.test(fn), 'openEndpointSheet no longer checks apiNameIsValid');
     assert.ok(/saveBtn\.disabled = !valid/.test(fn), 'openEndpointSheet no longer disables Save on an invalid name');
 });
 
 test('typed input is shaped into a valid API name', () => {
-    // The author should not have to know the rule to satisfy it.
     const module = loadApiNameGuard();
     const input = {
         value: 'Sales Orders_2024!',
@@ -466,9 +450,8 @@ test('typed input is shaped into a valid API name', () => {
 });
 
 test('an option list survives a comma inside one option', () => {
-    // A backslash escapes a comma that belongs to the option itself; splitOptions/joinOptions round-trip it.
     const core = read('js/core.js');
-    const slice = core.slice(core.indexOf('function splitOptions'), core.indexOf('/* Sortable list headers'));
+    const slice = core.slice(core.indexOf('function splitOptions'), core.indexOf('function sortState'));
     const module = {};
     eval(slice + '\n;module.splitOptions = splitOptions; module.joinOptions = joinOptions;');
 
@@ -480,9 +463,7 @@ test('an option list survives a comma inside one option', () => {
 });
 
 test('the client mirrors the API name pattern the server enforces', () => {
-    // Two copies of one rule: they must not drift, or the console blocks a save
-    // the API would take, or offers one it would reject.
-    const server = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'Engine', 'FieldValidation.cs'), 'utf8');
+    const server = readSource('Engine', 'Validation', 'FieldValidation.cs');
     const serverPattern = /new\(@"\^\[a-z\]\[a-z0-9-\]\{1,62\}\$"/.test(server);
     const clientPattern = /\/\^\[a-z\]\[a-z0-9-\]\{1,62\}\$\//.test(read('js/tables.js'));
     assert.ok(serverPattern, 'the server pattern changed; update the console to match');
@@ -491,7 +472,6 @@ test('the client mirrors the API name pattern the server enforces', () => {
 
 /* the OTP login flow */
 
-// auth.js boots itself on load; the checks below want its functions, not its boot.
 function loadAuthModule() {
     const dom = install(['curPass', 'newPass', 'newPass2', 'changeHint',
         'loginScreen', 'loginForm', 'forgotCard', 'changeCard',
@@ -502,7 +482,6 @@ function loadAuthModule() {
         toast() {},
         handle: async () => null
     };
-    // sso.js is a separate script on the page; the auth module only calls into it.
     global.ssoInit = () => {};
     global.ssoProviders = () => [];
     const module = {};
@@ -555,8 +534,6 @@ test('the OTP tab is a two-step flow: request a code, then enter it', () => {
 });
 
 test('a requested code expires on the client, not only when the server rejects it', () => {
-    // The field used to stay enabled and say "Sign in" long after the 60-second
-    // code was dead, a visitor only found out by submitting a spent code.
     const auth = read('js/auth.js');
     assert.ok(auth.includes('otpExpiryTimer'), 'the code has no expiry timer');
     assert.ok(auth.includes('clearTimeout(otpExpiryTimer)'), 'a stale timer outlives a reset');
@@ -579,9 +556,6 @@ test('the forgot link swaps to an explanatory card and back, clearing a pending 
     assert.ok(page.includes("href='/forgot-password'"), 'the forgot link is gone');
     assert.ok(/onclick='showForgot\(\);return false/.test(page), 'the link no longer swaps the card in place');
     assert.ok(page.includes("id='forgotCard' hidden"), 'the forgot card is not hidden behind the login form');
-    // Baseport sends no mail, there is no self-serve reset and nothing to wait
-    // for in an inbox. The card has to name the shell as the way back in, however
-    // it words it, or a visitor sits waiting for an email that never arrives.
     const forgot = page.slice(page.indexOf("id='forgotCard'"), page.indexOf("id='changeCard'"));
     assert.ok(/command line|shell|baseport accounts/i.test(forgot), 'the card no longer explains the only reset path');
     assert.ok(!/e-?mail|inbox|link will be sent/i.test(forgot), 'the card implies a reset email Baseport cannot send');
@@ -591,25 +565,17 @@ test('the forgot link swaps to an explanatory card and back, clearing a pending 
 });
 
 test('tabbing a password form goes username, password, submit before the forgot link', () => {
-    // The link used to sit inside the password label row, Tab from the
-    // password field landed on it instead of the submit button.
     const page = read('admin/_auth.html');
     assert.ok(!/field-label-row/.test(page), 'the forgot link is back inside the password label');
     assert.ok(page.indexOf("id='loginBtn'") < page.indexOf('forgot-password'), 'the forgot link tabs before the submit button');
 });
 
 test('the password tab is initialised so a hidden required field never blocks submit', () => {
-    // The OTP code input is required in the markup; until the active tab syncs
-    // the required attributes, a hidden required control makes the browser
-    // refuse the submit with "an invalid form control is not focusable".
     const auth = read('js/auth.js');
     assert.ok(/switchAuthMode\('password'\)/.test(auth), 'the active tab is never initialised');
 });
 
 test('a session still on the one-time password is forced to change it', () => {
-    // The seeded password used to render the full console and then 403 every
-    // console call, with no screen that could replace it. The auth page now
-    // includes the change card and boot() shows it before it can redirect away.
     const page = read('admin/_auth.html');
     const auth = read('js/auth.js');
     assert.ok(/id='changeCard'[^>]*hidden/.test(page), 'the change card is missing from the auth page');
@@ -718,9 +684,6 @@ test('typing does not red a field that is merely unfinished', () => {
 });
 
 test('the login card is a page of its own, and the shell no longer includes it', () => {
-    // The bug it guards: a signed-out visitor loading the console must not pull
-    // the sidebar, the sheet or any console script, and the login page must not
-    // need any of them either.
     const shell = read('admin/_shell.html');
     const footer = read('admin/_footer.html');
     const page = read('admin/_auth.html');
@@ -736,10 +699,6 @@ test('the login card is a page of its own, and the shell no longer includes it',
 });
 
 test('the switch is one component, not two', () => {
-    // The old .switch forces a fixed label size, a second markup variant
-    // (.switch-track) gets squeezed and its thumb runs past the track edge.
-    // Every switch on the console is built in script now, the check follows it there rather than
-    // reading a markup file that no longer transports one.
     const css = read('app.css');
     assert.ok(!css.includes('.switch-track'), 'a second switch implementation crept back in');
     ['ui.js', 'js/tables.js', 'js/settings.js'].forEach((file) => {
@@ -749,9 +708,6 @@ test('the switch is one component, not two', () => {
 });
 
 test('the auth page is labelled Authentication, not Auth', () => {
-    // The pane used the informal shorthand while the page it points at is the
-    // account and token surface; a sidebar that says one and a title that says
-    // the other reads as a bug.
     const sidebar = read('js/sidebar.js');
     const settings = read('js/settings.js');
     assert.ok(/\[\s*'auth',\s*'Authentication'/.test(sidebar), 'the sidebar still says Auth');
@@ -771,9 +727,6 @@ test('the jobs pane lists every job with a schedule, a next run and a run-now', 
 });
 
 test('a schedule saves explicitly, not as a side effect of running', () => {
-    // The old loadJobs auto-saved on change, the only way an operator could
-    // commit a new cron was by running the job. A save must stand alone, gated
-    // on an edit, and Enter must commit it.
     const settings = read('js/settings.js');
     assert.ok(!settings.includes("addEventListener('change', () => saveJob"), 'schedule still auto-saves on blur');
     assert.ok(settings.includes("ui.button('Save'"), 'the jobs table has no explicit Save button');
@@ -794,9 +747,6 @@ test('the backups pane stores snapshots on a rolling window', () => {
 });
 
 test('the backups pane separates settings from the snapshot list', () => {
-    // The pane used to cram the retention form and the table into one card,
-    // Save and Trigger flush against each other and against the rows. It now
-    // has a settings card and a snapshots card, like auth and jobs.
     const html = read('admin/views/settings.html');
     const css = read('app.css');
     const pane = html.slice(html.indexOf("data-pane='backups'"));
@@ -808,8 +758,6 @@ test('the backups pane separates settings from the snapshot list', () => {
 });
 
 test('the summary cards update on a full load, not only after a re-fetch', () => {
-    // boot() fills currentTables from the server payload, the tables route
-    // skips loadTables() and its updateSummary; the overview must call it itself.
     const core = read('js/core.js');
     assert.ok(/updateSummary\(currentTables\)/.test(core), 'the overview route no longer updates the summary');
     assert.ok(/function updateSummary\(tables\)/.test(core), 'updateSummary is gone');
@@ -833,8 +781,6 @@ test('the users page inherits the logs layout: actions in the header, pager in t
 });
 
 test('an account includes a role, and the console names it the way the API does', () => {
-    // The bug it guards: the editor still posting the old isAdmin flag, which the
-    // API ignores, every saved account silently falls back to consumer.
     const accounts = read('js/accounts.js');
     assert.ok(/<th>Role<\/th>/.test(read('admin/views/auth.html')), 'the accounts list no longer shows a role column');
     assert.ok(/id: 'accRole'[\s\S]*?type: 'select'/.test(accounts), 'the role is no longer a two-option control');
@@ -862,9 +808,6 @@ test('create controls live in the page header, not the sidebar', () => {
 });
 
 test('the console chrome is one sidebar and a topbar, not a rail and a panel', () => {
-    // The bug it guards: a second rail-and-panel structure surviving next to the
-    // merged sidebar, the console boots two fixed columns and the workspace
-    // is squeezed off the right edge.
     const shell = read('admin/_shell.html');
     const footer = read('admin/_footer.html');
     const sidebar = read('js/sidebar.js');
@@ -889,10 +832,6 @@ test('a new table is started from the overview, not the sidebar', () => {
 });
 
 test('the sql query actions show only while a saved query is open', () => {
-    // The bug it guards: Rename and Delete lived as icon buttons in the subbar,
-    // so the destructive action never reached the page header and a mid-size
-    // screen hid it entirely. The header now includes them, gated on an open
-    // query so a blank editor never offers Delete.
     const { install } = require('./dom-stub');
     install(['sqlQueryName', 'sqlQueryActions', 'sqlInput', 'sqlStatus', 'sqlResult', 'sqlNoData']);
     global.escapeHtml = (s) => String(s == null ? '' : s);
@@ -909,10 +848,6 @@ test('the sql query actions show only while a saved query is open', () => {
 });
 
 test('the form editor header includes Delete, hidden for a new form', () => {
-    // The bug it guards: the form editor had Preview/Cancel/Publish but no
-    // Delete, the destructive action only lived in the index row actions and
-    // an open editor could not remove the form it was editing. It hides on the
-    // create flow, where there is nothing to delete yet.
     const forms = read('admin/views/forms.html');
     assert.ok(/class='[^']*hidden[^']*' id='formDeleteBtn' onclick='deleteCurrentForm\(\)'[\s\S]*>Delete/.test(forms),
         'the form editor header lost its Delete button');
@@ -927,11 +862,7 @@ test('the form editor header includes Delete, hidden for a new form', () => {
 });
 
 test('the forms overview row includes one Open button, like the tables list', () => {
-    // The bug it guards: the forms rows shipped Preview, Edit and Delete while
-    // the tables rows carried a single Open, the two indexes read as two
-    // different lists. Edit is Open now, and Delete/Preview live in the editor
-    // header. The fragment is C#, read outside wwwroot.
-    const fragments = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'Api', 'FragmentEndpoints.cs'), 'utf8');
+    const fragments = readSource('Api', 'Endpoints', 'FragmentEndpoints.cs');
     const formsRow = fragments.slice(fragments.indexOf("fragments/forms"), fragments.indexOf("fragments/accounts"));
     assert.ok(/class=\\"row-link\\" onclick=\\"navigate\('\/forms\//.test(formsRow),
         'the forms row is not a row-link that navigates to the editor');
@@ -988,7 +919,7 @@ test('the forms subbar lists every form flat under Show all', () => {
         'Orders - Overview status open', 'Orders - Worklist',
     ], 'forms are not a flat, title-sorted list');
     assert.ok(!items.some((i) => i.header), 'a group header came back');
-    const builder = src.slice(src.indexOf('function sidebarItem'), src.indexOf('// Repaints the sidebar'));
+    const builder = src.slice(src.indexOf('function sidebarItem'), src.indexOf('function filterBar'));
     assert.ok(!/subbar-group|subbar-sep/.test(builder), 'sidebarItem still builds group headers');
     assert.strictEqual(items[0].icon, global.__sidebar.OBJECT_ICONS.folder,
         'Show all does not carry the folder icon');
@@ -999,10 +930,6 @@ test('the forms subbar lists every form flat under Show all', () => {
 });
 
 test('a subbar pill includes the original full name as its tooltip', () => {
-    // The bug it guards: the subbar pill ellipsizes long names and a hover had
-    // nothing, a stored title and its truncated shell looked identical. The
-    // tooltip is the browser's, via the title attribute: no toast spam on every
-    // hover, the full name appears when you rest on the pill.
     const { install } = require('./dom-stub');
     install([]);
     global.ui = {
@@ -1020,9 +947,6 @@ test('a subbar pill includes the original full name as its tooltip', () => {
 });
 
 test('the tables subbar marks proxy tables and leads with the table icon', () => {
-    // The bug it guards: the Tables subbar rendering plain text names, a
-    // stored table and a forwarded proxy table were indistinguishable in the
-    // rail. Each object includes the table icon; proxies are badged.
     const { install } = require('./dom-stub');
     install([]);
     global.ui = {
@@ -1056,9 +980,6 @@ test('the tables subbar marks proxy tables and leads with the table icon', () =>
 });
 
 test('the topbar stores the API reference and the account popout stays open', () => {
-    // The bug it guards: the account trigger calling toggleAccountMenu() without
-    // the event, stopPropagation never ran and the document click listener
-    // closed the popout in the same tick it opened — the menu could never show.
     const shell = read('admin/_shell.html');
     assert.ok(/class='topbar-actions'[\s\S]*window\.open\('\/docs'/.test(shell),
         'the topbar no longer links the API reference');
@@ -1079,9 +1000,6 @@ test('the sidebar collapse persists and the breadcrumb names the open record', (
 });
 
 test('the sql editor is a CodeMirror editor and every value goes through it', () => {
-    // The bug it guards: a console that reverts to a raw textarea loses tab
-    // support, highlighting, and the Ctrl+Enter/Ctrl+S shortcuts, because the
-    // keyboard handling moved out of onkeydown and into the editor's keymap.
     const sql = read('js/sql.js');
     assert.ok(/sqlEditor = CodeMirror\.fromTextArea/.test(sql), 'the editor is no longer a CodeMirror instance');
     assert.ok(/extraKeys:\s*\{\s*'Ctrl-Enter': \(\) => runSql\(\)/.test(sql), 'Ctrl+Enter no longer runs the query');
@@ -1103,10 +1021,6 @@ test('the schema canvas fills the viewport and offers reset and export on right-
 /* the public API reference */
 
 test('the API reference is served entirely from this origin', () => {
-    // The page is public and shows an auth panel. A CDN script tag, a remote
-    // font or Scalar's request proxy would each put a third party in the
-    // request path of a page we publish, and the proxy would see whatever
-    // token a reader pastes in.
     const docs = read('docs.html');
     const external = [...docs.matchAll(/(?:src|href)=['"](https?:)?\/\//g)].map(m => m[0]);
     assert.deepStrictEqual(external, [], `docs.html loads something off-origin: ${external.join(', ')}`);
@@ -1129,16 +1043,11 @@ test('the console links to the reference instead of the raw spec', () => {
 });
 
 test('every handler a server-rendered row calls is defined', () => {
-    // Rows are built in C# and assigned with innerHTML, their onclick names
-    // are never seen by the markup scan above. A renamed console function would
-    // leave a button that throws on click and nothing would catch it.
-    const fragments = fs.readFileSync(
-        path.join(__dirname, '..', 'Source', 'Baseport', 'Api', 'FragmentEndpoints.cs'), 'utf8');
+    const fragments = readSource('Api', 'Endpoints', 'FragmentEndpoints.cs');
     const js = readAll();
     const defined = new Set([...js.matchAll(/function\s+([A-Za-z_$][\w$]*)/g)].map(m => m[1]));
 
     const called = new Set([
-        // Html.Button("Label", "fn", ...) and Html.IconButton(icon, "title", "fn", ...)
         ...[...fragments.matchAll(/Html\.Button\("[^"]*",\s*"(\w+)"/g)].map(m => m[1]),
         ...[...fragments.matchAll(/Html\.IconButton\([^,]+,\s*"[^"]*",\s*"(\w+)"/g)].map(m => m[1]),
         // onclick written inline in the fragment markup
@@ -1150,7 +1059,6 @@ test('every handler a server-rendered row calls is defined', () => {
 });
 
 test('both places that reach a table\'s endpoint config open the same sheet', () => {
-    // One sheet decides how an endpoint documents itself; two would drift.
     assert.ok(read('admin/views/tables.html').includes("onclick='openEndpointSheet()'"), "a table's own settings page has no endpoint button");
     assert.ok(read('js/settings.js').includes('openEndpointSheet(t.id)'), 'Settings > API has no endpoint button');
     const definitions = [...readAll().matchAll(/function\s+openEndpointSheet\b/g)];
@@ -1158,8 +1066,6 @@ test('both places that reach a table\'s endpoint config open the same sheet', ()
 });
 
 test('a render expression cannot inject script into the host page', () => {
-    // The expression is author-written and its output lands on the customer's
-    // site, a compromised console must not become XSS on every embedding page.
     const embed = fs.readFileSync(
         path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'embed.js'), 'utf8');
 
@@ -1175,10 +1081,7 @@ test('a render expression cannot inject script into the host page', () => {
     }
 });
 
-
 test('the sql editor is built only once the view is on screen', () => {
-    // .view is display:none, a CodeMirror built at load time measures a
-    // zero-height container and renders partially until something forces a redraw.
     const sql = fs.readFileSync(
         path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'js', 'sql.js'), 'utf8');
     const core = fs.readFileSync(
@@ -1191,8 +1094,6 @@ test('the sql editor is built only once the view is on screen', () => {
     assert.ok(/function initSqlEditor\(\)\s*\{\s*if \(sqlEditor\) return;/.test(sql),
         'initSqlEditor is no longer idempotent, revisiting /sql would rebuild it');
 });
-
-/* form round-tripping: button actions, redirects, and per-row list actions */
 
 test('the button action dropdown offers cancel, validate, link and run, not just submit and reset', () => {
     const forms = read('forms.js');
@@ -1207,7 +1108,6 @@ test('switching a button to link or cancel reveals its own extra field', () => {
     const btn = forms.slice(forms.indexOf("row.t === 'button'"), forms.indexOf("row.t === 'group'"));
     assert.ok(/row\.action === 'cancel'[\s\S]*?'href'/.test(btn), 'cancel never gets an href field');
     assert.ok(/row\.action === 'link'[\s\S]*?'hrefExpr'/.test(btn), 'link never gets an hrefExpr field');
-    // The bug this catches: dropdown() only ever writes row[prop] and never re-renders, a dropdown() call here would leave the extra field stuck.
     assert.ok(/actionSel\.onchange = \(\) => \{[\s\S]*?renderCanvas\(\)/.test(forms),
         'the action select does not re-render, switching to link/cancel would not reveal its field');
 });
@@ -1240,7 +1140,6 @@ test('onSuccessRedirect only evaluates after a successful submit, never after a 
 
 test('embed guards link, cancel and action-column hrefs against javascript: and data: URLs', () => {
     const embed = read('embed.js');
-    // Every place a URL is built from author config or an expression must pass through the same guard.
     const guarded = [
         /row\.action === 'cancel'[\s\S]{0,200}isUnsafeUrl\(url\)/,
         /row\.action === 'link'[\s\S]{0,200}isUnsafeUrl\(url\)/,
@@ -1259,16 +1158,12 @@ test('a lookup form auto-runs from ?q= on load, a deep link lands on a result', 
 });
 
 test('list row actions read the raw row data, not the HTML-escaped renderer copy', () => {
-    // A renderer builds markup, its data is escaped first. An action button
-    // builds a URL, not markup, escaping it would double-encode every value.
     const embed = read('embed.js');
     const actionBlock = embed.slice(embed.indexOf('actions.forEach((a) => {'), embed.indexOf('tr.appendChild(td);', embed.indexOf('actions.forEach((a) => {')));
     assert.ok(actionBlock.includes('safeEval(a.hrefExpr, row.data)'), 'list actions no longer read row.data directly');
 });
 
 test('both field-type pickers read the server list, and the console keeps no copy of it', () => {
-    // The quick-add once drifted out of the full editor by a type, it listed one fewer than the
-    // server accepted. The list is now the server's FieldTypes table, delivered in the bootstrap.
     const js = read('js/tables.js');
     assert.ok(!/\[['"]derived['"],\s*['"]/.test(js), 'the console hardcodes a field-type list again');
     assert.ok(/fieldTypeRows = types \|\| \[\]/.test(js), 'setFieldTypes keeps no server rows to offer');
@@ -1279,8 +1174,6 @@ test('both field-type pickers read the server list, and the console keeps no cop
         'quick-add and the field editor no longer share one type list',
     );
 });
-
-/* the public auth pages: /auth redirects to the login card unconditionally */
 
 function loadUserAuth(stored, statusAuthenticated) {
     const store = stored ? {
@@ -1300,7 +1193,6 @@ function loadUserAuth(stored, statusAuthenticated) {
         replace: u => replaced.push(u),
         href: '/auth/login'
     };
-    // The cookie is HttpOnly, the page cannot read it; the server is what answers.
     global.fetch = async () => ({
         ok: true,
         json: async () => ({
@@ -1328,7 +1220,6 @@ test('a visitor holding tokens is not asked to sign in again on /auth', async ()
     assert.deepStrictEqual(replaced, ['/auth/profile'], '/auth/login keeps a signed-in user on the login card');
 });
 
-// The console sign-in leaves a cookie and nothing in localStorage, a page that only reads localStorage shows an operator a login form they do not need.
 test('a cookie session is recognised on /auth even with nothing stored locally', async () => {
     const {
         module,
@@ -1347,7 +1238,6 @@ test('a guest stays on the login card', async () => {
     assert.deepStrictEqual(replaced, [], 'a visitor with no session is bounced to a profile they cannot load');
 });
 
-// A cookie session has no stored refresh token, a sign-out that only fires when tokens exist leaves the cookie alive.
 test('signing out always reaches the server', () => {
     const js = read('js/userauth.js');
     const block = js.slice(js.indexOf('async function bpSignOut'), js.indexOf('async function bpDeleteAccount'));
@@ -1361,8 +1251,6 @@ test('both guest pages call the guard, neither drifts out of it', () => {
     });
 });
 
-/* the console mirrors the guards the accounts API enforces */
-
 test('an admin sheet greys the refused fields and keeps the token panel', () => {
     const js = read('js/accounts.js');
     const open = js.slice(js.indexOf('function openAccountForm'), js.indexOf('function adminNotice'));
@@ -1374,10 +1262,6 @@ test('an admin sheet greys the refused fields and keeps the token panel', () => 
 });
 
 test('the admin lock covers what takes an account over, and nothing else', () => {
-    // Greying the name and the address said they were credentials. They are not:
-    // Baseport sends no mail, no address is a reset path, and pillar 17 already
-    // refuses to auto-link an admin by either. The lock is on the password, the
-    // role, the disabled switch and deletion.
     const js = read('js/accounts.js');
     const open = js.slice(js.indexOf('function openAccountForm'), js.indexOf('function adminNotice'));
     const greyed = open.match(/\[([^\]]*)\]\s*\n\s*\.forEach\(\(id\) => \{/);
@@ -1386,20 +1270,15 @@ test('the admin lock covers what takes an account over, and nothing else', () =>
     for (const id of ['accRole', 'accPassword', 'accDisabled'])
         assert.ok(greyed[1].includes(id), `${id} is no longer greyed on an admin`);
 
-    // A greyed control still reads back a value, and the role select does not even
-    // offer admin when editing: sending either would ask the API for the one change
-    // it refuses, and fail the save the operator did make.
     const submit = js.slice(js.indexOf('async function submitAccount'));
     assert.ok(/const locked =[\s\S]{0,120}role === 'admin'/.test(submit), 'the save no longer knows it is editing an admin');
     assert.ok(/if \(!locked\) \{[\s\S]*?body\.role/.test(submit), 'a refused role is sent anyway');
     assert.ok(/if \(!locked\) \{[\s\S]*?body\.isDisabled/.test(submit), 'a refused disabled switch is sent anyway');
     assert.ok(/if \(!locked\) \{[\s\S]*?body\.password/.test(submit), 'a refused password is sent anyway');
 
-    // And the sheet needs a Save now that it has fields worth saving.
     assert.ok(!/if \(!locked\) \{\s*const saveBtn/.test(open), 'an admin sheet still has no way to save');
 });
 
-// Offering Admin when editing would build a promotion the API refuses, which is the "greyed out, never cleared" rule in AGENTS.md.
 test('the role select offers admin only when creating', () => {
     const js = read('js/accounts.js');
     const roleField = js.slice(js.indexOf("id: 'accRole'"), js.indexOf("if (a) {"));
@@ -1414,12 +1293,10 @@ test('a blank password field is not sent, saving never clears a password', () =>
     assert.ok(/if \(password(?: && password\.value|\?\.value)\) body\.password/.test(submit), 'an empty password field is submitted');
 });
 
-// The generated password is pasted straight into the command, anything under PasswordMin would be refused by the command it appears in.
 test('the generated admin password clears the server minimum', () => {
     const js = read('js/accounts.js');
     const fn = js.slice(js.indexOf('function randomPassword'), js.indexOf('function adminNotice'));
     const module = {};
-    // Varies per call, the length branch is actually exercised instead of pinned to one value.
     let seed = 0;
     global.crypto = {
         getRandomValues: (a) => {
@@ -1445,12 +1322,10 @@ test('the shell commands carry a hover copy button', () => {
     const ui_ = read('ui.js');
     assert.ok(ui_.includes('function copyable('), 'ui.js has no copyable primitive');
     assert.ok(/copyable,/.test(ui_.slice(ui_.lastIndexOf('return {'))), 'copyable is not exported');
-    // Feature stylesheets must not redefine a primitive, the styling belongs in ui.css.
     assert.ok(read('ui.css').includes('.copy-btn'), 'the copy button has no primitive styling');
     assert.ok(!read('app.css').includes('.copy-btn'), 'app.css redefines the copy button');
 });
 
-// The switch was defined twice in app.css and had no disabled state. It is a primitive now, it lives in ui.css and nowhere else.
 test('the switch is a single primitive, not a feature-stylesheet duplicate', () => {
     const uiCss = read('ui.css');
     const appCss = read('app.css');
@@ -1521,7 +1396,6 @@ test('embed.js renders child_table blocks and stages their rows for a post-submi
         'flushChildTables does not post to the per-form child-table route with the new header id');
 });
 
-// live-browser only: embed.js is a lone <script src>, so it must load Preact/htm itself or a line_items/child_table block throws "htm is not defined" (this headless suite never hits that path)
 test('embed.js loads its own Preact/htm dependencies before rendering a block that needs them', () => {
     const embed = read('embed.js');
     assert.ok(embed.includes('function ensurePreactHtm('), 'ensurePreactHtm is missing');
@@ -1542,7 +1416,7 @@ test('undo/redo snapshots each builder at the same choke point every one of its 
     assert.ok(renderCanvas.includes('layoutHistory.push()'), 'renderCanvas no longer snapshots layout history');
     assert.ok(forms.includes('function undoLayout()') && forms.includes('function redoLayout()'), 'layout undo/redo entry points are missing');
 
-    const renderListBuilder = forms.slice(forms.indexOf('function renderListBuilder('), forms.indexOf('// data.Id'));
+    const renderListBuilder = forms.slice(forms.indexOf('function renderListBuilder('), forms.indexOf('const LINK_EXPR_PLACEHOLDER'));
     assert.ok(renderListBuilder.includes('listColumnsHistory.push()'), 'renderListBuilder no longer snapshots list-column history');
     assert.ok(forms.includes('function undoListColumns()') && forms.includes('function redoListColumns()'), 'list-column undo/redo entry points are missing');
 
@@ -1556,8 +1430,6 @@ test('embed.js renders container, line_items and button_bar without duplicating 
     assert.ok(embed.includes("row.t === 'container'"), 'embed.js does not render container blocks');
     assert.ok(embed.includes("row.t === 'line_items'"), 'embed.js does not render line_items blocks');
     assert.ok(embed.includes("row.t === 'button_bar'"), 'embed.js does not render button_bar blocks');
-    // Both the standalone button and every button inside a bar must funnel through one handler,
-    // the same guarded window.location.href logic the javascript:/data: URL test checks.
     const definitions = [...embed.matchAll(/function\s+buildActionButton\b/g)];
     assert.strictEqual(definitions.length, 1, 'buildActionButton is defined more than once');
     assert.ok(/row\.t === 'button'\)\s*return buildActionButton\(row\)/.test(embed), "the standalone button no longer reuses buildActionButton");
@@ -1597,7 +1469,6 @@ test('undo/redo buttons show a disabled state instead of silently no-opping, for
 });
 
 test('the Blocks palette heading gets top spacing, not just an adjacent-h4 selector that never matches', () => {
-    // Fields h4 is followed by a <ul>, then Blocks h4 - so 'h4+h4' never matches either heading.
     const appCss = read('app.css');
     assert.ok(!/\.builder-palette h4\+h4/.test(appCss), 'the dead h4+h4 selector is still there');
     assert.ok(/\.builder-palette h4:not\(:first-child\)\s*\{\s*margin-top:\s*1rem;/.test(appCss),
@@ -1620,7 +1491,6 @@ test('the forms sidebar tells Form and List apart by icon alone, with no redunda
     assert.ok(!/badge:/.test(formsSpec), 'a redundant Form/List text tag is still built for every forms sidebar item');
     assert.ok(/icon: f\.kind === 'list' \? OBJECT_ICONS\.list : OBJECT_ICONS\.form/.test(formsSpec),
         'the sidebar item no longer picks a kind-specific icon');
-    // The list icon must not be a near-copy of the form icon now that it is the only signal left.
     const formIcon = /form: SECTION_ICONS\.forms/.test(sidebar);
     assert.ok(formIcon, 'sanity: form icon definition moved');
     assert.ok(!sidebar.includes("list: \"<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M8 9h8M8 13h8M8 17h4'/></svg>\""),
@@ -1722,9 +1592,6 @@ test('the Show field order loaded from a saved config is exactly what gets re-sa
 });
 
 test('dropping a chip on another chip reorders instead of silently doing nothing', () => {
-    // The bug: a same-column drop used to hit `moved.path === path` and just re-render, no reorder at all -
-    // a column's own field order was permanently fixed to insertion order. Every chip is now its own drop
-    // target (insert-before), and the column background stays a plain append.
     const forms = read('forms.js');
     assert.ok(forms.includes('function dropFieldAt(ev, targetIndex)'), 'the shared reorder-aware drop handler is missing');
     assert.ok(/col\.items\.forEach\(\(item, itemIdx\) => \{/.test(forms), "each chip's own index is no longer tracked");
@@ -1732,15 +1599,11 @@ test('dropping a chip on another chip reorders instead of silently doing nothing
         'a chip no longer has its own drop handler inserting before itself');
     assert.ok(/colEl\.addEventListener\('drop', \(ev\) => \{[\s\S]{0,150}dropFieldAt\(ev, undefined\)/.test(forms),
         'the column background no longer appends to the end');
-    // The old dead-end must be gone, not just shadowed by the new code.
     assert.ok(!/JSON\.stringify\(moved\.path\) === JSON\.stringify\(path\)\)\s*\{\s*renderCanvas\(\);\s*return;\s*\}/.test(forms),
         'a same-column drop still just re-renders without reordering');
 });
 
 test('dragging over a chip shows a drop indicator, not just a silent reorder', () => {
-    // Every chip calls stopPropagation() on its own dragover (needed so its own drop handler, not the
-    // column's, wins), which also meant the column's drop-hover highlight could never fire while hovering
-    // a chip - the exact moment a same-column reorder happens had zero visual feedback.
     const forms = read('forms.js');
     assert.ok(/chip\.addEventListener\('dragover', \(ev\) => \{[\s\S]{0,80}chip\.classList\.add\('drop-before'\)/.test(forms),
         'a chip no longer marks itself as a drop target while dragged over');
@@ -1753,15 +1616,11 @@ test('dragging over a chip shows a drop indicator, not just a silent reorder', (
 });
 
 test('a column\'s drop-hover border does not flicker off when the drag crosses onto a child chip', () => {
-    // dragleave fires the instant the pointer crosses onto ANY child element (a chip, even the chip's own
-    // x button), which used to blindly clear drop-hover/drop-before even though the drag never actually left
-    // the column/chip - relatedTarget tells you where the pointer really went.
     const forms = read('forms.js');
     assert.ok(/colEl\.addEventListener\('dragleave', \(ev\) => \{[\s\S]{0,400}colEl\.contains\(ev\.relatedTarget\)[\s\S]{0,150}colEl\.classList\.remove\('drop-hover'\)/.test(forms),
         "the column's dragleave still clears drop-hover on every child-boundary crossing");
     assert.ok(/chip\.addEventListener\('dragleave', \(ev\) => \{[\s\S]{0,400}chip\.contains\(ev\.relatedTarget\)[\s\S]{0,150}chip\.classList\.remove\('drop-before'\)/.test(forms),
         "a chip's dragleave still clears drop-before on every child-boundary crossing (e.g. its own x button)");
-    // A drag cancelled outside any valid target must not leave the highlight stuck forever.
     assert.ok(/chip\.addEventListener\('dragend', \(\) => \{[\s\S]{0,300}bcol\.drop-hover/.test(forms),
         'the dragend safety sweep no longer clears a stuck column border too');
 });
@@ -1788,8 +1647,6 @@ test('a run button evaluates its expression and shows the result as a toast, wit
 });
 
 test('the list and lookup canvases label a field with normal-case body text, not the ROW/CONTAINER eyebrow style', () => {
-    // .brow-type is an all-caps, letter-spaced tag sized for a fixed short word like ROW or CONTAINER.
-    // A field's own name is the primary content of that row, not a category label.
     const forms = read('forms.js');
     assert.ok(!forms.includes("label.className = 'brow-type';"), "a field-name label still borrows the block-type eyebrow style");
     const matches = forms.match(/label\.className = 'brow-field-name';/g) || [];
@@ -1799,8 +1656,6 @@ test('the list and lookup canvases label a field with normal-case body text, not
 });
 
 test('the onboarding step indicator is a real control (jumps steps), not a decoration that only looks clickable', () => {
-    // .seg-btn includes cursor:pointer and sits next to the genuinely clickable viewport toggle - shipping it
-    // with no onclick at all makes it look interactive while doing nothing.
     const html = read('admin/views/forms.html');
     assert.ok(/data-step='0' onclick='goToLookupStep\(0\)'/.test(html), 'step 0 indicator has no click handler');
     assert.ok(/data-step='1' onclick='goToLookupStep\(1\)'/.test(html), 'step 1 indicator has no click handler');
@@ -1826,9 +1681,6 @@ test('the onboarding step indicator is a real control (jumps steps), not a decor
 });
 
 test('list columns and lookup Show fields get their own independent undo, not just the submit layout', () => {
-    // Viewport preview doesn't apply here (a plain ordered list has nothing width-dependent to preview),
-    // but the drag/remove mistakes it protects against are identical to the submit layout's, it was an
-    // unjustified gap, not a deliberate one.
     const {
         dom,
         module
@@ -1886,12 +1738,9 @@ test('lookup Show fields undo independently of the list and submit builders', ()
     assert.deepStrictEqual(module.getLookupResultOrder(), ['Name'], 'lookup-result redo did not restore the field');
 });
 
-
-/* Single sign-on and the redesigned sign-in screens */
+/* single sign-on and the redesigned sign-in screens */
 
 test('the sign-in screens are a column on the page, not a card', () => {
-    // The card drew a border, a background and a radius around a page that has
-    // nothing else on it: chrome around chrome. app.css must not bring it back.
     const css = read('app.css');
     for (const page of ['admin/_auth.html', 'auth/login.html', 'auth/register.html', 'auth/profile.html'])
         assert.ok(!/login-card|login-screen/.test(read(page)), `${page} still renders the login card`);
@@ -1905,7 +1754,6 @@ test('the wordmark is masked, it takes the theme instead of a fixed navy', () =>
     const svg = read('baseport.svg');
     assert.ok(/\.signin-mark\s*{[\s\S]*?mask:\s*url\('\/baseport\.svg'\)/.test(css), 'the wordmark is not painted through a mask');
     assert.ok(/\.signin-mark\s*{[\s\S]*?background-color:\s*hsl\(var\(--foreground\)\)/.test(css), 'the wordmark ignores the foreground token');
-    // Live <text> renders in whatever Inter-like font the visitor happens to have.
     assert.ok(!/<text/.test(svg), 'the wordmark is text again, not paths');
     assert.ok(!/#000155/.test(svg), 'the wordmark includes a hard-coded colour');
 });
@@ -1924,8 +1772,6 @@ test('both sign-in screens offer the same providers from the same script', () =>
 });
 
 test('the provider buttons come from the rendered payload, never from a fetch', () => {
-    // A round trip here would leave the screen without its buttons on the first
-    // paint, which is the one thing the server-rendered bootstrap exists to stop.
     const sso = read('js/sso.js');
     assert.ok(!/fetch\(/.test(sso), 'the sign-in screen asks the server for its providers');
     assert.ok(/getElementById\('bootstrap'\)/.test(sso), 'the providers are not read from the rendered payload');
@@ -1934,8 +1780,6 @@ test('the provider buttons come from the rendered payload, never from a fetch', 
 });
 
 test('a failed sign-in reports a code the screen owns, and clears it from the address bar', () => {
-    // The callback must never put a provider-written message in the URL, and a
-    // reload must not re-report an error the visitor already saw.
     const sso = read('js/sso.js');
     for (const code of ['failed', 'denied', 'no_account', 'disabled', 'no_console'])
         assert.ok(new RegExp(`\\b${code}:`).test(sso), `the ${code} outcome has no wording`);
@@ -1945,8 +1789,6 @@ test('a failed sign-in reports a code the screen owns, and clears it from the ad
 });
 
 test('one panel at a time, and the providers belong to the sign-in panel', () => {
-    // Each panel includes its own heading now, two on screen reads as two
-    // headings, and the provider buttons under a forgot-password panel are noise.
     const auth = read('js/auth.js');
     assert.ok(/function showPanel/.test(auth), 'the panels are toggled ad hoc again');
     assert.ok(/ssoBlock[\s\S]{0,120}name !== 'login'/.test(auth), 'the provider block outlives the sign-in panel');
@@ -1955,9 +1797,6 @@ test('one panel at a time, and the providers belong to the sign-in panel', () =>
 });
 
 test('the username stops moving once a one-time code is out', () => {
-    // The server issues a code for one username and consumes it for that same
-    // username, a field still open for editing only offered the operator a
-    // code that could never work, with "that code is not valid" as the answer.
     const auth = read('js/auth.js');
     assert.ok(/function lockUsername/.test(auth), 'nothing locks the username field');
     assert.ok(/otpRequested = true;\s*\n\s*lockUsername\(true\)/.test(auth), 'the field stays editable while a code is pending');
@@ -1969,16 +1808,12 @@ test('the username stops moving once a one-time code is out', () => {
 });
 
 test('a confirmation is a modal, asking never destroys what it asks about', () => {
-    // sheet() closes whatever sheet is already open, a confirmation rendered
-    // as one answered the question by throwing away the editor behind it: the
-    // account sheet vanished the moment its Revoke button asked to be sure.
     const ui = read('ui.js');
     const confirm = ui.slice(ui.indexOf('function confirm('), ui.indexOf('return {', ui.indexOf('function confirm(')));
     assert.ok(/renderModal\(title, body, actions\)/.test(confirm), 'a confirmation does not render as a modal');
     assert.ok(!/sheet\(title, body, actions\)/.test(confirm), 'a confirmation still renders as a sheet');
     assert.ok(!/modal = false/.test(confirm), 'the sheet path is still reachable through an option');
     assert.ok(/function sheet\([\s\S]{0,80}closeSheet\(\)/.test(ui), 'sheet() no longer closes the open sheet, which was the reason');
-    // And it has to be on top of the sheet it was asked from, not behind it.
     const css = read('ui.css');
     const z = (sel) => Number(css.slice(css.indexOf(sel)).match(/z-index:\s*(\d+)/)[1]);
     assert.ok(z('.modal-overlay {') > z('.sheet {'), 'a confirmation renders behind the sheet that asked for it');
@@ -1986,9 +1821,6 @@ test('a confirmation is a modal, asking never destroys what it asks about', () =
 });
 
 test('the currency and time zone lists come from the browser, not from a list we keep current', () => {
-    // A three-letter free-text box accepted "EU" and "eur" alike, and there is
-    // no reason to ship ISO 4217 or the IANA zone table when every browser has
-    // both. The stored value stays selectable even if this browser lacks it.
     const settings = read('js/settings.js');
     const html = read('admin/views/settings.html');
     assert.ok(/<select class='input' id='settingsCurrency'>/.test(html), 'the currency is typed in again');
@@ -1997,22 +1829,16 @@ test('the currency and time zone lists come from the browser, not from a list we
     assert.ok(/ui\.fillOptions\(document\.getElementById\('settingsTimeZone'\), ui\.timeZoneOptions\(\)/.test(settings), 'the zone list is not filled from the browser');
     assert.ok(/timeZone: document\.getElementById\('settingsTimeZone'\)\.value/.test(settings), 'the zone is never saved');
     assert.ok(/supportedValuesOf/.test(read('ui.js')), 'the lists are carried in our own source');
-    // One formatter, a timestamp reads the same in every view.
     assert.ok(/function when\(iso\)/.test(read('ui.js')), 'there is no shared timestamp formatter');
-    // Numbers still take the reader's locale; only the clock is the instance's.
     for (const file of ['js/settings.js', 'js/sql.js', 'js/accounts.js'])
         assert.ok(!/new Date\([^)]*\)\.toLocale/.test(read(file)), `${file} formats a timestamp in the reader's own zone`);
 });
 
 test('a new provider is offered somewhere by default', () => {
-    // Enabled alone put a provider in the list, said "Enabled" in its row, and
-    // showed no button on any sign-in screen. Three switches, two of which had to
-    // be found before anything happened.
     const settings = read('js/settings.js');
     const sheet = settings.slice(settings.indexOf('function openOidcSheet'), settings.indexOf('function callbackFor'));
     assert.ok(/oidcIsEnabled'[\s\S]{0,80}checked: p \? p\.isEnabled : true/.test(sheet), 'a new provider is added switched off');
     assert.ok(/oidcConsoleEnabled'[\s\S]{0,80}checked: p \? p\.consoleEnabled : true/.test(sheet), 'a new provider is offered nowhere');
-    // Switched off, the surfaces are remembered, the row must not read as broken.
     assert.ok(/!p\.isEnabled \? 'Off'/.test(settings), 'a parked provider still reads as misconfigured');
 });
 
@@ -2023,8 +1849,7 @@ test('the provider sheet never reads a secret back, and never clears one by omis
     assert.ok(/clientSecret\.ctrl\.value \? \{ clientSecret/.test(settings), 'an untouched secret field is sent, which would clear the stored one');
 });
 
-
-/* The account menu behind the avatar */
+/* the account menu behind the avatar */
 
 function loadAccountMenu(stored) {
     const dom = install(['accountMenu', 'appearanceMenu', 'appearanceTrigger']);
@@ -2055,8 +1880,6 @@ function loadAccountMenu(stored) {
 }
 
 test('the avatar opens a menu that names the account and its address', () => {
-    // The trigger used to open a single Sign out button, which said nothing
-    // about which account was about to be signed out of.
     const shell = read('admin/_shell.html');
     const auth = read('js/auth.js');
     assert.ok(/id='accountMenu'[^>]*role='menu'/.test(shell), 'the account menu is not a menu');
@@ -2067,8 +1890,6 @@ test('the avatar opens a menu that names the account and its address', () => {
 });
 
 test('the appearance choice offers system, and the tick follows the choice not the screen', () => {
-    // With System picked at night the screen is dark, but Dark is not the
-    // choice: ticking what is rendered would make the menu lie about it.
     const { module, rows } = loadAccountMenu(null);
     const tick = () => rows.filter((r) => r.classList.contains('checked')).map((r) => r.dataset.appearance);
 
@@ -2079,7 +1900,6 @@ test('the appearance choice offers system, and the tick follows the choice not t
     assert.deepStrictEqual(tick(), ['dark'], 'choosing Dark did not move the tick');
     assert.strictEqual(localStorage.getItem('baseport.theme'), 'dark', 'the choice was not remembered');
 
-    // Stored as no choice at all, which is what the head script already reads.
     module.chooseAppearance('system');
     assert.deepStrictEqual(tick(), ['system'], 'choosing System did not move the tick');
     assert.strictEqual(localStorage.getItem('baseport.theme'), null, 'System left an explicit choice behind');
@@ -2087,8 +1907,6 @@ test('the appearance choice offers system, and the tick follows the choice not t
 });
 
 test('the submenu never outlives the menu that owns it', () => {
-    // A flyout left open behind a closed menu floats over the page with nothing
-    // anchoring it.
     const { dom, module } = loadAccountMenu('light');
     const open = (el) => !el.classList.contains('hidden');
 
@@ -2101,11 +1919,9 @@ test('the submenu never outlives the menu that owns it', () => {
     assert.ok(!open(dom.byId.appearanceMenu), 'the submenu survived its menu');
     assert.strictEqual(dom.byId.appearanceTrigger.getAttribute('aria-expanded'), 'false', 'the trigger still claims a submenu is open');
 
-    // Reopening must not restore the flyout the last visit left behind.
     module.toggleAccountMenu();
     assert.ok(open(dom.byId.accountMenu) && !open(dom.byId.appearanceMenu), 'reopening restored a stale submenu');
 
-    // Picking a choice is done with the menu.
     module.toggleAppearance();
     module.chooseAppearance('dark');
     assert.ok(!open(dom.byId.accountMenu) && !open(dom.byId.appearanceMenu), 'choosing left the menu open');
@@ -2116,8 +1932,7 @@ test('the menu has a keyboard exit', () => {
     assert.ok(/keydown[\s\S]{0,120}Escape[\s\S]{0,80}closeAccountMenu/.test(sidebar), 'Escape does not close the account menu');
 });
 
-
-/* Uncaught script failures reach the server */
+/* uncaught script failures reach the server */
 
 function loadReporter() {
     const dom = install([]);
@@ -2136,20 +1951,18 @@ function loadReporter() {
     };
     global.window.location = { pathname: '/_/admin/settings/auth', search: '?token=secret' };
     global.location = global.window.location;
-    // The toast markup is built with innerHTML and then read back; the stub does not parse it.
     global.document.createElement = (tag) => {
         const node = element(tag);
         node.querySelector = () => element('span');
         return node;
     };
 
-    const ui = eval(read('ui.js').replace(/if \(typeof window[^\n]*\n/g, '') + '; ui');
+    const quiet = { ...console, error() {} };
+    const ui = eval('(function (console) {' + read('ui.js').replace(/if \(typeof window[^\n]*\n/g, '') + '; return ui; })')(quiet);
     return { ui, sent, listeners, dom };
 }
 
 test('an uncaught failure is reported to the server as well as to the screen', () => {
-    // A toast is gone in seconds and the operator is the only witness; the same
-    // line has to reach a log that is still there tomorrow.
     const { sent, listeners } = loadReporter();
     const reason = new Error('ui.themeChoice is not a function');
     reason.stack = 'TypeError: ui.themeChoice is not a function\n    at markAppearance (http://host/js/sidebar.js:251:26)';
@@ -2159,13 +1972,10 @@ test('an uncaught failure is reported to the server as well as to the screen', (
     assert.strictEqual(sent.length, 1, 'the failure never left the browser');
     assert.strictEqual(sent[0].url, '/api/client-errors', 'the failure went somewhere else');
     assert.ok(/ui\.themeChoice is not a function/.test(sent[0].body.message), 'the message was not sent');
-    // A rejection includes no filename, without the frame there is nothing that says where to look.
     assert.ok(/sidebar\.js:251/.test(sent[0].body.message), 'the throwing frame was dropped');
 });
 
 test('the report includes the path and never the query', () => {
-    // A preview or reset link includes a token in its query, and a log is the
-    // last place that should end up.
     const { sent, listeners } = loadReporter();
     listeners.unhandledrejection({ reason: new Error('boom') });
 
@@ -2180,8 +1990,6 @@ test('a failure that repeats every frame is reported once, not once a frame', ()
 });
 
 test('reporting uses sendBeacon, a failed report cannot become the next failure', () => {
-    // fetch returns a promise; a rejected one lands back in unhandledrejection,
-    // which reports it, which fetches again.
     const js = read('ui.js');
     const reporter = js.slice(js.indexOf('function sendError'), js.indexOf('/* theme */'));
     assert.ok(/navigator\.sendBeacon/.test(reporter), 'the report is not fire-and-forget');
@@ -2189,18 +1997,13 @@ test('reporting uses sendBeacon, a failed report cannot become the next failure'
     assert.ok(/try \{/.test(reporter), 'a beacon that throws takes the handler with it');
 });
 
-
-/* The section subbar */
+/* the section subbar */
 
 test('a subbar row is the same control as a primary nav row', () => {
-    // It had its own grammar: a bordered, filled pill. That drew a third enclosing
-    // edge inside the two the sidebar and the workspace already draw, and made a
-    // list of destinations look like a stack of cards.
     const css = read('app.css');
     const pill = css.slice(css.indexOf('.subbar-pill {'), css.indexOf('.subbar-pill:hover'));
     assert.ok(/border:\s*none/.test(pill), 'a subbar row draws its own border again');
     assert.ok(/background:\s*transparent/.test(pill), 'a subbar row paints its own surface again');
-    // Same reach and rhythm as .side-nav-btn, or an author learns the list twice.
     const nav = css.slice(css.indexOf('.side-nav-btn {'), css.indexOf('.side-nav-btn svg'));
     for (const prop of ['padding', 'border-radius', 'gap'])
         assert.strictEqual(
@@ -2290,43 +2093,29 @@ test('a filter that matches nothing says so', () => {
 });
 
 test('typing in the filter keeps the caret', () => {
-    // Every keystroke repaints the bar, which replaces the field being typed into.
     const js = read('js/sidebar.js');
     assert.ok(/next\.setSelectionRange/.test(js), 'typing in the filter loses the caret');
 });
 
-
 test('the overview summary paints from the payload, not from a later fetch', () => {
-    // The bug: a full page load fills currentTables from the bootstrap and never
-    // calls loadTables(), which is the only thing that fetched the stats. The four
-    // cards then read "n/a", "n/a" and 0 until something happened to reload, while
-    // the settings page showed the same numbers correctly.
     const auth = read('js/auth.js');
     const core = read('js/core.js');
     assert.ok(/me\.stats[\s\S]{0,60}summaryStats = me\.stats/.test(auth), 'the payload stats are never read');
     assert.ok(/if \(me\.tables\) currentTables = me\.tables/.test(auth), 'the payload tables are no longer read either');
-    // The route still repaints on a full load, and loadTables still refreshes in-session.
     assert.ok(/updateSummary\(currentTables\)/.test(core), 'the overview no longer paints its summary');
     assert.ok(/summaryStats = await fetch\('\/api\/_admin\/settings'\)/.test(core), 'an in-session reload no longer refreshes the stats');
 });
 
 test('a field following a settings row clears that row\'s bottom border', () => {
-    // .field transports margin-bottom only, "Endpoint name" sat directly on the Expose row's border.
     const css = read('app.css');
     assert.ok(/\.setting-row \+ \.field \{[^}]*margin-top/.test(css), 'a field after a settings row has no top margin');
 
-    // The rule keys on adjacency, it silently stops applying if the field gets wrapped.
     const sheet = read('js/tables.js');
     assert.ok(/body\.append\(exposed, apiName, docsEnabled, displayName/.test(sheet),
         'the endpoint sheet no longer appends fields as siblings of its settings rows');
 });
 
-/* importing a table, or rows, from a file */
-
 test('the import sheet stores its rows, instead of walking up from an input', () => {
-    // ui.field wraps a checkbox in a switch, the input's parent is that switch and the
-    // field label is a level above it. withRows.parentElement.querySelector('.field-label-text')
-    // was null, the handler threw, nothing rendered, and a good file read as a failed import.
     const src = read('js/import.js');
     assert.ok(!/parentElement/.test(src), 'the import sheet reaches a row through an input again');
     assert.ok(/importEls = \{/.test(src), 'the sheet no longer keeps references to its own rows');
@@ -2334,10 +2123,6 @@ test('the import sheet stores its rows, instead of walking up from an input', ()
 });
 
 test('nothing in the runtime whitelist is also a real element', () => {
-    // tableName was whitelisted as runtime-created long after the inline create-table
-    // form that made it had been replaced by ui.ask(). Adding a real #tableName to table
-    // settings then collided with a dead hasUnsavedChanges() check that read it, and every
-    // table opened looked permanently dirty. The whitelist is what hid the clash.
     const html = readHtml();
     const runtime = ['toasts', 'sheetOverlay', 'pwCurrent', 'pwNew', 'fieldEditError', 'bootstrap', 'fieldType'];
     const present = new Set([...html.matchAll(/id=['"]([\w-]+)['"]/g)].map(m => m[1]));
@@ -2346,8 +2131,6 @@ test('nothing in the runtime whitelist is also a real element', () => {
 });
 
 test('no id is claimed twice in the composed page', () => {
-    // The views are concatenated into one document, so two sections reusing an id
-    // means getElementById silently answers with whichever came first.
     const ids = [...readHtml().matchAll(/id=['"]([\w-]+)['"]/g)].map(m => m[1]);
     const seen = new Set();
     const dupes = [...new Set(ids.filter(id => !seen.add(id)))];
@@ -2355,24 +2138,17 @@ test('no id is claimed twice in the composed page', () => {
 });
 
 test('unsaved state is tracked by the dirty flags, never sniffed off an input', () => {
-    // Reading a field's value to decide "is there unsaved work" makes any screen that
-    // happens to reuse that id permanently dirty. The flags are set by the oninput
-    // handlers and cleared on save and on open, which is the whole state machine.
     const core = read('js/core.js');
     const fn = core.slice(core.indexOf('function hasUnsavedChanges'), core.indexOf('async function navigate'));
     assert.ok(!/getElementById/.test(fn), 'hasUnsavedChanges reads an element again');
     assert.ok(/tableDirty \|\| fieldsDirty/.test(fn), 'the dirty flags are no longer what it checks');
 
-    // Opening a table fills the name box programmatically, which fires no input event.
     const tables = read('js/tables.js');
     const open = tables.slice(tables.indexOf('function selectTable'), tables.indexOf('function paintTableName'));
     assert.ok(/tableDirty = false/.test(open), 'opening a table no longer clears the dirty flag');
 });
 
 test('the field editor greys what the server refuses on a computed type', () => {
-    // FieldValidation refuses a computed field that is required or a lookup identifier.
-    // The editor offered both, so choosing System ID on an imported column, which import
-    // infers as required, came back 400 instead of simply not offering the option.
     const src = read('js/tables.js');
     assert.ok(/function syncComputedGuards/.test(src), 'the editor no longer mirrors the computed guard');
     assert.ok(/syncComputedGuards\(t\)/.test(src), 'the guard never runs when the type changes');
@@ -2382,10 +2158,6 @@ test('the field editor greys what the server refuses on a computed type', () => 
 });
 
 test('ticking Identifier ticks Required, and the validate call carries both key flags', () => {
-    // An identifier that may be absent admits rows nothing can ever look up, which is issue #15
-    // read from a REST client: the key column comes back empty. FieldValidation refuses the pair,
-    // so the editor shapes it instead of letting the save fail, and Validate has to send the two
-    // flags or the button answers a question about a different field than the one on screen.
     const src = read('js/tables.js');
     const editor = src.slice(src.indexOf("settingSwitch('feUnique'"), src.indexOf("settingSwitch('feHidden'"));
     assert.ok(/required\.checked = true/.test(editor), 'ticking Identifier no longer ticks Required');
@@ -2396,9 +2168,6 @@ test('ticking Identifier ticks Required, and the validate call carries both key 
 });
 
 test('the OpenAPI switch is dead while the table is not exposed', () => {
-    // The document is built from ApiEnabled && ApiDocsEnabled, so with Expose off this
-    // switch cannot take effect. It was live, and its help text described the off state
-    // as if it were the action.
     const tables = read('js/tables.js');
     const sheet = tables.slice(tables.indexOf("'sheetApiDocsEnabled'"), tables.indexOf('const displayName'));
     assert.ok(!/Hides endpoint/.test(sheet), 'the help text still describes the off state as the action');
@@ -2410,10 +2179,7 @@ test('the OpenAPI switch is dead while the table is not exposed', () => {
 });
 
 test('the API reference preselects the security scheme the document defines', () => {
-    // Scalar labels a document-defined scheme by its key in components.securitySchemes,
-    // and preselects by that same string. Rename one without the other and the auth panel
-    // either shows an internal identifier or comes up with nothing selected.
-    const spec = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'Api', 'OpenApiSpec.cs'), 'utf8');
+    const spec = readSource('Api', 'Support', 'OpenApiSpec.cs');
     const match = spec.match(/SecurityScheme\s*=\s*"([^"]+)"/);
     assert.ok(match, 'OpenApiSpec no longer defines SecurityScheme');
 
@@ -2425,20 +2191,15 @@ test('the API reference preselects the security scheme the document defines', ()
 });
 
 test('which types are computed comes from the payload, not a copy in the console', () => {
-    // One table says what a field type is; a hardcoded list here drifts from FieldTypes.cs.
     const src = read('js/tables.js');
     assert.ok(/if \(t\.computed\) COMPUTED_TYPES\.push\(t\.name\)/.test(src), 'the console no longer reads computed from the payload');
     assert.ok(!/\['calculated', ?'derived', ?'systemid'\]/.test(src), 'the console keeps its own list of computed types');
 
-    // ...and the server has to actually send it, or the console greys nothing.
-    const console_ = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'Api', 'ConsoleEndpoints.cs'), 'utf8');
+    const console_ = readSource('Api', 'Endpoints', 'ConsoleEndpoints.cs');
     assert.ok(/fieldTypes = FieldTypes\.All\.Select[^\n]*t\.Computed/.test(console_), 'the bootstrap payload no longer carries Computed');
 });
 
 test('a table can be renamed, and every place showing the name repaints together', () => {
-    // Table settings offered Description but not Name: the API took a rename the console
-    // had no field for. Painting it in one place keeps the heading from reading the old
-    // name after a save that changed it.
     const html = readHtml();
     const tables = read('js/tables.js');
     const records = read('js/records.js');
@@ -2450,7 +2211,6 @@ test('a table can be renamed, and every place showing the name repaints together
 });
 
 test('the table name reaches innerHTML escaped', () => {
-    // page-sub interpolates the name into innerHTML, and a table name is author-written.
     const tables = read('js/tables.js');
     const sub = tables.slice(tables.indexOf('function paintTableName'), tables.indexOf('function tableSettingsPayload'));
     assert.ok(/ui\.escape\(name\)/.test(sub), 'the table name goes into innerHTML unescaped');
@@ -2458,16 +2218,12 @@ test('the table name reaches innerHTML escaped', () => {
 });
 
 test('the import sheet posts the file itself, never a JSON body', () => {
-    // The endpoint reads multipart/form-data; a JSON body would arrive as no file at all
-    // and the sheet would report "Choose a file to import" over a file the author did choose.
     const src = read('js/import.js');
     assert.ok(/new FormData\(\)/.test(src), 'the file is not posted as form data');
     assert.ok(!/Content-Type/.test(src), 'a hand-set content type would drop the multipart boundary');
 });
 
 test('preview and create post the same file to the same route, no upload is held server-side', () => {
-    // The alternative is a server-side cache keyed by an upload id, which needs a TTL,
-    // a sweep and a story for what happens when the author walks away mid-import.
     const src = read('js/import.js');
     const posts = [...src.matchAll(/fetch\('\/api\/_admin\/tables\/import'/g)];
     assert.strictEqual(posts.length, 2, 'preview and create no longer post the same route');
@@ -2491,8 +2247,6 @@ test('the import stub is gone, and nothing still opens a modal that does nothing
 });
 
 test('a dropdown trigger transports a caret, and the caret follows the menu instead of a handler', () => {
-    // The caret keys on the menu's own hidden class, toggleDropdown does not also
-    // have to find and rotate an icon: one state, read in two places.
     const html = readHtml();
     const css = read('app.css');
     const triggers = (html.match(/onclick='toggleDropdown\(event\)'/g) || []).length;
@@ -2504,8 +2258,6 @@ test('a dropdown trigger transports a caret, and the caret follows the menu inst
 });
 
 test('New record opens a dropdown whose entries are both defined', () => {
-    // The plain button was replaced by a menu; an entry naming a function nobody wrote
-    // is a dead row in an open menu, which the generic handler check only catches by name.
     const html = readHtml();
     assert.ok(/id='newRecordMenu'/.test(html), 'the record dropdown is gone');
     assert.ok(/closeDropdown\(\); openNewRecordModal\(\)/.test(html), 'creating a record by hand is no longer offered');
@@ -2533,7 +2285,6 @@ test('the httpRequest step editor renders headers and bodyTemplate as key/value 
     assert.ok(/actionKeyValueList\('Body', step\.bodyTemplate/.test(js), 'bodyTemplate is not rendered through the key/value list');
 });
 
-// found live: renaming a key fires on blur, which also fires when tabbing into the value input next to it - rebuilding the row right then tears out the input the click was about to land in
 test('renaming a key/value row does not rebuild the row (a rename fires on blur, into the value input next to it)', () => {
     const js = read('js/actions.js');
     const list = js.slice(js.indexOf('function actionKeyValueList('), js.indexOf('async function saveAction('));
@@ -2541,8 +2292,6 @@ test('renaming a key/value row does not rebuild the row (a rename fires on blur,
     assert.ok(!onchange.includes('renderRows()'), 'renaming a key still rebuilds every row in the list');
     assert.ok(/let currentKey = initialKey/.test(list), 'each row no longer tracks its own current key across a rename');
 });
-
-/* embed.js: visitor data reaching an author's render expression */
 
 // runs embed.js functions by name
 function embedFunctions(...names) {
@@ -2581,6 +2330,12 @@ test('setSafeHtml strips style attributes', () => {
     assert.ok(/name === 'style'/.test(body), 'setSafeHtml keeps style attributes');
 });
 
+let stray = 0;
+process.on('unhandledRejection', (reason) => {
+    console.log(`  FAIL unhandled rejection outside a test\n       ${reason && reason.message || reason}`);
+    stray++;
+});
+
 (async () => {
     for (const [name, fn] of queue) {
         try {
@@ -2592,6 +2347,8 @@ test('setSafeHtml strips style attributes', () => {
             failed++;
         }
     }
+    await new Promise((resolve) => setImmediate(resolve));
+    failed += stray;
     console.log(`\n${passed} passed, ${failed} failed`);
     process.exit(failed ? 1 : 0);
 })();

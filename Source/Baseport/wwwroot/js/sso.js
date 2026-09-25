@@ -1,6 +1,4 @@
-/* the identity-provider buttons on both sign-in screens, and the outcome the callback comes back with */
 
-// The callback only ever puts a code in the address bar, nothing the provider wrote reaches the client
 const SSO_PROBLEMS = {
     failed: 'Sign-in failed. Please try again or check the server logs for details.',
     denied: 'Sign-in was cancelled by the provider.',
@@ -11,7 +9,7 @@ const SSO_PROBLEMS = {
     insecure: 'Sign-in needs HTTPS on this address.',
 };
 
-// Server-rendered into the page
+// server-rendered into the page
 function ssoProviders() {
     const el = document.getElementById('bootstrap');
     if (!el) return [];
@@ -52,7 +50,6 @@ function ssoRender(surface) {
     }
 }
 
-// A failed round trip lands back here with ?sso=<code>;
 function ssoReportOutcome() {
     const code = new URLSearchParams(location.search).get('sso');
     if (!code) return;

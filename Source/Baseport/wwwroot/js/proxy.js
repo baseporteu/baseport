@@ -1,4 +1,3 @@
-/* importing a table from a remote OpenAPI document */
 
 function openProxySheet() {
     const wrap = document.createElement('div');

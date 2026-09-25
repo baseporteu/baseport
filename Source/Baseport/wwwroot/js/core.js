@@ -1,4 +1,4 @@
-/* Shared state, the router, and table loading. */
+/* shared state, the router, and table loading. */
 let currentTablePublicId = null;
 let currentTableProxyUrl = '';
 let currentTables = [];
@@ -11,13 +11,11 @@ let tableDirty = false;
 let recordPage = 1;
 let recordSearchTimer = null;
 
-// Staged field CRUD; nothing hits the API until Save.
 let fieldDraft = [];
 let fieldOriginal = {};
 let fieldSeq = 0;
 let fieldsDirty = false;
 
-// Comma-separated option/value lists: a comma inside one entry survives as \, (a literal backslash is \\).
 function splitOptions(str) {
     return (str || '')
         .split(/(?<!\\),/)
@@ -28,8 +26,6 @@ function splitOptions(str) {
 function joinOptions(list) {
     return (list || []).map((s) => String(s).replace(/([\\,])/g, '\\$1')).join(', ');
 }
-
-/* Sortable list headers: click a <th data-sort="key"> to sort, remembered per list across visits. */
 
 function sortState(listKey, defaultKey) {
     try {
@@ -45,7 +41,6 @@ function sortState(listKey, defaultKey) {
     }
 }
 
-// wires <th data-sort> clicks and repaints the active arrow; safe to call on every render, not just once
 function initSortableHeaders(headRowId, listKey, defaultKey, onChange) {
     const headRow = document.getElementById(headRowId);
     if (!headRow) return;
@@ -94,7 +89,6 @@ function cloneField(f) {
     };
 }
 
-// Saved fields carry a server id; staged ones a local key, a row is addressable either way.
 function fieldKey(f) {
     return f.key || f.id;
 }
@@ -122,7 +116,6 @@ function greet(username) {
     document.getElementById('greeting').innerText = `${g}, ${username || 'builder'}`;
 }
 
-// Views are a route, not a toggle: the URL decides which one shows.
 function setView(v) {
     if (!currentTablePublicId) return;
     navigate(v === 'records' ? `/tables/${currentTablePublicId}/records` : `/tables/${currentTablePublicId}`);
@@ -135,9 +128,6 @@ function applyView(v) {
     if (v === 'records') loadRecords();
 }
 
-/* Router: the URL is the single source of truth; every selection navigates and render() rebuilds from the path, deep links work and back/forward behave. Paths: /, /tables/{id}, /tables/{id}/records, /forms, /forms/{id}, /sql, /sql/{id}, /settings/{page}, /schema, /auth, /logs. */
-
-// The console is mounted under a prefix; parseRoute strips it and navigate puts it back, every route above stays written as if the console owned the root.
 const BASE = '/_/admin';
 
 function routePath() {
@@ -189,7 +179,6 @@ function parseRoute() {
     };
 }
 
-// none of these are visible to the browser's own "leave site?" prompt since nothing was submitted
 function hasUnsavedChanges() {
     if (tableDirty || fieldsDirty) return true;
     return typeof hasUnsavedFormChanges === 'function' && hasUnsavedFormChanges();
@@ -214,11 +203,8 @@ async function navigate(path, {
     return render();
 }
 
-// Each section owns its route; loading happens here so a deep link works on a cold page.
 const SECTION_ROUTES = {
-    // Overview and editor are separate pages: an index has no business rendering the chrome of the thing it indexes.
     tables: async (id) => {
-        // Already rendered on a full load; only fetch when stale or navigating in-session.
         if (!currentTables.length) await loadTables();
         else renderSidebar('tables');
         const overview = !id;
@@ -226,7 +212,6 @@ const SECTION_ROUTES = {
         document.getElementById('tableDetail').classList.toggle('hidden', overview);
         if (overview) {
             currentTablePublicId = null;
-            // runs here too since a full page load fills currentTables without calling loadTables()
             updateSummary(currentTables);
             renderTablesOverview();
             return;
@@ -240,7 +225,6 @@ const SECTION_ROUTES = {
         applyView(parseRoute().view || 'builder');
     },
     forms: async (id) => {
-        // Already rendered on a full load; only fetch when stale or navigating in-session.
         if (!formsAll.length) await loadForms();
         else renderFormsList();
         const overview = !id;
@@ -258,7 +242,6 @@ const SECTION_ROUTES = {
     },
     actions: async (id) => {
         if (!currentTables.length) await loadTables(); // the table picker needs the catalogue loaded
-        // Already rendered on a full load; only fetch when stale or navigating in-session.
         if (!actionsAll.length) await loadActions();
         else renderActionsList();
         const overview = !id;
@@ -276,13 +259,11 @@ const SECTION_ROUTES = {
     },
     sql: async (id) => {
         await initSqlEditor();
-        // Already rendered on a full load; only fetch when stale or navigating in-session.
         if (!savedQueries.length) await loadSavedQueries();
         else refreshSidebar('sql');
         const query = savedQueries.find((q) => q.id === id);
         if (query) applyQuery(query);
         else clearQuery();
-        // rAF gives layout a chance to settle before CodeMirror re-measures a freshly-shown container
         if (sqlEditor) requestAnimationFrame(() => sqlEditor.refresh());
     },
     settings: async (page) => {
@@ -318,7 +299,6 @@ async function render() {
     lastRenderedUrl = location.href;
 }
 
-// Kept because the rail markup and call sites read better this way.
 function goSection(section) {
     return navigate('/' + section);
 }
@@ -339,7 +319,6 @@ async function loadTables() {
     updateSummary(currentTables);
 }
 
-// Four numbers on the tables overview: how much data is here and what it costs, at a glance.
 function updateSummary(tables) {
     const el = document.getElementById('tablesSummary');
     if (!el) return;
@@ -379,10 +358,6 @@ async function newTable() {
     navigate(`/tables/${data.id}`);
 }
 
-// Suggests field names while typing "data.<partial>" inside a free-text JS-expression input (showIf, a
-// subtotal or button expr, a validation rule); Enter/Tab or a click completes the identifier in place and
-// leaves the rest of the expression alone. Reuses the combobox-list/-option look from ui.combobox, not that
-// widget itself: ui.combobox replaces a whole field's value, this inserts one at the cursor.
 function attachFieldExprAutocomplete(input, getFieldNames) {
     let list = null;
     let items = [];

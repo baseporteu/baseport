@@ -37,11 +37,9 @@ async function loadRecords(page) {
         loadRecords();
     });
 
-    // __created has no field behind it; the API already sorts by CreatedAt whenever sort is left off, so only order travels.
     const sort = sortState(sortKey, '__created');
     const sortParams = sort.key === '__created' ? `&order=${sort.dir}` : `&sort=${encodeURIComponent(sort.key)}&order=${sort.dir}`;
 
-    // Rows arrive rendered; the browser assigns one string.
     const meta = await ui.fragment(
         'recordsBody',
         `/api/_admin/fragments/records/${currentTablePublicId}?page=${recordPage}&pageSize=25` +
@@ -62,7 +60,6 @@ function renderRecordPager(data) {
         el.innerHTML = '';
         return;
     }
-    // The count is capped, past the ceiling the total is a floor and the page count with it.
     const from = (data.page - 1) * data.pageSize + 1;
     const to = data.countExact ? Math.min(data.page * data.pageSize, data.total) : data.page * data.pageSize;
     const label = data.countExact ? `${data.total}` : `${data.total}+`;
@@ -90,8 +87,6 @@ function deleteRecord(rid, label) {
     });
 }
 
-/* New record: one input per writable field, same write path as the REST API and embedded forms. */
-
 const NON_WRITABLE_TYPES = new Set(['calculated', 'formula', 'derived', 'internal', 'systemid', 'system_id']);
 
 function normalizeFieldType(t) {
@@ -115,7 +110,6 @@ function parseFieldOptions(json) {
     }
 }
 
-// The member names of an object or list field's sub-schema, the editor can say what shape it wants.
 function schemaMembers(f) {
     try {
         const o = JSON.parse(f.optionsJson || '{}');
@@ -134,7 +128,6 @@ function refTableId(json) {
     }
 }
 
-// Searches the target table as the visitor types, instead of loading every row up front.
 function fetchReferenceOptions(targetId, query, signal) {
     return fetch(`/api/_admin/tables/${targetId}/records?q=${encodeURIComponent(query)}&pageSize=20`, {
             signal
@@ -151,7 +144,6 @@ function recordLabel(rec) {
     return (vals[0] || 'Record').slice(0, 40);
 }
 
-// Matches the toast icon style (stroke-based, 2.5 weight); a Lucide-shaped key, small enough to sit inline with a label.
 const IDENTIFIER_ICON =
     '<svg class="field-id-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>Identifier field</title><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/></svg>';
 
@@ -291,7 +283,6 @@ function openNewRecordModal() {
                 help: f.helpText
             });
         }
-        // a combobox's .ctrl is the hidden value input, not what the visitor sees; markInvalid needs the visible search box, or the red never shows
         (row.querySelector('.combobox-box input[type="text"]') || row.ctrl).dataset.field = f.name.toLowerCase();
         if (f.isIdentifier) {
             const labelText = row.querySelector('.field-label-text');
@@ -321,7 +312,6 @@ function openNewRecordModal() {
 }
 
 async function submitNewRecord(inputs) {
-    // Any file field switches the whole submission to multipart, same as a curl -F upload against the REST API.
     const hasFile = Object.values(inputs).some((i) => i.type === 'file');
     const url = `/api/_admin/tables/${currentTablePublicId}/records`;
     let res;
@@ -389,7 +379,7 @@ async function submitNewRecord(inputs) {
     await loadTables();
 }
 
-/* Table settings: description + REST API exposure */
+/* table settings: description + REST API exposure */
 
 async function saveTableSettings(btn) {
     if (!currentTablePublicId) return;
@@ -413,7 +403,6 @@ async function saveTableSettings(btn) {
         applyProxySettings(table);
         paintTableName(table);
     });
-    // Outside the busy wrapper so it has the last word over ui.busy's own disabled-state restore.
     if (saved) updateSaveButtons();
 }
 
@@ -424,8 +413,6 @@ async function refreshAll() {
     if (table) renderFields(table.fields);
     loadRecords();
 }
-
-/* Icon rail sections (sql / schema / auth / logs / settings) */
 
 function escapeHtml(s) {
     return ui.escape(s);

@@ -59,7 +59,6 @@ async function loadSchema() {
     const cols = Math.max(1, Math.ceil(Math.sqrt(tables.length)));
     const rows = Math.ceil(tables.length / cols);
     const heights = tables.map((t) => 48 + t.fields.length * 27 + 10);
-    // grid-row layout: a row's height is its tallest node, a short node below a tall one never lands inside it
     const rowHeight = new Array(rows).fill(0);
     tables.forEach((t, i) => {
         const row = Math.floor(i / cols);
@@ -135,7 +134,6 @@ function renderSchemaLinks() {
             const nr = nodeEl.getBoundingClientRect();
             const sx = n.x + (fr.right - nr.left);
             const sy = n.y + (fr.top - nr.top) + fr.height / 2;
-            // reference target resolved from the table's fields at layout time
             const target = schemaRefs[nodeEl.dataset.pid]?.[fieldEl.dataset.field];
             if (!target || !schemaNodes[target]) return;
             const t = schemaNodes[target];

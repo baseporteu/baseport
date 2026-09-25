@@ -1,8 +1,7 @@
-// Table and record import utility functions
+// table and record import utility functions
 
 const IMPORT_ACCEPT = '.csv,.tsv,.txt,.json,.xml';
 
-// The file stays in the browser between preview and creation; the same File object is posted twice.
 let importFile = null;
 
 function importForm(extra) {
@@ -26,7 +25,6 @@ function importFileRow(onPick) {
     return row;
 }
 
-// Reference to sheet elements. Note: ui.field wraps checkboxes in a switch element.
 let importEls = null;
 
 function openImportDefinition() {

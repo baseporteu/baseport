@@ -1,4 +1,3 @@
-// Baseport UI primitives: the only sanctioned way to show feedback, build a control, or open an overlay; text reaching the DOM goes through ui.escape.
 const ui = (() => {
     /* toasts */
 
@@ -16,7 +15,6 @@ const ui = (() => {
             el = document.createElement('div');
             el.id = 'toasts';
             el.className = 'toasts';
-            // aria-live so screen readers hear it without stealing focus.
             el.setAttribute('role', 'status');
             el.setAttribute('aria-live', 'polite');
             document.body.appendChild(el);
@@ -46,7 +44,6 @@ const ui = (() => {
         el.appendChild(actions);
 
         host().appendChild(el);
-        // Errors linger, they carry a field name worth reading, but nothing outlives the ceiling. Equal delays fire in spawn order, a stack clears top-down.
         setTimeout(() => dismiss(el), kind === 'error' || !timeout ? TOAST_MAX_MS : Math.min(timeout, TOAST_MAX_MS));
         return el;
     }
@@ -105,14 +102,12 @@ const ui = (() => {
         return true;
     }
 
-    // The track and thumb that render a checkbox as a switch; shared so switchRow and field emit one markup.
     function switchTrack(input) {
         const track = el('span', 'switch');
         track.append(input, el('span', 'track'), el('span', 'thumb'));
         return track;
     }
 
-    // A checkbox rendered as a switch, with its label. Same markup the settings rows use, both inherit one stylesheet.
     function switchRow(label, {
         id,
         checked = false,
@@ -132,7 +127,6 @@ const ui = (() => {
         return row;
     }
 
-    // Wraps a block in a hover-revealed copy button. `text` may be a function, a caller can copy something generated at click time.
     function copyable(block, text) {
         const wrap = el('div', 'copy-wrap');
         const btn = el('button', 'copy-btn', {
@@ -154,7 +148,6 @@ const ui = (() => {
 
     /* a unified single response handler */
 
-    // Clears .input-invalid elements in scope, then marks specific [data-field="name"] elements matching (server)returned invalid field names
     function markInvalid(names, scope) {
         const root = scope || document.querySelector('.sheet') || document;
         root.querySelectorAll('.input-invalid').forEach((el) => el.classList.remove('input-invalid'));
@@ -164,7 +157,6 @@ const ui = (() => {
         });
     }
 
-    // Unwraps a fetch Response, toasting the server's error text on failure.
     async function handle(res, {
         success,
         failure = 'Something went wrong.'
@@ -211,15 +203,12 @@ const ui = (() => {
 
     /* uncaught failures */
 
-    // Surface handler crashes as toasts: a silent dead button looks unresponsive.
     let lastError = '';
 
     function reportError(source, error) {
         const message = (error && (error.message || error)) || 'Unknown error';
-        // A rejection includes no filename, the frame it threw from is the only thing that says where to look.
         const frame = (error && error.stack || '').split('\n')[1];
         const text = `${source}: ${message}` + (frame ? ` (${frame.trim()})` : '');
-        // A loop that throws every frame must not bury the screen in toasts, or the server in rows.
         if (text === lastError) return;
         lastError = text;
         setTimeout(() => {
@@ -231,19 +220,16 @@ const ui = (() => {
         sendError(text);
     }
 
-    // sendBeacon instead of fetch: it returns nothing to await, a failure here cannot itself become an unhandled rejection and feed this function its own output. It also survives the page unload that a hard failure often triggers.
     function sendError(text) {
         if (!navigator.sendBeacon) return;
         try {
             navigator.sendBeacon('/api/client-errors', new Blob([JSON.stringify({
                 message: text,
-                // The path only: a preview or reset link includes a token in its query, and that must not reach a log.
                 page: location.pathname,
             })], {
                 type: 'application/json'
             }));
         } catch (e) {
-            /* over the beacon size limit, or blocked: the toast already said it */
         }
     }
 
@@ -256,14 +242,12 @@ const ui = (() => {
 
     /* theme */
 
-    // Applied by an inline script in <head> so it survives reloads without a flash; here we only record and follow changes.
     const THEME_KEY = 'baseport.theme';
 
     function theme() {
         return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
     }
 
-    // What the user picked, which is not what is on screen: 'system' resolves to either.
     function themeChoice() {
         try {
             const stored = localStorage.getItem(THEME_KEY);
@@ -280,7 +264,6 @@ const ui = (() => {
     function setTheme(next, {
         remember = true
     } = {}) {
-        // 'system' is stored as no choice at all, which is what the head script and the media listener both already read.
         const system = next === 'system';
         document.documentElement.dataset.theme = system ? systemTheme() : next === 'dark' ? 'dark' : 'light';
         if (!remember) return;
@@ -296,7 +279,6 @@ const ui = (() => {
         setTheme(theme() === 'dark' ? 'light' : 'dark');
     }
 
-    // Follow the system only while the user has not chosen for themselves.
     if (window.matchMedia) {
         const system = window.matchMedia('(prefers-color-scheme: dark)');
         const follow = (ev) => {
@@ -312,7 +294,6 @@ const ui = (() => {
         else if (system.addListener) system.addListener(follow);
     }
 
-    // reformats Html.Num()'s invariant text (data-n) with the browser's own locale, e.g. thousands/decimal separators
     function formatNums(root) {
         root.querySelectorAll('.num[data-n]').forEach((el) => {
             const raw = el.dataset.n;
@@ -324,7 +305,6 @@ const ui = (() => {
         });
     }
 
-    // Loads a server-rendered table body into targetId; rows arrive formatted, paging rides in headers, and options.body posts so a statement never lands in an access log. Returns { page, pageSize, total, totalPages, header } or null.
     async function fragment(targetId, url, options = {}) {
         const target = document.getElementById(targetId);
         if (!target) return null;
@@ -352,7 +332,7 @@ const ui = (() => {
                 }
                 return null;
             }
-            // Server-rendered and server-escaped; see Api/Html.cs.
+            // server-rendered and server-escaped; see Api/Html.cs.
             target.innerHTML = await res.text();
             formatNums(target);
             const n = (h) => Number(res.headers.get(h) || 0);
@@ -390,7 +370,6 @@ const ui = (() => {
         return node;
     }
 
-    // A labeled form control supporting standard inputs, textareas, selects, and checkboxes (with `[value, label]` options). The optional `name` maps to server validation errors for `markInvalid`
     function field(label, {
         id,
         type = 'text',
@@ -437,8 +416,6 @@ const ui = (() => {
         return wrap;
     }
 
-    // searchable select; .ctrl is a hidden input so callers reading row.ctrl.value need no special-casing
-    // browseAll: show every option on focus/click, not just after typing
     function combobox(label, {
         id,
         value = '',
@@ -465,8 +442,6 @@ const ui = (() => {
         });
         if (id) hidden.id = id;
 
-        // a single chosen value renders as a removable chip, not editable text: this is a searchable select, one value at a
-        // time, there is nothing to reselect until the current pick is explicitly cleared
         const chip = el('div', 'combobox-chip' + (value ? '' : ' hidden'));
         const chipLabel = el('span', 'combobox-chip-label', {
             textContent: valueLabel || value
@@ -497,7 +472,6 @@ const ui = (() => {
             active = -1;
         }
 
-        // a searchable select's typed text must resolve to a chosen option; leftover free text with no match is invalid, not a custom value
         function markValidity() {
             search.classList.toggle('input-invalid', search.value.trim() !== '' && !hidden.value);
         }
@@ -514,7 +488,6 @@ const ui = (() => {
             search.classList.remove('hidden');
         }
 
-        // set while the chip is removed but nothing new has been picked yet, an unpicked blur can put it back
         let pendingValue = null;
         let pendingLabel = null;
 
@@ -552,7 +525,6 @@ const ui = (() => {
                 }));
             } else {
                 rows.forEach((r) => {
-                    // A heading row, not a choice. It includes no .combobox-option, keyboard nav skips it.
                     if (r.group) {
                         list.append(el('li', 'combobox-group', {
                             textContent: r.label
@@ -562,7 +534,6 @@ const ui = (() => {
                     const li = el('li', 'combobox-option' + (String(r.id) === String(hidden.value) && hidden.value !== '' ? ' selected' : ''), {
                         textContent: r.label
                     });
-                    // mousedown, not click: it fires before the search input's blur, the list is still open to read from.
                     li.addEventListener('mousedown', (e) => {
                         e.preventDefault();
                         selectOption(r.id, r.label);
@@ -572,7 +543,6 @@ const ui = (() => {
             }
             active = -1;
             list.classList.remove('hidden');
-            // opening on an already-chosen value should land on it, not always at the top of the list
             const selected = list.querySelector('.combobox-option.selected');
             if (selected) selected.scrollIntoView({
                 block: 'nearest'
@@ -620,7 +590,6 @@ const ui = (() => {
                 e.preventDefault();
                 active = (active - 1 + options.length) % options.length;
             } else if (e.key === 'Enter') {
-                // no highlight yet: take the top match, but only if a filter was actually typed
                 const idx = active >= 0 ? active : (search.value.trim() ? 0 : -1);
                 if (idx >= 0 && options[idx]) {
                     e.preventDefault();
@@ -640,7 +609,6 @@ const ui = (() => {
         });
 
         search.addEventListener('blur', () => {
-            // delayed close: an option's mousedown fires before this blur, it only closes an unpicked list
             setTimeout(() => {
                 closeList();
                 if (!hidden.value && pendingValue) {
@@ -658,7 +626,6 @@ const ui = (() => {
 
         if (browseAll) {
             search.addEventListener('focus', () => runSearch(''));
-            // covers reopening after Escape without a blur in between; skipped on the focusing click itself, or this double-fires with the listener above
             search.addEventListener('mousedown', () => {
                 if (document.activeElement === search && list.classList.contains('hidden')) runSearch('');
             });
@@ -682,7 +649,6 @@ const ui = (() => {
         return b;
     }
 
-    // disables btn and shows a spinner for fn()'s duration, then always restores it
     async function busy(btn, fn) {
         if (!btn) return fn();
         const original = btn.innerHTML;
@@ -701,14 +667,12 @@ const ui = (() => {
 
     /* overlays */
 
-    // only one sheet is ever open at a time, one dirty flag is enough
     let sheetDirty = false;
 
     function markSheetDirty() {
         sheetDirty = true;
     }
 
-    // overlay/×/escape route here instead of closeSheet directly, a dirty sheet can't vanish by accident
     function attemptCloseSheet() {
         if (sheetDirty) {
             toast('You have unsaved changes. Use Cancel to discard them.', 'info');
@@ -739,7 +703,6 @@ const ui = (() => {
 
         const body = el('div', 'sheet-body');
         body.append(bodyEl);
-        // arms the dirty guard; change too, since checkboxes/selects don't always fire input
         body.addEventListener('input', markSheetDirty);
         body.addEventListener('change', markSheetDirty);
 
@@ -749,14 +712,11 @@ const ui = (() => {
             actions.append(actionsEl);
             panel.append(actions);
         }
-        // Sibling of the overlay, not a child: a nested click would bubble to dismiss.
         document.body.append(overlay, panel);
-        // Next frame, the browser has a start state to transition from.
         requestAnimationFrame(() => {
             overlay.classList.add('open');
             panel.classList.add('open');
         });
-        // Escape closes: an overlay with no keyboard exit is a trap.
         document.addEventListener('keydown', escapeToClose);
         const first = panel.querySelector('input, select, textarea, button');
         if (first) first.focus();
@@ -774,7 +734,6 @@ const ui = (() => {
         if (ev.key === 'Escape') attemptCloseSheet();
     }
 
-    // Centered modal: the panel is a child of the overlay so `place-items: center` places it, and a click inside is stopped from bubbling to the overlay's close.
     function renderModal(title, bodyEl, actionsEl) {
         closeModal();
         const overlay = el('div', 'modal-overlay');
@@ -814,7 +773,6 @@ const ui = (() => {
         if (ev.key === 'Escape') closeModal();
     }
 
-    // Single-value input. Resolves the trimmed string, or null on cancel; exists because the native prompt() cannot be styled.
     function ask({
         title,
         label,
@@ -863,7 +821,6 @@ const ui = (() => {
         });
     }
 
-    // Timestamps travel as UTC and render in the instance zone, two operators reading one row read the same clock. The zone is named only when it is not the reader's own, where an unlabelled time is a wrong one.
     let instanceZone = null;
     let whenFormat = null;
 
@@ -891,7 +848,6 @@ const ui = (() => {
         try {
             whenFormat = new Intl.DateTimeFormat(navigator.language || undefined, parts);
         } catch (e) {
-            // A zone this browser does not know is the reader's problem to see, not a reason to print nothing.
             delete parts.timeZone;
             delete parts.timeZoneName;
             whenFormat = new Intl.DateTimeFormat(navigator.language || undefined, parts);
@@ -905,7 +861,6 @@ const ui = (() => {
         return isNaN(d) ? String(iso) : whenFormatter().format(d);
     }
 
-    // ISO 4217 and the IANA zone list both ship with the browser, neither list is ours to carry or keep current.
     function currencyOptions() {
         const codes = Intl.supportedValuesOf ? Intl.supportedValuesOf('currency') : [];
         let names = null;
@@ -925,7 +880,6 @@ const ui = (() => {
         return ['UTC'].concat(zones.filter((z) => z !== 'UTC')).map((z) => [z, z]);
     }
 
-    // Fills a native select with [value, label] pairs, keeping the stored value selectable even when this browser has never heard of it.
     function fillOptions(select, options, value) {
         const list = options.slice();
         if (value && !list.some(([v]) => v === value)) list.unshift([value, value]);
@@ -937,7 +891,6 @@ const ui = (() => {
         select.value = value || (list[0] ? list[0][0] : '');
     }
 
-    // Confirmation. Resolves true when confirmed, false otherwise. Always a centered modal: a sheet closes whatever sheet is already open, asking from inside one answered the question by destroying what it was about.
     function confirm({
         title,
         message,

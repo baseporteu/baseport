@@ -1,4 +1,3 @@
-// Actions rail: an action watches one table's record events (create/update/delete) and runs an ordered list of steps (runExpression, updateRecord, httpRequest) against it; server-side in ActionEndpoints.cs/ActionRunner.cs/JobScheduler, this view is the only way to author one without hand-writing StepsJson
 let actionsAll = [];
 let actionEditingId = null;
 let actionSteps = []; // [{ type: 'runExpression', expr }] | [{ type: 'updateRecord', setJson: { Field: expr, ... } }]
@@ -266,7 +265,6 @@ function renderActionSteps() {
     });
 }
 
-// webhook step: url + method, free-form headers, and a bodyTemplate with values as expressions against the triggering record (same shape as updateRecord's setJson, but the keys are the outbound payload's own field names)
 function actionHttpRequestEditor(step) {
     const wrap = document.createElement('div');
     if (!step.headers) step.headers = {};
@@ -304,7 +302,6 @@ function actionHttpRequestEditor(step) {
     return wrap;
 }
 
-// a free-text-key -> value row list shared by a step's headers (plain strings) and bodyTemplate (expressions)
 function actionKeyValueList(title, obj, addLabel, keyPlaceholder, valuePlaceholder, isExpression) {
     const wrap = document.createElement('div');
     const heading = document.createElement('label');
@@ -315,7 +312,6 @@ function actionKeyValueList(title, obj, addLabel, keyPlaceholder, valuePlacehold
     const rows = document.createElement('div');
     rows.className = 'brow-container-rows';
 
-    // never rebuilds the rows on rename: blur also fires when tabbing into the value input next to it, so each row tracks its own key in a closure instead of the DOM moving under that click
     function renderRows() {
         rows.innerHTML = '';
         Object.keys(obj).forEach((initialKey) => {

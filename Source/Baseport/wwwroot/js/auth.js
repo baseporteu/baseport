@@ -1,6 +1,4 @@
-/* sign in, sign out, and the boot sequence */
 
-// Nothing loads until the session is confirmed; this reads the payload the server rendered into the page (present on a full load, absent after a sign-in).
 function bootstrap() {
     const el = document.getElementById('bootstrap');
     if (!el) return null;
@@ -11,16 +9,13 @@ function bootstrap() {
     }
 }
 
-// The console and the login card live on separate routes now, the shell and every console script never load for a signed-out visitor.
 function isAuthPage() {
     return !document.getElementById('appShell');
 }
 
 async function boot() {
-    // Server-rendered on a full load, the first render will costs no round trips.
     const me = bootstrap() || (await fetch('/api/auth/me').then((r) => r.json()).catch(() => null));
     if (!me) return;
-    // Each page forwards to the other: the console to the login page when the session is gone, the login page to the console once it is back.
     if (!me.authenticated) {
         if (!isAuthPage()) {
             location.replace('/_/auth');
@@ -30,7 +25,6 @@ async function boot() {
         return;
     }
     if (isAuthPage()) {
-        // Pending session: replace the seeded password before the console loads.
         if (me.authenticated && me.mustChangePassword) {
             showChangePassword();
             return;
@@ -41,10 +35,8 @@ async function boot() {
     document.getElementById('appShell').hidden = false;
 
     const avatar = document.getElementById('sidebarAvatar');
-    // The bootstrap payload nests the account under `user`; the /api/auth/me reply is flat and capitalised. Read both shapes.
     const username = me.username || me.user?.username || me.Username || '';
     const avatarUri = me.avatar || me.user?.avatar || me.Avatar || '';
-    // An unrenderable avatar is an initial, never an empty circle.
     if (avatarUri) {
         avatar.replaceChildren(Object.assign(new Image(32, 32), { src: avatarUri, alt: '' }));
     } else {
@@ -59,24 +51,20 @@ async function boot() {
     const menuName = document.getElementById('accountMenuName');
     if (menuName) menuName.textContent = username;
     const menuEmail = document.getElementById('accountMenuEmail');
-    // An account with no address says so, instead of leaving a blank line where one belongs.
     if (menuEmail) menuEmail.textContent = email || 'No email address set';
     markAppearance();
 
     if (me.user) currentAccount = me.user;
     if (me.tables) currentTables = me.tables;
-    // Server-rendered alongside the tables, so the sidebar's per-section counts are right on the very first
-    // paint instead of only after a visitor has clicked into that section at least once this session.
     if (me.forms) formsAll = me.forms;
     if (me.actions) actionsAll = me.actions;
     if (me.sql) savedQueries = me.sql;
-    // Server-rendered alongside the tables
+    // server-rendered alongside the tables
     if (me.stats) summaryStats = me.stats;
     if (me.settings) settingsData = {
         ...(settingsData || {}),
         ...me.settings
     };
-    // Every timestamp the console prints reads this, it is set before the first view renders instead of when the settings page happens to load.
     if (settingsData) ui.timeZone(settingsData.timeZone || 'UTC');
 
     if (me.fieldTypes && typeof setFieldTypes === 'function') setFieldTypes(me.fieldTypes, me.fieldTypeGroups);
@@ -87,7 +75,6 @@ async function boot() {
     await render();
 }
 
-// The panels the sign-in screen swaps between. Each includes its own heading, only one may be on screen at a time, and the provider buttons belong to the first.
 function showPanel(name) {
     document.getElementById('loginForm').hidden = name !== 'login';
     document.getElementById('forgotCard').hidden = name !== 'forgot';
@@ -104,7 +91,6 @@ function showLogin() {
     if (user) user.focus();
 }
 
-// Password or one-time code. Both submit the same form; the button says which one the next press does.
 function switchAuthMode(mode) {
     const otp = mode === 'otp';
     hideTotpField();
@@ -196,16 +182,13 @@ async function changePassword(ev) {
         return false;
     }
     for (const field of CHANGE_FIELDS) document.getElementById(field).value = '';
-    // The server re-issued the session without the pending flag; the console loads.
     location.replace('/_/admin');
     return false;
 }
 
-// True once a code has been requested, the same button then signs in with it.
 let otpRequested = false;
 let otpExpiryTimer = null;
 
-// The server issues a code for one username and consumes it for that same username, a field the operator can still edit only offers them a code that cannot work.
 function lockUsername(locked) {
     const user = document.getElementById('loginUser');
     if (!user) return;
@@ -262,7 +245,6 @@ async function signIn(ev) {
     const btn = document.getElementById('loginBtn');
     const username = document.getElementById('loginUser').value;
 
-    // First press in code mode asks for one; the second signs in with it.
     if (authMode() === 'otp' && !otpRequested) {
         btn.disabled = true;
         try {
@@ -316,7 +298,6 @@ async function signIn(ev) {
                 failure: 'Sign-in failed.'
             }))) {
             if (reply?.totp) showTotpField();
-            // A wrong or stale code is spent, the next attempt needs a new one.
             if (authMode() === 'otp') {
                 expireOtpFlow();
             }
@@ -324,7 +305,6 @@ async function signIn(ev) {
         }
         document.getElementById('loginPass').value = '';
         document.getElementById('otpCode').value = '';
-        // The login page was rendered for a signed-out visitor, go to the console instead of re-running boot() against a stale payload.
         location.replace('/_/admin');
         return false;
     } finally {
@@ -333,7 +313,6 @@ async function signIn(ev) {
     return false;
 }
 
-// Shown after the password was accepted and the account asks for a second factor.
 function showTotpField() {
     document.getElementById('loginUser').readOnly = true;
     document.getElementById('totpContainer').hidden = false;
@@ -440,7 +419,6 @@ async function signOut() {
     location.reload();
 }
 
-// A 401 mid-session means the session lapsed: send the console back to the login page.
 const rawFetch = window.fetch;
 window.fetch = async (...args) => {
     const res = await rawFetch(...args);
@@ -452,7 +430,6 @@ window.fetch = async (...args) => {
     return res;
 };
 
-// The sign-in screen only: the console page includes none of these controls.
 if (document.getElementById('loginForm')) {
     ssoInit('console');
     switchAuthMode('password');

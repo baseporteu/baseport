@@ -1,9 +1,7 @@
-// Forms, rail item 2. Kinds: submit (writes), lookup (matches one record on an identifier), list (paged overview). Everything a form reveals is chosen here and enforced server-side.
 let formsAll = [];
 let formEditingId = null;
 let formKind = 'form';
 let formActions = ['submit'];
-// Working config kept across action toggles; enabling lookup must reveal a filled-in panel.
 let formConfigDraft = {};
 let formTableFields = [];
 let formTableIsProxy = false;
@@ -126,7 +124,6 @@ async function editForm(id) {
     document.getElementById('saveFormBtn').innerText = 'Save changes';
     document.getElementById('formEditor').classList.remove('hidden');
 
-    // Table and kind are fixed after creation: changing either would orphan every field the form references.
     document.getElementById('formKinds').classList.add('hidden');
     document.getElementById('formKindBadge').classList.remove('hidden');
     document.getElementById('formKindBadge').innerText = f.kind === 'list' ? 'List' : 'Form';
@@ -150,12 +147,10 @@ function closeFormEditor() {
     document.getElementById('formEditor').classList.add('hidden');
 }
 
-// Cancel returns to the forms index, which is a route, not a hidden div.
 function cancelFormEditor() {
     navigate('/forms');
 }
 
-// Preview the form currently open in the editor.
 function previewCurrentForm() {
     if (formEditingId) openPreview(formEditingId);
 }
@@ -167,16 +162,12 @@ function fillTableSelect(selected) {
         .join('');
 }
 
-// Kind decides the rendering; for a form the enabled actions decide which panels show, and both may be on at once.
 function applyFormShape(kind, actions) {
     formKind = kind === 'list' ? 'list' : 'form';
     formActions = formKind === 'list' ? [] : normalizeActions(actions);
 
     const doesSubmit = formActions.includes('submit');
     const doesLookup = formActions.includes('lookup');
-    // A form's layout is a property of the form, not of the submit toggle: it's built once and takes effect
-    // whenever submit is later turned on, the builder stays visible (and its data stays saved, see
-    // formSnapshot) regardless of which actions happen to be on right now.
     document.getElementById('kindSubmit').classList.toggle('hidden', formKind !== 'form');
     document.getElementById('kindLookup').classList.toggle('hidden', formKind !== 'form' || !doesLookup);
     document.getElementById('kindList').classList.toggle('hidden', formKind !== 'list');
@@ -200,7 +191,6 @@ function applyFormShape(kind, actions) {
     if (formKind === 'form') renderCanvas();
 }
 
-// At least one action, or the form does nothing at all.
 function normalizeActions(actions) {
     const valid = (actions || []).filter((a) => a === 'submit' || a === 'lookup');
     return valid.length ? valid : ['submit'];
@@ -217,7 +207,6 @@ function onActionsChange() {
         applyFormShape(formKind, formActions);
         return;
     }
-    // Save the visible panels' state before switching, a revealed panel arrives filled in.
     formConfigDraft = {
         ...formConfigDraft,
         ...collectConfig()
@@ -227,7 +216,6 @@ function onActionsChange() {
 }
 
 async function onFormTableChange() {
-    // Columns, actions, filters and the lookup result order name the previous table's fields, they cannot survive the switch.
     listColumns = [];
     listActions = [];
     lookupResultOrder = [];
@@ -247,7 +235,6 @@ async function loadTableFields(tableId) {
     applyProxyNotice(table);
 }
 
-// Proxy tables delegate ordering to the remote API, sort/filters are dead controls there.
 function applyProxyNotice(table) {
     const note = document.getElementById('formProxyNote');
     note.classList.toggle('hidden', !formTableIsProxy);
@@ -260,7 +247,6 @@ function applyProxyNotice(table) {
 
 /* kind-specific config */
 
-// Server-computed and hidden fields are absent from pickers: a visitor can neither type nor see them, offering them builds a form the server refuses.
 function selectableFields() {
     return formTableFields.filter((f) => !f.isHidden && f.dataType !== 'derived');
 }
@@ -339,13 +325,9 @@ function applyKindConfig(cfg) {
     document.getElementById('listPageSize').value = cfg.pageSize || 25;
     document.getElementById('formSuccessRedirect').value = cfg.onSuccessRedirect || '';
 
-    // A brand-new lookup (nothing chosen yet) walks through Match on / Show / Not-found one at a time;
-    // an already-configured one shows them flat, re-opening a working form never re-triggers the wizard.
     lookupOnboardStep = (cfg.matchFields || []).length === 0 && (cfg.resultFields || []).length === 0 ? 0 : -1;
     renderLookupOnboardNav();
 }
-
-/* LOOKUP kind: first-run onboarding wizard around Match on / Show / Not-found. */
 
 let lookupOnboardStep = -1; // -1 = flat panel (default for an already-configured lookup), 0-2 = wizard step
 
@@ -363,7 +345,6 @@ function renderLookupOnboardNav() {
     syncLookupOnboardNav();
 }
 
-// Gates Next on the current step actually having something in it, onboarding can't complete an empty lookup.
 function syncLookupOnboardNav() {
     if (lookupOnboardStep < 0) return;
     const nextBtn = document.getElementById('lookupOnboardNext');
@@ -382,8 +363,6 @@ function lookupOnboardBack() {
     renderLookupOnboardNav();
 }
 
-// The step indicator is a real control, not decoration: free lateral jump, same as Back already allows.
-// Only completing the wizard (Next on the last step) stays gated on the current step having something in it.
 function goToLookupStep(step) {
     if (lookupOnboardStep < 0) return; // no wizard active (already-configured lookup); nothing to jump between
     lookupOnboardStep = step;
@@ -394,10 +373,6 @@ function lookupOnboardSkip() {
     lookupOnboardStep = -1;
     renderLookupOnboardNav();
 }
-
-/* LOOKUP kind: "Show" field order. Same palette-and-canvas drag-reorder shape as the list column builder
-   below, kept as its own small copy instead of parameterizing that one: two call sites don't earn a
-   generalized abstraction, and the list builder's tests pin its exact functions. */
 
 let lookupResultOrder = []; // field names, in display order
 let lookupResultDragFrom = null;
@@ -519,8 +494,6 @@ function insertLookupResultField(name, at) {
     });
 })();
 
-/* LIST kind: column builder. Same palette-and-canvas shape as the submit builder. */
-
 let listColumns = []; // [{ name, render }] in display order
 let listActions = []; // [{ label, hrefExpr }] — per-row buttons, not bound to a single column
 
@@ -611,10 +584,8 @@ function renderListBuilder() {
     listColumnsHistory.push();
 }
 
-// data.Id isn't a real field, the placeholder names an actual field instead of implying it'd resolve
 const LINK_EXPR_PLACEHOLDER = "'/view?ref=' + encodeURIComponent(data.YourIdentifierField)";
 
-// Per-row buttons (e.g. "View", "Approve"): a label and a URL built from that row's own data, not tied to one column.
 function addListAction() {
     listActions.push({
         label: '',
@@ -736,7 +707,6 @@ function filterRow(f, index) {
     const value = document.createElement('input');
     value.className = 'input filter-value';
 
-    // The control follows the field: "greater than" on a select, or free text on an enum, invites filters that can never match.
     function syncToField() {
         const chosen = formTableFields.find((x) => x.name === field.value);
         const type = chosen ? chosen.dataType : 'text';
@@ -766,7 +736,6 @@ function filterRow(f, index) {
         }
         value.type = numeric ? 'number' : 'text';
         value.placeholder = numeric ? '0' : 'Value';
-        // Suggest values already in the table; "contains" keeps partial matches working.
         value.setAttribute('list', `filter-values-${index}`);
     }
 
@@ -804,7 +773,6 @@ function parseFieldOptions(field) {
     }
 }
 
-// Distinct stored values for a field, a filter is picked instead of typed.
 async function loadFilterSuggestions(fieldName, datalist) {
     const table = document.getElementById('formTable').value;
     if (!table || !fieldName) return;
@@ -888,7 +856,6 @@ function parseConfig(json) {
 
 /* save */
 
-// same shape saveForm posts; also doubles as the dirty-check snapshot so both read one definition of "the form's state"
 function formSnapshot() {
     return {
         tableId: document.getElementById('formTable').value,
@@ -966,7 +933,6 @@ function parseLayout(layoutJson) {
     try {
         const p = JSON.parse(layoutJson || '[]');
         if (p && Array.isArray(p.rows)) return p;
-        // Legacy layouts were an array of rows of field names.
         if (Array.isArray(p))
             return {
                 rows: p.map((r) => ({
@@ -1068,7 +1034,6 @@ function labeledInput(label, row, prop, ph) {
     return lab;
 }
 
-// test button for url-building expressions; hidden fields are valid refs since an expression often surfaces an id nobody sees
 function testExprButton(getExpr) {
     const wrap = document.createElement('span');
     wrap.className = 'expr-test';
@@ -1119,7 +1084,6 @@ function rowFields(row) {
     const div = document.createElement('div');
     div.className = 'brow-fields';
 
-    // same engine as a subtotal or button-link expression; evaluated against the record on every change, hides the whole block when false
     const showIfLab = labeledInput('Show if (optional)', row, 'showIf', "data.Country === 'NL'");
     showIfLab.appendChild(testExprButton(() => row.showIf));
     attachFieldExprAutocomplete(showIfLab.querySelector('input'), () => formTableFields.map((f) => f.name));
@@ -1159,7 +1123,6 @@ function rowFields(row) {
     } else if (row.t === 'button') {
         div.appendChild(labeledInput('Label', row, 'label', 'Submit'));
 
-        // Switching action reveals a different extra field, this select re-renders the row instead of going through the generic dropdown().
         const actionLab = document.createElement('label');
         actionLab.className = 'brow-field-label';
         actionLab.innerText = 'Action';
@@ -1191,7 +1154,6 @@ function rowFields(row) {
             attachFieldExprAutocomplete(hrefLab.querySelector('input'), () => formTableFields.map((f) => f.name));
             div.appendChild(hrefLab);
         } else if (row.action === 'run') {
-            // A blank button: no fixed outcome, just this expression evaluated on click and shown as a toast.
             const exprLab = labeledInput('Expression', row, 'expr', "'Total: ' + (data.Qty * data.Price)");
             exprLab.appendChild(testExprButton(() => row.expr));
             attachFieldExprAutocomplete(exprLab.querySelector('input'), () => formTableFields.map((f) => f.name));
@@ -1230,7 +1192,6 @@ function rowFields(row) {
     return div;
 }
 
-// The sub-schema of an array field, the same shape FieldValidation.NestedFields parses server-side.
 function clientArrayColumns(optionsJson) {
     try {
         const o = JSON.parse(optionsJson || '{}');
@@ -1254,7 +1215,6 @@ function refTargetId(optionsJson) {
     }
 }
 
-// other tables carrying a reference field that points back at the form's own table
 function childTableCandidates() {
     const formTableId = document.getElementById('formTable').value;
     return currentTables.filter(
@@ -1267,7 +1227,6 @@ function refFieldCandidates(childTable) {
     return (childTable ? childTable.fields || [] : []).filter((f) => f.dataType === 'reference' && refTargetId(f.optionsJson) === formTableId);
 }
 
-// child table + reference field + which of the child table's own fields become grid columns
 function childTableEditor(row) {
     const wrap = document.createElement('div');
     const candidates = childTableCandidates();
@@ -1330,7 +1289,6 @@ function childTableEditor(row) {
     return wrap;
 }
 
-// A button_bar groups several buttons behind one alignment, unlike a standalone "button" block which is one-per-row.
 function buttonBarEditor(row) {
     const wrap = document.createElement('div');
     if (!Array.isArray(row.buttons)) row.buttons = [];
@@ -1449,10 +1407,6 @@ function renderCanvas() {
     layoutHistory.push();
 }
 
-// Builds one block. `path` locates the row for column drag/move: [ri] at top level, [ri, nestedRi] for a row
-// nested inside a container - renderColumn appends its own column index to get a full column path.
-// `ownerArray` is the array `row` actually lives in (layout.rows, or a container's own row.rows), move/
-// remove act on the right list regardless of nesting.
 function buildRowElement(row, index, ownerArray, path) {
     const el = document.createElement('div');
     el.className = 'brow' + (row.t === 'group' ? ' brow-group' : '');
@@ -1484,13 +1438,11 @@ function buildRowElement(row, index, ownerArray, path) {
 
         const block = ev.dataTransfer.getData('text/block');
         if (block) {
-            // Only the top-level canvas accepts a new block dropped from the palette; a nested row is already inside one.
             if (path.length > 1) return;
             addRow(block, insertAt);
             return;
         }
 
-        // reordering an existing block; cross-container moves aren't supported, drag it out with ✕ and re-add instead
         if (!blockDragFrom || blockDragFrom.array !== ownerArray || blockDragFrom.index === index) return;
         const from = blockDragFrom.index;
         const [moved] = ownerArray.splice(from, 1);
@@ -1558,8 +1510,6 @@ function buildRowElement(row, index, ownerArray, path) {
     head.appendChild(actions);
     el.appendChild(head);
 
-    // every block type gets "show if" (and whatever else rowFields renders for its own type); this is also what
-    // wires up the group title editor, previously unreachable because nothing called rowFields for a group.
     el.appendChild(rowFields(row));
 
     if (row.t === 'container') {
@@ -1584,8 +1534,6 @@ function buildRowElement(row, index, ownerArray, path) {
     return el;
 }
 
-// Applied to a whole row at once: replaces its columns with one per span, keeping only the first column's
-// fields (the rest start empty) - the same trade-off preview.html's setRowPreset makes.
 function applyRowPreset(row, preset) {
     if (!preset) return;
     const allFields = row.cols.flatMap((c) => c.items);
@@ -1598,8 +1546,6 @@ function applyRowPreset(row, preset) {
     renderCanvas();
 }
 
-/* viewport preview: cosmetic only, toggles the canvas's own max-width */
-
 function setBuilderViewport(size, btn) {
     document.querySelectorAll('#builderViewport .seg-btn').forEach((b) => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
@@ -1608,11 +1554,6 @@ function setBuilderViewport(size, btn) {
     if (size !== 'desktop') canvas.classList.add(size);
 }
 
-/* undo/redo: generic over any JSON-serializable piece of state, snapshotting at whatever single choke
-   point already re-renders after every mutation - nothing else has to call into history bookkeeping
-   directly. Three independent instances below (layout, list columns, lookup result order): each builder
-   panel owns its own state and is visible on its own schedule, one shared history across all three
-   would mean "undo" jumping into a panel the user isn't even looking at. */
 function createHistory(undoBtnId, redoBtnId) {
     let stack = [];
     let index = -1;
@@ -1620,8 +1561,6 @@ function createHistory(undoBtnId, redoBtnId) {
     let getState = () => null;
     let applyState = () => {};
 
-    // A button that silently no-ops on click (nothing left to undo/redo) is worse than no button: it looks
-    // live but gives no feedback. Disabled state is the only signal the bound is real.
     function sync() {
         const undoBtn = document.getElementById(undoBtnId);
         const redoBtn = document.getElementById(redoBtnId);
@@ -1719,7 +1658,6 @@ const COL_WIDTHS = [
     [3, 'One quarter'],
 ];
 
-// Resolves a column from a path built by buildRowElement/renderColumn: [ri, ci] at top level, [ri, nestedRi, ci] nested.
 function colAtPath(path) {
     const ci = path[path.length - 1];
     const row = path.length === 2 ? layout.rows[path[0]] : (layout.rows[path[0]] || {}).rows && layout.rows[path[0]].rows[path[1]];
@@ -1731,14 +1669,10 @@ function renderColumn(row, path, col, ci) {
     colEl.className = 'bcol';
     colEl.style.flexGrow = col.w || 12;
 
-    // Shared by every drop target in this column (each chip, and the column's own empty background): a chip
-    // drop inserts before that chip, a same-column drop actually reorders instead of the no-op it used to
-    // be; the column background stays a plain append, for dropping past the last chip or into an empty column.
     function dropFieldAt(ev, targetIndex) {
         const field = ev.dataTransfer.getData('text/field');
         if (!field) return;
 
-        // A chip dragged from another column (or the same one) includes its origin path.
         let moved = null;
         try {
             moved = JSON.parse(ev.dataTransfer.getData('text/movefield') || 'null');
@@ -1772,8 +1706,6 @@ function renderColumn(row, path, col, ci) {
         colEl.classList.add('drop-hover');
     });
     colEl.addEventListener('dragleave', (ev) => {
-        // dragleave fires the instant the pointer crosses onto a child element (a chip, even the chip's own
-        // × button) - relatedTarget is where the pointer actually went, a still-inside move is not a real leave.
         if (ev.relatedTarget && colEl.contains(ev.relatedTarget)) return;
         colEl.classList.remove('drop-hover');
     });
@@ -1796,8 +1728,6 @@ function renderColumn(row, path, col, ci) {
                 path
             }));
         });
-        // Safety net: a drag that ends outside any valid target (cancelled, dropped off-canvas) still fires
-        // dragend on the chip being dragged, this is the one place guaranteed to run and clear every marker.
         chip.addEventListener('dragend', () => {
             document.querySelectorAll('.chip.drop-before').forEach((c) => c.classList.remove('drop-before'));
             document.querySelectorAll('.bcol.drop-hover').forEach((c) => c.classList.remove('drop-hover'));
@@ -1809,7 +1739,6 @@ function renderColumn(row, path, col, ci) {
         });
         chip.addEventListener('dragleave', (ev) => {
             ev.stopPropagation();
-            // Same relatedTarget check as the column: crossing onto the chip's own × button is not a real leave.
             if (ev.relatedTarget && chip.contains(ev.relatedTarget)) return;
             chip.classList.remove('drop-before');
         });
@@ -1875,7 +1804,6 @@ document.getElementById('formLayout').addEventListener('change', (ev) => {
         layout = p;
         renderCanvas();
     } catch (e) {
-        /* invalid JSON is left for the author to fix */
     }
 });
 

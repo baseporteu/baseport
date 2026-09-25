@@ -1,4 +1,3 @@
-/* Table overview, settings, the field builder and its editor. */
 function selectTable(table) {
     currentTablePublicId = table.id;
     currentTableProxyUrl = table.proxyUrl || '';
@@ -23,7 +22,6 @@ function selectTable(table) {
     renderFields(fieldDraft);
 }
 
-// Proxy targets stay editable: a rotated token must not force deleting the table.
 function applyProxySettings(table) {
     const panel = document.getElementById('proxySettings');
     panel.classList.toggle('hidden', !table.isProxy);
@@ -48,15 +46,12 @@ function clearProxyToken() {
     ui.toast('Token will be cleared when you save.', 'info');
 }
 
-// Mirrors FieldValidation.ApiNamePattern; the server decides, this stops a doomed save.
 const API_NAME_PATTERN = /^[a-z][a-z0-9-]{1,62}$/;
 
-// A name is only required while the table's API is published; an unpublished table may have none at all.
 function apiNameIsValid(name, required) {
     return !required || API_NAME_PATTERN.test(name);
 }
 
-// Typed input is shaped, not policed: an author need not know the rule.
 function normalizeApiName(input) {
     const before = input.value;
     const caret = input.selectionStart;
@@ -72,13 +67,11 @@ function normalizeApiName(input) {
     markTableDirty();
 }
 
-// Every place the table's name is shown, repainted together: a rename that only reached the settings card left the heading above it reading the old name.
 function paintTableName(table) {
     const name = table.name || '';
     document.getElementById('recordsTableName').innerText = name;
     document.getElementById('detailTableName').innerText = name;
     document.getElementById('settingsTableName').innerText = name;
-    // A table name is author-written and lands in innerHTML here, so it goes through ui.escape like every other interpolated value.
     const safe = ui.escape(name);
     document.getElementById('page-sub').innerHTML = table.isProxy ?
         `Building <strong>${safe}</strong>, a proxy to <code>${ui.escape((table.proxyMethod || 'POST') + ' ' + (table.proxyUrl || ''))}</code>.` :
@@ -96,16 +89,12 @@ function tableSettingsPayload() {
         body.proxyMethod = document.getElementById('proxyMethod').value;
         body.proxyUrl = document.getElementById('proxyUrl').value;
         body.proxyReadUrl = document.getElementById('proxyReadUrl').value;
-        // An empty box means "keep the current token"; clearing is explicit.
         if (token.value.trim()) body.proxyToken = token.value.trim();
         if (token.dataset.clear === 'true') body.clearProxyToken = true;
     }
     return body;
 }
 
-/* the published endpoint: a sheet, opened from the table's own settings, not a separate list row */
-
-// Stacked settings-style row (label + one-line description + a slider), matching the table settings panel.
 function settingSwitch(id, checked, label, desc) {
     const row = ui.el('div', 'setting-row');
     const info = ui.el('div', 'setting-label');
@@ -151,7 +140,6 @@ function openEndpointSheet(id) {
     });
     const apiNameHelp = apiName.querySelector('.field-help');
     const apiNameHelpDefault = apiNameHelp.textContent;
-    // A published table doing without a name would 400 on save; an unpublished one needs no name at all.
     function refreshEndpointSaveState() {
         const name = apiName.ctrl.value.trim();
         const valid = apiNameIsValid(name, exposed.ctrl.checked);
@@ -285,16 +273,13 @@ async function renderTablesOverview() {
     document.getElementById('tablesEmpty').classList.toggle('hidden', currentTables.length > 0);
 }
 
-// Filled from the console bootstrap, which reads the server's field type table. Nothing here decides what a type is.
 const TYPE_LABELS = new Map();
 const NESTABLE_TYPES = [];
 let fieldTypeRows = [];
 let fieldTypeGroups = [];
 
-// Which types the server fills in itself, from the bootstrap payload rather than a second copy of FieldTypes.cs.
 const COMPUTED_TYPES = [];
 
-// FieldValidation refuses a computed field that is required or a lookup identifier: a visitor never supplies the value, so neither can mean anything. The console greys them rather than letting the save come back 400.
 function syncComputedGuards(type) {
     const computed = COMPUTED_TYPES.includes(type);
     for (const id of ['feRequired', 'feIdentifier']) {
@@ -320,8 +305,6 @@ function setFieldTypes(types, groups) {
     }
 }
 
-// Grouped in the server's order, with the group headings as unselectable rows. A typed query matches the
-// label, the stored name and the aliases, searching "price" or "formula" still finds the type.
 function fieldTypeOptions(query) {
     const q = (query || '').trim().toLowerCase();
     const matches = fieldTypeRows.filter((t) => !q ||
@@ -339,7 +322,6 @@ function fieldTypeOptions(query) {
     return rows;
 }
 
-// sets both the hidden value and the visible search text
 function setTypeComboboxValue(id, value) {
     const hidden = document.getElementById(id);
     if (!hidden) return;
@@ -363,7 +345,6 @@ function initFieldTypeCombobox() {
     row.id = 'fieldTypeRow';
 }
 
-// one pictogram per type family, 24 types stay scannable by shape instead of by reading each pill
 const TYPE_ICON_FAMILY = {
     text: 'text', longtext: 'text', richtext: 'text', slug: 'text',
     number: 'hash', currency: 'hash',
@@ -408,7 +389,6 @@ function typeIcon(dataType) {
 const HIDDEN_ICON =
     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></svg>';
 
-// type includes the icon+label; required/unique/hidden stay as small muted text instead of competing pills; identifier reuses the key glyph systemid already uses.
 function fieldBadges(f) {
     const isFn = f.dataType === 'calculated' || f.dataType === 'derived';
     const label = escapeHtml(TYPE_LABELS.get(f.dataType) || f.dataType);
@@ -423,7 +403,6 @@ function fieldBadges(f) {
 
 const TEXT_LENGTH_TYPES = new Set(['text', 'longtext', 'richtext', 'slug', 'email', 'url', 'password']);
 
-// Bounds mean value for numbers and length for text; the summary picks the reading.
 function fieldLimits(f) {
     const unit = TEXT_LENGTH_TYPES.has(f.dataType) ? ' chars' : '';
     if (f.min !== null && f.min !== undefined && f.max !== null && f.max !== undefined) return `${f.min}-${f.max}${unit}`;
@@ -432,7 +411,6 @@ function fieldLimits(f) {
     return '';
 }
 
-// Added to every record by the server, they are listed but never editable.
 const SYSTEM_COLUMNS = [
     ['Created', 'System column, set once when the record is written.', 'Date.now()'],
     ['Modified', 'System column, restamped on every change.', 'Date.now()'],
@@ -482,7 +460,6 @@ function renderFields(fields) {
     }
 }
 
-/* Field reordering: rows are dragged (Alt+Arrow for keyboard) */
 let dragFrom = null;
 
 function wireFieldDrag(tr) {
@@ -490,7 +467,6 @@ function wireFieldDrag(tr) {
         dragFrom = Number(tr.dataset.index);
         tr.classList.add('dragging');
         ev.dataTransfer.effectAllowed = 'move';
-        // Firefox 153.x in this case refuses to begin a drag with no payload set
         ev.dataTransfer.setData('text/plain', String(dragFrom));
     });
     tr.addEventListener('dragend', () => {
@@ -524,7 +500,6 @@ function wireFieldDrag(tr) {
     });
 }
 
-// Order persists immediately: it is independent of the staged field edits.
 async function moveFieldTo(from, to) {
     if (from === to || to < 0 || to > fieldDraft.length - 1) return;
     const moved = fieldDraft.splice(from, 1)[0];
@@ -542,7 +517,6 @@ async function moveFieldTo(from, to) {
     });
 }
 
-// Name and type only; everything else needs server checks and belongs in the field editor instead.
 async function addField() {
     const typeEl = document.getElementById('fieldType');
     if (!typeEl) { ui.toast('The page is out of date. Reload and try again.', 'error'); return; }
@@ -577,9 +551,8 @@ async function addField() {
     markFieldsDirty();
 }
 
-/* Reusable side sheet */
+/* reusable side sheet */
 
-// ui.js owns overlays; these remain as the names the feature code calls.
 function openSheet(title, bodyEl, actionsEl) {
     return ui.sheet(title, bodyEl, actionsEl);
 }
@@ -589,7 +562,6 @@ function closeSheet() {
     editingFieldId = null;
 }
 
-// the browser's back/forward buttons change location.href before this fires, bypassing navigate()'s unsaved-changes guard entirely; restore the URL bar if the user backs out
 window.addEventListener('popstate', async () => {
     if (hasUnsavedChanges()) {
         const leave = await ui.confirm({
@@ -606,9 +578,8 @@ window.addEventListener('popstate', async () => {
     render();
 });
 
-/* Reusable modal */
+/* reusable modal */
 
-// Thin adapter so existing call sites read the same; the dialog is ui.confirm().
 function openModal({
     title,
     message,
@@ -632,7 +603,6 @@ function closeModal() {
     ui.closeSheet();
 }
 
-// The select twin of fieldInputRow, a row of fixed choices sits in the sheet exactly like a row of free text.
 function fieldSelectRow(label, id, value, options) {
     const lab = document.createElement('label');
     lab.className = 'field-label';
@@ -645,7 +615,6 @@ function fieldSelectRow(label, id, value, options) {
     return lab;
 }
 
-// dataField, if given, is what a server's { invalid: [...] } names this field as -- see ui.markInvalid.
 function fieldInputRow(label, id, value, placeholder, mono, dataField) {
     const lab = document.createElement('label');
     lab.className = 'field-label';
@@ -660,8 +629,6 @@ function fieldInputRow(label, id, value, placeholder, mono, dataField) {
     return lab;
 }
 
-// The sub-schema of an object or array field, stored in OptionsJson the way select options are.
-// Members are fields in their own right, the server validates them with the same rules.
 function subSchemaEditor(f, isList) {
     let cols = [];
     try {
@@ -789,7 +756,6 @@ function openFieldEditor(fieldId) {
     wrap.appendChild(fieldSelectRow('Currency code', 'feCurrency', f.currency,
         [['', `Instance default (${instanceCurrency})`]].concat(ui.currencyOptions())));
 
-    // One pair of bounds: value range for numbers, length range for text.
     const boundsRow = document.createElement('div');
     boundsRow.className = 'grid-form two';
     boundsRow.appendChild(
@@ -884,7 +850,6 @@ function openFieldEditor(fieldId) {
         () => fieldDraft.filter((x) => String(fieldKey(x)) !== String(editingFieldId)).map((x) => x.name));
     return;
 
-    // Respects the type's actual allowed values instead of being a blank free-text box.
     function syncFeDefault() {
         const t = typeSel.value;
         const row = document.getElementById('feDefaultRow');
@@ -915,7 +880,6 @@ function openFieldEditor(fieldId) {
         row.appendChild(fieldInputRow('Default value', 'feDefault', current, 'Applied when the submission omits this field'));
     }
 
-    // options as currently drafted in the config row when it's live text, else the field's saved options
     function currentOptionDraft() {
         const cfg = document.getElementById('feConfig');
         if (cfg && cfg.tagName === 'INPUT' && (typeSel.value === 'select' || typeSel.value === 'multiselect'))
@@ -959,7 +923,6 @@ function openFieldEditor(fieldId) {
         document.getElementById('feScaleRow').classList.toggle('hidden', t !== 'number' && t !== 'currency');
         const hint = document.getElementById('feBoundsHint');
         if (!hint) return;
-        // matches the Min/Max cases FieldValidation.cs actually checks -- everything else silently ignores them
         hint.innerText =
             t === 'number' || t === 'currency' ?
             'Smallest and largest accepted value. Leave blank for no bound.' :
@@ -993,7 +956,6 @@ function openFieldEditor(fieldId) {
             row.appendChild(hint);
             const inp = document.getElementById('feConfig');
             inp.addEventListener('input', debounceExprValidate);
-            // leaving the field must judge what it stores now, not wait out a debounce that tabbing away skips
             inp.addEventListener('blur', () => {
                 clearTimeout(debounceExprValidate._t);
                 validateExprLive();
@@ -1083,7 +1045,6 @@ function openFieldEditor(fieldId) {
         debounceValidationExprValidate._t = setTimeout(validateValidationExprLive, 400);
     }
 
-    // same engine as a calculated field's expression, but this one is cross-field: any field name on the table may appear, not just the ones before it
     async function validateValidationExprLive() {
         const inp = document.getElementById('feValidationExpr');
         const hint = document.getElementById('feValidationExprStatus');
@@ -1226,7 +1187,6 @@ async function saveFieldChanges() {
     const newType = document.getElementById('feType').value;
     const cfg = document.getElementById('feConfig');
 
-    // Local name-uniqueness and required checks; authority is the server on commit.
     const dup = fieldDraft.find((x) => String(fieldKey(x)) !== String(editingFieldId) && x.name === newName);
     if (!newName) {
         ui.toast('Field name is required.', 'error');
@@ -1308,9 +1268,6 @@ async function saveFieldChanges() {
     const scaleRaw = num('feScale');
     const scale = scaleRaw === null ? null : Math.trunc(scaleRaw);
 
-    // Captured now, before any await: ui.confirm() below opens through the same shared
-    // sheet panel this form is rendered in, which removes this form's DOM as a side effect
-    // of opening -- every element read has to happen before that, not after.
     const newLabel = document.getElementById('feLabel').value.trim();
     const newHelp = document.getElementById('feHelp').value.trim();
     const newDefault = document.getElementById('feDefault').value;
@@ -1320,7 +1277,6 @@ async function saveFieldChanges() {
     const newIdentifier = document.getElementById('feIdentifier').checked;
     const newHidden = document.getElementById('feHidden').checked;
 
-    // Defensive: the picker is already locked in the sheet whenever the field has data.
     if (draft.id && draft.dataType !== newType) {
         const table = currentTables.find((t) => t.id === currentTablePublicId);
         if ((table?.recordCount || 0) > 0) {
@@ -1366,7 +1322,6 @@ async function saveFieldChanges() {
     markFieldsDirty();
 }
 
-// One payload shape for add and update, a new field option is never saved on one path and silently dropped on the other.
 function fieldPayload(f) {
     return {
         name: f.name,
@@ -1408,7 +1363,6 @@ async function commitFields() {
             if (!fieldDraft.some((f) => fieldKey(f) === fieldKey(o))) del.push(o);
         });
 
-        // Mirrors FieldValidation.cs, named by field, instead of an unattributed 400 from the server.
         const nameCounts = new Map();
         fieldDraft.forEach((f) => nameCounts.set(f.name, (nameCounts.get(f.name) || 0) + 1));
         for (const [name, count] of nameCounts) {
@@ -1490,7 +1444,6 @@ async function commitFields() {
         renderFields(fieldDraft);
         await loadTables();
     });
-    // outside ui.busy so this has the last word over its own disabled-state restore
     updateSaveButtons();
 }
 

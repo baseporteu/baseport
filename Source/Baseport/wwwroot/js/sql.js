@@ -13,7 +13,7 @@ function setSqlValue(sql) {
     else document.getElementById('sqlInput').value = sql;
 }
 
-// Fetch only when needed.
+// fetch only when needed.
 let codeMirrorLoad = null;
 
 function loadCodeMirror() {
@@ -32,7 +32,6 @@ async function initSqlEditor() {
     if (sqlEditor) return;
     const ta = document.getElementById('sqlInput');
     if (!ta) return;
-    // Fall back to plain textarea if fetch fails; queries still function.
     await loadCodeMirror().catch(() => {});
     if (sqlEditor || typeof CodeMirror === 'undefined') return;
     sqlEditor = CodeMirror.fromTextArea(ta, {
@@ -160,7 +159,6 @@ async function saveSchedule() {
     if (saved) renderSchedule(saved);
 }
 
-// Tests the destination immediately rather than waiting for the scheduled cron run.
 async function runScheduleNow() {
     if (!currentQueryId) return;
     const ran = await ui.send(`/api/_admin/queries/${currentQueryId}/run`, {
@@ -260,7 +258,6 @@ async function runSql() {
     clearSqlOutput();
     const status = document.getElementById('sqlStatus');
     status.innerText = 'Running...';
-    // Grid arrives pre-rendered; result sets are optimized for display.
     const meta = await ui.fragment('sqlResult', '/api/_admin/fragments/sql', {
         body: {
             sql,
