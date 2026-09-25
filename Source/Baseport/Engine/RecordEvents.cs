@@ -8,11 +8,18 @@ public sealed record RecordEvent(string Action, string TableId, string RecordId,
 
 public static class RecordEvents
 {
-
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Channel<RecordEvent>, byte> Subscribers = new();
+    private static int _count;
 
-    public static Channel<RecordEvent> Subscribe()
+    internal static int MaxSubscribers { get; set; } = 1000;
+
+    public static Channel<RecordEvent>? TrySubscribe()
     {
+        if (Interlocked.Increment(ref _count) > MaxSubscribers)
+        {
+            Interlocked.Decrement(ref _count);
+            return null;
+        }
         var channel = Channel.CreateBounded<RecordEvent>(
             new BoundedChannelOptions(256) { FullMode = BoundedChannelFullMode.DropOldest });
         Subscribers[channel] = 0;
@@ -21,7 +28,7 @@ public static class RecordEvents
 
     public static void Unsubscribe(Channel<RecordEvent> channel)
     {
-        Subscribers.TryRemove(channel, out _);
+        if (Subscribers.TryRemove(channel, out _)) Interlocked.Decrement(ref _count);
         channel.Writer.TryComplete();
     }
 

@@ -122,12 +122,12 @@ public static class OpenApiSpec
                 paths[$"/api/v1/{t.ApiName}/subscribe"] = new JsonObject
                 {
                     ["get"] = BuildOp(t, $"subscribe_{SchemaName(t)}", $"Stream {name} changes",
-                        Responses(("200", SseResp())))
+                        Responses(StreamProblems, ("200", SseResp())))
                 };
                 paths[$"/api/v1/{t.ApiName}/subscribe/{{recordId}}"] = new JsonObject
                 {
                     ["get"] = BuildOp(t, $"subscribe_{SchemaName(t)}_record", $"Stream changes to one {name} record",
-                        Responses(("200", SseResp()), ("404", JsonResp("Record not found", ErrorResponse()))))
+                        Responses(StreamProblems, ("200", SseResp()), ("404", JsonResp("Record not found", ErrorResponse()))))
                 };
             }
         }
@@ -406,6 +406,8 @@ public static class OpenApiSpec
         ApiProblem.BadRequest, ApiProblem.Conflict, ApiProblem.PreconditionFailed, ApiProblem.TooLarge,
         ApiProblem.UnsupportedMediaType, ApiProblem.Unprocessable
     ];
+
+    private static readonly ApiProblem[] StreamProblems = [ApiProblem.ServiceUnavailable];
 
     private static readonly ApiProblem[] ConditionalProblems = [ApiProblem.PreconditionFailed];
 

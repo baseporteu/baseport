@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -108,7 +109,9 @@ public static class PublicApiEndpoints
             if (AcceptGate(ctx) is { } unacceptable) return unacceptable;
             if (table.IsProxy) return ApiError(ctx, ApiProblem.BadRequest, "Proxy tables store nothing locally and emit no changes.");
 
-            return TypedResults.ServerSentEvents(Stream(scopes, table.Id, null, caller.Id, caller.Role, ctx.RequestAborted), "record");
+            var (channel, refusal) = OpenSubscription(ctx);
+            if (channel is null) return refusal!;
+            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, null, caller.Id, caller.Role, ctx.RequestAborted), "record");
         });
 
         app.MapGet("/api/v1/{apiName}/subscribe/{rid}", async (IServiceScopeFactory scopes, HttpContext ctx, string apiName, string rid) =>
@@ -128,7 +131,9 @@ public static class PublicApiEndpoints
             if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, caller.Id, rid, callerRole: caller.Role))
                 return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to read.");
 
-            return TypedResults.ServerSentEvents(Stream(scopes, table.Id, rid, caller.Id, caller.Role, ctx.RequestAborted), "record");
+            var (channel, refusal) = OpenSubscription(ctx);
+            if (channel is null) return refusal!;
+            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, rid, caller.Id, caller.Role, ctx.RequestAborted), "record");
         });
 
         app.MapGet("/api/v1/{apiName}/records/{rid}", async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
@@ -251,29 +256,36 @@ public static class PublicApiEndpoints
 
     }
 
-    private static async IAsyncEnumerable<object> Stream(
-        IServiceScopeFactory scopes, string tableId, string? recordId, string userId, string callerRole,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
+    internal static (Channel<RecordEvent>? Channel, IResult? Refusal) OpenSubscription(HttpContext ctx)
     {
-        var channel = RecordEvents.Subscribe();
-        try
+        if (RecordEvents.TrySubscribe() is not { } channel)
         {
-            await foreach (var e in channel.Reader.ReadAllAsync(token))
-            {
-                if (e.TableId != tableId) continue;
-                if (recordId is not null && e.RecordId != recordId) continue;
-                if (await AllowedFieldsAsync(scopes, tableId, userId, callerRole, e, token) is not { } fields) continue;
-                yield return new
-                {
-                    action = e.Action,
-                    id = e.RecordId,
-                    record = EventRecord(e.Json, fields)
-                };
-            }
+            ctx.Response.Headers.RetryAfter = "30";
+            return (null, ApiError(ctx, ApiProblem.ServiceUnavailable, "Too many open subscriptions. Try again shortly."));
         }
-        finally
+        ctx.Response.OnCompleted(() =>
         {
             RecordEvents.Unsubscribe(channel);
+            return Task.CompletedTask;
+        });
+        return (channel, null);
+    }
+
+    private static async IAsyncEnumerable<object> Stream(
+        Channel<RecordEvent> channel, IServiceScopeFactory scopes, string tableId, string? recordId, string userId, string callerRole,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
+    {
+        await foreach (var e in channel.Reader.ReadAllAsync(token))
+        {
+            if (e.TableId != tableId) continue;
+            if (recordId is not null && e.RecordId != recordId) continue;
+            if (await AllowedFieldsAsync(scopes, tableId, userId, callerRole, e, token) is not { } fields) continue;
+            yield return new
+            {
+                action = e.Action,
+                id = e.RecordId,
+                record = EventRecord(e.Json, fields)
+            };
         }
     }
 

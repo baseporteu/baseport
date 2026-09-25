@@ -73,6 +73,16 @@ public class OpenApiSpecTests
     }
 
     [Fact]
+    public void Both_streams_document_the_subscriber_cap()
+    {
+        foreach (var path in new[] { "/api/v1/orders/subscribe", "/api/v1/orders/subscribe/{recordId}" })
+        {
+            var op = (Paths(Table())[path] as JsonObject)?["get"] as JsonObject;
+            AssertErrorRef((op!["responses"] as JsonObject)!, "503");
+        }
+    }
+
+    [Fact]
     public void The_stream_follows_the_GET_switch()
     {
         var t = Table();

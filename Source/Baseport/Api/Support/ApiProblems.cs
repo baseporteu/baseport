@@ -16,12 +16,13 @@ public readonly record struct ApiProblem(int Status, string Type, string Title)
     public static readonly ApiProblem TooManyRequests = new(429, Urn("too-many-requests"), "Rate limit exceeded");
     public static readonly ApiProblem Internal = new(500, Urn("internal-error"), "Internal server error");
     public static readonly ApiProblem BadGateway = new(502, Urn("bad-gateway"), "Invalid response from an upstream service");
+    public static readonly ApiProblem ServiceUnavailable = new(503, Urn("service-unavailable"), "Temporarily unavailable");
     public static readonly ApiProblem GatewayTimeout = new(504, Urn("gateway-timeout"), "An upstream service timed out");
 
     public static readonly IReadOnlyList<ApiProblem> All =
     [
         BadRequest, Unauthorized, Forbidden, NotFound, MethodNotAllowed, NotAcceptable, Conflict,
-        PreconditionFailed, TooLarge, UnsupportedMediaType, Unprocessable, TooManyRequests, Internal, BadGateway, GatewayTimeout
+        PreconditionFailed, TooLarge, UnsupportedMediaType, Unprocessable, TooManyRequests, Internal, BadGateway, ServiceUnavailable, GatewayTimeout
     ];
 
     private static string Urn(string slug) => $"urn:baseport:problem:{slug}";

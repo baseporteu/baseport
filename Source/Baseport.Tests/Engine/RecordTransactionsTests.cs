@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 
 namespace Baseport.Tests;
 
+[Collection(nameof(RecordEvents))]
 public class RecordTransactionsTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -62,7 +63,7 @@ public class RecordTransactionsTests : IDisposable
     public async Task A_rolled_back_transactional_batch_emits_no_event()
     {
         var table = await NotesAsync();
-        var channel = RecordEvents.Subscribe();
+        var channel = RecordEvents.TrySubscribe()!;
         try
         {
             var outcome = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
@@ -84,7 +85,7 @@ public class RecordTransactionsTests : IDisposable
     public async Task A_committed_transactional_batch_emits_every_event_once()
     {
         var table = await NotesAsync();
-        var channel = RecordEvents.Subscribe();
+        var channel = RecordEvents.TrySubscribe()!;
         try
         {
             var outcome = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
@@ -106,7 +107,7 @@ public class RecordTransactionsTests : IDisposable
     public async Task A_non_transactional_write_still_emits_immediately()
     {
         var table = await NotesAsync();
-        var channel = RecordEvents.Subscribe();
+        var channel = RecordEvents.TrySubscribe()!;
         try
         {
             await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation> { Create("notes", "now") },

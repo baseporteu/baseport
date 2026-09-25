@@ -5,6 +5,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
+[CollectionDefinition(nameof(RecordEvents), DisableParallelization = true)]
+public class RecordEventsCollection;
+
+[Collection(nameof(RecordEvents))]
 public class RecordEventsTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -27,7 +31,7 @@ public class RecordEventsTests : IDisposable
         _db.Tables.Add(new TableDefinition { Id = "table-1", Name = "T", CreatedAt = DateTime.UtcNow });
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var channel = RecordEvents.Subscribe();
+        var channel = RecordEvents.TrySubscribe()!;
         try
         {
             var record = new Record
@@ -98,7 +102,7 @@ public class RecordEventsTests : IDisposable
     [Fact]
     public async Task ASaveThatChangesNoRecordEmitsNothing()
     {
-        var channel = RecordEvents.Subscribe();
+        var channel = RecordEvents.TrySubscribe()!;
         try
         {
             _db.AppSettings.Add(new AppSettings());
@@ -127,7 +131,7 @@ public class RecordEventsTests : IDisposable
             db.Tables.Add(new TableDefinition { Id = "table-3", Name = "V", CreatedAt = DateTime.UtcNow });
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-            var channel = RecordEvents.Subscribe();
+            var channel = RecordEvents.TrySubscribe()!;
             try
             {
                 var record = new Record { Id = Ids.NewShortId(12), TableId = "table-3", JsonData = "{}" };
@@ -154,10 +158,55 @@ public class RecordEventsTests : IDisposable
     public void UnsubscribingRemovesTheSubscriber()
     {
         var before = RecordEvents.SubscriberCount;
-        var channel = RecordEvents.Subscribe();
+        var channel = RecordEvents.TrySubscribe()!;
         Assert.Equal(before + 1, RecordEvents.SubscriberCount);
         RecordEvents.Unsubscribe(channel);
         Assert.Equal(before, RecordEvents.SubscriberCount);
+    }
+
+    [Fact]
+    public void A_subscription_past_the_cap_is_refused_with_503()
+    {
+        var saved = RecordEvents.MaxSubscribers;
+        RecordEvents.MaxSubscribers = RecordEvents.SubscriberCount;
+        try
+        {
+            var ctx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+            var (channel, refusal) = PublicApiEndpoints.OpenSubscription(ctx);
+
+            Assert.Null(channel);
+            Assert.Equal(503, Assert.IsAssignableFrom<Microsoft.AspNetCore.Http.IStatusCodeHttpResult>(refusal).StatusCode);
+            Assert.Equal("30", ctx.Response.Headers.RetryAfter.ToString());
+        }
+        finally
+        {
+            RecordEvents.MaxSubscribers = saved;
+        }
+    }
+
+    [Fact]
+    public void A_closed_subscription_frees_a_slot()
+    {
+        var saved = RecordEvents.MaxSubscribers;
+        RecordEvents.MaxSubscribers = RecordEvents.SubscriberCount + 1;
+        try
+        {
+            var first = RecordEvents.TrySubscribe();
+            Assert.NotNull(first);
+            Assert.Null(RecordEvents.TrySubscribe());
+
+            RecordEvents.Unsubscribe(first);
+            RecordEvents.Unsubscribe(first);
+
+            var second = RecordEvents.TrySubscribe();
+            Assert.NotNull(second);
+            Assert.Null(RecordEvents.TrySubscribe());
+            RecordEvents.Unsubscribe(second);
+        }
+        finally
+        {
+            RecordEvents.MaxSubscribers = saved;
+        }
     }
 
     public void Dispose()
