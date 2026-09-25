@@ -31,6 +31,13 @@ public static class AdminSurface
             await next();
         });
 
+    internal static IEnumerable<string> ConsoleUrls(IEnumerable<string> urls, int? adminPort) =>
+        from url in urls
+        let parsed = Uri.TryCreate(url, UriKind.Absolute, out var u) ? u : null
+        where adminPort is null || parsed?.Port == adminPort
+        select (parsed is { Host: "0.0.0.0" or "[::]" } ? new UriBuilder(parsed) { Host = "localhost" }.Uri.ToString() : url)
+            .TrimEnd('/') + "/_/admin";
+
     internal static bool IsAdminPath(string path) =>
         !path.StartsWith("/api/auth/v1", StringComparison.OrdinalIgnoreCase)
         && (path.StartsWith("/_/", StringComparison.OrdinalIgnoreCase)

@@ -273,6 +273,22 @@ public class AdminSurfaceTests
         AdminSurface.Configure("");
     }
 
+    [Fact]
+    public void Every_bound_address_gets_its_own_console_link_and_wildcards_read_as_localhost()
+    {
+        var urls = AdminSurface.ConsoleUrls(["http://0.0.0.0:5000", "http://[::]:5001", "http://127.0.0.1:5002"], null);
+
+        Assert.Equal(["http://localhost:5000/_/admin", "http://localhost:5001/_/admin", "http://127.0.0.1:5002/_/admin"], urls);
+    }
+
+    [Fact]
+    public void With_an_admin_address_only_the_admin_port_is_offered_as_the_console()
+    {
+        var urls = AdminSurface.ConsoleUrls(["http://[::]:5000", "http://127.0.0.1:5264"], 5264);
+
+        Assert.Equal(["http://127.0.0.1:5264/_/admin"], urls);
+    }
+
     [Theory]
     [InlineData("/_/admin", true)]
     [InlineData("/_/auth", true)]

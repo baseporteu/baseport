@@ -217,8 +217,8 @@ try
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {
-        var addresses = app.Urls.Count > 0 ? string.Join(", ", app.Urls) : "the configured address";
-        Log.Information("Baseport listening on {Addresses}/_/admin", addresses);
+        foreach (var console in AdminSurface.ConsoleUrls(app.Urls, AdminSurface.Port))
+            Log.Information("Console {Url}", console);
 
         foreach (var url in app.Urls)
         {
