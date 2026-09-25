@@ -13,29 +13,33 @@ public static class PostgresConnection
         socket.NoDelay = true;
         await using var stream = new NetworkStream(socket, ownsSocket: false);
 
-        if (await ReadStartupAsync(stream, ct) is null) return;
+        using var handshake = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        handshake.CancelAfter(NetStreamExtensions.HandshakeTimeout);
+        var hs = handshake.Token;
 
-        await WriteAuthAsync(stream, 3, ct);
-        var passwordMessage = await ReadMessageAsync(stream, ct);
+        if (await ReadStartupAsync(stream, hs) is null) return;
+
+        await WriteAuthAsync(stream, 3, hs);
+        var passwordMessage = await ReadMessageAsync(stream, hs);
         if (passwordMessage is not { Type: 'p' } pm)
         {
-            await WriteErrorAsync(stream, "FATAL", "08P01", "expected a password message", ct);
+            await WriteErrorAsync(stream, "FATAL", "08P01", "expected a password message", hs);
             return;
         }
 
         var token = ReadCStringFromStart(pm.Payload);
-        var account = await ResolveAccountAsync(scopes, token, ct);
+        var account = await ResolveAccountAsync(scopes, token, hs);
         if (account is null)
         {
-            await WriteErrorAsync(stream, "FATAL", "28P01", "password authentication failed", ct);
+            await WriteErrorAsync(stream, "FATAL", "28P01", "password authentication failed", hs);
             return;
         }
 
-        await WriteAuthAsync(stream, 0, ct);
-        await WriteParameterStatusAsync(stream, "server_version", "15.0 (Baseport)", ct);
-        await WriteParameterStatusAsync(stream, "client_encoding", "UTF8", ct);
-        await WriteBackendKeyDataAsync(stream, ct);
-        await WriteReadyForQueryAsync(stream, ct);
+        await WriteAuthAsync(stream, 0, hs);
+        await WriteParameterStatusAsync(stream, "server_version", "15.0 (Baseport)", hs);
+        await WriteParameterStatusAsync(stream, "client_encoding", "UTF8", hs);
+        await WriteBackendKeyDataAsync(stream, hs);
+        await WriteReadyForQueryAsync(stream, hs);
 
         var statements = new Dictionary<string, PreparedStatement>();
         var portals = new Dictionary<string, Portal>();

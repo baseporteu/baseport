@@ -124,6 +124,7 @@ public static class Jobs
             FileStore.Delete(name);
             deleted++;
         }
+        FileStore.Recount();
         return deleted == 0 ? $"Checked {stored.Count} upload(s); none orphaned." : $"Deleted {deleted} orphaned upload(s) of {stored.Count}.";
     }
 

@@ -8,6 +8,7 @@ public sealed class TdsServer(IServiceScopeFactory scopes) : BackgroundService
     private static readonly Serilog.ILogger Log = Serilog.Log.ForContext<TdsServer>();
 
     private TcpListener? _listener;
+    private readonly SemaphoreSlim _slots = new(NetStreamExtensions.MaxConnections);
     private CancellationTokenSource? _acceptCts;
     private (bool Enabled, int Port, string BindAddress) _running;
 
@@ -56,6 +57,13 @@ public sealed class TdsServer(IServiceScopeFactory scopes) : BackgroundService
             return;
         }
 
+        if (WireBind.Problem(desired.BindAddress, "TDS") is { } refused)
+        {
+            Log.Error("Not starting the TDS listener on {Address}: {Reason}", desired.BindAddress, refused);
+            _running = desired;
+            return;
+        }
+
         try
         {
             _listener = new TcpListener(IPAddress.Parse(desired.BindAddress), desired.Port);
@@ -93,6 +101,11 @@ public sealed class TdsServer(IServiceScopeFactory scopes) : BackgroundService
                 Socket socket;
                 try { socket = await listener.AcceptSocketAsync(ct); }
                 catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException) { break; }
+                if (!_slots.Wait(0))
+                {
+                    socket.Dispose();
+                    continue;
+                }
                 _ = HandleClientAsync(socket, ct);
             }
         }
@@ -104,13 +117,21 @@ public sealed class TdsServer(IServiceScopeFactory scopes) : BackgroundService
 
     private async Task HandleClientAsync(Socket socket, CancellationToken ct)
     {
-        using (socket)
+        try
         {
-            try { await TdsConnection.HandleAsync(socket, scopes, ct); }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                Log.Debug(ex, "TDS connection ended abnormally");
-            }
+            using (socket)
+                await TdsConnection.HandleAsync(socket, scopes, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Debug(ex, "TDS connection ended abnormally");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _slots.Release();
         }
     }
 }

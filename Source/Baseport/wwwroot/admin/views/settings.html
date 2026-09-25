@@ -30,6 +30,11 @@
                                         <p class='desc'>Audit entries older than this are pruned. 0 disables pruning.</p>
                                     </div>
                                     <div class='settings-form-row'>
+                                        <label for='settingsUploadsMax'>Upload storage (MB)</label>
+                                        <input type='number' class='input' id='settingsUploadsMax' min='1' max='1048576'>
+                                        <p class='desc' id='settingsUploadsUsed'>Uploads past this limit are refused.</p>
+                                    </div>
+                                    <div class='settings-form-row'>
                                         <label for='settingsCurrency'>Default currency</label>
                                         <select class='input' id='settingsCurrency'></select>
                                         <p class='desc'>ISO 4217 code used by currency fields that do not set their own.</p>
@@ -182,7 +187,7 @@
                         </div>
                         <div class='settings-pane hidden' data-pane='providers'>
                             <div class='card'>
-                                <div class='card-header'><div><h2>PostgreSQL</h2><p class='muted'>Enable the PostgreSQL wire protocol on this port.</p></div></div>
+                                <div class='card-header'><div><h2>PostgreSQL</h2><p class='muted'>Enable the PostgreSQL wire protocol on this port. Tokens travel in cleartext, so it binds to loopback unless <code>Baseport:WireRemoteAccess</code> is set.</p></div></div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsPostgresEnabled'>Enabled</label>
@@ -214,7 +219,7 @@
                                 </div>
                             </div>
                             <div class='card'>
-                                <div class='card-header'><div><h2>SQL Server (TDS)</h2><p class='muted'>Enable the TDS wire protocol on this port.</p></div></div>
+                                <div class='card-header'><div><h2>SQL Server (TDS)</h2><p class='muted'>Enable the TDS wire protocol on this port. Tokens travel in cleartext, so it binds to loopback unless <code>Baseport:WireRemoteAccess</code> is set.</p></div></div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsTdsEnabled'>Enabled</label>

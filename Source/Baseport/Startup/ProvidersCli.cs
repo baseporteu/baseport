@@ -1,4 +1,4 @@
-using System.Net;
+using Baseport.Providers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
@@ -32,7 +32,7 @@ public static class ProvidersCli
         var rest = args.Skip(1).ToArray();
         if (rest is ["status"]) return await PrintStatusAsync(db);
         if (rest is [("postgres" or "tds") and var provider, ("enable" or "disable") and var action, ..])
-            return await SetAsync(db, provider, action, rest[2..]);
+            return await SetAsync(db, provider, action, rest[2..], config.GetValue("Baseport:WireRemoteAccess", false));
 
         PrintUsage();
         return rest.Length == 0 ? 0 : 1;
@@ -46,7 +46,7 @@ public static class ProvidersCli
         return 0;
     }
 
-    private static async Task<int> SetAsync(AppDbContext db, string provider, string action, string[] rest)
+    private static async Task<int> SetAsync(AppDbContext db, string provider, string action, string[] rest, bool remoteAllowed)
     {
         int? port = null;
         string? bind = null;
@@ -60,9 +60,9 @@ public static class ProvidersCli
             Console.Error.WriteLine("Port must be between 1 and 65535.");
             return 1;
         }
-        if (bind is not null && !IPAddress.TryParse(bind, out _))
+        if (bind is not null && WireBind.Problem(bind, provider == "tds" ? "TDS" : "Postgres", remoteAllowed) is { } bindProblem)
         {
-            Console.Error.WriteLine("Bind address must be a valid IP address.");
+            Console.Error.WriteLine(bindProblem);
             return 1;
         }
 

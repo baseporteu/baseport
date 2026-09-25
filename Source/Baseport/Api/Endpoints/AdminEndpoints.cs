@@ -367,6 +367,8 @@ public static class AdminEndpoints
                 s.Currency,
                 s.TimeZone,
                 s.BackupRetention,
+                s.UploadsMaxMegabytes,
+                UploadsUsedBytes = FileStore.UsedBytes,
                 s.S3ExportEnabled,
                 s.S3Bucket,
                 s.S3Region,
@@ -426,6 +428,12 @@ public static class AdminEndpoints
                 if (backupRetention < 1 || backupRetention > 50)
                     return Results.BadRequest(new { errors = new[] { "Backup retention must be between 1 and 50 backups." } });
                 s.BackupRetention = backupRetention;
+            }
+            if (body["uploadsMaxMegabytes"] is JsonValue umv && umv.TryGetValue<int>(out var uploadsMax))
+            {
+                if (uploadsMax < 1 || uploadsMax > 1_048_576)
+                    return Results.BadRequest(new { errors = new[] { "Upload storage must be between 1 MB and 1,048,576 MB (1 TB)." } });
+                s.UploadsMaxMegabytes = uploadsMax;
             }
             if (body["s3ExportEnabled"] is JsonValue s3ee && s3ee.TryGetValue<bool>(out var s3Enabled))
                 s.S3ExportEnabled = s3Enabled;
@@ -529,9 +537,10 @@ public static class AdminEndpoints
             await db.SaveChangesAsync();
             UserTokens.Configure(s);
             ProxyTarget.Configure(s);
+            FileStore.Configure(s);
             return Results.Ok(new
             {
-                s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.TimeZone, s.BackupRetention, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled,
+                s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.TimeZone, s.BackupRetention, s.UploadsMaxMegabytes, UploadsUsedBytes = FileStore.UsedBytes, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled,
                 s.PublicAuthEnabled, s.PublicRegistrationEnabled, s.AnonymousAuthEnabled, s.AnonymousRetentionDays,
                 s.AuthIssuer, s.AuthTokenLifetimeSec, s.AuthRefreshLifetimeDays,
                 s.ProxyPrivateTargetsEnabled,
@@ -691,7 +700,7 @@ public static class AdminEndpoints
         return null;
     }
 
-    private static string? ApplyProviderSettings(JsonObject body, AppSettings s)
+    internal static string? ApplyProviderSettings(JsonObject body, AppSettings s)
     {
         if (body["postgresEnabled"] is JsonValue pev && pev.TryGetValue<bool>(out var postgresEnabled))
             s.PostgresEnabled = postgresEnabled;
@@ -702,7 +711,7 @@ public static class AdminEndpoints
         }
         if (body["postgresBindAddress"] is JsonValue pbv && pbv.TryGetValue<string>(out var postgresBind))
         {
-            if (!IPAddress.TryParse(postgresBind, out _)) return "Postgres bind address must be a valid IP address.";
+            if (Baseport.Providers.WireBind.Problem(postgresBind, "Postgres") is { } bindProblem) return bindProblem;
             s.PostgresBindAddress = postgresBind;
         }
 
@@ -715,7 +724,7 @@ public static class AdminEndpoints
         }
         if (body["tdsBindAddress"] is JsonValue tbv && tbv.TryGetValue<string>(out var tdsBind))
         {
-            if (!IPAddress.TryParse(tdsBind, out _)) return "TDS bind address must be a valid IP address.";
+            if (Baseport.Providers.WireBind.Problem(tdsBind, "TDS") is { } bindProblem) return bindProblem;
             s.TdsBindAddress = tdsBind;
         }
 

@@ -8,6 +8,7 @@ public sealed class PostgresServer(IServiceScopeFactory scopes) : BackgroundServ
     private static readonly Serilog.ILogger Log = Serilog.Log.ForContext<PostgresServer>();
 
     private TcpListener? _listener;
+    private readonly SemaphoreSlim _slots = new(NetStreamExtensions.MaxConnections);
     private CancellationTokenSource? _acceptCts;
     private (bool Enabled, int Port, string BindAddress) _running;
 
@@ -56,6 +57,13 @@ public sealed class PostgresServer(IServiceScopeFactory scopes) : BackgroundServ
             return;
         }
 
+        if (WireBind.Problem(desired.BindAddress, "Postgres") is { } refused)
+        {
+            Log.Error("Not starting the Postgres listener on {Address}: {Reason}", desired.BindAddress, refused);
+            _running = desired;
+            return;
+        }
+
         try
         {
             _listener = new TcpListener(IPAddress.Parse(desired.BindAddress), desired.Port);
@@ -93,6 +101,11 @@ public sealed class PostgresServer(IServiceScopeFactory scopes) : BackgroundServ
                 Socket socket;
                 try { socket = await listener.AcceptSocketAsync(ct); }
                 catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException) { break; }
+                if (!_slots.Wait(0))
+                {
+                    socket.Dispose();
+                    continue;
+                }
                 _ = HandleClientAsync(socket, ct);
             }
         }
@@ -104,13 +117,21 @@ public sealed class PostgresServer(IServiceScopeFactory scopes) : BackgroundServ
 
     private async Task HandleClientAsync(Socket socket, CancellationToken ct)
     {
-        using (socket)
+        try
         {
-            try { await PostgresConnection.HandleAsync(socket, scopes, ct); }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                Log.Debug(ex, "Postgres connection ended abnormally");
-            }
+            using (socket)
+                await PostgresConnection.HandleAsync(socket, scopes, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Debug(ex, "Postgres connection ended abnormally");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _slots.Release();
         }
     }
 }

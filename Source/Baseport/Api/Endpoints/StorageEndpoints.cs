@@ -19,7 +19,6 @@ public static class StorageEndpoints
             var file = form.Files["file"] ?? form.Files.FirstOrDefault();
             if (file is null) return Error(400, "No file was uploaded.");
 
-            // ponytail: no disk quota yet
             var (stored, error) = await FileStore.SaveAsync(file, bucket, ctx.RequestAborted);
             if (error is not null) return Error(400, error);
 
@@ -33,7 +32,7 @@ public static class StorageEndpoints
                 size = file.Length,
                 content_type = ContentTypeFor(name)
             });
-        });
+        }).RequireRateLimiting(RateLimit.Upload);
 
         app.MapGet("/api/v1/files/{bucket}/{name}", async (AppDbContext db, HttpContext ctx, string bucket, string name) =>
         {
@@ -52,7 +51,7 @@ public static class StorageEndpoints
 
             var path = FileStore.Resolve($"{bucket}/{name}");
             if (path is null || !File.Exists(path)) return Error(404, "No such file.");
-            File.Delete(path);
+            FileStore.Delete($"{bucket}/{name}");
             return Results.Ok(new { deleted = $"{bucket}/{name}" });
         });
     }

@@ -21,6 +21,8 @@ public static class SqlEngine
 
     public const int MaxRows = 200;
 
+    internal static TimeSpan StatementDeadline = TimeSpan.FromSeconds(10);
+
     public sealed record Result(List<string> Columns, List<List<string?>> Rows, bool Truncated, string? Error);
 
     private static void Pragma(System.Data.Common.DbConnection conn, string pragma)
@@ -61,6 +63,10 @@ public static class SqlEngine
 
             if (restrict && configure is not null && conn is SqliteConnection guarded) WireCatalog.Restrict(guarded);
 
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var deadline = StatementDeadline;
+            SQLitePCL.raw.sqlite3_progress_handler(((SqliteConnection)conn).Handle, 1000, _ => clock.Elapsed > deadline ? 1 : 0, null);
+
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql.TrimEnd().TrimEnd(';');
             using var reader = await cmd.ExecuteReaderAsync();
@@ -76,12 +82,19 @@ public static class SqlEngine
             }
             return new Result(columns, rows, rows.Count == MaxRows, null);
         }
+        catch (SqliteException interrupted) when (interrupted.SqliteErrorCode == 9)
+        {
+            return new Result(new List<string>(), new List<List<string?>>(), false,
+                $"The query ran longer than {StatementDeadline.TotalSeconds:0.#} seconds and was stopped.");
+        }
         catch (Exception ex)
         {
             return new Result(new List<string>(), new List<List<string?>>(), false, ex.Message);
         }
         finally
         {
+            if (conn is SqliteConnection { State: System.Data.ConnectionState.Open } open)
+                SQLitePCL.raw.sqlite3_progress_handler(open.Handle, 0, null, null);
 
             if (configure is not null && conn is SqliteConnection guarded) WireCatalog.Unrestrict(guarded);
             if (!wasOpen) await conn.CloseAsync();

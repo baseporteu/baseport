@@ -19,21 +19,25 @@ public static class TdsConnection
         socket.NoDelay = true;
         await using var stream = new NetworkStream(socket, ownsSocket: false);
 
-        var prelogin = await ReadTdsMessageAsync(stream, ct);
-        if (prelogin is not { Type: PtPreLogin }) return;
-        await WriteTdsMessageAsync(stream, PtTabularResult, BuildPreloginResponse(), ct);
+        using var handshake = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        handshake.CancelAfter(NetStreamExtensions.HandshakeTimeout);
+        var hs = handshake.Token;
 
-        var login = await ReadTdsMessageAsync(stream, ct);
+        var prelogin = await ReadTdsMessageAsync(stream, hs);
+        if (prelogin is not { Type: PtPreLogin }) return;
+        await WriteTdsMessageAsync(stream, PtTabularResult, BuildPreloginResponse(), hs);
+
+        var login = await ReadTdsMessageAsync(stream, hs);
         if (login is not { Type: PtLogin7 } loginMsg) return;
 
         var (_, password) = ParseLogin7(loginMsg.Payload);
-        var account = await ResolveAccountAsync(scopes, password, ct);
+        var account = await ResolveAccountAsync(scopes, password, hs);
         if (account is null)
         {
             using var fail = new MemoryStream();
             WriteError(fail, "Login failed.");
             WriteDone(fail, 0x0002, 0, 0);
-            await WriteTdsMessageAsync(stream, PtTabularResult, fail.ToArray(), ct);
+            await WriteTdsMessageAsync(stream, PtTabularResult, fail.ToArray(), hs);
             return;
         }
 
@@ -41,7 +45,7 @@ public static class TdsConnection
         {
             WriteLoginAck(ok);
             WriteDone(ok, 0x0000, 0, 0);
-            await WriteTdsMessageAsync(stream, PtTabularResult, ok.ToArray(), ct);
+            await WriteTdsMessageAsync(stream, PtTabularResult, ok.ToArray(), hs);
         }
 
         while (true)

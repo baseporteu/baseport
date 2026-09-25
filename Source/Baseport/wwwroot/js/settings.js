@@ -94,6 +94,9 @@ async function loadSettings() {
     document.getElementById('settingsAppName').value = settingsData.appName || 'Baseport';
     document.getElementById('settingsSiteUrl').value = settingsData.siteUrl || '';
     document.getElementById('settingsLogRetention').value = settingsData.logRetentionSec ?? 0;
+    document.getElementById('settingsUploadsMax').value = settingsData.uploadsMaxMegabytes ?? 10240;
+    document.getElementById('settingsUploadsUsed').textContent =
+        `${fmtSize(settingsData.uploadsUsedBytes || 0)} in use. Uploads past this limit are refused.`;
     // The browser ships ISO 4217 and the IANA zone list, neither is ours to carry or keep current.
     ui.fillOptions(document.getElementById('settingsCurrency'), ui.currencyOptions(), settingsData.currency || 'EUR');
     ui.fillOptions(document.getElementById('settingsTimeZone'), ui.timeZoneOptions(), settingsData.timeZone || 'UTC');
@@ -177,6 +180,7 @@ async function submitSettings(btn) {
             currency: document.getElementById('settingsCurrency').value.trim().toUpperCase(),
             timeZone: document.getElementById('settingsTimeZone').value,
             backupRetention: Number(document.getElementById('settingsBackupRetention').value) || 5,
+            uploadsMaxMegabytes: Number(document.getElementById('settingsUploadsMax').value) || 10240,
         };
         const res = await fetch('/api/_admin/settings', {
             method: 'PUT',

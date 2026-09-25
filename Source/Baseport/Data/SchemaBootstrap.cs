@@ -40,6 +40,7 @@ public static class SchemaBootstrap
 
         EmbedOrigins.Set(settings.AllowedOrigins);
         ProxyTarget.Configure(settings);
+        FileStore.Configure(settings);
 
         foreach (var table in await db.Tables.Include(t => t.Fields).ToListAsync())
             await RecordIndexes.SyncAsync(db, table);

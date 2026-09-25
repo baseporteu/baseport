@@ -131,6 +131,8 @@ Each of these opens something up. Turn them on only when you need them.
 | TDS listener | The SQL Server wire protocol, bound to `127.0.0.1:1433` by default |
 | Proxy private targets | Lets outbound proxy requests reach your own network, including cloud metadata endpoints |
 
+Both wire protocols send the API token in cleartext, so a listener only binds to a loopback address unless `appsettings.json` sets `Baseport:WireRemoteAccess` to `true` (`Baseport__WireRemoteAccess=true` in Docker, where loopback inside the container is unreachable from the host; publish the port as well). Put a TLS tunnel in front of a remote listener. The console refuses a public bind address without the switch, and so does the listener itself at start.
+
 You can also control the two listeners from the shell:
 
 ```bash

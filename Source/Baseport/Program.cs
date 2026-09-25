@@ -97,6 +97,7 @@ try
     var connectionString = config["ConnectionString"] ?? "Data Source=baseport.db";
     var previewSecret = config["PreviewSecret"];
     var trustForwardedHeaders = config.GetValue("TrustForwardedHeaders", false);
+    Baseport.Providers.WireBind.RemoteAllowed = config.GetValue("WireRemoteAccess", false);
     FileStore.Initialize(connectionString);
 
     var dbSource = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;

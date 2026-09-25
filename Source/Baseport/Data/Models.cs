@@ -316,6 +316,7 @@ public class AppSettings
 
     public string TimeZone { get; set; } = TimeZones.HostDefault;
     public int BackupRetention { get; set; } = 5;
+    public int UploadsMaxMegabytes { get; set; } = 10240;
 
     public bool S3ExportEnabled { get; set; } = false;
     public string S3Bucket { get; set; } = "";
