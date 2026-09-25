@@ -21,6 +21,29 @@ public static class SqlEngine
 
     public const int MaxRows = 200;
 
+    private static readonly HashSet<string> IntrospectionPragmas = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "table_info", "table_xinfo", "table_list", "index_list", "index_info", "index_xinfo",
+        "foreign_key_list", "foreign_key_check", "integrity_check", "quick_check"
+    };
+
+    private static readonly HashSet<string> ReadablePragmas = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "user_version", "schema_version", "application_id", "page_count", "page_size", "freelist_count",
+        "journal_mode", "encoding", "database_list", "collation_list", "function_list", "pragma_list",
+        "module_list", "compile_options", "data_version", "foreign_keys"
+    };
+
+    // console pragmas may only read
+    private static readonly SQLitePCL.delegate_authorizer ReadOnlyPragmas = (_, action, name, argument, _, _) =>
+    {
+        if (action != SQLitePCL.raw.SQLITE_PRAGMA) return SQLitePCL.raw.SQLITE_OK;
+        var pragma = name.utf8_to_string();
+        var allowed = IntrospectionPragmas.Contains(pragma)
+            || ReadablePragmas.Contains(pragma) && string.IsNullOrEmpty(argument.utf8_to_string());
+        return allowed ? SQLitePCL.raw.SQLITE_OK : SQLitePCL.raw.SQLITE_DENY;
+    };
+
     internal static TimeSpan StatementDeadline = TimeSpan.FromSeconds(10);
 
     public sealed record Result(List<string> Columns, List<List<string?>> Rows, bool Truncated, string? Error);
@@ -62,6 +85,7 @@ public static class SqlEngine
             }
 
             if (restrict && configure is not null && conn is SqliteConnection guarded) WireCatalog.Restrict(guarded);
+            else SQLitePCL.raw.sqlite3_set_authorizer(((SqliteConnection)conn).Handle, ReadOnlyPragmas, null);
 
             var clock = System.Diagnostics.Stopwatch.StartNew();
             var deadline = StatementDeadline;
@@ -87,6 +111,11 @@ public static class SqlEngine
             return new Result(new List<string>(), new List<List<string?>>(), false,
                 $"The query ran longer than {StatementDeadline.TotalSeconds:0.#} seconds and was stopped.");
         }
+        catch (SqliteException denied) when (denied.SqliteErrorCode == 23)
+        {
+            return new Result(new List<string>(), new List<List<string?>>(), false,
+                "That statement is not allowed here. Queries can read, not change settings or data.");
+        }
         catch (Exception ex)
         {
             return new Result(new List<string>(), new List<List<string?>>(), false, ex.Message);
@@ -96,7 +125,7 @@ public static class SqlEngine
             if (conn is SqliteConnection { State: System.Data.ConnectionState.Open } open)
                 SQLitePCL.raw.sqlite3_progress_handler(open.Handle, 0, null, null);
 
-            if (configure is not null && conn is SqliteConnection guarded) WireCatalog.Unrestrict(guarded);
+            if (conn is SqliteConnection { State: System.Data.ConnectionState.Open } restricted) WireCatalog.Unrestrict(restricted);
             if (!wasOpen) await conn.CloseAsync();
             if (!inMemory) await conn.DisposeAsync();
         }

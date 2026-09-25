@@ -70,6 +70,8 @@ public static partial class RecordAccess
             return "An access rule must be 2000 characters or fewer.";
         if (rule.Contains(';')) 
             return "An access rule is a single expression and cannot contain ';'.";
+        if (ShapeProblem(rule) is { } shape)
+            return shape;
 
         foreach (Match match in AliasReference().Matches(rule))
         {
@@ -93,26 +95,56 @@ public static partial class RecordAccess
         return null;
     }
 
+    // the rule must stay one parenthesised expression
+    private static string? ShapeProblem(string rule)
+    {
+        if (rule.IndexOfAny(['{', '}']) >= 0)
+            return "An access rule cannot contain '{' or '}'.";
+
+        var depth = 0;
+        for (var i = 0; i < rule.Length; i++)
+        {
+            var c = rule[i];
+            if (c is '\'' or '"' or '`' or '[')
+            {
+                var end = rule.IndexOf(c == '[' ? ']' : c, i + 1);
+                if (end < 0) return "An access rule has a quote or bracket that is never closed.";
+                if (c == '\'' && AliasReference().IsMatch(rule[(i + 1)..end]))
+                    return "_USER_, _ROW_ and _REQ_ cannot appear inside a quoted string.";
+                i = end;
+            }
+            else if (c is '?' or '$' or ':' or '@')
+                return $"An access rule cannot contain '{c}' outside a quoted string.";
+            else if (c == '(') depth++;
+            else if (c == ')' && --depth < 0) return "An access rule has a ')' without a matching '('.";
+            else if ((c == '-' || c == '/') && i + 1 < rule.Length && rule[i + 1] == (c == '-' ? '-' : '*'))
+                return "An access rule cannot contain a comment.";
+        }
+        return depth == 0 ? null : "An access rule has a '(' that is never closed.";
+    }
+
     internal static string Rewrite(string rule, IReadOnlyList<FieldDefinition> fields, string? rowAlias, string? userId, JsonObject? request, JsonObject? row, List<object?> args, string? callerRole = null)
     {
-        return AliasReference().Replace(rule, match =>
+        return AliasReference().Replace(rule, match => $"({Substitute(match)})");
+
+        string Substitute(Match match)
         {
             var alias = match.Groups["alias"].Value;
             var name = match.Groups["quoted"].Success ? match.Groups["quoted"].Value : match.Groups["bare"].Value;
 
-            if (alias == "_USER_") 
+            if (alias == "_USER_")
                 return Slot(args, name == "role" ? callerRole : userId);
-            if (alias == "_REQ_") 
+            if (alias == "_REQ_")
                 return Slot(args, Value(request, name));
 
             var field = fields.FirstOrDefault(f => f.Name == name);
-            if (field is null) 
+            if (field is null)
                 return "NULL";
-            if (rowAlias is not null) 
+            if (rowAlias is not null)
                 return QueryEngine.JsonPathFor(field.Name, rowAlias);
-            
+
             return row is null ? "NULL" : Slot(args, Value(row, name));
-        });
+        }
     }
 
     public static async Task<bool> AllowsAsync(
