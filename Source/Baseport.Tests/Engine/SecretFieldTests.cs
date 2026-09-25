@@ -43,6 +43,45 @@ public class SecretFieldTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    private const string Chosen = "pbkdf2$1$c2FsdA$Y2hvc2Vu";
+
+    [Fact]
+    public async Task A_client_supplied_pbkdf2_value_is_hashed_again_on_create()
+    {
+        var obj = new System.Text.Json.Nodes.JsonObject { ["Name"] = "mallory", ["Pw"] = Chosen };
+
+        var outcome = await RecordEngine.PrepareAsync(_db, _table, _fields, obj);
+
+        Assert.False(outcome.HasErrors);
+        var stored = (string)obj["Pw"]!;
+        Assert.NotEqual(Chosen, stored);
+        Assert.True(AdminAuth.VerifyPassword(Chosen, stored));
+    }
+
+    [Fact]
+    public async Task A_client_supplied_pbkdf2_value_is_hashed_again_on_patch()
+    {
+        var record = _db.Records.Single();
+
+        var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(_db, _table, _fields, record,
+            new System.Text.Json.Nodes.JsonObject { ["Pw"] = Chosen }, replace: false);
+
+        Assert.False(outcome.HasErrors);
+        Assert.NotEqual(Chosen, (string)merged["Pw"]!);
+    }
+
+    [Fact]
+    public async Task An_unrelated_patch_keeps_the_stored_hash()
+    {
+        var record = _db.Records.Single();
+
+        var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(_db, _table, _fields, record,
+            new System.Text.Json.Nodes.JsonObject { ["Name"] = "bob" }, replace: false);
+
+        Assert.False(outcome.HasErrors);
+        Assert.Equal(Hash, (string)merged["Pw"]!);
+    }
+
     [Fact]
     public async Task Wire_sql_has_no_column_for_a_password_field()
     {

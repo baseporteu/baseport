@@ -36,7 +36,7 @@ public static class RecordEngine
         catch (JsonException) { return null; }
     }
 
-    public static async Task<ValidationOutcome> PrepareAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, JsonObject obj, string? excludeRecordId = null)
+    public static async Task<ValidationOutcome> PrepareAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, JsonObject obj, string? excludeRecordId = null, JsonObject? stored = null)
     {
 
         foreach (var kv in obj.ToList())
@@ -81,7 +81,7 @@ public static class RecordEngine
         if (errors.Count > 0) return new ValidationOutcome(errors, invalid, ValidationFailure.Conflict);
 
         SanitizeRichText(fields, obj);
-        HashPasswords(fields, obj);
+        HashPasswords(fields, obj, stored);
 
         foreach (var f in fields.Where(f => FieldValidation.NormalizeType(f.DataType) == "systemid"))
             obj[f.Name] = Ids.NewShortId();
@@ -153,13 +153,15 @@ public static class RecordEngine
         }
     }
 
-    private static void HashPasswords(List<FieldDefinition> fields, JsonObject obj)
+    // only the unchanged stored hash is kept
+    private static void HashPasswords(List<FieldDefinition> fields, JsonObject obj, JsonObject? stored)
     {
         foreach (var f in fields.Where(f => FieldTypes.Of(f).Secret))
         {
             if (!obj.TryGetPropertyValue(f.Name, out var pv) || pv is not JsonValue pjv || pjv.GetValueKind() != JsonValueKind.String) continue;
             var raw = pjv.GetValue<string>();
-            if (raw.Length > 0 && !raw.StartsWith("pbkdf2$", StringComparison.Ordinal))
+            var unchanged = stored?[f.Name] is JsonValue sv && sv.TryGetValue<string>(out var current) && current == raw;
+            if (raw.Length > 0 && !unchanged)
                 obj[f.Name] = JsonValue.Create(AdminAuth.HashPassword(raw));
         }
     }
@@ -277,7 +279,7 @@ public static class RecordEngine
             .Where(f => FieldValidation.NormalizeType(f.DataType) == "systemid")
             .ToDictionary(f => f.Name, f => stored.TryGetPropertyValue(f.Name, out var v) ? v?.DeepClone() : null);
 
-        var outcome = await PrepareAsync(db, table, fields, merged, record.Id);
+        var outcome = await PrepareAsync(db, table, fields, merged, record.Id, stored);
         if (outcome.HasErrors) return (merged, outcome);
 
         foreach (var (name, value) in systemIds)

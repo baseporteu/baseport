@@ -5,6 +5,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport.Tests;
 
+[CollectionDefinition(nameof(UserAuthTests), DisableParallelization = true)]
+public class UserAuthCollection;
+
+// mutates the shared token issuer and key
+[Collection(nameof(UserAuthTests))]
 public class UserAuthTests : IDisposable
 {
     private readonly SqliteConnection _connection;
