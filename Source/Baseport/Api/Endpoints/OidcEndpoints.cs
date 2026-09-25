@@ -25,6 +25,7 @@ public static class OidcEndpoints
             {
                 var start = await OidcFlow.BeginAsync(provider, RedirectUri(ctx, settings, provider.Slug),
                     console ? "/_/admin" : "/auth/profile", console, ctx.RequestAborted);
+                OidcFlow.Bind(ctx, start.State);
                 return Results.Redirect(start.AuthorizeUrl);
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or IOException)
@@ -43,7 +44,7 @@ public static class OidcEndpoints
             var provider = await UsableAsync(db, slug, console: true);
             if (provider is null) return Results.NotFound();
 
-            if (!LoginGuard.Allowed($"user:{user.Id}"))
+            if (!LoginGuard.Allowed(LoginGuard.Key($"user:{user.Id}", ctx)))
             {
                 ctx.Response.Headers.RetryAfter = "300";
                 return Results.Json(new { errors = new[] { "Too many attempts. Wait a few minutes and try again." } }, statusCode: 429);
@@ -52,17 +53,18 @@ public static class OidcEndpoints
             var password = body["currentPassword"] is JsonValue pv && pv.TryGetValue<string>(out var typed) ? typed : "";
             if (!AdminAuth.VerifyPassword(password, user.PasswordHash))
             {
-                LoginGuard.Failed($"user:{user.Id}");
+                LoginGuard.Failed(LoginGuard.Key($"user:{user.Id}", ctx));
                 AuditLogMiddleware.Note(ctx, $"Failed link attempt for {user.Username} through {provider.Name}");
                 return Results.BadRequest(new { errors = new[] { "That password is incorrect." } });
             }
-            LoginGuard.Succeeded($"user:{user.Id}");
+            LoginGuard.Succeeded(LoginGuard.Key($"user:{user.Id}", ctx));
 
             try
             {
                 var settings = await db.SettingsAsync() ?? new AppSettings();
                 var start = await OidcFlow.BeginAsync(provider, RedirectUri(ctx, settings, provider.Slug),
                     "/_/admin/settings/auth", console: true, ctx.RequestAborted, linkTo: user.Id);
+                OidcFlow.Bind(ctx, start.State);
                 return Results.Ok(new { authorizeUrl = start.AuthorizeUrl });
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or IOException)
@@ -76,7 +78,8 @@ public static class OidcEndpoints
             string slug, string? code, string? state, string? error) =>
         {
 
-            var flow = OidcFlow.Claim(state);
+            var flow = OidcFlow.Claim(state, ctx.Request.Cookies[OidcFlow.BindingCookie]);
+            ctx.Response.Cookies.Delete(OidcFlow.BindingCookie, new CookieOptions { Path = "/api/auth/oidc" });
 
             if (flow is null)
                 return Results.Redirect(Back(await db.OidcProviders.AnyAsync(p => p.Slug == slug && p.ConsoleEnabled), OidcFlow.Failed));

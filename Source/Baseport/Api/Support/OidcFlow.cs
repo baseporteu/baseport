@@ -25,6 +25,21 @@ public static class OidcFlow
 
     public static readonly TimeSpan FlowLifetime = TimeSpan.FromMinutes(10);
 
+    public const string BindingCookie = "baseport_oidc";
+
+    public static string Binding(string state) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(state)));
+
+    // lax: the provider's redirect back is a cross-site top-level navigation
+    public static void Bind(Microsoft.AspNetCore.Http.HttpContext ctx, string state) =>
+        ctx.Response.Cookies.Append(BindingCookie, Binding(state), new Microsoft.AspNetCore.Http.CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax,
+            Secure = ctx.Request.IsHttps,
+            MaxAge = FlowLifetime,
+            Path = "/api/auth/oidc"
+        });
+
     private static readonly ConcurrentDictionary<string, PendingFlow> Pending = new(StringComparer.Ordinal);
 
     private static readonly ConcurrentDictionary<string, ConfigurationManager<OpenIdConnectConfiguration>> Documents = new(StringComparer.Ordinal);
@@ -82,9 +97,11 @@ public static class OidcFlow
         return new Start(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(document.AuthorizationEndpoint, query), state);
     }
 
-    public static PendingFlow? Claim(string? state)
+    public static PendingFlow? Claim(string? state, string? binding)
     {
         if (string.IsNullOrEmpty(state) || !Pending.TryRemove(state, out var flow)) return null;
+        if (binding is null || !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(binding), Encoding.ASCII.GetBytes(Binding(state))))
+            return null;
         return flow.ExpiresAt <= DateTime.UtcNow ? null : flow;
     }
 

@@ -373,6 +373,23 @@ public class AuthTests
     }
 
     [Fact]
+    public void Failures_from_one_client_do_not_lock_out_another()
+    {
+        LoginGuard.Reset();
+        var attacker = LoginGuard.Key("admin", Context("203.0.113.66", ""));
+        var operatorKey = LoginGuard.Key("admin", Context("198.51.100.10", ""));
+
+        for (var i = 0; i < 5; i++) LoginGuard.Failed(attacker);
+
+        Assert.False(LoginGuard.Allowed(attacker));
+        Assert.True(LoginGuard.Allowed(operatorKey));
+    }
+
+    [Fact]
+    public void The_lockout_key_names_both_the_account_and_the_client() =>
+        Assert.NotEqual(LoginGuard.Key("admin", Context("203.0.113.66", "")), LoginGuard.Key("other", Context("203.0.113.66", "")));
+
+    [Fact]
     public void A_quiet_entry_is_pruned_and_a_live_lockout_is_not()
     {
         LoginGuard.Reset();

@@ -97,7 +97,7 @@ public static class UserAuthEndpoints
             var handle = Text(body, "email_or_username").Trim();
             var password = Text(body, "password");
 
-            if (!LoginGuard.Allowed($"user:{handle}"))
+            if (!LoginGuard.Allowed(LoginGuard.Key($"user:{handle}", ctx)))
             {
                 ctx.Response.Headers.RetryAfter = "300";
                 return Error(429, "Too many sign-in attempts. Wait a few minutes and try again.");
@@ -110,12 +110,12 @@ public static class UserAuthEndpoints
 
             if (!ok)
             {
-                LoginGuard.Failed($"user:{handle}");
+                LoginGuard.Failed(LoginGuard.Key($"user:{handle}", ctx));
                 AuditLogMiddleware.Note(ctx, $"Failed end-user sign-in as \"{handle}\" with a password");
                 return Error(401, "Incorrect credentials.");
             }
 
-            LoginGuard.Succeeded($"user:{handle}");
+            LoginGuard.Succeeded(LoginGuard.Key($"user:{handle}", ctx));
             var now = DateTime.UtcNow;
             user!.LastLoginAt = now;
             await db.SaveChangesAsync();
@@ -173,7 +173,7 @@ public static class UserAuthEndpoints
             var current = Text(body, "current_password");
             var next = Text(body, "new_password");
 
-            if (!LoginGuard.Allowed($"user:{user.Id}"))
+            if (!LoginGuard.Allowed(LoginGuard.Key($"user:{user.Id}", ctx)))
             {
                 ctx.Response.Headers.RetryAfter = "300";
                 return Error(429, "Too many attempts. Wait a few minutes and try again.");
@@ -184,11 +184,11 @@ public static class UserAuthEndpoints
                 return Results.BadRequest(new { errors = new[] { "The new password must be different from the current one." } });
             if (!AdminAuth.VerifyPassword(current, user.PasswordHash))
             {
-                LoginGuard.Failed($"user:{user.Id}");
+                LoginGuard.Failed(LoginGuard.Key($"user:{user.Id}", ctx));
                 return Results.BadRequest(new { errors = new[] { "The current password is incorrect." } });
             }
 
-            LoginGuard.Succeeded($"user:{user.Id}");
+            LoginGuard.Succeeded(LoginGuard.Key($"user:{user.Id}", ctx));
             user.PasswordHash = AdminAuth.HashPassword(next);
             user.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();

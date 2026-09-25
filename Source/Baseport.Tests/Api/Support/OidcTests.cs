@@ -117,17 +117,48 @@ public class OidcTests : IDisposable
     {
         var start = OidcFlow.Begin(Document(), Provider(), "https://app.example.com/cb", "/_/admin", console: true);
 
-        Assert.NotNull(OidcFlow.Claim(start.State));
+        Assert.NotNull(OidcFlow.Claim(start.State, OidcFlow.Binding(start.State)));
 
-        Assert.Null(OidcFlow.Claim(start.State));
+        Assert.Null(OidcFlow.Claim(start.State, OidcFlow.Binding(start.State)));
     }
 
     [Fact]
     public void An_unknown_state_is_refused()
     {
-        Assert.Null(OidcFlow.Claim("never-issued"));
-        Assert.Null(OidcFlow.Claim(""));
-        Assert.Null(OidcFlow.Claim(null));
+        Assert.Null(OidcFlow.Claim("never-issued", OidcFlow.Binding("never-issued")));
+        Assert.Null(OidcFlow.Claim("", ""));
+        Assert.Null(OidcFlow.Claim(null, null));
+    }
+
+    [Fact]
+    public void A_callback_without_the_binding_cookie_is_refused()
+    {
+        var start = OidcFlow.Begin(Document(), Provider(), "https://app.example.com/cb", "/_/admin", console: true);
+
+        Assert.Null(OidcFlow.Claim(start.State, null));
+    }
+
+    [Fact]
+    public void A_callback_with_another_flows_binding_is_refused()
+    {
+        var provider = Provider();
+        var attacker = OidcFlow.Begin(Document(), provider, "https://app.example.com/cb", "/_/admin", console: true);
+        var victim = OidcFlow.Begin(Document(), provider, "https://app.example.com/cb", "/_/admin", console: true);
+
+        Assert.Null(OidcFlow.Claim(attacker.State, OidcFlow.Binding(victim.State)));
+    }
+
+    [Fact]
+    public void The_binding_cookie_is_http_only_lax_and_never_the_state_itself()
+    {
+        var ctx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        OidcFlow.Bind(ctx, "state-value");
+
+        var cookie = ctx.Response.Headers.SetCookie.ToString();
+        Assert.Contains(OidcFlow.BindingCookie + "=", cookie);
+        Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=lax", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("state-value", cookie);
     }
 
     [Fact]
@@ -136,7 +167,7 @@ public class OidcTests : IDisposable
         var start = OidcFlow.Begin(Document(), Provider(), "https://app.example.com/cb", "/_/admin", console: true);
 
         Assert.Equal(1, OidcFlow.Prune(DateTime.UtcNow + OidcFlow.FlowLifetime + TimeSpan.FromMinutes(1)));
-        Assert.Null(OidcFlow.Claim(start.State));
+        Assert.Null(OidcFlow.Claim(start.State, OidcFlow.Binding(start.State)));
     }
 
     [Fact]
@@ -211,9 +242,9 @@ public class OidcTests : IDisposable
         var link = OidcFlow.Begin(Document(), provider, "https://app.example.com/cb", "/_/admin/settings/auth", console: true, linkTo: "acct00000001");
         var signIn = OidcFlow.Begin(Document(), provider, "https://app.example.com/cb", "/_/admin", console: true);
 
-        Assert.Equal("acct00000001", OidcFlow.Claim(link.State)!.LinkTo);
+        Assert.Equal("acct00000001", OidcFlow.Claim(link.State, OidcFlow.Binding(link.State))!.LinkTo);
 
-        Assert.Equal("", OidcFlow.Claim(signIn.State)!.LinkTo);
+        Assert.Equal("", OidcFlow.Claim(signIn.State, OidcFlow.Binding(signIn.State))!.LinkTo);
     }
 
     [Fact]

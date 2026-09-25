@@ -15,7 +15,7 @@ public static class AuthEndpoints
 
             var user = await db.UserAccounts.FirstOrDefaultAsync(u => u.Username == username);
 
-            if (!LoginGuard.Allowed(username))
+            if (!LoginGuard.Allowed(LoginGuard.Key(username, ctx)))
             {
                 ctx.Response.Headers.RetryAfter = "300";
                 return Results.Json(new { errors = new[] { "Too many sign-in attempts. Wait a few minutes and try again." } },
@@ -32,14 +32,14 @@ public static class AuthEndpoints
 
             if (!ok)
             {
-                LoginGuard.Failed(username);
+                LoginGuard.Failed(LoginGuard.Key(username, ctx));
 
                 AuditLogMiddleware.Note(ctx, $"Failed console sign-in as \"{username}\" with a {credential}");
                 return Results.Json(new { errors = new[] { otp.Length > 0 ? "That code is not valid or has expired." : "Incorrect username or password." } },
                     statusCode: StatusCodes.Status401Unauthorized);
             }
 
-            LoginGuard.Succeeded(username);
+            LoginGuard.Succeeded(LoginGuard.Key(username, ctx));
             var now = DateTime.UtcNow;
             user!.LastLoginAt = now;
             await db.SaveChangesAsync();
@@ -105,7 +105,7 @@ public static class AuthEndpoints
             var current = body["currentPassword"]?.GetValue<string>() ?? "";
             var next = body["newPassword"]?.GetValue<string>() ?? "";
 
-            if (!LoginGuard.Allowed(user.Id))
+            if (!LoginGuard.Allowed(LoginGuard.Key(user.Id, ctx)))
             {
                 ctx.Response.Headers.RetryAfter = "300";
                 return Results.Json(new { errors = new[] { "Too many attempts. Wait a few minutes and try again." } },
@@ -120,11 +120,11 @@ public static class AuthEndpoints
 
             if (!AdminAuth.VerifyPassword(current, user.PasswordHash))
             {
-                LoginGuard.Failed(user.Id);
+                LoginGuard.Failed(LoginGuard.Key(user.Id, ctx));
                 return Results.BadRequest(new { errors = new[] { "The current password is incorrect." } });
             }
 
-            LoginGuard.Succeeded(user.Id);
+            LoginGuard.Succeeded(LoginGuard.Key(user.Id, ctx));
 
             var now = DateTime.UtcNow;
             user.PasswordHash = AdminAuth.HashPassword(next);

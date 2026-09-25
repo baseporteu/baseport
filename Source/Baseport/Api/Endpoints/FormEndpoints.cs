@@ -561,7 +561,7 @@ $$"""
         return chosen.Count > 0 ? chosen : fields.Where(f => !f.IsHidden).Take(6).ToList();
     }
 
-    private static async Task<IResult> ForwardAsync(HttpClient http, TableDefinition table, JsonObject obj)
+    internal static async Task<IResult> ForwardAsync(HttpClient http, TableDefinition table, JsonObject obj)
     {
         if (ProxyTarget.Problem(table.ProxyUrl) is { } blocked)
             return Results.BadRequest(new { errors = new[] { blocked } });
@@ -581,7 +581,7 @@ $$"""
         catch (HttpRequestException ex)
         {
             Serilog.Log.Warning("Proxy write {Table} {Method} {Url} -> {Error}", table.Name, table.ProxyMethod, ProxyLog.Redact(table.ProxyUrl), ex.Message);
-            return Results.BadRequest(new { errors = new[] { $"Proxy request failed: {ex.Message}" } });
+            return Results.BadRequest(new { errors = new[] { "The remote service could not be reached." } });
         }
         catch (TaskCanceledException)
         {
@@ -602,7 +602,7 @@ $$"""
                 : $"Remote API rejected the submission ({resp.StatusCode}).";
             return Results.BadRequest(new { errors = new[] { msg } });
         }
-        return Results.Ok(new { success = true, proxy = true, status = (int)resp.StatusCode, response = OpenApiProxy.TryParseJson(raw) ?? raw });
+        return Results.Ok(new { success = true, proxy = true, status = (int)resp.StatusCode });
     }
 
     private static List<string> ActionsFrom(JsonObject body)
