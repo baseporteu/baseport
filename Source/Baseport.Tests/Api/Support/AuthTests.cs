@@ -372,6 +372,83 @@ public class AuthTests
         Assert.False(LoginGuard.Allowed("admin"));
     }
 
+    private static string CookiesFor(string scheme, string host)
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Scheme = scheme;
+        ctx.Request.Host = new HostString(host);
+        AdminAuth.IssueCookies(ctx, new UserTokenPair("auth-token", "refresh-token", DateTime.UtcNow.AddHours(1)));
+        return ctx.Response.Headers.SetCookie.ToString().ToLowerInvariant();
+    }
+
+    [Theory]
+    [InlineData("https", "baseport.example.com")]
+    [InlineData("http", "baseport.example.com")]
+    [InlineData("http", "192.168.1.20:5000")]
+    public void Cookies_are_secure_on_any_public_host(string scheme, string host) =>
+        Assert.Contains("secure", CookiesFor(scheme, host));
+
+    [Theory]
+    [InlineData("localhost:5000")]
+    [InlineData("127.0.0.1:5000")]
+    [InlineData("[::1]:5000")]
+    public void Cookies_are_not_secure_on_localhost(string host) =>
+        Assert.DoesNotContain("secure", CookiesFor("http", host));
+
+    [Theory]
+    [InlineData("http", "baseport.example.com", true)]
+    [InlineData("https", "baseport.example.com", false)]
+    [InlineData("http", "localhost:5000", false)]
+    [InlineData("http", "[::1]:5000", false)]
+    public void Sign_in_needs_https_off_localhost(string scheme, string host, bool refused)
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Scheme = scheme;
+        ctx.Request.Host = new HostString(host);
+
+        Assert.Equal(refused, AdminAuth.NeedsHttps(ctx));
+    }
+
+    [Fact]
+    public void The_insecure_override_allows_plain_http_sign_in_without_secure_cookies()
+    {
+        AdminAuth.AllowInsecureSignIn = true;
+        try
+        {
+            var ctx = new DefaultHttpContext();
+            ctx.Request.Scheme = "http";
+            ctx.Request.Host = new HostString("servername:5000");
+
+            Assert.False(AdminAuth.NeedsHttps(ctx));
+            var cookies = CookiesFor("http", "servername:5000");
+            Assert.DoesNotContain("secure", cookies);
+            Assert.Contains("httponly", cookies);
+            Assert.Contains("samesite=lax", cookies);
+        }
+        finally
+        {
+            AdminAuth.AllowInsecureSignIn = false;
+        }
+    }
+
+    [Fact]
+    public void The_insecure_override_keeps_https_cookies_secure()
+    {
+        AdminAuth.AllowInsecureSignIn = true;
+        try
+        {
+            Assert.Contains("secure", CookiesFor("https", "servername:5000"));
+        }
+        finally
+        {
+            AdminAuth.AllowInsecureSignIn = false;
+        }
+    }
+
+    [Fact]
+    public void The_https_refusal_names_the_fix() =>
+        Assert.Contains("Baseport:TrustForwardedHeaders", AdminAuth.HttpsRequired);
+
     [Fact]
     public void Failures_from_one_client_do_not_lock_out_another()
     {

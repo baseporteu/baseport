@@ -297,6 +297,11 @@ doctor)
     warn "no database yet, the first start creates one and prints a one-time admin login."
   fi
 
+  if grep -qsE '"AllowInsecureSignIn"[[:space:]]*:[[:space:]]*true' "$DIR/appsettings.json" \
+    || grep -qsiE 'Baseport__AllowInsecureSignIn=true' "$UNIT"; then
+    bad "Baseport:AllowInsecureSignIn is on: sign-in works over plain HTTP. Turn it off before exposing this instance."
+  fi
+
   if [ -e "$UNIT" ]; then
     if systemctl is-active --quiet baseport 2>/dev/null; then
       ok "baseport.service is active"

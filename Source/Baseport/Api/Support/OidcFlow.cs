@@ -22,6 +22,7 @@ public static class OidcFlow
     public const string NoConsole = "no_console";
     public const string Linked = "linked";
     public const string NotLinked = "not_linked";
+    public const string Insecure = "insecure";
 
     public static readonly TimeSpan FlowLifetime = TimeSpan.FromMinutes(10);
 
@@ -35,7 +36,7 @@ public static class OidcFlow
         {
             HttpOnly = true,
             SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-            Secure = ctx.Request.IsHttps,
+            Secure = AdminAuth.SecureCookie(ctx),
             MaxAge = FlowLifetime,
             Path = "/api/auth/oidc"
         });

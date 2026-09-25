@@ -98,6 +98,7 @@ try
     var previewSecret = config["PreviewSecret"];
     var trustForwardedHeaders = config.GetValue("TrustForwardedHeaders", false);
     Baseport.Providers.WireBind.RemoteAllowed = config.GetValue("WireRemoteAccess", false);
+    AdminAuth.AllowInsecureSignIn = config.GetValue("AllowInsecureSignIn", false);
     FileStore.Initialize(connectionString);
 
     var dbSource = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;
@@ -221,6 +222,10 @@ try
     {
         foreach (var console in AdminSurface.ConsoleUrls(app.Urls, AdminSurface.Port))
             Log.Information("Console {Url}", console);
+
+        if (AdminAuth.AllowInsecureSignIn)
+            Log.Warning("Baseport:AllowInsecureSignIn is on. Sign-in works over plain HTTP and session cookies are not Secure; " +
+                "anyone on the network path can take over a session. Turn it off before exposing this instance.");
 
         foreach (var url in app.Urls)
         {

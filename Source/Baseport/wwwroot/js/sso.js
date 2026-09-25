@@ -8,6 +8,7 @@ const SSO_PROBLEMS = {
     disabled: 'This account has been disabled.',
     no_console: 'Your account does not have access to the console.',
     not_linked: 'Unable to link identity. It may already be connected to another account or the session expired.',
+    insecure: 'Sign-in needs HTTPS on this address.',
 };
 
 // Server-rendered into the page

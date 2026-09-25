@@ -15,6 +15,7 @@ public static class OidcEndpoints
         app.MapGet($"{Base}/{{slug}}/start", async (AppDbContext db, HttpContext ctx, string slug, string? surface) =>
         {
             var console = surface != "public";
+            if (AdminAuth.NeedsHttps(ctx)) return Results.Redirect(Back(console, OidcFlow.Insecure));
             var provider = await UsableAsync(db, slug, console);
             if (provider is null) return Results.NotFound();
 
@@ -38,6 +39,7 @@ public static class OidcEndpoints
 
         app.MapPost($"{Base}/{{slug}}/link", async (AppDbContext db, HttpContext ctx, JsonObject body, string slug) =>
         {
+            if (AdminAuth.NeedsHttps(ctx)) return Results.BadRequest(new { errors = new[] { AdminAuth.HttpsRequired } });
             if (await AdminAuth.ResolveAsync(db, ctx) is not { } user)
                 return Results.Json(new { errors = new[] { "Sign in to continue." } }, statusCode: 401);
 

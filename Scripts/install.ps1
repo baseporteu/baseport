@@ -175,6 +175,11 @@ switch ($verb) {
     if (Test-Path $db) { Ok ("database $db, " + [math]::Round((Get-Item $db).Length / 1MB, 1) + " MB") }
     else { Warn "no database yet, the first start creates one and prints a one-time admin login." }
 
+    $settings = Join-Path $dir 'appsettings.json'
+    if (((Test-Path $settings) -and (Select-String -Path $settings -Pattern '"AllowInsecureSignIn"\s*:\s*true' -Quiet)) -or $env:Baseport__AllowInsecureSignIn -eq 'true') {
+        Bad "Baseport:AllowInsecureSignIn is on: sign-in works over plain HTTP. Turn it off before exposing this instance."
+    }
+
     if (Get-BaseportProcess) { Ok "a Baseport process is running" }
     else { Warn "no Baseport process is running." }
 

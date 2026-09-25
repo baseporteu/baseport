@@ -9,6 +9,7 @@ public static class AuthEndpoints
     {
         app.MapPost("/api/auth/login", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
         {
+            if (AdminAuth.NeedsHttps(ctx)) return Results.BadRequest(new { errors = new[] { AdminAuth.HttpsRequired } });
             var username = (body["username"]?.GetValue<string>() ?? "").Trim();
             var password = body["password"]?.GetValue<string>() ?? "";
             var otp = body["otp"]?.GetValue<string>() ?? "";
@@ -99,6 +100,7 @@ public static class AuthEndpoints
 
         app.MapPost("/api/auth/password", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
         {
+            if (AdminAuth.NeedsHttps(ctx)) return Results.BadRequest(new { errors = new[] { AdminAuth.HttpsRequired } });
             var user = await AdminAuth.ResolveAsync(db, ctx);
             if (user is null) return Results.Unauthorized();
 

@@ -46,6 +46,10 @@ Baseport serves plain HTTP and does not terminate TLS itself, binding `0.0.0.0` 
 
 Set `Baseport__TrustForwardedHeaders` to `true` (`BASEPORT_TRUST_FORWARDED_HEADERS` in Docker). Rate limiting works off the client address, without this every request looks like it came from the proxy and they all share one budget.
 
+Sign-in also depends on it. Session cookies are always `Secure` unless you browse to `localhost`, `127.0.0.1` or `[::1]`, and sign-in over plain HTTP on any other address is refused with "Sign-in needs HTTPS on this address". Without the forwarded headers Baseport cannot tell that the proxy in front of it speaks HTTPS, so it refuses.
+
+For a trusted network with no TLS at all (a test server reached as `http://servername:5000`), set `Baseport__AllowInsecureSignIn` to `true` in `appsettings.json` or the environment. Sign-in then works over plain HTTP and the session cookies drop `Secure`, so anyone on the network path can take over a session. Baseport logs a warning on every start and `baseport doctor` fails while it is on. There is no console switch for it. Prefer an SSH tunnel (`ssh -L 5000:localhost:5000 servername`, then browse to `localhost:5000`) where you can.
+
 If you want the console off the public port altogether, give it its own address with `Baseport__AdminAddress` (`BASEPORT_ADMIN_ADDRESS` in Docker) and only expose that port on loopback. In `docker-compose.yml`, that also means uncommenting the matching `127.0.0.1:PORT:PORT` line under `ports:` — the env var alone binds the port inside the container, it still needs publishing to reach it from the host.
 
 ## Running it as a service

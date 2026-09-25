@@ -94,6 +94,18 @@ public static class AdminAuth
         ctx.Response.Cookies.Delete(RefreshCookie, new CookieOptions { Path = "/" });
     }
 
+    public const string HttpsRequired =
+        "Sign-in needs HTTPS on this address. Behind a TLS proxy, set Baseport:TrustForwardedHeaders.";
+
+    public static bool IsLocalHost(HttpContext ctx) =>
+        ctx.Request.Host.Host is "localhost" or "127.0.0.1" or "::1" or "[::1]";
+
+    public static bool AllowInsecureSignIn { get; internal set; }
+
+    public static bool NeedsHttps(HttpContext ctx) => !ctx.Request.IsHttps && !IsLocalHost(ctx) && !AllowInsecureSignIn;
+
+    public static bool SecureCookie(HttpContext ctx) => ctx.Request.IsHttps || NeedsHttps(ctx);
+
     private static void AppendCookie(HttpContext ctx, string name, string value, TimeSpan lifetime) =>
         ctx.Response.Cookies.Append(name, value, new CookieOptions
         {
@@ -101,7 +113,7 @@ public static class AdminAuth
 
             SameSite = SameSiteMode.Lax,
 
-            Secure = ctx.Request.IsHttps,
+            Secure = SecureCookie(ctx),
             MaxAge = lifetime,
             Path = "/"
         });
