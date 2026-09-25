@@ -73,7 +73,7 @@ public class ApiLinksTests : IDisposable
         var order = await RecordAsync(orders, new JsonObject { ["customer"] = customer.Id, ["total"] = 10 });
 
         var relations = await ApiLinks.RelationsAsync(_db, fields, TestContext.Current.CancellationToken);
-        var extras = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, Array.Empty<ApiLinks.Relation>(), "alice", TestContext.Current.CancellationToken);
+        var extras = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, Array.Empty<ApiLinks.Relation>(), Caller("alice"), TestContext.Current.CancellationToken);
 
         Assert.Equal($"/api/v1/orders/records/{order.Id}", extras.Links["self"]!.GetValue<string>());
         Assert.Equal("/api/v1/orders/records", extras.Links["collection"]!.GetValue<string>());
@@ -90,7 +90,7 @@ public class ApiLinksTests : IDisposable
         var relations = await ApiLinks.RelationsAsync(_db, fields, TestContext.Current.CancellationToken);
         Assert.Empty(relations);
 
-        var extras = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, Array.Empty<ApiLinks.Relation>(), "alice", TestContext.Current.CancellationToken);
+        var extras = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, Array.Empty<ApiLinks.Relation>(), Caller("alice"), TestContext.Current.CancellationToken);
         Assert.False(extras.Links.ContainsKey("customer"));
 
         var (_, error) = ApiLinks.ParseExpand("customer", relations);
@@ -118,7 +118,7 @@ public class ApiLinksTests : IDisposable
         var (expand, error) = ApiLinks.ParseExpand("customer", relations);
         Assert.Null(error);
 
-        var extras = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, expand, "alice", TestContext.Current.CancellationToken);
+        var extras = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, expand, Caller("alice"), TestContext.Current.CancellationToken);
         var embedded = extras.Expanded!["customer"]!.AsObject();
         Assert.Equal(customer.Id, embedded["id"]!.GetValue<string>());
         Assert.Equal("Acme", embedded["data"]!["name"]!.GetValue<string>());
@@ -134,11 +134,28 @@ public class ApiLinksTests : IDisposable
         var relations = await ApiLinks.RelationsAsync(_db, fields, TestContext.Current.CancellationToken);
         var (expand, _) = ApiLinks.ParseExpand("customer", relations);
 
-        var mine = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, expand, "alice", TestContext.Current.CancellationToken);
+        var mine = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, expand, Caller("alice"), TestContext.Current.CancellationToken);
         Assert.NotNull(mine.Expanded!["customer"]);
 
-        var theirs = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, expand, "bob", TestContext.Current.CancellationToken);
+        var theirs = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, expand, Caller("bob"), TestContext.Current.CancellationToken);
         Assert.Null(theirs.Expanded);
+    }
+
+    private static UserAccount Caller(string id, string role = AccountRoles.Consumer) => new() { Id = id, Role = role };
+
+    [Fact]
+    public async Task A_role_read_rule_filters_an_expanded_relation()
+    {
+        var (orders, fields, _, customer) = await ShopAsync(customersReadRule: "_USER_.role = 'consumer'");
+        var order = await RecordAsync(orders, new JsonObject { ["customer"] = customer.Id });
+        var relations = await ApiLinks.RelationsAsync(_db, fields, TestContext.Current.CancellationToken);
+        var (expand, _) = ApiLinks.ParseExpand("customer", relations);
+
+        var service = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, expand, Caller("svc"), TestContext.Current.CancellationToken);
+        var endUser = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, expand, Caller("alice", AccountRoles.User), TestContext.Current.CancellationToken);
+
+        Assert.NotNull(service.Expanded!["customer"]);
+        Assert.Null(endUser.Expanded);
     }
 
     [Fact]
@@ -165,7 +182,7 @@ public class ApiLinksTests : IDisposable
         var order = await RecordAsync(orders, new JsonObject { ["self"] = customer.Id });
 
         var relations = await ApiLinks.RelationsAsync(_db, new[] { field }, TestContext.Current.CancellationToken);
-        var extras = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, Array.Empty<ApiLinks.Relation>(), "alice", TestContext.Current.CancellationToken);
+        var extras = await ApiLinks.ForRecordAsync(_db, "orders", order, relations, Array.Empty<ApiLinks.Relation>(), Caller("alice"), TestContext.Current.CancellationToken);
 
         Assert.Equal($"/api/v1/orders/records/{order.Id}", extras.Links["self"]!.GetValue<string>());
     }

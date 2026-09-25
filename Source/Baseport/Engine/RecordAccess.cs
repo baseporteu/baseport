@@ -152,24 +152,24 @@ public static partial class RecordAccess
         return results.Count > 0 && results[0] != 0;
     }
 
-    public static string? ListClause(TableDefinition table, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId, List<object> args)
+    public static string? ListClause(TableDefinition table, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId, string? callerRole, List<object> args)
     {
         if (!HasRule(table, Permission.Read)) return null;
 
         var collected = new List<object?>();
-        var expression = Rewrite(table.ReadRule, fields, rowAlias, userId, null, null, collected);
+        var expression = Rewrite(table.ReadRule, fields, rowAlias, userId, null, null, collected, callerRole);
 
         var offset = args.Count;
         args.AddRange(collected.Select(a => a ?? (object)DBNull.Value));
         return SlotToken().Replace(expression, m => $"{{{int.Parse(m.Groups["n"].Value) + offset}}}");
     }
 
-    public static string? ReadClauseLiteral(string readRule, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId)
+    public static string? ReadClauseLiteral(string readRule, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId, string? callerRole)
     {
         if (string.IsNullOrWhiteSpace(readRule)) return null;
 
         var args = new List<object?>();
-        var expression = Rewrite(readRule, fields, rowAlias, userId, null, null, args);
+        var expression = Rewrite(readRule, fields, rowAlias, userId, null, null, args, callerRole);
         return SlotToken().Replace(expression, m =>
         {
             var value = args[int.Parse(m.Groups["n"].Value)];

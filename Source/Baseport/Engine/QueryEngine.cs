@@ -95,6 +95,7 @@ public static class QueryEngine
         IReadOnlyList<Filter>? filters = null,
         IReadOnlyList<FieldDefinition>? accessFields = null,
         string? accessUserId = null,
+        string? accessRole = null,
         Cursor? cursor = null,
         string? systemSort = null,
         bool literal = false)
@@ -105,7 +106,7 @@ public static class QueryEngine
         var args = new List<object> { table.Id };
         var where = "r.\"TableId\" = {0}";
 
-        if (accessFields is not null && RecordAccess.ListClause(table, accessFields, "r", accessUserId, args) is { } clause)
+        if (accessFields is not null && RecordAccess.ListClause(table, accessFields, "r", accessUserId, accessRole, args) is { } clause)
             where += $" AND ({clause})";
 
         foreach (var f in filters ?? Array.Empty<Filter>())

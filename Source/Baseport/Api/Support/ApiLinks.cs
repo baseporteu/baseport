@@ -61,7 +61,7 @@ public static class ApiLinks
         IReadOnlyList<Record> records,
         IReadOnlyList<Relation> relations,
         IReadOnlyList<Relation> expand,
-        string? userId,
+        UserAccount caller,
         CancellationToken token = default)
     {
         var data = records.ToDictionary(r => r.Id, Data);
@@ -72,7 +72,7 @@ public static class ApiLinks
             var ids = records.Select(r => Reference(data[r.Id], relation.Field.Name)).OfType<string>().Distinct().ToList();
             if (ids.Count == 0) continue;
 
-            var targets = await ReadableAsync(db, relation, ids, userId, token);
+            var targets = await ReadableAsync(db, relation, ids, caller, token);
             var visible = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
             foreach (var target in targets) visible[target.Id] = ApiDtos.RecordDto(target, relation.TargetFields);
             embedded[relation.Field.Name] = visible;
@@ -102,16 +102,16 @@ public static class ApiLinks
     }
 
     public static async Task<RecordExtras> ForRecordAsync(
-        AppDbContext db, string apiName, Record record, IReadOnlyList<Relation> relations, IReadOnlyList<Relation> expand, string? userId,
+        AppDbContext db, string apiName, Record record, IReadOnlyList<Relation> relations, IReadOnlyList<Relation> expand, UserAccount caller,
         CancellationToken token = default) =>
-        (await ForRecordsAsync(db, apiName, new[] { record }, relations, expand, userId, token))[record.Id];
+        (await ForRecordsAsync(db, apiName, new[] { record }, relations, expand, caller, token))[record.Id];
 
-    private static Task<List<Record>> ReadableAsync(AppDbContext db, Relation relation, List<string> ids, string? userId, CancellationToken token)
+    private static Task<List<Record>> ReadableAsync(AppDbContext db, Relation relation, List<string> ids, UserAccount caller, CancellationToken token)
     {
         var args = new List<object> { relation.Target.Id };
         var where = "r.\"TableId\" = {0}";
 
-        if (RecordAccess.ListClause(relation.Target, relation.TargetFields, "r", userId, args) is { } clause)
+        if (RecordAccess.ListClause(relation.Target, relation.TargetFields, "r", caller.Id, caller.Role, args) is { } clause)
             where += $" AND ({clause})";
 
         var slots = new List<string>();

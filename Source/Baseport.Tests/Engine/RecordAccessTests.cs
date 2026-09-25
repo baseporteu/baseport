@@ -161,6 +161,38 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
+    public async Task A_role_read_rule_filters_a_rest_listing()
+    {
+        var (table, fields) = await NotesAsync(readRule: "_USER_.role = 'consumer'");
+        await RecordAsync(table, "alice", "first");
+        await RecordAsync(table, "bob", "second");
+
+        var service = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
+            accessFields: fields, accessUserId: "svc", accessRole: AccountRoles.Consumer);
+        var endUser = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
+            accessFields: fields, accessUserId: "alice", accessRole: AccountRoles.User);
+
+        Assert.Equal(2, service.Records.Count);
+        Assert.Empty(endUser.Records);
+    }
+
+    [Theory]
+    [InlineData(AccountRoles.Consumer, "2")]
+    [InlineData(AccountRoles.User, "0")]
+    public async Task A_role_read_rule_filters_a_wire_view(string role, string expected)
+    {
+        var (table, _) = await NotesAsync(readRule: "_USER_.role = 'consumer'");
+        await RecordAsync(table, "alice", "first");
+        await RecordAsync(table, "bob", "second");
+
+        var result = await SqlEngine.ReadAsync(_db, "SELECT count(*) FROM \"Notes\"",
+            conn => WireCatalog.Apply(conn, WireDialect.Postgres, new UserAccount { Id = "caller", Role = role }));
+
+        Assert.Null(result.Error);
+        Assert.Equal(expected, Assert.Single(result.Rows)[0]);
+    }
+
+    [Fact]
     public async Task A_filtered_listing_counts_only_what_it_returns()
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");

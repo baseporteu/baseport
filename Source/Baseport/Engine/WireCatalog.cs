@@ -22,13 +22,13 @@ public static class WireCatalog
         var tables = caller is null || ApiMethods.Parse(caller.ApiTokenMethods).Contains("GET")
             ? Read(conn, publishedOnly: true)
             : [];
-        CreateRowViews(conn, tables, caller?.Id, readRules: true);
+        CreateRowViews(conn, tables, caller?.Id, caller?.Role, readRules: true);
 
         if (dialect == WireDialect.Postgres) BuildPostgres(conn, tables);
         else BuildTds(conn, tables);
     }
 
-    public static void Views(SqliteConnection conn) => CreateRowViews(conn, Read(conn, publishedOnly: false), null, readRules: false);
+    public static void Views(SqliteConnection conn) => CreateRowViews(conn, Read(conn, publishedOnly: false), null, null, readRules: false);
 
     private static readonly delegate_authorizer WireAuthorizer = (_, action, _, _, dbName, viaObject) =>
         action == raw.SQLITE_PRAGMA
@@ -89,7 +89,7 @@ public static class WireCatalog
                 select new CatalogLink(table, column, byId[column.RefTableId!])).ToList();
     }
 
-    private static void CreateRowViews(SqliteConnection conn, List<CatalogTable> tables, string? userId, bool readRules)
+    private static void CreateRowViews(SqliteConnection conn, List<CatalogTable> tables, string? userId, string? callerRole, bool readRules)
     {
         var stale = new List<string>();
         using (var reader = Query(conn, "SELECT name FROM temp.sqlite_master WHERE type = 'view'"))
@@ -105,7 +105,7 @@ public static class WireCatalog
             projection.Append($" FROM main._records r WHERE r.TableId = {Literal(table.Id)}");
 
             var fields = table.Columns.Select(c => new FieldDefinition { Name = c.Name }).ToList();
-            if (readRules && RecordAccess.ReadClauseLiteral(table.ReadRule, fields, "r", userId) is { } clause)
+            if (readRules && RecordAccess.ReadClauseLiteral(table.ReadRule, fields, "r", userId, callerRole) is { } clause)
                 projection.Append($" AND COALESCE(({clause}), 0)");
 
             Exec(conn, $"DROP VIEW IF EXISTS temp.{Quote(table.Name)}");

@@ -79,8 +79,8 @@ public static class PublicApiEndpoints
             }
 
             var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50,
-                filters: parsedFilters, accessFields: fields, accessUserId: caller.Id, cursor: from);
-            var extras = await ApiLinks.ForRecordsAsync(db, apiName, result.Records, relations, expand, caller.Id, ctx.RequestAborted);
+                filters: parsedFilters, accessFields: fields, accessUserId: caller.Id, accessRole: caller.Role, cursor: from);
+            var extras = await ApiLinks.ForRecordsAsync(db, apiName, result.Records, relations, expand, caller, ctx.RequestAborted);
             return Results.Ok(new
             {
                 rows = result.Records.Select(r => ApiDtos.RecordDto(r, fields, extras[r.Id].Links, extras[r.Id].Expanded)),
@@ -151,7 +151,7 @@ public static class PublicApiEndpoints
             ApiConditional.SetETag(ctx, record);
             if (ApiConditional.NotModified(ctx, record)) return Results.StatusCode(StatusCodes.Status304NotModified);
 
-            var read = await ApiLinks.ForRecordAsync(db, apiName, record, readRelations, readExpand, caller.Id, ctx.RequestAborted);
+            var read = await ApiLinks.ForRecordAsync(db, apiName, record, readRelations, readExpand, caller, ctx.RequestAborted);
             return Results.Ok(ApiDtos.RecordDto(record, readFields, read.Links, read.Expanded));
         });
 
@@ -182,7 +182,7 @@ public static class PublicApiEndpoints
             };
             db.Records.Add(record);
             await db.SaveChangesAsync();
-            var created = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller.Id, ctx.RequestAborted);
+            var created = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller, ctx.RequestAborted);
             ApiConditional.SetETag(ctx, record);
             return Results.Created(ApiLinks.Self(apiName, record.Id), ApiDtos.RecordDto(record, fields, created.Links));
         });
@@ -222,7 +222,7 @@ public static class PublicApiEndpoints
             {
                 return ApiError(ctx, ApiProblem.Conflict, "Another write reached this record first. Re-read it and apply your change to the current one.");
             }
-            var written = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller.Id, ctx.RequestAborted);
+            var written = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller, ctx.RequestAborted);
             ApiConditional.SetETag(ctx, record);
             return Results.Ok(ApiDtos.RecordDto(record, fields, written.Links));
         });
