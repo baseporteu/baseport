@@ -9,6 +9,42 @@ public static class ProxyTarget
 
     public static void Configure(AppSettings settings) => _allowPrivate = settings.ProxyPrivateTargetsEnabled;
 
+    public const string OidcClient = "oidc";
+
+    // the operator's identity provider may sit on a private network, so only redirects are refused there
+    public static IServiceCollection AddOutboundHttp(this IServiceCollection services)
+    {
+        services.AddHttpClient();
+        services.ConfigureHttpClientDefaults(b => b.ConfigurePrimaryHttpMessageHandler(() => Handler()));
+        services.AddHttpClient(OidcClient).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+        return services;
+    }
+
+    // resolves once and connects to the address it checked, so a rebinding DNS answer cannot slip past
+    internal static SocketsHttpHandler Handler(bool? allowPrivate = null) => new()
+    {
+        AllowAutoRedirect = false,
+        ConnectCallback = async (context, ct) =>
+        {
+            var host = context.DnsEndPoint.Host;
+            var addresses = IPAddress.TryParse(host, out var literal) ? [literal] : await Dns.GetHostAddressesAsync(host, ct);
+            if (!(allowPrivate ?? _allowPrivate) && addresses.Any(IsPrivate))
+                throw new HttpRequestException($"Refused to connect to {host}: it is on a private or loopback network.");
+
+            var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            try
+            {
+                await socket.ConnectAsync(addresses, context.DnsEndPoint.Port, ct);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+    };
+
     public static string? Problem(string? url)
     {
         if (!Uri.TryCreate((url ?? "").Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))

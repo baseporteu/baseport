@@ -121,7 +121,7 @@ try
             .AllowAnyMethod()
             .AllowAnyHeader()));
 
-    builder.Services.AddHttpClient();
+    builder.Services.AddOutboundHttp();
 
     builder.Services.AddResponseCompression();
 

@@ -100,7 +100,7 @@ public static class OidcEndpoints
             OidcIdentity? identity;
             try
             {
-                identity = await OidcFlow.CompleteAsync(provider, flow, code, clients.CreateClient(), ctx.RequestAborted);
+                identity = await OidcFlow.CompleteAsync(provider, flow, code, clients.CreateClient(ProxyTarget.OidcClient), ctx.RequestAborted);
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or IOException)
             {
