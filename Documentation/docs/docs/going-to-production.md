@@ -1,17 +1,17 @@
 ---
 title: Going to production
-description: "Configuration, the reverse proxy, backups and the switches that are off for a reason"
+description: "Configuration, reverse proxy, service install, backups, jobs and default-off switches"
 ---
 
 # Going to production
 
 :::warning
-Baseport is in early pre-alpha. Expect breaking changes to the database schema and API surface between commits. Consider this guide a preview of the eventual deployment architecture, with no backward compatibility guaranteed for your current data.
+Baseport is pre-alpha. The database schema and API surface change between commits, without backward compatibility for existing data.
 :::
 
 ## Configuration
 
-Settings live in `appsettings.json` beside the binary. Any `Baseport:*` setting is also an environment variable: replace the colon with a double underscore.
+Settings are read from `appsettings.json` beside the binary. Every `Baseport:*` setting is also an environment variable, with `__` replacing the colon.
 
 ```ini
 Baseport__ConnectionString=Data Source=/data/baseport.db
@@ -19,7 +19,7 @@ Baseport__TrustForwardedHeaders=true
 Baseport__AdminAddress=0.0.0.0:5264
 ```
 
-With `docker-compose.yml`, set the same three through their shorter aliases in a `.env` file next to it instead — the compose file forwards them to the names above:
+`docker-compose.yml` forwards shorter aliases from a `.env` file to the same settings:
 
 ```ini
 BASEPORT_CONNECTION_STRING=Data Source=/data/baseport.db
@@ -27,34 +27,35 @@ BASEPORT_TRUST_FORWARDED_HEADERS=true
 BASEPORT_ADMIN_ADDRESS=0.0.0.0:5264
 ```
 
-Everything else you would change while running lives in the console under **Settings** and is stored in the database.
+Runtime settings are managed under **Settings** in the console and stored in the database. Every key is listed in the [Configuration reference](/docs/configuration).
 
 ## Listening address
 
-`--urls` decides which interfaces Kestrel binds:
+`--urls` sets the interfaces Kestrel binds:
 
 | Value | Reachable from |
 | --- | --- |
-| `http://localhost:5000` | The machine itself only |
-| `http://0.0.0.0:5000` | Any interface, anything that can route to the host |
+| `http://localhost:5000` | The host only |
+| `http://0.0.0.0:5000` | Any interface |
 
-`localhost` is the safe default and the one to keep if a reverse proxy on the same host is the only thing talking to Baseport. Use `0.0.0.0` when something on another machine connects directly.
+`localhost` suits a reverse proxy on the same host. `0.0.0.0` is for direct connections from other machines. Baseport does not terminate TLS; a public `0.0.0.0` bind without a proxy carries unencrypted traffic.
 
-Baseport serves plain HTTP and does not terminate TLS itself, binding `0.0.0.0` on anything public means unencrypted traffic. Put a proxy in front of it.
+## Reverse proxy
 
-## Behind a reverse proxy
+`Baseport__TrustForwardedHeaders=true` (`BASEPORT_TRUST_FORWARDED_HEADERS` in Docker) makes Baseport read the client address and scheme from the proxy's forwarded headers. Without it:
 
-Set `Baseport__TrustForwardedHeaders` to `true` (`BASEPORT_TRUST_FORWARDED_HEADERS` in Docker). Rate limiting works off the client address, without this every request looks like it came from the proxy and they all share one budget.
+- rate limits key on the proxy address, so all clients share one budget;
+- sign-in is refused with "Sign-in needs HTTPS on this address", because the request appears to be plain HTTP.
 
-Sign-in also depends on it. Session cookies are always `Secure` unless you browse to `localhost`, `127.0.0.1` or `[::1]`, and sign-in over plain HTTP on any other address is refused with "Sign-in needs HTTPS on this address". Without the forwarded headers Baseport cannot tell that the proxy in front of it speaks HTTPS, so it refuses.
+Session cookies are `Secure` unless the host is `localhost`, `127.0.0.1` or `[::1]`. Sign-in over plain HTTP on any other host is refused.
 
-For a trusted network with no TLS at all (a test server reached as `http://servername:5000`), set `Baseport__AllowInsecureSignIn` to `true` in `appsettings.json` or the environment. Sign-in then works over plain HTTP and the session cookies drop `Secure`, so anyone on the network path can take over a session. Baseport logs a warning on every start and `baseport doctor` fails while it is on. There is no console switch for it. Prefer an SSH tunnel (`ssh -L 5000:localhost:5000 servername`, then browse to `localhost:5000`) where you can.
+`Baseport__AllowInsecureSignIn=true` lifts both rules for a trusted network without TLS, such as a test server at `http://servername:5000`. Session cookies are then sent without `Secure` and can be taken over by anyone on the network path. The setting is config-only, logs a warning on every start, and fails `baseport doctor`. An SSH tunnel (`ssh -L 5000:localhost:5000 servername`, then `localhost:5000`) avoids it.
 
-If you want the console off the public port altogether, give it its own address with `Baseport__AdminAddress` (`BASEPORT_ADMIN_ADDRESS` in Docker) and only expose that port on loopback. In `docker-compose.yml`, that also means uncommenting the matching `127.0.0.1:PORT:PORT` line under `ports:` — the env var alone binds the port inside the container, it still needs publishing to reach it from the host.
+`Baseport__AdminAddress` (`BASEPORT_ADMIN_ADDRESS` in Docker) moves the console to a second listener; the console routes return `404` on the public port. Publish that port on loopback only; in `docker-compose.yml`, add an entry such as `"127.0.0.1:5264:5264"` under `ports:`.
 
-## Running it as a service
+## Service install
 
-Install as root, which lands in `/opt/baseport` with the wrapper in `/usr/local/bin`, then let `service` write the unit:
+A root install uses `/opt/baseport` with the wrapper in `/usr/local/bin`. `service` writes the systemd unit:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/install.sh | sudo bash
@@ -62,96 +63,87 @@ curl -sSL https://raw.githubusercontent.com/baseporteu/baseport/main/Scripts/ins
 sudo /usr/local/bin/baseport service
 ```
 
-`service` needs root: it creates a `baseport` system user and writes the unit. Pass any host options you want in `ExecStart`:
+`service` requires root: it creates a `baseport` system user and writes the unit. Host options are passed through to `ExecStart`:
 
 ```bash
 sudo /usr/local/bin/baseport service --urls http://0.0.0.0:5000
 ```
 
-Use the full path with `sudo`. Its `secure_path` does not include `~/.local/bin`, a wrapper installed there will not resolve.
+The full path is required with `sudo`, whose `secure_path` excludes `~/.local/bin`.
 
-Run it again with different options and it rewrites the unit and restarts. It refuses instead of producing a unit that cannot start: no systemd, or a service account that cannot read the install directory, and it stops. That last one is why a root install defaults to `/opt` and not `~/.baseport`: `/root` is mode 0700, a `User=baseport` service cannot read anything inside it.
+Rerunning `service` with different options rewrites the unit and restarts it. It refuses when systemd is missing or when the service account cannot read the install directory. A root install therefore defaults to `/opt`: `/root` is mode 0700 and unreadable to `User=baseport`.
 
-`/opt/baseport` stores the binary and the data together, because Baseport writes `baseport.db`, `log/` and `uploads/` relative to `WorkingDirectory`. Splitting the binary into `/opt` and data into `/var/lib` would need a second path the application does not have a concept of.
+Binary and data share `/opt/baseport`, because `baseport.db`, `log/` and `uploads/` are written relative to `WorkingDirectory`.
 
-`sudo baseport start`, `sudo baseport stop` and `sudo baseport restart` control that unit once it exists. Without sudo they ask for it themselves rather than telling you to retype the command.
-
-`baseport stop --force` is the one to reach for when you do not care how it is running. It stops the service if there is one, kills a foreground instance if there is one, and says so rather than failing when there was nothing to stop. This is what `baseport update` runs before it replaces the binary.
-
-`baseport update` stops what is running, replaces the binary, and restarts the service when the unit runs from the directory it updated. `sudo baseport restart` does it by hand.
-
-`baseport status` prints what systemd thinks. `baseport doctor` goes wider: version, PATH, database, unit state, whether the unit runs from the directory the wrapper updates, and whether anything answers on its address.
-
-`sudo baseport uninstall` disables and removes the unit, removes the program files and the wrapper, and leaves the data. Add `--purge` to delete the directory and the `baseport` system user with it.
+Service control, `update`, `doctor` and `uninstall`: see [Command line](/docs/command-line).
 
 :::warning
-The `baseport update` command targets the directory where the wrapper was originally installed. If you installed it locally (e.g., to `~/.baseport`) but run your service from a different location (e.g., `/opt/baseport`), the update will modify the inactive copy. The installer will warn you if it detects this mismatch. To ensure you are updating the active service, specify the correct path using the `BASEPORT_DIR` environment variable.
+`baseport update` targets the directory the wrapper was installed from. With a local install (`~/.baseport`) and a service in `/opt/baseport`, the update changes the inactive copy. The installer warns on this mismatch; `BASEPORT_DIR` selects the correct directory.
 :::
 
 ## Backups
 
-Back up the directory Baseport runs in. What is in it:
+A backup covers the whole working directory:
 
-| File | Why it matters |
+| File | Contents |
 | --- | --- |
-| `baseport.db` | Everything: schema, records, accounts, settings |
-| `baseport.key` | The ES256 key used to sign auth tokens. Lose it and every token you have issued stops working. |
-| `uploads/` | Uploaded files, which are not stored in the database |
-| `appsettings.json` | Your own configuration |
+| `baseport.db` | Schema, records, accounts, settings |
+| `baseport.key` | ES256 token signing key. Without it every issued token is invalid |
+| `uploads/` | Uploaded files, not stored in the database |
+| `appsettings.json` | Local configuration |
 
-The `backup` job copies the SQLite file into `backups/` at 03:00 by default and keeps the five most recent. That is a local copy, not an offsite backup, copy the directory somewhere else as well.
+The `backup` job copies the SQLite file into `backups/` daily at 03:00 and keeps the five most recent. `backups/` is on the same disk as the database; copy it off the host.
 
 ## Jobs
 
-A scheduler runs maintenance against your data whether you configured it or not. Schedules and on/off are under **Settings**.
+The scheduler runs maintenance jobs; schedules and switches are under **Settings**.
 
-| Key | Default | What it does |
+| Key | Default | Action |
 | --- | --- | --- |
-| `backup` | 03:00 daily | Copies the SQLite file into `backups/`, keeping the most recent five |
-| `heartbeat` | every 5 min | Records that the scheduler is alive |
-| `logs-cleanup` | 04:00 daily | Prunes audit rows past the log retention setting |
-| `session-cleanup` | hourly | Drops expired sessions, sign-in codes and lockouts |
-| `anonymous-cleanup` | 04:15 daily | Deletes abandoned anonymous accounts, see [Authentication](/docs/authentication) |
+| `backup` | 03:00 daily | Copy the SQLite file into `backups/`, keep five |
+| `heartbeat` | every 5 min | Record scheduler liveness |
+| `logs-cleanup` | 04:00 daily | Prune audit rows past the log retention setting |
+| `session-cleanup` | hourly | Remove expired sessions, sign-in codes and lockouts |
+| `anonymous-cleanup` | 04:15 daily | Delete abandoned anonymous accounts, see [Authentication](/docs/authentication) |
 | `query-optimizer` | 05:00 Sundays | `PRAGMA optimize` |
-| `search-index` | 05:30 Sundays | Optimizes the full text index, rebuilding it if it has drifted |
-| `file-deletions` | **off** | Deletes uploads no record refers to, see [Files and uploads](/docs/files) |
+| `search-index` | 05:30 Sundays | Optimize the full text index, rebuild on drift |
+| `file-deletions` | **off** | Delete uploads no record refers to, see [Files and uploads](/docs/files) |
 
-`backup` writes to the same disk as the database, so it survives a bad migration and nothing else. Copy `backups/` somewhere off the host.
+`file-deletions` is off by default: an upload not yet attached to a record is indistinguishable from an abandoned one.
 
-`file-deletions` ships off because an upload you have not attached to a record yet is indistinguishable from an abandoned one.
+Saved SQL queries can run on the same scheduler; see [SQL and scheduled queries](/docs/sql-and-queries).
 
-You can also put a saved SQL query on this scheduler and POST its results to a URL. See [SQL and scheduled queries](/docs/sql-and-queries).
+## Default-off switches
 
-## Things that are off by default
-
-Each of these opens something up. Turn them on only when you need them.
-
-| Switch | What it opens |
+| Switch | Opens |
 | --- | --- |
-| Public authentication | `/auth` and `/api/auth/v1`, a second place accounts can sign in |
-| Public registration | Lets visitors sign themselves up |
-| Anonymous accounts | Lets an unauthenticated caller create an account |
-| Postgres listener | The Postgres wire protocol, bound to `127.0.0.1:5432` by default |
-| TDS listener | The SQL Server wire protocol, bound to `127.0.0.1:1433` by default |
-| Proxy private targets | Lets outbound proxy requests reach your own network, including cloud metadata endpoints |
+| Public authentication | `/auth` and `/api/auth/v1` |
+| Public registration | Self sign-up |
+| Anonymous accounts | Account creation by unauthenticated callers |
+| Postgres listener | Postgres wire protocol, default `127.0.0.1:5432` |
+| TDS listener | SQL Server wire protocol, default `127.0.0.1:1433` |
+| Allow private targets | Outbound proxy, action and webhook requests to private networks, including cloud metadata endpoints |
 
-Both wire protocols send the API token in cleartext, so a listener only binds to a loopback address unless `appsettings.json` sets `Baseport:WireRemoteAccess` to `true` (`Baseport__WireRemoteAccess=true` in Docker, where loopback inside the container is unreachable from the host; publish the port as well). Put a TLS tunnel in front of a remote listener. The console refuses a public bind address without the switch, and so does the listener itself at start.
+## Wire listeners
 
-You can also control the two listeners from the shell:
+Both wire protocols send the API token in cleartext. A listener binds only to a loopback address unless `Baseport:WireRemoteAccess` is `true` in `appsettings.json` (`Baseport__WireRemoteAccess=true` in Docker, where container loopback is unreachable from the host; the port also needs publishing). The console, the CLI and the listener at start all refuse a public bind address without it. A remote listener belongs behind a TLS tunnel.
 
-```bash
-baseport providers status
-baseport providers postgres enable --port 5432 --bind 127.0.0.1
-baseport providers tds disable
-```
+| Limit | Value |
+| --- | --- |
+| Message size | 1 MB |
+| Connections per listener | 32; the next is closed immediately |
+| Handshake | 10 seconds |
+| Statement | 10 seconds |
+
+Listener setup and client connections: [Postgres and TDS clients](/docs/postgres-and-tds).
 
 ## AI agents
 
-Record data and form submissions are untrusted input. An AI agent that reads them can be steered by whatever a visitor typed. Give an agent a `consumer` account whose API token has only the methods it needs, an expiry, and read rules that limit it to the rows it works on.
+Record data and form submissions are untrusted input; an AI agent that reads them can be steered by visitor text. An agent account is a `consumer` with an API token limited to the required methods, an expiry date, and read rules restricted to its rows.
 
 ## Updating
 
-`baseport update` replaces the binary and leaves `baseport.db`, `baseport.key`, `log/`, `uploads/`, `backups/` and your `appsettings.json` alone. It reinstalls into the same directory you first installed to.
+`baseport update` replaces the binary in the original install directory. `baseport.db`, `baseport.key`, `log/`, `uploads/`, `backups/` and `appsettings.json` are not changed.
 
 ::: code-group
 ```sh [Linux]
@@ -165,4 +157,4 @@ docker compose pull && docker compose up -d
 ```
 :::
 
-If the wrapper is not on your PATH, running the installer again does the same thing.
+Without the wrapper on the PATH, rerunning the installer has the same effect.

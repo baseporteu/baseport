@@ -5,25 +5,24 @@ description: "Per record create, read, update and delete rules, evaluated by SQL
 
 # Access rules
 
-A published table is readable by anyone who gets past the two API switches, and at that point they can see every row in it. Access rules are how you narrow that down to the rows a particular caller should see.
+A published table without rules exposes every row to any caller that passes both API switches. Access rules restrict records per caller.
 
-Each table has four rules, each one a SQLite boolean expression:
+Each table has four rules, set on the table's access panel: **create**, **read**, **update** and **delete**. Each rule is a SQLite boolean expression. An empty rule means no restriction.
 
 ```sql
 _ROW_.owner = _USER_.id
 ```
 
-Set them on the table's access panel: **create**, **read**, **update** and **delete**. An empty rule means no rule.
-
-## What a rule can refer to
+## References
 
 | Reference | Resolves to |
 | --- | --- |
-| `_USER_.id` | The id of the calling account. Only `id` is available. |
-| `_ROW_.<field>` | A field on the stored record. `NULL` on create, because there is no row yet. |
-| `_REQ_.<field>` | A field in the incoming request body. |
+| `_USER_.id` | Id of the calling account. |
+| `_USER_.role` | Role of the calling account: `admin`, `consumer` or `user`. |
+| `_ROW_.<field>` | A field on the stored record. `NULL` on create. |
+| `_REQ_.<field>` | A field in the request body. |
 
-There is no expression language to learn. Baseport rewrites your references into `json_extract` calls with bound parameters and hands the rest to SQLite, so anything you can put in a SQLite `WHERE` clause works.
+References are rewritten into `json_extract` calls and bound parameters; the rest of the expression is passed to SQLite unchanged. Any expression valid in a SQLite `WHERE` clause is accepted.
 
 ```sql
 _ROW_.status = 'open' AND _ROW_.owner = _USER_.id
@@ -33,20 +32,34 @@ _ROW_.status = 'open' AND _ROW_.owner = _USER_.id
 _REQ_.total < 1000
 ```
 
-## What happens when a rule fails
+```sql
+_USER_.role = 'consumer'
+```
 
-A read rule **filters a list** instead of rejecting the request, a caller gets their own records back instead of a `403`. Everywhere else, including reading one record by id, a rule that does not hold means the request is rejected.
+The last example refuses end-user JWTs and allows service tokens.
 
-A rule that evaluates to `NULL`, or that refers to a record that no longer exists, counts as a rejection.
+## Evaluation
 
-Live updates are filtered the same way reads are. If a caller could not fetch a record, no event for it reaches them either. The rule is re-read for every event, so tightening one takes effect on streams that are already open.
+| Operation | Rule result `false` or `NULL` |
+| --- | --- |
+| List (`GET /records`) | Row omitted from the result |
+| Get, create, update, delete | `403` |
+| Live updates (SSE) | Event not delivered |
 
-## Rules are checked when you save
+A rule that refers to a deleted record evaluates as a refusal. Live updates re-read the rule for every event; a changed rule applies to open streams. The role reaches every evaluation: single-record checks, list filters, relation expansion, transactions, SSE and the wire views.
 
-Rules are checked when you save the table, not when somebody calls it. An unknown field name, a stray `;`, an alias other than the three above, and anything SQLite itself rejects will all stop the save. Otherwise a bad rule would turn into a `500` on every request to that table.
+## Validation
 
-## Where rules do not apply
+Rules are validated when the table is saved. The save is refused for:
 
-The console at `/api/_admin/*` is never filtered. If you are signed in as an operator you see everything.
+- an unknown field name or alias (only `_USER_`, `_ROW_` and `_REQ_`);
+- `;`, comments (`--`, `/*`), `{` or `}`;
+- parameter markers (`?`, `$`, `:`, `@`) outside a quoted string;
+- an unclosed quote or bracket, or unbalanced parentheses;
+- `_USER_`, `_ROW_` or `_REQ_` inside a quoted string;
+- anything SQLite rejects.
 
-The Postgres and TDS listeners are filtered like the API, not like the console. They authenticate with an API token, they only see published tables, each one behind its read rule. A SQLite authorizer also blocks any direct read of the underlying schema, `_users` and `_settings` are not reachable from them.
+## Scope
+
+- The console (`/api/_admin/*`) is never filtered.
+- The Postgres and TDS listeners apply read rules like the REST API. They authenticate with an API token and expose published tables only, each as a view filtered by its read rule. A SQLite authorizer blocks direct reads of the underlying tables, including `_users` and `_settings`.

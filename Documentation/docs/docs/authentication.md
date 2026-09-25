@@ -1,11 +1,16 @@
 ---
 title: Authentication
-description: "API tokens, end user accounts, single sign-on and anonymous accounts"
+description: "API tokens, end user accounts, single sign-on, two-factor and anonymous accounts"
 ---
 
 # Authentication
 
-There are two kinds of credential. An **API token** is a long lived string you issue to an account yourself, usually for something server side calling the REST API. A **JWT** is short lived and comes from signing in, which is what your application's own users get. Both work on the same `/api/v1` routes.
+Two credential types authenticate the `/api/v1` routes:
+
+| Credential | Lifetime | Issued by | Typical caller |
+| --- | --- | --- | --- |
+| **API token** | Until its expiry date | An operator, per account | Server-side integrations |
+| **JWT** | Short, refreshable | A sign-in | Application users |
 
 ```
 Authorization: Bearer <token or jwt>
@@ -13,13 +18,13 @@ Authorization: Bearer <token or jwt>
 
 ## API tokens
 
-Create one under **Authentication** on the account that should have it, and pick an expiry date. You see the token once, when it is generated. Only a hash is stored, it is never shown again.
+Tokens are generated under **Authentication** on the owning account, with an expiry date. The token is displayed once; only its hash is stored.
 
-The account's **API enabled** switch controls whether its token works at all, and returns `401` when it is off. A disabled account cannot sign in and its token is rejected.
+The account's **API enabled** switch gates the token: `401` when off. A disabled account cannot sign in and its token is refused.
 
 ## End user accounts
 
-Your application's own users sign in at `/auth`, or call `/api/auth/v1` directly. Both are off until you turn **Public authentication** on in Settings, and letting people sign themselves up is a separate switch.
+Application users sign in at `/auth` or through `/api/auth/v1`. Both require **Public authentication** in Settings; self-registration is a separate switch.
 
 ```bash
 curl -X POST http://localhost:5000/api/auth/v1/login \
@@ -31,85 +36,87 @@ curl -X POST http://localhost:5000/api/auth/v1/login \
 { "auth_token": "eyJ...", "refresh_token": "...", "expires_at": 1755680000 }
 ```
 
-| Route | What it does |
+| Route | Action |
 | --- | --- |
 | `POST /api/auth/v1/register` | Sign up, when registration is open |
 | `POST /api/auth/v1/login` | Exchange credentials for a token pair |
+| `POST /api/auth/v1/anonymous` | Create an anonymous account, when enabled |
 | `POST /api/auth/v1/refresh` | Mint a new auth token from a refresh token |
 | `POST /api/auth/v1/logout` | Revoke a refresh token |
-| `GET /api/auth/v1/status` | Who is calling |
-| `POST /api/auth/v1/change_password` | Change your own password |
-| `POST /api/auth/v1/delete` | Delete your own account |
-| `GET /api/auth/v1/jwks.json` | The public half of the signing key |
+| `GET /api/auth/v1/status` | The calling account |
+| `POST /api/auth/v1/change_password` | Change the caller's password |
+| `DELETE /api/auth/v1/delete` | Delete the caller's account |
+| `GET /api/auth/v1/jwks.json` | Public signing key |
 
-The role is never read from the token. Every request looks the account up again, so demoting someone takes effect on their next request rather than their next sign-in.
+The role is not read from the token. Every request re-reads the account, so a demotion applies on the next request.
+
+Five failed sign-ins lock the account for five minutes, per account and client address.
 
 ## Anonymous accounts
 
-Useful if you want people to try your app before signing up. Turn **Anonymous accounts** on, then ask for one:
+With **Anonymous accounts** enabled, `POST /api/auth/v1/anonymous` returns a token pair for a new anonymous account:
 
 ```bash
 curl -X POST http://localhost:5000/api/auth/v1/anonymous
 ```
 
-You get back the same pair of tokens a normal sign-in returns. Anything the visitor creates while using them belongs to that account.
+Records created with that token belong to the anonymous account. A registration request sent with the token attached **converts** the account instead of creating a second one; its records are kept and all existing sessions are revoked.
 
-When they sign up, send the registration request with that token still attached. Registering **converts** the anonymous account instead of creating a second one, everything they already created stays with them. All existing sessions on the account are revoked at that point, since the account now has a password.
-
-The `anonymous-cleanup` job deletes abandoned anonymous accounts once all their sessions have expired and the retention window has passed.
+The `anonymous-cleanup` job deletes anonymous accounts whose sessions have all expired, after the retention window.
 
 ## Single sign-on
 
-Add an OpenID Connect provider under **Settings > Authentication > Single sign-on**. Anything that publishes a discovery document works, including Authelia, Authentik and Pocket ID.
+OpenID Connect providers are configured under **Settings > Authentication > Single sign-on**. Any provider with a discovery document is supported, including Authelia, Authentik and Pocket ID.
 
-Copy the redirect URL out of the sheet and register it at your provider:
+Redirect URL to register at the provider:
 
 ```
 https://baseport.example.com/api/auth/oidc/{key}/callback
 ```
 
-Saving fetches and checks the discovery document straight away, so a wrong issuer URL is an error in the sheet rather than a dead button on the sign-in screen. The flow uses PKCE and a nonce, and verifies the `id_token` against the provider's JWKS.
+The discovery document is fetched and validated on save. The flow uses PKCE and a nonce, binds the `state` to the browser with a cookie, and verifies the `id_token` against the provider's JWKS.
 
-Choose where the provider appears: the console at `/_/auth`, your application's own sign-in at `/auth`, or both. If you enable a provider but do not show it on either, the save is rejected.
+Each provider is shown on the console sign-in (`/_/auth`), the application sign-in (`/auth`), or both. An enabled provider shown on neither is refused on save.
 
-Accounts are matched on the provider's subject id, never on a name, so renaming someone in your directory does not lock them out. The first sign-in can attach an existing account by an exact username match, or by an email address the provider says it has verified. Turn **Create accounts on first sign-in** on if you want unknown users created automatically as plain users.
+Accounts are matched on the provider's subject id. On first sign-in, an existing account is attached by exact username match or by an email address the provider marks as verified. **Create accounts on first sign-in** creates unknown users with the `user` role.
 
 :::warning
-Admin accounts are never linked automatically, whatever the provider sends. Console access should not depend on a name in your directory, no claim will ever match one.
+Admin accounts are never linked automatically.
 :::
 
-To sign in to the console with your provider, link your account yourself. Go to **Settings > Authentication > Single sign-on**, press **Link my account** on the provider row and confirm your password. You sign in at the provider once, and the identity it returns is attached to the account you are already signed in as. Nothing the provider sends picks the account, because that was decided before you were redirected.
+An operator links their own admin account under **Settings > Authentication > Single sign-on** with **Link my account** and a password confirmation. The provider identity returned by that sign-in is attached to the signed-in account. Linking revokes every other session on the account.
 
-Linking revokes every other session on the account, since you have just added another way to sign in.
-
-You can also do it from the shell, or for an account that is not yours:
+Shell equivalents, also for other accounts:
 
 ```bash
 baseport accounts link <username> <provider-key> <subject>
 baseport accounts unlink <username>
 ```
 
-The subject id is in the log line from the sign-in that was rejected.
+The subject id is written to the log by the refused sign-in.
 
 ## Two-factor sign-in
 
-Admin accounts can ask for a code from an authenticator app after the password. Open the account menu at the bottom of the sidebar, choose **Two-factor**, add the key (or the `otpauth://` link) to your authenticator app, and enter the code it shows. Turning it on signs out every other session on that account.
+Admin accounts can require an authenticator code after the password. Setup: account menu (sidebar) > **Two-factor**, add the key or `otpauth://` link to an authenticator app, confirm with a code. Enabling it revokes every other session on the account.
 
-Once it is on, both password sign-ins ask for the code: the console (`code`) and `POST /api/auth/v1/login` (`totp_code`). A reply of `401` with `"totp": true` means the password was right and the code is missing or wrong. Each code works once, and a wrong code counts toward the sign-in lockout.
+| Sign-in | Code field |
+| --- | --- |
+| Console, `POST /api/auth/login` | `code` |
+| Public, `POST /api/auth/v1/login` | `totp_code` |
 
-One-time codes and single sign-on do not ask for it. A one-time code needs access to the server log, and your identity provider handles its own second factor.
+A `401` with `"totp": true` means the password was accepted and the code is missing or invalid. Each code is accepted once; an invalid code counts toward the lockout. One-time codes and single sign-on do not ask for a code.
 
-Turning it off needs your password and a current code. If the device is lost, remove it from the shell:
+Disabling requires the password and a current code. Recovery for a lost device:
 
 ```bash
 baseport accounts totp-reset <account>
 ```
 
-That also revokes every session on the account.
+This also revokes every session on the account.
 
 ## CLI-only operations
 
-The console does not allow operations that would let one operator take over another's account. Those are in the CLI, which needs shell access:
+Operations that could let one operator take over another's account are not available in the console. They require shell access:
 
 ```
 baseport accounts list
@@ -120,4 +127,4 @@ baseport accounts rename <account> <new>
 baseport accounts totp-reset <account>
 ```
 
-Use `rename` to replace the generated `admin-xxxxxxxx` username with your own. A password you set for somebody else is always single use: they have to change it on first sign-in, and every session on that account is revoked.
+`rename` replaces the generated `admin-xxxxxxxx` username. A password set for another account is single use: it must be changed at the next sign-in, and every session on that account is revoked.

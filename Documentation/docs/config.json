@@ -7,7 +7,18 @@
   "brandImage": "/assets/baseporteu.png",
   "favicon": "🛟",
   "lastUpdated": true,
+  "repo": "https://github.com/baseporteu/baseport",
   "footer": "© {year} Baseport · Licensed under [EUPL 1.2](https://github.com/baseporteu/baseport/blob/main/LICENSE). Built with [Bark](https://github.com/melosso/bark/).",
+  "bottomNav": [
+    {
+      "text": "Issues",
+      "link": "https://github.com/baseporteu/baseport/issues"
+    },
+    {
+      "text": "Security",
+      "link": "https://github.com/baseporteu/baseport/security/policy"
+    }
+  ],
   "editLink": {
     "pattern": "https://github.com/baseporteu/baseport/edit/main/Documentation/docs/:path",
     "text": "Edit this page on GitHub"
@@ -49,54 +60,102 @@
           {
             "title": "How to use Baseport",
             "path": "docs/how-to-use"
-          },
-          {
-            "title": "Tables and fields",
-            "path": "docs/tables-and-fields"
-          },
-          {
-            "title": "Access rules",
-            "path": "docs/access-rules"
           }
         ]
       },
       {
-        "title": "Working with data",
+        "title": "Data model",
         "collapsed": false,
         "items": [
           {
-            "title": "Authentication",
-            "path": "docs/authentication"
-          },
-          {
-            "title": "Files and uploads",
-            "path": "docs/files"
+            "title": "Tables and fields",
+            "path": "docs/tables-and-fields"
           },
           {
             "title": "Relations",
             "path": "docs/relations"
           },
           {
+            "title": "Access rules",
+            "path": "docs/access-rules"
+          },
+          {
+            "title": "Import",
+            "path": "docs/import"
+          }
+        ]
+      },
+      {
+        "title": "Interfaces",
+        "collapsed": false,
+        "items": [
+          {
+            "title": "Web APIs reference",
+            "path": "docs/api"
+          },
+          {
+            "title": ".NET SDK",
+            "path": "docs/dotnet-sdk"
+          },
+          {
             "title": "Forms and embeds",
             "path": "docs/forms"
+          },
+          {
+            "title": "Files and uploads",
+            "path": "docs/files"
           },
           {
             "title": "SQL and scheduled queries",
             "path": "docs/sql-and-queries"
           },
           {
-            "title": ".NET SDK",
-            "path": "docs/dotnet-sdk"
+            "title": "Postgres and TDS clients",
+            "path": "docs/postgres-and-tds"
           }
         ]
       },
       {
-        "title": "Going to production",
-        "path": "docs/going-to-production"
+        "title": "Automation",
+        "collapsed": false,
+        "items": [
+          {
+            "title": "Actions",
+            "path": "docs/actions"
+          },
+          {
+            "title": "Proxy tables",
+            "path": "docs/proxy-tables"
+          }
+        ]
       },
       {
-        "title": "Web APIs reference",
-        "path": "docs/api"
+        "title": "Accounts",
+        "collapsed": false,
+        "items": [
+          {
+            "title": "Authentication",
+            "path": "docs/authentication"
+          }
+        ]
+      },
+      {
+        "title": "Operations",
+        "collapsed": false,
+        "items": [
+          {
+            "title": "Going to production",
+            "path": "docs/going-to-production"
+          },
+          {
+            "title": "Configuration reference",
+            "path": "docs/configuration"
+          },
+          {
+            "title": "Command line",
+            "path": "docs/command-line"
+          }
+        ]
       }
     ]
   }

@@ -1,27 +1,31 @@
 ---
 title: Relations
-description: "Reference fields, modelling one to many and many to many, and expanding a related record"
+description: "Reference fields, relationship shapes and expansion"
 ---
 
 # Relations
 
-A `reference` field stores the id of one record in another table. You pick the target table when you add the field, and the field stores that record's id as a string. That is the whole mechanism: one field, one id, one target record.
+A `reference` field stores the id of one record in a target table, chosen when the field is created. The value is the target record's id as a string.
 
-Writing one means sending the id:
+A write sends the id:
 
 ```json
 { "OrderNo": "SO-100000", "Customer": "T7mQ2xR9vLbK" }
 ```
 
-The id is checked on write. If no record with that id exists in the target table you get a `422` saying so, instead of a row pointing at nothing.
+The id is validated on write; an id with no matching record in the target table returns `422`.
 
-## Modelling the usual shapes
+## Relationship shapes
 
-Because a reference field stores a single identifier, the resulting relationship relies entirely on where that field is placed.
+A reference holds one id; the relationship is determined by which table holds the field.
 
-* **One to many:** A customer has many orders, while each order belongs to one customer. Place the reference on the "many" side by adding a `Customer` reference field to **Orders** pointing to Customers. This is the standard approach used most frequently.
-* **One to one:** A customer has a single billing profile. This uses the same setup as above, but with the **Unique** option enabled on the reference field to prevent multiple records from pointing to the same target.
-* **Many to many:** An order can have multiple tags, and a single tag can appear on multiple orders. Since a single field cannot hold multiple identifiers, you must introduce a third junction table to store the pairings:
+| Shape | Model |
+| --- | --- |
+| One to many | Reference on the "many" side: a `Customer` field on **Orders**. |
+| One to one | As one to many, with **Unique** on the reference field. |
+| Many to many | A junction table with two references. |
+
+Many to many, orders and tags:
 
 | Table | Fields |
 | --- | --- |
@@ -29,11 +33,11 @@ Because a reference field stores a single identifier, the resulting relationship
 | Tags | `Name` |
 | OrderTags | `Order` (reference to Orders), `Tag` (reference to Tags) |
 
-One row in OrderTags means one tag on one order. To list an order's tags, read OrderTags filtered by that order, expanding `Tag`.
+Each OrderTags row pairs one order with one tag. An order's tags: list OrderTags filtered by `Order`, with `expand=Tag`.
 
 ## Links
 
-Every record in an API response includes a `links` block. Reference fields appear in it beside `self` and `collection`:
+Every record in an API response has a `links` block with `self`, `collection` and one entry per reference field:
 
 ```json
 {
@@ -47,11 +51,11 @@ Every record in an API response includes a `links` block. Reference fields appea
 }
 ```
 
-A reference only appears in `links` if the target table is published and allows `GET`. There is no point giving you a link you cannot follow.
+A reference is included only when the target table is published and allows `GET`.
 
 ## Expanding a reference
 
-Follow the reference in the same request with `expand`, no second call:
+`expand` includes the referenced record in the same response:
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
@@ -68,19 +72,19 @@ curl -H "Authorization: Bearer $TOKEN" \
 }
 ```
 
-Separate several field names with commas. Name something that is not an expandable reference field and you get a `400`, so a typo is reported rather than quietly ignored.
+Multiple fields are comma-separated. A name that is not an expandable reference field returns `400`.
 
-Expansion goes one level deep. To follow a chain, expand at each step or read the next record directly. This works the same way when you read a single record.
+Expansion is one level deep, on list and single-record reads alike.
 
-## Access rules apply to the target
+## Access rules on the target
 
-Expanding a reference re-reads the target table through its own read rule. If the caller could not have fetched that customer directly, the customer is left out of `expanded`, even though the order is still returned. The `links` entry stays, since it is built from an id already stored on the order.
+Expansion reads the target through its own read rule. A target the caller cannot read is omitted from `expanded`; the parent record is still returned. The `links` entry remains, since it is built from the stored id.
 
-## Deleting a record something points at
+## Deleting a referenced record
 
-Baseport checks a reference when you write it, not afterwards, and deleting a record does not touch anything referring to it. So if you delete a customer, the orders that pointed at them keep the old id.
+References are validated on write only. Deleting a record does not change records that refer to it; they keep the old id.
 
-Two things follow from that. Reading those orders still works, and `expanded` leaves the customer out. But **editing one of them fails**, even if you never touch the reference, because an update revalidates the whole record and the reference no longer resolves.
+Reads of those records succeed, with the target omitted from `expanded`. **Updates fail**, even when the reference is not changed, because an update revalidates the whole record:
 
 ```json
 {
@@ -90,4 +94,4 @@ Two things follow from that. Reading those orders still works, and `expanded` le
 }
 ```
 
-If you delete records that others point at, delete or repoint the children first. A [scheduled query](/docs/going-to-production) is a reasonable way to find orphans before they become a surprise.
+Delete or repoint referring records before deleting their target. A [scheduled query](/docs/sql-and-queries) can report orphans.

@@ -1,11 +1,11 @@
 ---
 title: Files and uploads
-description: "The file field, the storage API and how uploads are served"
+description: "File fields, the storage API and upload serving"
 ---
 
 # Files and uploads
 
-Add a `file` field to a table and you get a file input in forms and in the console. The file is saved to `uploads/` next to the database, and the field stores its URL.
+A `file` field renders a file input in forms and the console. Files are saved to `uploads/` next to the database; the field stores the file's URL.
 
 ## Uploading
 
@@ -26,32 +26,38 @@ curl -X POST http://localhost:5000/api/v1/files/invoices \
 }
 ```
 
-Save that `url` into a `file` field on a record.
+The returned `url` is the value for a `file` field.
 
-| Route | What it does |
+| Route | Action |
 | --- | --- |
 | `POST /api/v1/files/{bucket}` | Upload one file as `multipart/form-data` |
 | `GET /api/v1/files/{bucket}/{name}` | Read it back, with range requests |
 | `DELETE /api/v1/files/{bucket}/{name}` | Delete it |
 
-All three need a bearer token. A bucket is a folder under `uploads/`, and its name is 1 to 32 characters of lower-case letters, digits and hyphens.
+All three require a bearer token. A bucket is a folder under `uploads/`; bucket names are 1 to 32 characters of lower-case letters, digits and hyphens.
 
 ## Limits
 
-- 25 MB per file
-- allowed extensions: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.pdf`, `.txt`, `.csv`, `.json`, `.zip`
-- files are stored under 22 random characters plus the original extension, never the filename that was uploaded
+| Limit | Value |
+| --- | --- |
+| File size | 25 MB |
+| Extensions | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.pdf`, `.txt`, `.csv`, `.json`, `.zip` |
+| Instance total | **Upload storage (MB)** in **Settings > Host**, default 10,240 MB |
+| Free disk | Uploads are refused below 1 GB free |
+| `POST /api/v1/files/{bucket}` | 30 per minute per client |
 
-## How uploads are served
+Stored names are 22 random characters plus the original extension; the uploaded filename is not used. The instance total is approximate under concurrent uploads; the free-disk floor is the hard limit.
 
-`/uploads` is served as static files with no authentication. A `file` field stores an absolute URL, the file has to be fetchable without a session or a token, the same as any other URL you would put in that field.
+## Serving
+
+`/uploads` is served as static files without authentication, so a stored URL works in any client.
 
 :::warning
-The only thing protecting an upload is that nobody can guess its name. Twenty-two characters is 132 bits, which is enough, but whoever has the URL can pass it on. Do not put files here that would be a problem in the wrong hands.
+An upload is protected only by its unguessable name (22 characters, 132 bits). Anyone with the URL can share it. Confidential files do not belong here.
 :::
 
-## Deleting unused files
+## Unused files
 
-The `file-deletions` job removes uploads no record refers to any more. It is off by default: an upload you have not attached to a record yet is indistinguishable from an abandoned one, so until your code reliably attaches files in the same request, this job deletes work in progress.
+The `file-deletions` job removes files in the `uploads/` root that no record refers to. Bucket folders are not swept. The job is off by default: a file not yet attached to a record is indistinguishable from an abandoned one.
 
-It matches on the `/uploads/` path segment inside each record's JSON, not on a substring, so a filename mentioned in a text field is not treated as a reference. Schedule it under **Settings**, alongside the other [jobs](/docs/going-to-production).
+References are matched on the `/uploads/` path segment in each record's JSON; a filename in a text field is not a reference. The job is scheduled under **Settings** with the other [jobs](/docs/going-to-production).

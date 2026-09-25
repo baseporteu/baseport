@@ -1,21 +1,21 @@
 ---
 title: Web APIs reference
-description: "Every published route, its parameters and what it answers"
+description: "Published routes, parameters and responses"
 ---
 
 # Web APIs reference
 
-Everything under `/api/v1` needs a bearer token, either an account's API token or a JWT from a sign-in.
+Every route under `/api/v1` requires a bearer token: an account's API token or a JWT from a sign-in.
 
 ```
 Authorization: Bearer <token>
 ```
 
-Your own instance publishes an OpenAPI document at `/api/openapi.json`, and the console shows it at `/docs`. If you turn it off under **Settings** the document returns `404`, but the `/api/v1` routes keep working.
+Each instance publishes an OpenAPI 3.2 document at `/api/openapi.json`, rendered at `/docs`. Turning it off in **Settings** makes the document return `404`; the `/api/v1` routes are unaffected.
 
 ## Records
 
-`{apiName}` is the name you gave the table when you published it.
+`{apiName}` is the table's API name.
 
 | Method | Route | Notes |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ Your own instance publishes an OpenAPI document at `/api/openapi.json`, and the 
 | `GET` | `/api/v1/{apiName}/subscribe` | Server-Sent Events for the table |
 | `GET` | `/api/v1/{apiName}/subscribe/{id}` | Server-Sent Events for one record |
 
-A table publishes only the methods you left enabled on it.
+A table answers only its enabled methods.
 
 ### List parameters
 
@@ -42,11 +42,11 @@ A table publishes only the methods you left enabled on it.
 | `cursor` | none | Position from a previous response's `nextCursor` |
 | `expand` | none | Comma separated reference fields, see [Relations](/docs/relations) |
 
-Every collection endpoint pages. None returns an unbounded list.
+Every collection endpoint is paged.
 
 ### Cursor paging
 
-`page` is fine for a grid someone clicks through. Walking a whole table, use `nextCursor`:
+`page` suits interactive grids. Full-table walks use `nextCursor`:
 
 ```bash
 curl "http://localhost:5000/api/v1/sales-orders/records?pageSize=200" -H "Authorization: Bearer $TOKEN"
@@ -55,15 +55,15 @@ curl "http://localhost:5000/api/v1/sales-orders/records?pageSize=200" -H "Author
 curl "http://localhost:5000/api/v1/sales-orders/records?pageSize=200&cursor=eyJDIjoi..." -H "Authorization: Bearer $TOKEN"
 ```
 
-`links.next` has the same URL already built. Keep going until `nextCursor` is null.
+`links.next` contains the same URL. The walk ends when `nextCursor` is null.
 
-Keyset, not offset: the cursor holds `(CreatedAt, Id)` from the last row of the previous page, so page 500 costs what page 1 costs and an insert mid-walk cannot shift unread rows into the window you already read.
+The cursor is a keyset on `(CreatedAt, Id)` of the previous page's last row: every page has the same cost, and concurrent inserts do not shift rows between pages.
 
-Defined for the default `CreatedAt DESC, Id DESC` order only. `sort` plus `cursor` is a `400`: a keyset over a nullable column needs the NULLS FIRST/LAST half of the comparison, and one that gets it wrong skips or repeats rows silently.
+Cursors apply to the default `CreatedAt DESC, Id DESC` order only; `sort` with `cursor` returns `400`.
 
 ### Optimistic concurrency
 
-A single record response comes back with an `ETag`. Send it back as `If-Match` on a write and the write is refused with `412` if the record changed since you read it.
+Single-record responses carry an `ETag`. A write with `If-Match` returns `412` when the record changed since it was read.
 
 ```bash
 curl -X PATCH http://localhost:5000/api/v1/sales-orders/records/gAOPLyJDI5UU \
@@ -73,13 +73,13 @@ curl -X PATCH http://localhost:5000/api/v1/sales-orders/records/gAOPLyJDI5UU \
   -d '{"Total":91.0}'
 ```
 
-`If-Match` is optional. `Record.UpdatedAt` is an EF concurrency token, so the version the writer read is in the `UPDATE`'s own `WHERE` clause and a write that loses a race gets `409` whether or not it sent a precondition. `If-Match` moves that failure earlier: you learn the record moved before your write is attempted, not after.
+`If-Match` is optional. `Record.UpdatedAt` is a concurrency token in the `UPDATE`'s `WHERE` clause, so a write that loses a race returns `409` without a precondition. `If-Match` reports the conflict before the write is attempted.
 
-`If-None-Match` on a read answers `304` when you already hold the current version.
+`If-None-Match` on a read returns `304` for the current version.
 
 ### Bodies
 
-A write body is a plain JSON object of field names, or `multipart/form-data` when you are sending a file in the same request. There is no wrapper key.
+A write body is a JSON object keyed by field name, or `multipart/form-data` when it includes a file. There is no wrapper key.
 
 ```bash
 curl -X POST http://localhost:5000/api/v1/sales-orders/records \
@@ -88,7 +88,29 @@ curl -X POST http://localhost:5000/api/v1/sales-orders/records \
   -d '{"OrderNo":"SO-100001","Total":88.4}'
 ```
 
-Server owned fields are ignored if you send them. Read only fields are too.
+Values for server-owned and read-only fields are ignored.
+
+## Transactions
+
+`POST /api/transaction/v1/execute` runs up to 128 operations across tables in one call.
+
+```json
+{
+  "transaction": true,
+  "operations": [
+    { "op": "create", "apiName": "sales-orders", "value": { "OrderNo": "SO-100002" } },
+    { "op": "update", "apiName": "customers", "recordId": "T7mQ2xR9vLbK", "value": { "Name": "Ada" } },
+    { "op": "delete", "apiName": "order-tags", "recordId": "b8Xk2mQ9pLwR" }
+  ]
+}
+```
+
+| `transaction` | Behavior |
+| --- | --- |
+| `false` (default) | Each operation commits on its own; an error leaves earlier operations applied. |
+| `true` | One database transaction; the first error rolls back the batch. |
+
+Each operation passes the same validation, method switches and access rules as the single-record routes.
 
 ## Files
 
@@ -102,7 +124,7 @@ See [Files and uploads](/docs/files).
 
 ## End user authentication
 
-Under `/api/auth/v1`, and only when public authentication is on. See [Authentication](/docs/authentication).
+Available when public authentication is on. See [Authentication](/docs/authentication).
 
 | Method | Route |
 | --- | --- |
@@ -113,12 +135,12 @@ Under `/api/auth/v1`, and only when public authentication is on. See [Authentica
 | `POST` | `/api/auth/v1/logout` |
 | `GET` | `/api/auth/v1/status` |
 | `POST` | `/api/auth/v1/change_password` |
-| `POST` | `/api/auth/v1/delete` |
+| `DELETE` | `/api/auth/v1/delete` |
 | `GET` | `/api/auth/v1/jwks.json` |
 
 ## Forms
 
-Public, per form, and rate limited. See [Forms and embeds](/docs/forms).
+Anonymous, per form, rate limited. See [Forms and embeds](/docs/forms).
 
 | Method | Route |
 | --- | --- |
@@ -145,11 +167,12 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents,
 }
 ```
 
-`errors` and `invalid` are extensions on top of the standard members. `invalid` names the fields that were rejected, so you can mark them in a form without parsing the messages.
+`errors` and `invalid` extend the standard members. `invalid` lists the rejected field names.
 
-Two statuses are worth telling apart:
+| Status | Meaning |
+| --- | --- |
+| `409` | Conflict with stored data: a duplicate unique value, or a concurrent write. |
+| `422` | The record is invalid; a retry needs a changed body. |
+| `503` | Subscriber limit reached on `/subscribe` (1,000 per instance). `Retry-After: 30`. |
 
-- `409` means the write conflicts with what is stored. A value that must be unique is already used, or another write reached the record first. Retrying with a different value may work.
-- `422` means the record itself is wrong. Retrying will not help until you change it.
-
-A table with its API access turned off answers `404`, not `403`. It reads the same as a table that does not exist, on purpose, so nobody can probe for which tables you have. A method you turned off answers `405` with an `Allow` header listing the ones that work.
+A table with its API off returns `404`, identical to a missing table. A disabled method returns `405` with an `Allow` header.

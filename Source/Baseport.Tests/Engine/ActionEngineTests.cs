@@ -172,7 +172,7 @@ public class ActionEngineIntegrationTests : IDisposable
             StepsJson = """[{"type":"updateRecord","setJson":{"Status":"'received'"}}]"""
         };
         _db.Actions.Add(action);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
         ActionDefCache.Reload(new[] { action });
 
         var obj = (JsonObject)JsonNode.Parse("""{ "Qty": 3 }""")!;
@@ -180,15 +180,15 @@ public class ActionEngineIntegrationTests : IDisposable
         Assert.Empty(outcome.Errors);
         var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
         _db.Records.Add(record);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var runs = await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync();
+        var runs = await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync(TestContext.Current.CancellationToken);
         var run = Assert.Single(runs);
         Assert.Equal(ActionRunStatus.Pending, run.Status);
         Assert.Equal(record.Id, run.RecordId);
 
-        await ActionRunner.RunAsync(_db, run, NoHttp, _log, default);
-        await _db.SaveChangesAsync();
+        await ActionRunner.RunAsync(_db, run, NoHttp, _log, TestContext.Current.CancellationToken);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ActionRunStatus.Done, run.Status);
         var stored = JsonNode.Parse(record.JsonData)!;
@@ -214,19 +214,19 @@ public class ActionEngineIntegrationTests : IDisposable
             StepsJson = """[{"type":"runExpression","expr":"1"}]"""
         };
         _db.Actions.AddRange(onCreate, onUpdate);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
         ActionDefCache.Reload(new[] { onCreate, onUpdate });
 
         var obj = (JsonObject)JsonNode.Parse("""{ "Qty": 1 }""")!;
         var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
         _db.Records.Add(record);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var createRun = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == onCreate.Id).ToListAsync());
-        await ActionRunner.RunAsync(_db, createRun, NoHttp, _log, default);
-        await _db.SaveChangesAsync();
+        var createRun = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == onCreate.Id).ToListAsync(TestContext.Current.CancellationToken));
+        await ActionRunner.RunAsync(_db, createRun, NoHttp, _log, TestContext.Current.CancellationToken);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var updateRuns = await _db.PendingActionRuns.Where(r => r.ActionDefId == onUpdate.Id).ToListAsync();
+        var updateRuns = await _db.PendingActionRuns.Where(r => r.ActionDefId == onUpdate.Id).ToListAsync(TestContext.Current.CancellationToken);
         Assert.Empty(updateRuns);
     }
 
@@ -242,21 +242,21 @@ public class ActionEngineIntegrationTests : IDisposable
             StepsJson = """[{"type":"updateRecord","setJson":{"Code":"'dup'"}}]"""
         };
         _db.Actions.Add(action);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
         ActionDefCache.Reload(new[] { action });
 
         var existing = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = """{"Code":"dup"}""", CreatedAt = DateTime.UtcNow };
         _db.Records.Add(existing);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var obj = (JsonObject)JsonNode.Parse("""{ "Code": "fresh" }""")!;
         var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
         _db.Records.Add(record);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.RecordId == record.Id).ToListAsync());
-        await ActionRunner.RunAsync(_db, run, NoHttp, _log, default);
-        await _db.SaveChangesAsync();
+        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.RecordId == record.Id).ToListAsync(TestContext.Current.CancellationToken));
+        await ActionRunner.RunAsync(_db, run, NoHttp, _log, TestContext.Current.CancellationToken);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ActionRunStatus.Pending, run.Status);
         Assert.Equal(1, run.Attempts);
@@ -277,18 +277,18 @@ public class ActionEngineIntegrationTests : IDisposable
             StepsJson = """[{"type":"httpRequest","url":"https://example.com/hook","bodyTemplate":{"units":"Qty * 2"}}]"""
         };
         _db.Actions.Add(action);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
         ActionDefCache.Reload(new[] { action });
 
         var obj = (JsonObject)JsonNode.Parse("""{ "Qty": 3 }""")!;
         var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
         _db.Records.Add(record);
-        await _db.SaveChangesAsync();
-        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync());
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync(TestContext.Current.CancellationToken));
 
         var http = new HttpStub(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK));
-        await ActionRunner.RunAsync(_db, run, http, _log, default);
-        await _db.SaveChangesAsync();
+        await ActionRunner.RunAsync(_db, run, http, _log, TestContext.Current.CancellationToken);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ActionRunStatus.Done, run.Status);
         var sent = Assert.Single(http.Requests);
@@ -307,17 +307,17 @@ public class ActionEngineIntegrationTests : IDisposable
             StepsJson = """[{"type":"httpRequest","url":"https://example.com/hook"}]"""
         };
         _db.Actions.Add(action);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
         ActionDefCache.Reload(new[] { action });
 
         var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = """{"Qty":1}""", CreatedAt = DateTime.UtcNow };
         _db.Records.Add(record);
-        await _db.SaveChangesAsync();
-        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync());
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync(TestContext.Current.CancellationToken));
 
         var http = new HttpStub(_ => new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable));
-        await ActionRunner.RunAsync(_db, run, http, _log, default);
-        await _db.SaveChangesAsync();
+        await ActionRunner.RunAsync(_db, run, http, _log, TestContext.Current.CancellationToken);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ActionRunStatus.Pending, run.Status);
         Assert.Equal(1, run.Attempts);
@@ -335,16 +335,16 @@ public class ActionEngineIntegrationTests : IDisposable
             StepsJson = """[{"type":"httpRequest","url":"http://169.254.169.254/latest"}]"""
         };
         _db.Actions.Add(action);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
         ActionDefCache.Reload(new[] { action });
 
         var record = new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = """{"Qty":1}""", CreatedAt = DateTime.UtcNow };
         _db.Records.Add(record);
-        await _db.SaveChangesAsync();
-        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync());
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var run = Assert.Single(await _db.PendingActionRuns.Where(r => r.ActionDefId == action.Id).ToListAsync(TestContext.Current.CancellationToken));
 
-        await ActionRunner.RunAsync(_db, run, NoHttp, _log, default);
-        await _db.SaveChangesAsync();
+        await ActionRunner.RunAsync(_db, run, NoHttp, _log, TestContext.Current.CancellationToken);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ActionRunStatus.Pending, run.Status);
         Assert.Contains("private", run.LastError, StringComparison.OrdinalIgnoreCase);

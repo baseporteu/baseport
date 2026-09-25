@@ -1,61 +1,61 @@
 ---
 title: Forms and embeds
-description: "Publish a table as a public page or a script tag, without building a front end"
+description: "Public pages and script-tag embeds over a table"
 ---
 
 # Forms and embeds
 
-A form is a public page built on top of a table. Forms are managed separately from tables, under **Forms** in the console, and served from `/api/forms/{formId}`.
+A form is a public surface over a table. Forms are managed under **Forms**, separately from tables, and served from `/api/forms/{formId}`.
 
-Point a form at a table and the console gives you a line to paste:
+The console generates an embed tag for each form:
 
 ```html
 <script src="https://baseport.example.com/embed.js?id=Kf3nQ8xR2vLm"></script>
 ```
 
-The form appears wherever you put the tag.
+The form renders at the tag's position.
 
-## Form or list
+## Kinds
 
-A form is either a **form** or a **list**.
+A form has one of two kinds, fixed at creation:
 
-- A **form** collects or looks up one record. Set its action to `submit` or `lookup`, or turn both on.
-- A **list** shows a paged, searchable table of records using the columns you pick.
+- **form**: submits or looks up one record. Actions: `submit`, `lookup`, or both.
+- **list**: a paged, searchable table over the configured columns.
 
-**Read only** shows values instead of inputs and rejects writes. An unpublished form returns `404`.
+**Read only** renders values instead of inputs and refuses writes. An unpublished form returns `404`.
 
 ## The hosted page
 
-A script tag does not put anything in the HTML a search engine sees, every form also has its own page at `/f/{formId}`:
+Every form also has a server-rendered page at `/f/{formId}`, for links and search engines:
 
 ```
 https://baseport.example.com/f/Kf3nQ8xR2vLm
 ```
 
-For a list, the first page of rows is included in the HTML, you can share the link, search engines can index it, and it still works with JavaScript turned off. Once the embed loads it replaces that with the interactive version.
+For a list, the HTML contains the first page of rows and works without JavaScript. The embed replaces it with the interactive version once loaded.
 
-The server-rendered version is deliberately plain. It projects through the same columns the JSON route does, so it cannot show a field the embed would have hidden. Custom renderers and row actions are JavaScript expressions and there is no JavaScript engine here, so they are left out rather than approximated.
+The server-rendered page uses the same column projection as the JSON route. Custom renderers and row actions are JavaScript expressions and are omitted.
 
-For a submit form the page shows only the heading and description. Rendering a second set of inputs with nowhere to send them would just be a form that does nothing.
+For a submit form, the page contains the heading and description only.
 
 ## Styling
 
-Override the CSS variables on `.baserow-embed` from your own stylesheet. The embed adds its styles once per page, your rules only need to be more specific.
+The embed exposes CSS variables on `.baserow-embed`. Its styles are added once per page; overrides need higher specificity.
 
-## Which sites may embed
+## Allowed sites
 
-Under **Settings**, list the origins that are allowed to embed your forms, one per line:
+**Settings > Sites** lists the origins allowed to embed forms, one per line:
 
 ```
 https://shop.example.com
 https://portal.example.org
 ```
 
-Leave it empty and any site can embed them, which is usually what you want while you are building. Once you fill it in, keep it current: a site that is not on the list gets nothing.
+An empty list allows every origin. The list drives the `embed` CORS policy and `frame-ancestors`, so browsers block embeds from other origins. It is a browser policy, not access control.
 
 ## Rate limits
 
-The public form routes are rate limited per client and per form, so one busy visitor does not use up everyone else's budget.
+Public form routes are rate limited per client and per form.
 
 | Route | Per minute |
 | --- | --- |
@@ -64,4 +64,4 @@ The public form routes are rate limited per client and per form, so one busy vis
 | List and `/f/{formId}` | 60 |
 | Schema | 60 |
 
-Behind a reverse proxy, set `Baseport__TrustForwardedHeaders` to `true`, otherwise every visitor counts against the same limit. See [Going to production](/docs/going-to-production).
+Behind a reverse proxy, `Baseport__TrustForwardedHeaders=true` is required; without it every visitor shares one budget. See [Going to production](/docs/going-to-production).

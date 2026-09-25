@@ -58,7 +58,7 @@ public class BackupExportTests
         try
         {
             var file = Path.Combine(dir, "baseport-20260101-abcd.db");
-            await File.WriteAllBytesAsync(file, "snapshot bytes"u8.ToArray());
+            await File.WriteAllBytesAsync(file, "snapshot bytes"u8.ToArray(), TestContext.Current.CancellationToken);
             var uploader = new FakeUploader();
 
             await BackupExport.UploadAsync(uploader, file, Configured("nightly"), TestContext.Current.CancellationToken);

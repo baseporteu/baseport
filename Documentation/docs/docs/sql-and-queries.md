@@ -1,25 +1,25 @@
 ---
 title: SQL and scheduled queries
-description: "The read-only SQL console, saved queries, and running one on a cron with a webhook"
+description: "Read-only SQL console, saved queries, and scheduled queries with webhooks"
 ---
 
 # SQL and scheduled queries
 
-Records are stored as JSON in one `_records` table, so anything you want that the REST API does not expose as a filter is a SQL query. The **SQL** rail item is a console over the live database.
+Records are stored as JSON in one `_records` table. The **SQL** console runs read-only queries against the live database, for anything the REST API filters do not cover.
 
-## What the console will run
+## Accepted statements
 
-Statements are checked before they execute:
+Statements must match:
 
 ```
 ^\s*(SELECT|PRAGMA|EXPLAIN|WITH|VALUES)\b
 ```
 
-Anything else is refused, and so is more than one statement. A trailing `;` is fine, one in the middle is not. The connection is opened read-only and `query_only` is set on top of that, so the check is belt and braces rather than the only thing standing between you and a `DROP`.
+Other statements and multiple statements are refused; a trailing `;` is allowed. Execution adds two more guards: `query_only` on the connection, and a SQLite authorizer that allows only reading pragmas (`table_info` and similar, and settings such as `journal_mode` without an argument). A refused statement returns "That statement is not allowed here." Every statement is stopped after 10 seconds.
 
-Results cap at 200 rows (`SqlEngine.MaxRows`). The response says whether it hit the cap instead of quietly handing you a short answer.
+Results are capped at 200 rows (`SqlEngine.MaxRows`); the response reports truncation.
 
-Field values live in `JsonData`, so most queries go through SQLite's JSON1 functions:
+Field values are stored in `JsonData` and read with SQLite's JSON1 functions:
 
 ```sql
 SELECT json_extract(JsonData, '$.OrderNo')  AS order_no,
@@ -30,21 +30,21 @@ WHERE TableId = 'Kf3nQ8xR2vLm'
 ORDER BY CreatedAt DESC;
 ```
 
-`RecordIndexes` maintains a generated column plus an index per indexable field, named `g_<fieldId>`. Querying `json_extract` directly still works and still scans; the planner uses the index when you match the generated column's expression exactly.
+`RecordIndexes` maintains a generated column and an index per indexable field, named `g_<fieldId>`. A plain `json_extract` query scans; the planner uses the index only when the expression matches the generated column exactly.
 
-The console posts rather than gets (`POST /api/_admin/fragments/sql`), so your statement does not end up in an access log. Row count, column count and whether the result was truncated come back in `X-Row-Count`, `X-Column-Count` and `X-Truncated`.
+The console sends statements with `POST /api/_admin/fragments/sql`, so they do not appear in access logs. Row count, column count and truncation are returned in `X-Row-Count`, `X-Column-Count` and `X-Truncated`.
 
 ::: warning
-The console is not filtered by [access rules](/docs/access-rules). An operator session reads everything, including `_users` and `_settings`. That is deliberate, and it is why console access is the thing to guard.
+The console is not filtered by [access rules](/docs/access-rules). An operator session reads every table, including `_users` and `_settings`.
 :::
 
 ## Saved queries
 
-Name a query and it is stored as a `SavedQuery`. That gets you a query you can rerun, and the row a schedule attaches to.
+A named query is stored as a `SavedQuery`, which can be rerun and scheduled.
 
-## Scheduling one
+## Scheduled queries
 
-Give a saved query a cron expression and the same `JobScheduler` tick that runs the maintenance jobs runs it too. Five and six field expressions both parse, along with `@daily` and `@hourly`:
+A saved query with a cron expression runs on the `JobScheduler` tick that runs maintenance jobs. Five- and six-field expressions, `@daily` and `@hourly` are accepted:
 
 ```
 0 7 * * *      07:00 every day
@@ -52,7 +52,7 @@ Give a saved query a cron expression and the same `JobScheduler` tick that runs 
 @hourly
 ```
 
-Set a **webhook URL** and each run POSTs its grid there:
+With a **webhook URL**, each run POSTs its result:
 
 ```json
 {
@@ -63,13 +63,13 @@ Set a **webhook URL** and each run POSTs its grid there:
 }
 ```
 
-Leave the URL empty and the run records its row count against the query instead, which you read in the console.
+Without a URL, the run records its row count on the query, visible in the console.
 
-**Run now** fires it immediately, so you can check the destination works without waiting for the schedule.
+**Run now** executes the query immediately.
 
-Pausing a schedule keeps the cron expression (`ScheduleEnabled` is a separate flag from `Schedule`), so you are not retyping it to switch a report off for a week.
+Pausing keeps the cron expression: `ScheduleEnabled` is separate from `Schedule`.
 
-### What is validated, and when
+### Validation
 
 | Check | On save | At run time |
 | --- | --- | --- |
@@ -77,8 +77,6 @@ Pausing a schedule keeps the cron expression (`ScheduleEnabled` is a separate fl
 | Cron parses | yes | |
 | Webhook URL resolves, and is not private or loopback | yes | yes |
 
-The cron and the URL are checked when you save for the same reason an access rule is: a typo should be a message in the sheet, not a report that silently never arrives.
+At run time the outbound connection uses the `ProxyTarget` guard shared with proxy tables: the host is resolved once, private and loopback addresses are refused, the connection goes to the checked address, and redirects are not followed. **Allow private targets** (Settings) lifts the address check.
 
-The URL is checked again at run time because DNS moves. A hostname that resolved to a public address when you saved it can resolve to `169.254.169.254` later, and this is the same `ProxyTarget` guard proxy tables use. Private and loopback destinations are refused unless **Allow private proxy targets** is on in Settings.
-
-A failing run is recorded on the query rather than thrown, so one broken report does not stop the jobs queued behind it.
+A failing run is recorded on the query and does not stop other queued jobs.

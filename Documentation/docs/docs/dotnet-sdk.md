@@ -1,17 +1,17 @@
 ---
 title: .NET SDK
-description: "Reading and writing records from a .NET app without hand-rolling HTTP"
+description: "Typed .NET client for records, storage, auth and live updates"
 ---
 
 # .NET SDK
 
-`Baseport.Client` targets `net8.0`, so MAUI, WPF, Avalonia and ASP.NET Core hosts can all take it. It wraps the same `/api/v1` routes you would otherwise call with `HttpClient`.
+`Baseport.Client` targets `net8.0` (MAUI, WPF, Avalonia and ASP.NET Core hosts) and wraps the `/api/v1` routes.
 
 ```bash
 dotnet add package Baseport.Client
 ```
 
-## Register it
+## Registration
 
 ```csharp
 services.AddBaseport(o =>
@@ -21,11 +21,11 @@ services.AddBaseport(o =>
 });
 ```
 
-Registers `IBaseportClient` as a singleton over `IHttpClientFactory`. For end-user sessions rather than a shared static token, leave `ApiToken` unset and call `LoginAsync`; the client refreshes a minute before expiry.
+Registers `IBaseportClient` as a singleton over `IHttpClientFactory`. For end-user sessions, `ApiToken` stays unset and `LoginAsync` signs in; the client refreshes the token one minute before expiry.
 
 ## Records
 
-`Records()` takes the table's published API name, not its internal one.
+`Records()` takes the table's API name.
 
 ```csharp
 public sealed record SalesOrder(string OrderNo, decimal Total);
@@ -42,20 +42,20 @@ await orders.UpdateAsync(id, new { Total = 91.0m });
 await orders.DeleteAsync(id);
 ```
 
-`As<T>()` deserializes the record's `data` into your own type.
+`As<T>()` deserializes the record's `data`.
 
-## Walking a whole table
+## Full-table walks
 
 ```csharp
 await foreach (var row in orders.WalkAsync(pageSize: 200, cancellationToken: ct))
     Process(row.As<SalesOrder>());
 ```
 
-Keyset paging under the hood, so page 500 costs what page 1 costs and an insert mid-walk cannot shift unread rows into what you already read. Prefer it over looping `page: 1, 2, 3`, which is `OFFSET` and degrades linearly.
+`WalkAsync` uses keyset paging: constant cost per page, unaffected by concurrent inserts. Numbered pages use `OFFSET`, whose cost grows with the page number.
 
 ## Optimistic concurrency
 
-Records come back with an `ETag`. Pass it to a write and the write is refused if the record moved on since you read it:
+Records carry an `ETag`. A write with the `ETag` is refused when the record changed since it was read:
 
 ```csharp
 var order = await orders.ReadAsync(id);
@@ -66,28 +66,28 @@ try
 }
 catch (BaseportException e) when (e.IsPreconditionFailure)
 {
-    // Someone wrote first. Re-read and decide what to do with their version.
+    // re-read and merge
 }
 ```
 
-The `ETag` is optional. A write that loses a race is refused with `e.IsConflict` either way, because the server holds a concurrency token on the record. Sending the `ETag` moves the failure earlier and tells you which version you were working from.
+The `ETag` is optional. A write that loses a race fails with `e.IsConflict` regardless, through the server's concurrency token; the `ETag` reports the conflict before the write.
 
 ## Errors
 
-Failures throw `BaseportException`, which exposes the server's problem document through `Detail`, `InvalidFields` and a few predicates:
+Failures throw `BaseportException`, exposing the problem document through `Detail`, `InvalidFields` and predicates:
 
 ```csharp
 catch (BaseportException e) when (e.IsValidationFailure)
 {
-    // e.InvalidFields names the fields that were rejected
+    // e.InvalidFields lists rejected fields
 }
 catch (BaseportException e) when (e.IsConflict)
 {
-    // A value that must be unique is already used, or a write lost a race
+    // duplicate unique value, or a lost race
 }
 ```
 
-Split the two in your retry logic: a conflict may succeed with a different value, a validation failure never will.
+A conflict can succeed on retry with a different value; a validation failure cannot.
 
 ## Live updates
 
@@ -96,7 +96,7 @@ await foreach (var change in orders.SubscribeAsync(ct))
     Console.WriteLine($"{change.Action} {change.Id}");
 ```
 
-Pass a record id to watch one row instead of the table. Access rules apply to a stream the same way they apply to a read.
+A record id limits the stream to one record. Read rules filter events as they filter reads.
 
 ## Files
 
@@ -106,8 +106,8 @@ var stored = await client.Storage
     .UploadAsync("photo.png", "image/png", stream, ct);
 ```
 
-`stored.Url` is the address to hand back to a browser. See [Files and uploads](/docs/files).
+`stored.Url` is the public file URL. See [Files and uploads](/docs/files).
 
-## If you only need to verify tokens
+## Token verification only
 
-A service that just checks Baseport JWTs does not need this package. Point `AddJwtBearer` at `/api/auth/v1/jwks.json` with the issuer and audience from **Settings › Authentication**.
+A service that only verifies Baseport JWTs does not need this package: `AddJwtBearer` with `/api/auth/v1/jwks.json` and the issuer and audience from **Settings > Authentication**.

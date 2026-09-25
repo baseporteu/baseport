@@ -5,21 +5,21 @@ description: "From an empty console to a working REST call in five steps"
 
 # How to use Baseport
 
-Five steps to get a table you can read and write over HTTP. Everything else in these pages builds on this.
+Five steps from an empty console to a table that is readable and writable over HTTP.
 
 ## 1. Create a table
 
-Go to **Tables**, add a table and add some fields. Every field has a type, dates are stored as dates and currency amounts as currency amounts. See [Tables and fields](/docs/tables-and-fields).
+**Tables**: add a table and its fields. Each field has a type that determines storage and validation, for example dates as dates and amounts as currency. See [Tables and fields](/docs/tables-and-fields).
 
 ## 2. Publish it
 
-Tables are private by default. On the table's API panel, set an **API name** and turn **API enabled** on. The API name is what appears in the URL. It is separate from the name you see in the console, you can rename a table without breaking anything already calling it.
+Tables are private by default. On the table's API panel, set an **API name** and turn on **API enabled**. The API name forms the URL and is independent of the console name, so renaming a table does not change its routes.
 
 ## 3. Issue a token
 
-Go to **Authentication**, open an account and generate an API token, choosing an expiry date. You see the token once. Only a hash of it is stored, there is no way to look it up later. Copy it somewhere safe.
+**Authentication**: open an account and generate an API token with an expiry date. The token is displayed once; only its hash is stored.
 
-Use a `consumer` account for this. It can hold an API token but cannot sign in to the console.
+Use a `consumer` account: it holds an API token and has no console access.
 
 ## 4. Call it
 
@@ -53,7 +53,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 }
 ```
 
-Writes use the same path. All the routes are listed in the [Web APIs reference](/docs/api).
+Writes use the same path. The [Web APIs reference](/docs/api) lists every route.
 
 ## 5. Watch it change
 
@@ -67,17 +67,17 @@ event: record
 data: {"action":"create","id":"unique-id","record":{"OrderNo":"SO-100000"}}
 ```
 
-You get a Server-Sent Event for every write to that table. Add a record id to the end of the path to follow a single record instead.
+Every write to the table produces one Server-Sent Event. Appending a record id to the path limits the stream to that record.
 
-## Both API switches have to be on
+## API switches
 
-A request has to get past both of these before access rules are even considered:
+Two switches are checked before access rules:
 
-- the account's own **API enabled** switch, which answers `401` when it is off
-- the table's **API enabled** switch, which answers `404` when it is off, so nobody can probe for which tables you have
+- the account's **API enabled** switch: `401` when off;
+- the table's **API enabled** switch: `404` when off, so unpublished tables cannot be discovered.
 
-After that, [access rules](/docs/access-rules) decide which records the caller can see.
+[Access rules](/docs/access-rules) then decide which records the caller can reach.
 
 ## Demo data
 
-An empty console is hard to evaluate. From a source checkout, `./POPULATE.sh` creates products, customers, orders and order lines with references between them: roughly 294,000 rows in about twenty seconds. Prefix it with `SCALE=0.05` for 15,000 rows instead.
+`./POPULATE.sh` (source checkout) creates products, customers, orders and order lines with references between them: about 294,000 rows in roughly twenty seconds. `SCALE=0.05` reduces this to 15,000 rows.

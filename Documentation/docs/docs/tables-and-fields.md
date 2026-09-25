@@ -1,15 +1,15 @@
 ---
 title: Tables and fields
-description: "Modelling your data: field types, constraints and server-computed values"
+description: "Field types, constraints and server-computed values"
 ---
 
 # Tables and fields
 
-Tables live under **Tables** in the console. Records are stored as JSON in one shared table, indexes are managed for you, and every record gets a random 12-character id instead of an auto-incrementing number.
+Tables are managed under **Tables** in the console. Records are stored as JSON in one shared table, indexes are maintained automatically, and each record has a random 12-character id instead of an auto-incrementing number.
 
 ## Field types
 
-A field's type decides what is accepted on write and what the form draws.
+A field's type determines the accepted values on write and the form control.
 
 | Group | Types |
 | --- | --- |
@@ -20,54 +20,54 @@ A field's type decides what is accepted on write and what the form draws.
 | Structured | `json`, `array`, `file`, `reference` |
 | Server owned | `calculated`, `derived`, `systemid` |
 
-`password` fields are hashed on write and never come back in an API response.
+`password` fields are hashed on write and excluded from every API response.
 
-A `currency` field has its own ISO 4217 code, or falls back to the instance default. `date` and `datetime` are stored in UTC and rendered in the instance time zone. Both defaults are in **Settings > Host**, and both travel with a published form's schema so an embed on somebody else's page formats the same way the console does.
+A `currency` field carries an ISO 4217 code, defaulting to the instance currency. `date` and `datetime` are stored in UTC and rendered in the instance time zone. Both defaults are set in **Settings > Host** and are included in a published form's schema, so an embed formats values the same way as the console.
 
 ## Objects and lists
 
-A `json` field holds an object and an `array` field holds a list. Leave them without a schema and they take whatever you send.
+A `json` field holds an object; an `array` field holds a list. Without a schema, both accept any value.
 
-Give one a schema and each member becomes a real field, with `Required`, `Min`, `Max`, `Pattern`, select options and references all working the same way they do at the top level. You can nest three levels deep.
+With a schema, each member is a field with the same `Required`, `Min`, `Max`, `Pattern`, select option and reference validation as a top-level field. Nesting depth is limited to three levels.
 
-The schema shows up in the OpenAPI document too, so generated clients get the shape rather than an untyped object. `PATCH` merges an object member by member, so changing one member does not drop the rest. `PUT` still replaces the whole record.
+The schema is included in the OpenAPI document, so generated clients receive a typed shape. `PATCH` merges an object member by member; `PUT` replaces the whole record.
 
-One difference from top-level fields: a key the schema does not declare is rejected rather than ignored. The schema and the object are written together, so an unexpected member is a mistake worth hearing about.
+Unlike top-level fields, a key the schema does not declare is rejected rather than ignored.
 
-Nested members cannot be `calculated`, `derived`, `systemid`, `slug` or `password`, and cannot be unique or an identifier. All of those are computed or checked over a whole record, and none of those write paths run below the top level. Sorting and filtering only reach top-level fields as well.
+Nested members cannot be `calculated`, `derived`, `systemid`, `slug` or `password`, and cannot be unique or an identifier; those are computed or checked per record at the top level only. Sorting and filtering apply to top-level fields only.
 
 ## Constraints
 
-Every field has `Label`, `HelpText`, `DefaultValue`, `Min`, `Max` and `Pattern`, plus these switches:
+Every field has `Label`, `HelpText`, `DefaultValue`, `Min`, `Max` and `Pattern`, and these switches:
 
-- **Required** rejects a write that leaves the field empty
-- **Unique** rejects a write that repeats a value already stored
-- **Identifier** is the field a lookup form matches on. Turning it on turns **Required** on too
-- **Hidden** keeps the field out of forms
-- **Read only** shows the value in a form but does not let anyone edit it
+- **Required**: rejects a write that leaves the field empty.
+- **Unique**: rejects a write that repeats a stored value.
+- **Identifier**: the field a lookup form matches on. Implies **Required**.
+- **Hidden**: excluded from forms.
+- **Read only**: displayed in a form, not editable.
 
-All of this is enforced in one place. Writes from a form, from the REST API and from the console run through the same validation code, so they cannot disagree.
+Forms, the REST API and the console share one validation path.
 
-Turning **Unique** or **Identifier** on is a claim about the rows you already have, not just about the next write, so both are checked against the stored data when you save the field. If the column has duplicates you are told which values, and the save is refused until you clear them. That usually comes up right after an import, where the column you want as a key is the one the file already had.
+**Unique** and **Identifier** are checked against stored data when the field is saved. Existing duplicates are listed and the save is refused until they are resolved, which typically applies after an import.
 
-**Identifier** has to be **Required** because it is the value someone types to find their own record. A row without one could never be found by it.
+**Identifier** requires **Required**: a record without an identifier value cannot be found by a lookup.
 
-Values are compared without regard to case, so `A-1` and `a-1` count as the same value. That matches how a lookup form searches, which is what stops a form finding two records where you meant one.
+Comparison is case-insensitive (`A-1` equals `a-1`), matching lookup form search, so a lookup never matches two records.
 
-`Pattern` is a regular expression. It runs on requests that need no authentication, so it is evaluated with a 100 millisecond timeout, and a pattern too slow on ordinary input is rejected when you save the field instead of failing later.
+`Pattern` is a regular expression evaluated with a 100 millisecond timeout, because it runs on unauthenticated requests. A pattern too slow on ordinary input is rejected when the field is saved.
 
 ## Server-computed fields
 
-These three ignore anything a client sends for them. The expression is checked when you save the field, not when somebody writes a record.
+Client-supplied values for these types are ignored. Expressions are validated when the field is saved.
 
-- `systemid` gets a random short id when the record is created
-- `calculated` runs a JavaScript expression over the record and shows the result in forms
-- `derived` is the same thing, but never rendered in a form
+- `systemid`: a random short id assigned on create.
+- `calculated`: a JavaScript expression over the record; the result is displayed in forms.
+- `derived`: as `calculated`, never rendered in a form.
 
-Add one of these to a table that already has rows and the existing rows are filled in too, so you do not end up with a column that is populated only for records somebody happened to edit afterwards.
+Adding one of these fields to a table with rows fills in the existing rows.
 
 ## Publishing
 
-A table needs an **API name** before you can turn its API on: url-safe, unique, and not a reserved word. Routes, OpenAPI tags and schema names all come from that name, so renaming the table in the console cannot break anything already calling it.
+A table requires an **API name** before its API can be enabled: url-safe, unique, not a reserved word. Routes, OpenAPI tags and schema names derive from it, so a console rename does not change the published contract.
 
-You can also restrict which methods a table answers. Turn `DELETE` off and it disappears from the OpenAPI document as well as from the routes, rather than being documented as something that then refuses.
+The methods a table answers are configurable. A disabled method is removed from the OpenAPI document and answered with `405`.
