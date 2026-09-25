@@ -33,8 +33,10 @@ public static class RecordEvents
     internal static int SubscriberCount => Subscribers.Count;
 }
 
-public sealed class RecordChangeInterceptor : SaveChangesInterceptor
+// transaction events wait for commit
+public sealed class RecordChangeInterceptor : SaveChangesInterceptor, IDbTransactionInterceptor
 {
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<DbContext, List<RecordEvent>> _deferred = new();
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<DbContext, List<RecordEvent>> _pending = new();
 
@@ -113,8 +115,58 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor
     private List<RecordEvent> Flush(DbContext? context)
     {
         if (context is null || !_pending.TryRemove(context, out var pending)) return new List<RecordEvent>();
-        foreach (var e in pending) RecordEvents.Publish(e);
+        if (context.Database.CurrentTransaction is not null)
+            _deferred.AddOrUpdate(context, _ => [.. pending], (_, held) => { held.AddRange(pending); return held; });
+        else
+            foreach (var e in pending) RecordEvents.Publish(e);
         return pending;
+    }
+
+    private void Release(DbContext? context)
+    {
+        if (context is null || !_deferred.TryRemove(context, out var held)) return;
+        foreach (var e in held) RecordEvents.Publish(e);
+    }
+
+    private void Forget(DbContext? context)
+    {
+        if (context is not null) _deferred.TryRemove(context, out _);
+    }
+
+    System.Data.Common.DbTransaction IDbTransactionInterceptor.TransactionStarted(System.Data.Common.DbConnection connection, TransactionEndEventData eventData, System.Data.Common.DbTransaction result)
+    {
+        Forget(eventData.Context);
+        return result;
+    }
+
+    ValueTask<System.Data.Common.DbTransaction> IDbTransactionInterceptor.TransactionStartedAsync(System.Data.Common.DbConnection connection, TransactionEndEventData eventData, System.Data.Common.DbTransaction result, CancellationToken cancellationToken)
+    {
+        Forget(eventData.Context);
+        return ValueTask.FromResult(result);
+    }
+
+    void IDbTransactionInterceptor.TransactionCommitted(System.Data.Common.DbTransaction transaction, TransactionEndEventData eventData) => Release(eventData.Context);
+
+    Task IDbTransactionInterceptor.TransactionCommittedAsync(System.Data.Common.DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken)
+    {
+        Release(eventData.Context);
+        return Task.CompletedTask;
+    }
+
+    void IDbTransactionInterceptor.TransactionRolledBack(System.Data.Common.DbTransaction transaction, TransactionEndEventData eventData) => Forget(eventData.Context);
+
+    Task IDbTransactionInterceptor.TransactionRolledBackAsync(System.Data.Common.DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken)
+    {
+        Forget(eventData.Context);
+        return Task.CompletedTask;
+    }
+
+    void IDbTransactionInterceptor.TransactionFailed(System.Data.Common.DbTransaction transaction, TransactionErrorEventData eventData) => Forget(eventData.Context);
+
+    Task IDbTransactionInterceptor.TransactionFailedAsync(System.Data.Common.DbTransaction transaction, TransactionErrorEventData eventData, CancellationToken cancellationToken)
+    {
+        Forget(eventData.Context);
+        return Task.CompletedTask;
     }
 
     private void Discard(DbContext? context)

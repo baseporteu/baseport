@@ -11,7 +11,6 @@ public static class FileStore
 
     public static string Directory { get; private set; } = "";
 
-    // ponytail: instance-wide cap, per-account when multi-tenant
     internal static long CapBytes = 10240L * 1024 * 1024;
 
     internal static long MinFreeBytes = 1024L * 1024 * 1024;

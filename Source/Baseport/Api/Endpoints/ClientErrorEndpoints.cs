@@ -14,13 +14,21 @@ public static class ClientErrorEndpoints
 
     public static void MapClientErrorEndpoints(this WebApplication app)
     {
-        app.MapPost(Route, (HttpContext ctx, AuditLogWriter audit, JsonObject body) =>
-        {
-            var message = Clean(Text(body, "message"), MessageMax);
-            var page = Clean(Text(body, "page"), PageMax);
+        app.MapPost(Route, async (HttpContext ctx, AppDbContext db, AuditLogWriter audit, JsonObject body) =>
+            Record(audit, body, await AdminAuth.ResolveAsync(db, ctx))).RequireRateLimiting(RateLimit.ClientError);
+    }
 
-            if (message.Length == 0) return Results.NoContent();
+    // only admin reports reach the audit log
+    internal static IResult Record(AuditLogWriter audit, JsonObject body, UserAccount? caller)
+    {
+        var message = Clean(Text(body, "message"), MessageMax);
+        var page = Clean(Text(body, "page"), PageMax);
 
+        if (message.Length == 0) return Results.NoContent();
+
+        Serilog.Log.Warning("Client error on {Page}: {Message}", page.Length > 0 ? page : "an unknown page", message);
+
+        if (caller is { Role: AccountRoles.Admin })
             audit.Enqueue(new AuditLog
             {
                 Id = Ids.NewShortId(12),
@@ -29,13 +37,10 @@ public static class ClientErrorEndpoints
                 Path = page,
                 Status = 0,
                 Message = message,
-                UserId = AdminAuth.UserIdFor(ctx) ?? ""
+                UserId = caller.Id
             });
 
-            Serilog.Log.Warning("Client error on {Page}: {Message}", page.Length > 0 ? page : "an unknown page", message);
-
-            return Results.NoContent();
-        }).RequireRateLimiting(RateLimit.ClientError);
+        return Results.NoContent();
     }
 
     internal static string Clean(string value, int max)

@@ -133,7 +133,7 @@ public static class LoginGuard
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (int Failures, DateTime LockedUntil, DateTime TouchedAt)> State =
         new(System.StringComparer.OrdinalIgnoreCase);
 
-    // per client, so nobody can lock an operator out; the auth budget and totp cover distributed guessing
+    // keyed by account and client
     public static string Key(string account, HttpContext ctx) => $"{account}|{RateLimit.ClientKey(ctx)}";
 
     public static bool Allowed(string key)

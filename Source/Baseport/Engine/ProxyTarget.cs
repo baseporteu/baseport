@@ -11,7 +11,7 @@ public static class ProxyTarget
 
     public const string OidcClient = "oidc";
 
-    // the operator's identity provider may sit on a private network, so only redirects are refused there
+    // oidc may reach a private idp
     public static IServiceCollection AddOutboundHttp(this IServiceCollection services)
     {
         services.AddHttpClient();
@@ -20,7 +20,7 @@ public static class ProxyTarget
         return services;
     }
 
-    // resolves once and connects to the address it checked, so a rebinding DNS answer cannot slip past
+    // connect only to the checked address
     internal static SocketsHttpHandler Handler(bool? allowPrivate = null) => new()
     {
         AllowAutoRedirect = false,

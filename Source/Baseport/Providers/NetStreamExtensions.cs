@@ -4,7 +4,7 @@ internal static class NetStreamExtensions
 {
     public const int MaxMessageBytes = 1 << 20;
 
-    // ceiling per listener, see "Wire listeners" in AGENTS.md
+    // connections per listener
     public const int MaxConnections = 32;
 
     internal static TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(10);

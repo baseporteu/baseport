@@ -5,8 +5,7 @@ also happens to speak $filter/$top -- some real REST APIs do.
 Deliberately not supported: $filter's `or` and parentheses, and cross-field
 `$expand`. Baseport itself only ever sends a single `eq`/`contains` condition and
 `$top`, a full boolean-expression parser buys nothing a real caller here would
-use; adding one on spec alone is exactly the kind of speculative surface ponytail
-says to skip. `and`-chains of simple conditions cover everything realistic.
+use, so adding one on spec alone would be speculative. `and`-chains of simple conditions cover everything realistic.
 """
 
 import re

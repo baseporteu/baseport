@@ -28,12 +28,18 @@ public sealed class OutboundHttpTests : IAsyncDisposable
             {
                 using var socket = await _listener.AcceptSocketAsync(_stop.Token);
                 var buffer = new byte[4096];
-                await socket.ReceiveAsync(buffer, SocketFlags.None, _stop.Token);
+                var request = "";
+                while (!request.Contains("\r\n\r\n"))
+                {
+                    var read = await socket.ReceiveAsync(buffer, SocketFlags.None, _stop.Token);
+                    if (read == 0) break;
+                    request += Encoding.ASCII.GetString(buffer, 0, read);
+                }
                 await socket.SendAsync(Encoding.ASCII.GetBytes(
                     "HTTP/1.1 302 Found\r\nLocation: http://203.0.113.9/elsewhere\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"), SocketFlags.None, _stop.Token);
             }
         }
-        catch (Exception ex) when (ex is OperationCanceledException or SocketException or ObjectDisposedException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or SocketException or ObjectDisposedException or InvalidOperationException) { }
     }
 
     public async ValueTask DisposeAsync()

@@ -50,6 +50,76 @@ public class RecordTransactionsTests : IDisposable
     private static UserAccount Caller(string id = "tester", string role = AccountRoles.Consumer, string apiTokenMethods = ApiMethods.Default) =>
         new() { Id = id, Role = role, ApiTokenMethods = apiTokenMethods };
 
+    private static List<RecordEvent> Drain(System.Threading.Channels.Channel<RecordEvent> channel, string tableId)
+    {
+        var events = new List<RecordEvent>();
+        while (channel.Reader.TryRead(out var e))
+            if (e.TableId == tableId) events.Add(e);
+        return events;
+    }
+
+    [Fact]
+    public async Task A_rolled_back_transactional_batch_emits_no_event()
+    {
+        var table = await NotesAsync();
+        var channel = RecordEvents.Subscribe();
+        try
+        {
+            var outcome = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
+            {
+                Create("notes", "never happened"),
+                Update("notes", "no-such-record", "x")
+            }, transactional: true, Caller(), TestContext.Current.CancellationToken);
+
+            Assert.True(outcome.HasErrors);
+            Assert.Empty(Drain(channel, table.Id));
+        }
+        finally
+        {
+            RecordEvents.Unsubscribe(channel);
+        }
+    }
+
+    [Fact]
+    public async Task A_committed_transactional_batch_emits_every_event_once()
+    {
+        var table = await NotesAsync();
+        var channel = RecordEvents.Subscribe();
+        try
+        {
+            var outcome = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
+            {
+                Create("notes", "one"),
+                Create("notes", "two")
+            }, transactional: true, Caller(), TestContext.Current.CancellationToken);
+
+            Assert.False(outcome.HasErrors);
+            Assert.Equal(outcome.Ids!.Order(), Drain(channel, table.Id).Select(e => e.RecordId).Order());
+        }
+        finally
+        {
+            RecordEvents.Unsubscribe(channel);
+        }
+    }
+
+    [Fact]
+    public async Task A_non_transactional_write_still_emits_immediately()
+    {
+        var table = await NotesAsync();
+        var channel = RecordEvents.Subscribe();
+        try
+        {
+            await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation> { Create("notes", "now") },
+                transactional: false, Caller(), TestContext.Current.CancellationToken);
+
+            Assert.Single(Drain(channel, table.Id));
+        }
+        finally
+        {
+            RecordEvents.Unsubscribe(channel);
+        }
+    }
+
     [Fact]
     public async Task Sequential_operations_apply_and_return_one_id_per_operation()
     {

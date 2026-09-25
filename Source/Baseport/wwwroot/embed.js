@@ -336,7 +336,7 @@
             [...el.attributes].forEach((attr) => {
                 const name = attr.name.toLowerCase();
                 // on* is script by another name.
-                if (name.startsWith('on') || isUnsafeUrl(attr.value)) {
+                if (name.startsWith('on') || name === 'style' || isUnsafeUrl(attr.value)) {
                     el.removeAttribute(attr.name);
                 }
             });
@@ -353,12 +353,16 @@
         }
     }
 
+    // escapes strings at any depth
+    function escapeDeep(v) {
+        if (typeof v === 'string') return escapeHtml(v);
+        if (Array.isArray(v)) return v.map(escapeDeep);
+        if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, escapeDeep(x)]));
+        return v;
+    }
+
     function renderCell(expression, data) {
-        const safe = {};
-        Object.keys(data || {}).forEach((k) => {
-            const v = data[k];
-            safe[k] = typeof v === 'string' ? escapeHtml(v) : v;
-        });
+        const safe = escapeDeep(data || {});
         try {
             const out = new Function('data', 'return ' + expression)(safe);
             return out === null || out === undefined ? '' : String(out);

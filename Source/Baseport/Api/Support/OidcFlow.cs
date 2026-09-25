@@ -29,7 +29,7 @@ public static class OidcFlow
 
     public static string Binding(string state) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(state)));
 
-    // lax: the provider's redirect back is a cross-site top-level navigation
+    // lax survives the idp redirect back
     public static void Bind(Microsoft.AspNetCore.Http.HttpContext ctx, string state) =>
         ctx.Response.Cookies.Append(BindingCookie, Binding(state), new Microsoft.AspNetCore.Http.CookieOptions
         {

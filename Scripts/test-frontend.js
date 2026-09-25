@@ -2525,5 +2525,44 @@ test('renaming a key/value row does not rebuild the row (a rename fires on blur,
     assert.ok(/let currentKey = initialKey/.test(list), 'each row no longer tracks its own current key across a rename');
 });
 
+/* embed.js: visitor data reaching an author's render expression */
+
+// runs embed.js functions by name
+function embedFunctions(...names) {
+    const src = read('embed.js');
+    const bodies = names.map((name) => {
+        const start = src.indexOf(`function ${name}(`);
+        assert.ok(start >= 0, `embed.js no longer defines ${name}`);
+        let depth = 0;
+        for (let i = src.indexOf('{', start); i < src.length; i++) {
+            if (src[i] === '{') depth++;
+            if (src[i] === '}' && --depth === 0) return src.slice(start, i + 1);
+        }
+        throw new Error(`unbalanced braces in ${name}`);
+    });
+    return new Function(`const displayValue = (v) => String(v); ${bodies.join('\n')} return { ${names.join(', ')} };`)();
+}
+
+test('a multiselect value cannot inject markup through a render expression', () => {
+    const { renderCell } = embedFunctions('renderCell', 'escapeDeep', 'escapeHtml');
+    const out = renderCell("'<td>' + data.tags + '</td>'", { tags: ['ok', '<a href=https://evil.example style=position:fixed>win</a>'] });
+
+    assert.ok(!out.includes('<a '), `array item reached the markup raw: ${out}`);
+    assert.ok(out.includes('ok'), 'the harmless item was lost');
+});
+
+test('a json field value is escaped before a render expression sees it', () => {
+    const { renderCell } = embedFunctions('renderCell', 'escapeDeep', 'escapeHtml');
+    const out = renderCell("'<b>' + data.meta.note + '</b>'", { meta: { note: '<img src=x onerror=alert(1)>' } });
+
+    assert.ok(!out.includes('<img'), `object property reached the markup raw: ${out}`);
+});
+
+test('setSafeHtml strips style attributes', () => {
+    const src = read('embed.js');
+    const body = src.slice(src.indexOf('function setSafeHtml('), src.indexOf('function safeEval('));
+    assert.ok(/name === 'style'/.test(body), 'setSafeHtml keeps style attributes');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

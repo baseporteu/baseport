@@ -7,6 +7,18 @@ public static class AuditLogMiddleware
     public static void Note(HttpContext ctx, string message) =>
         ctx.Items[NoteKey] = ClientErrorEndpoints.Clean(message, 200);
 
+    // routing ignores case
+    internal static bool ShouldLog(string path, string method, bool hasNote)
+    {
+        if (!path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/api/_admin/logs", StringComparison.OrdinalIgnoreCase)
+            || path.Equals(ClientErrorEndpoints.Route, StringComparison.OrdinalIgnoreCase)) return false;
+
+        return hasNote
+            || !(HttpMethods.IsGet(method) || HttpMethods.IsHead(method) || HttpMethods.IsOptions(method))
+            || path.StartsWith("/api/_admin", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static IApplicationBuilder UseAuditLog(this IApplicationBuilder app) =>
         app.Use(async (context, next) =>
         {
@@ -16,11 +28,7 @@ public static class AuditLogMiddleware
             await next();
 
             var note = context.Items[NoteKey] as string;
-            var isConsoleRead = path.StartsWith("/api/_admin", StringComparison.Ordinal);
-
-            if (method is "GET" or "HEAD" or "OPTIONS" && note is null && !isConsoleRead) return;
-
-            if (!path.StartsWith("/api", StringComparison.Ordinal) || path == "/api/_admin/logs" || path == ClientErrorEndpoints.Route) return;
+            if (!ShouldLog(path, method, note is not null)) return;
 
             context.RequestServices.GetRequiredService<AuditLogWriter>().Enqueue(new AuditLog
             {
