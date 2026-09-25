@@ -39,6 +39,7 @@ appsettings.*.local.json
 *.md
 !README.md
 !CONTRIBUTING.md
+!SECURITY.md
 !CONFIGURATION.md
 !Documentation/**/*.md
 
