@@ -139,6 +139,10 @@ baseport providers postgres enable --port 5432 --bind 127.0.0.1
 baseport providers tds disable
 ```
 
+## AI agents
+
+Record data and form submissions are untrusted input. An AI agent that reads them can be steered by whatever a visitor typed. Give an agent a `consumer` account whose API token has only the methods it needs, an expiry, and read rules that limit it to the rows it works on.
+
 ## Updating
 
 `baseport update` replaces the binary and leaves `baseport.db`, `baseport.key`, `log/`, `uploads/`, `backups/` and your `appsettings.json` alone. It reinstalls into the same directory you first installed to.

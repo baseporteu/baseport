@@ -184,6 +184,7 @@ try
         RequestPath = "/uploads",
         ServeUnknownFileTypes = false
     });
+    app.UseSameOriginWrites();
     app.UseAdminSurface();
     app.UseAuditLog();
     app.UseAdminAuth();
