@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR_DIR="$ROOT/Source/Baseport/wwwroot/js/vendor"
 mkdir -p "$VENDOR_DIR"
 
-SCALAR_VERSION="1.64.0"
+SCALAR_VERSION="1.72.1"
 PREACT_VERSION="10.29.8"
 HTM_VERSION="3.1.1"
 
