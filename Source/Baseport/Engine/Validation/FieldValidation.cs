@@ -89,7 +89,8 @@ public static class FieldValidation
     }
 
     public static string? RefTableId(string optionsJson)
-    {        try
+    {
+        try
         {
             var o = JsonSerializer.Deserialize<JsonElement>(string.IsNullOrWhiteSpace(optionsJson) ? "{}" : optionsJson);
             if (o.ValueKind == JsonValueKind.Object && o.TryGetProperty("tableId", out var tid) &&
@@ -817,18 +818,18 @@ public static class FieldValidation
     {
         var errs = new List<string>();
         {
-                var match = StringArray(config, "matchFields");
-                if (match.Count == 0)
-                    errs.Add("A lookup needs at least one identifier field to match on.");
-                foreach (var n in match)
-                {
-                    var f = fields.FirstOrDefault(x => x.Name == n);
-                    if (f is null) { errs.Add($"Lookup references unknown field '{n}'."); continue; }
+            var match = StringArray(config, "matchFields");
+            if (match.Count == 0)
+                errs.Add("A lookup needs at least one identifier field to match on.");
+            foreach (var n in match)
+            {
+                var f = fields.FirstOrDefault(x => x.Name == n);
+                if (f is null) { errs.Add($"Lookup references unknown field '{n}'."); continue; }
 
-                    if (f.IsHidden) errs.Add($"'{DisplayName(f)}' is hidden and cannot be a lookup identifier.");
-                    else if (NormalizeType(f.DataType) is "multiselect" or "file")
-                        errs.Add($"'{DisplayName(f)}' is not a usable lookup identifier.");
-                }
+                if (f.IsHidden) errs.Add($"'{DisplayName(f)}' is hidden and cannot be a lookup identifier.");
+                else if (NormalizeType(f.DataType) is "multiselect" or "file")
+                    errs.Add($"'{DisplayName(f)}' is not a usable lookup identifier.");
+            }
             errs.AddRange(UnknownNames(config, "resultFields", names, "Lookup result"));
             if (StringArray(config, "resultFields").Count == 0)
                 errs.Add("A lookup needs at least one field to show when a record is found.");
@@ -840,54 +841,54 @@ public static class FieldValidation
     {
         var errs = new List<string>();
         {
-                var columns = StringArray(config, "columns");
-                if (columns.Count == 0) errs.Add("A list needs at least one column.");
-                errs.AddRange(UnknownNames(config, "columns", names, "List column"));
-                errs.AddRange(UnknownNames(config, "searchFields", names, "List search field"));
+            var columns = StringArray(config, "columns");
+            if (columns.Count == 0) errs.Add("A list needs at least one column.");
+            errs.AddRange(UnknownNames(config, "columns", names, "List column"));
+            errs.AddRange(UnknownNames(config, "searchFields", names, "List search field"));
 
-                var sort = config.TryGetProperty("sortField", out var sf) && sf.ValueKind == JsonValueKind.String ? sf.GetString() ?? "" : "";
-                if (sort.Length > 0 && !names.Contains(sort)) errs.Add($"List sorts on unknown field '{sort}'.");
+            var sort = config.TryGetProperty("sortField", out var sf) && sf.ValueKind == JsonValueKind.String ? sf.GetString() ?? "" : "";
+            if (sort.Length > 0 && !names.Contains(sort)) errs.Add($"List sorts on unknown field '{sort}'.");
 
-                var dir = config.TryGetProperty("sortDir", out var sd) && sd.ValueKind == JsonValueKind.String ? sd.GetString() ?? "desc" : "desc";
-                if (dir is not ("asc" or "desc")) errs.Add("List sort direction must be 'asc' or 'desc'.");
+            var dir = config.TryGetProperty("sortDir", out var sd) && sd.ValueKind == JsonValueKind.String ? sd.GetString() ?? "desc" : "desc";
+            if (dir is not ("asc" or "desc")) errs.Add("List sort direction must be 'asc' or 'desc'.");
 
-                if (config.TryGetProperty("filters", out var fl) && fl.ValueKind == JsonValueKind.Array)
-                    foreach (var f in fl.EnumerateArray())
-                    {
-                        var fname = f.ValueKind == JsonValueKind.Object && f.TryGetProperty("field", out var fn) && fn.ValueKind == JsonValueKind.String ? fn.GetString() ?? "" : "";
-                        if (!names.Contains(fname)) { errs.Add($"List filter references unknown field '{fname}'."); continue; }
-                        var fop = f.TryGetProperty("op", out var op2) && op2.ValueKind == JsonValueKind.String ? op2.GetString() ?? "eq" : "eq";
-                        if (!QueryEngine.FilterOperators.Contains(fop)) errs.Add($"List filter uses unknown operator '{fop}'.");
-                    }
-
-                if (config.TryGetProperty("pageSize", out var ps))
+            if (config.TryGetProperty("filters", out var fl) && fl.ValueKind == JsonValueKind.Array)
+                foreach (var f in fl.EnumerateArray())
                 {
-
-                    if (ps.ValueKind != JsonValueKind.Number || !ps.TryGetInt32(out var size) || size < 0 || size > QueryEngine.MaxPageSize)
-                        errs.Add($"List page size must be a whole number between 0 and {QueryEngine.MaxPageSize}.");
+                    var fname = f.ValueKind == JsonValueKind.Object && f.TryGetProperty("field", out var fn) && fn.ValueKind == JsonValueKind.String ? fn.GetString() ?? "" : "";
+                    if (!names.Contains(fname)) { errs.Add($"List filter references unknown field '{fname}'."); continue; }
+                    var fop = f.TryGetProperty("op", out var op2) && op2.ValueKind == JsonValueKind.String ? op2.GetString() ?? "eq" : "eq";
+                    if (!QueryEngine.FilterOperators.Contains(fop)) errs.Add($"List filter uses unknown operator '{fop}'.");
                 }
 
-                if (config.TryGetProperty("renderers", out var rend) && rend.ValueKind == JsonValueKind.Object)
-                    foreach (var r in rend.EnumerateObject())
-                    {
-                        if (!names.Contains(r.Name)) { errs.Add($"List renderer targets unknown column '{r.Name}'."); continue; }
-                        if (r.Value.ValueKind != JsonValueKind.String) { errs.Add($"Renderer for '{r.Name}' must be an expression string."); continue; }
-                        var expr = r.Value.GetString() ?? "";
-                        if (string.IsNullOrWhiteSpace(expr)) continue;
-                        var vr = JsExpr.Validate(expr, names);
-                        if (!vr.Valid) errs.AddRange(vr.Errors.Select(e => $"Renderer for '{r.Name}': {e}"));
-                    }
+            if (config.TryGetProperty("pageSize", out var ps))
+            {
 
-                if (config.TryGetProperty("actions", out var acts) && acts.ValueKind == JsonValueKind.Array)
-                    foreach (var a in acts.EnumerateArray())
-                    {
-                        var label = a.ValueKind == JsonValueKind.Object && a.TryGetProperty("label", out var lb) && lb.ValueKind == JsonValueKind.String ? lb.GetString() ?? "" : "";
-                        if (string.IsNullOrWhiteSpace(label)) { errs.Add("List action requires a label."); continue; }
-                        var hrefExpr = a.ValueKind == JsonValueKind.Object && a.TryGetProperty("hrefExpr", out var he) && he.ValueKind == JsonValueKind.String ? he.GetString() ?? "" : "";
-                        if (string.IsNullOrWhiteSpace(hrefExpr)) { errs.Add($"Action '{label}' requires a URL expression."); continue; }
-                        var vr = JsExpr.Validate(hrefExpr, names);
-                        if (!vr.Valid) errs.AddRange(vr.Errors.Select(e => $"Action '{label}': {e}"));
-                    }
+                if (ps.ValueKind != JsonValueKind.Number || !ps.TryGetInt32(out var size) || size < 0 || size > QueryEngine.MaxPageSize)
+                    errs.Add($"List page size must be a whole number between 0 and {QueryEngine.MaxPageSize}.");
+            }
+
+            if (config.TryGetProperty("renderers", out var rend) && rend.ValueKind == JsonValueKind.Object)
+                foreach (var r in rend.EnumerateObject())
+                {
+                    if (!names.Contains(r.Name)) { errs.Add($"List renderer targets unknown column '{r.Name}'."); continue; }
+                    if (r.Value.ValueKind != JsonValueKind.String) { errs.Add($"Renderer for '{r.Name}' must be an expression string."); continue; }
+                    var expr = r.Value.GetString() ?? "";
+                    if (string.IsNullOrWhiteSpace(expr)) continue;
+                    var vr = JsExpr.Validate(expr, names);
+                    if (!vr.Valid) errs.AddRange(vr.Errors.Select(e => $"Renderer for '{r.Name}': {e}"));
+                }
+
+            if (config.TryGetProperty("actions", out var acts) && acts.ValueKind == JsonValueKind.Array)
+                foreach (var a in acts.EnumerateArray())
+                {
+                    var label = a.ValueKind == JsonValueKind.Object && a.TryGetProperty("label", out var lb) && lb.ValueKind == JsonValueKind.String ? lb.GetString() ?? "" : "";
+                    if (string.IsNullOrWhiteSpace(label)) { errs.Add("List action requires a label."); continue; }
+                    var hrefExpr = a.ValueKind == JsonValueKind.Object && a.TryGetProperty("hrefExpr", out var he) && he.ValueKind == JsonValueKind.String ? he.GetString() ?? "" : "";
+                    if (string.IsNullOrWhiteSpace(hrefExpr)) { errs.Add($"Action '{label}' requires a URL expression."); continue; }
+                    var vr = JsExpr.Validate(hrefExpr, names);
+                    if (!vr.Valid) errs.AddRange(vr.Errors.Select(e => $"Action '{label}': {e}"));
+                }
         }
         return errs;
     }

@@ -66,63 +66,63 @@ public static class RecordTransactions
         switch (op.Op)
         {
             case "create":
-            {
-                var obj = op.Value ?? new JsonObject();
-                var outcome = await RecordEngine.PrepareAsync(db, table, fields, obj);
-                if (outcome.HasErrors) 
-                    return FailFrom(outcome, op.ApiName);
+                {
+                    var obj = op.Value ?? new JsonObject();
+                    var outcome = await RecordEngine.PrepareAsync(db, table, fields, obj);
+                    if (outcome.HasErrors)
+                        return FailFrom(outcome, op.ApiName);
 
-                if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, caller.Id, request: obj, callerRole: caller.Role))
-                    return Fail(ApiProblem.Forbidden, $"That record is not yours to create in '{op.ApiName}'.");
+                    if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, caller.Id, request: obj, callerRole: caller.Role))
+                        return Fail(ApiProblem.Forbidden, $"That record is not yours to create in '{op.ApiName}'.");
 
-                var record = new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
-                db.Records.Add(record);
-                await db.SaveChangesAsync(ct);
+                    var record = new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
+                    db.Records.Add(record);
+                    await db.SaveChangesAsync(ct);
 
-                db.Entry(record).State = EntityState.Detached;
+                    db.Entry(record).State = EntityState.Detached;
 
-                return new Outcome([record.Id], null, null);
-            }
+                    return new Outcome([record.Id], null, null);
+                }
             case "update":
-            {
-                if (string.IsNullOrEmpty(op.RecordId)) 
-                    return Fail(ApiProblem.BadRequest, "update needs a recordId.");
+                {
+                    if (string.IsNullOrEmpty(op.RecordId))
+                        return Fail(ApiProblem.BadRequest, "update needs a recordId.");
 
-                var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == op.RecordId, ct);
-                if (record is null) 
-                    return Fail(ApiProblem.NotFound, $"Record '{op.RecordId}' not found in '{op.ApiName}'.");
+                    var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == op.RecordId, ct);
+                    if (record is null)
+                        return Fail(ApiProblem.NotFound, $"Record '{op.RecordId}' not found in '{op.ApiName}'.");
 
-                var obj = op.Value ?? new JsonObject();
-                if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Update, caller.Id, op.RecordId, request: obj, callerRole: caller.Role))
-                    return Fail(ApiProblem.Forbidden, $"Record '{op.RecordId}' is not yours to change.");
+                    var obj = op.Value ?? new JsonObject();
+                    if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Update, caller.Id, op.RecordId, request: obj, callerRole: caller.Role))
+                        return Fail(ApiProblem.Forbidden, $"Record '{op.RecordId}' is not yours to change.");
 
-                var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, obj, replace: false);
-                if (outcome.HasErrors) 
-                    return FailFrom(outcome, op.ApiName);
+                    var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, obj, replace: false);
+                    if (outcome.HasErrors)
+                        return FailFrom(outcome, op.ApiName);
 
-                record.JsonData = merged.ToJsonString();
-                await db.SaveChangesAsync(ct);
-                db.Entry(record).State = EntityState.Detached;
+                    record.JsonData = merged.ToJsonString();
+                    await db.SaveChangesAsync(ct);
+                    db.Entry(record).State = EntityState.Detached;
 
-                return new Outcome([record.Id], null, null);
-            }
+                    return new Outcome([record.Id], null, null);
+                }
             case "delete":
-            {
-                if (string.IsNullOrEmpty(op.RecordId)) 
-                    return Fail(ApiProblem.BadRequest, "delete needs a recordId.");
+                {
+                    if (string.IsNullOrEmpty(op.RecordId))
+                        return Fail(ApiProblem.BadRequest, "delete needs a recordId.");
 
-                var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == op.RecordId, ct);
-                if (record is null) 
-                    return Fail(ApiProblem.NotFound, $"Record '{op.RecordId}' not found in '{op.ApiName}'.");
+                    var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == op.RecordId, ct);
+                    if (record is null)
+                        return Fail(ApiProblem.NotFound, $"Record '{op.RecordId}' not found in '{op.ApiName}'.");
 
-                if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Delete, caller.Id, op.RecordId, callerRole: caller.Role))
-                    return Fail(ApiProblem.Forbidden, $"Record '{op.RecordId}' is not yours to delete.");
+                    if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Delete, caller.Id, op.RecordId, callerRole: caller.Role))
+                        return Fail(ApiProblem.Forbidden, $"Record '{op.RecordId}' is not yours to delete.");
 
-                db.Records.Remove(record);
-                await db.SaveChangesAsync(ct);
+                    db.Records.Remove(record);
+                    await db.SaveChangesAsync(ct);
 
-                return new Outcome([record.Id], null, null);
-            }
+                    return new Outcome([record.Id], null, null);
+                }
             default:
                 return Fail(ApiProblem.BadRequest, $"'{op.Op}' must be create, update or delete.");
         }

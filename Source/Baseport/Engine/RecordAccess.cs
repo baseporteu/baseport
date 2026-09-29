@@ -66,9 +66,9 @@ public static partial class RecordAccess
     public static string? Problem(string? rule, IReadOnlyList<FieldDefinition> fields)
     {
         if (string.IsNullOrWhiteSpace(rule)) return null;
-        if (rule.Length > 2000) 
+        if (rule.Length > 2000)
             return "An access rule must be 2000 characters or fewer.";
-        if (rule.Contains(';')) 
+        if (rule.Contains(';'))
             return "An access rule is a single expression and cannot contain ';'.";
         if (ShapeProblem(rule) is { } shape)
             return shape;
@@ -80,7 +80,7 @@ public static partial class RecordAccess
 
             if (alias == "_USER_")
             {
-                if (name is not ("id" or "role")) 
+                if (name is not ("id" or "role"))
                     return $"_USER_ has no '{name}'. Only _USER_.id and _USER_.role are available.";
                 continue;
             }

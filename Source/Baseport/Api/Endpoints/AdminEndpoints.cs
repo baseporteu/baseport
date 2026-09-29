@@ -10,7 +10,10 @@ public static class AdminEndpoints
     {
         static object JobDto(JobConfig j) => new
         {
-            j.Key, j.Name, j.Schedule, j.Enabled,
+            j.Key,
+            j.Name,
+            j.Schedule,
+            j.Enabled,
             NextRunAt = Utc(j.NextRunAt),
             LastRunAt = Utc(j.LastRunAt),
             j.LastResult
@@ -23,9 +26,17 @@ public static class AdminEndpoints
 
             return Results.Ok(accounts.Select(a => new
             {
-                a.Id, a.Username, a.Email, a.Role, a.IsDisabled,
-                a.CreatedAt, a.UpdatedAt, a.LastLoginAt,
-                a.ApiEnabled, a.ApiTokenExpiresAt, a.ApiTokenMethods,
+                a.Id,
+                a.Username,
+                a.Email,
+                a.Role,
+                a.IsDisabled,
+                a.CreatedAt,
+                a.UpdatedAt,
+                a.LastLoginAt,
+                a.ApiEnabled,
+                a.ApiTokenExpiresAt,
+                a.ApiTokenMethods,
                 HasApiToken = !string.IsNullOrEmpty(a.ApiTokenHash),
                 ApiTokenExpired = a.ApiTokenExpiresAt is { } e && e <= DateTime.UtcNow
             }));
@@ -60,9 +71,17 @@ public static class AdminEndpoints
             await db.SaveChangesAsync();
             return Results.Ok(new
             {
-                account.Id, account.Username, account.Email, account.Role, account.IsDisabled,
-                account.CreatedAt, account.UpdatedAt, account.LastLoginAt,
-                account.ApiEnabled, account.ApiTokenExpiresAt, account.ApiTokenMethods,
+                account.Id,
+                account.Username,
+                account.Email,
+                account.Role,
+                account.IsDisabled,
+                account.CreatedAt,
+                account.UpdatedAt,
+                account.LastLoginAt,
+                account.ApiEnabled,
+                account.ApiTokenExpiresAt,
+                account.ApiTokenMethods,
                 HasApiToken = !string.IsNullOrEmpty(account.ApiTokenHash)
             });
         });
@@ -160,9 +179,17 @@ public static class AdminEndpoints
             await db.SaveChangesAsync();
             return Results.Ok(new
             {
-                account.Id, account.Username, account.Email, account.Role, account.IsDisabled,
-                account.CreatedAt, account.UpdatedAt, account.LastLoginAt,
-                account.ApiEnabled, account.ApiTokenExpiresAt, account.ApiTokenMethods,
+                account.Id,
+                account.Username,
+                account.Email,
+                account.Role,
+                account.IsDisabled,
+                account.CreatedAt,
+                account.UpdatedAt,
+                account.LastLoginAt,
+                account.ApiEnabled,
+                account.ApiTokenExpiresAt,
+                account.ApiTokenMethods,
                 HasApiToken = !string.IsNullOrEmpty(account.ApiTokenHash)
             });
         });
@@ -540,12 +567,39 @@ public static class AdminEndpoints
             FileStore.Configure(s);
             return Results.Ok(new
             {
-                s.AppName, s.SiteUrl, s.LogRetentionSec, s.Currency, s.TimeZone, s.BackupRetention, s.UploadsMaxMegabytes, UploadsUsedBytes = FileStore.UsedBytes, s.ApiTitle, s.ApiDescription, s.AllowedOrigins, s.OpenApiEnabled,
-                s.PublicAuthEnabled, s.PublicRegistrationEnabled, s.AnonymousAuthEnabled, s.AnonymousRetentionDays,
-                s.AuthIssuer, s.AuthTokenLifetimeSec, s.AuthRefreshLifetimeDays,
+                s.AppName,
+                s.SiteUrl,
+                s.LogRetentionSec,
+                s.Currency,
+                s.TimeZone,
+                s.BackupRetention,
+                s.UploadsMaxMegabytes,
+                UploadsUsedBytes = FileStore.UsedBytes,
+                s.ApiTitle,
+                s.ApiDescription,
+                s.AllowedOrigins,
+                s.OpenApiEnabled,
+                s.PublicAuthEnabled,
+                s.PublicRegistrationEnabled,
+                s.AnonymousAuthEnabled,
+                s.AnonymousRetentionDays,
+                s.AuthIssuer,
+                s.AuthTokenLifetimeSec,
+                s.AuthRefreshLifetimeDays,
                 s.ProxyPrivateTargetsEnabled,
-                s.S3ExportEnabled, s.S3Bucket, s.S3Region, s.S3ServiceUrl, s.S3AccessKey, s.S3Prefix, HasS3SecretKey = s.S3SecretKeyProtected.Length > 0,
-                s.PostgresEnabled, s.PostgresPort, s.PostgresBindAddress, s.TdsEnabled, s.TdsPort, s.TdsBindAddress
+                s.S3ExportEnabled,
+                s.S3Bucket,
+                s.S3Region,
+                s.S3ServiceUrl,
+                s.S3AccessKey,
+                s.S3Prefix,
+                HasS3SecretKey = s.S3SecretKeyProtected.Length > 0,
+                s.PostgresEnabled,
+                s.PostgresPort,
+                s.PostgresBindAddress,
+                s.TdsEnabled,
+                s.TdsPort,
+                s.TdsBindAddress
             });
         });
 
@@ -674,8 +728,17 @@ public static class AdminEndpoints
 
     internal static object QueryDto(SavedQuery q) => new
     {
-        q.Id, q.Name, q.Sql, q.CreatedAt, q.UpdatedAt, q.LastExecutedAt,
-        q.Schedule, q.ScheduleEnabled, q.WebhookUrl, q.NextRunAt, q.LastResult
+        q.Id,
+        q.Name,
+        q.Sql,
+        q.CreatedAt,
+        q.UpdatedAt,
+        q.LastExecutedAt,
+        q.Schedule,
+        q.ScheduleEnabled,
+        q.WebhookUrl,
+        q.NextRunAt,
+        q.LastResult
     };
 
     private static string? ApplySchedule(JsonObject body, SavedQuery query, DateTime now)

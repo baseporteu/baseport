@@ -15,17 +15,17 @@ public static class TransactionEndpoints
             JsonObject? body;
             try { body = await ctx.Request.ReadFromJsonAsync<JsonObject>(ctx.RequestAborted); }
             catch (JsonException) { return ApiProblems.Write(ctx, ApiProblem.BadRequest, "The request body is not valid JSON."); }
-            if (body is null) 
+            if (body is null)
                 return ApiProblems.Write(ctx, ApiProblem.BadRequest, "A transaction needs a JSON body.");
 
             var (ops, parseError) = ParseOperations(body["operations"] as JsonArray);
-            if (parseError is not null) 
+            if (parseError is not null)
                 return ApiProblems.Write(ctx, ApiProblem.BadRequest, parseError);
 
             var transactional = body["transaction"] is JsonValue tv && tv.TryGetValue<bool>(out var t) && t;
 
             var outcome = await RecordTransactions.ExecuteAsync(db, ops, transactional, caller, ctx.RequestAborted);
-            if (outcome.Problem is { } problem) 
+            if (outcome.Problem is { } problem)
                 return ApiProblems.Write(ctx, problem, outcome.Detail ?? problem.Title);
 
             return Results.Ok(new { results = outcome.Ids.Select(id => new { id }) });

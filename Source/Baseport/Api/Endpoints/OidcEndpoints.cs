@@ -197,10 +197,21 @@ public static class OidcEndpoints
 
     private static object Dto(OidcProvider p, HttpContext ctx, AppSettings settings) => new
     {
-        p.Id, p.Slug, p.Name, p.Authority, p.ClientId, p.Scopes,
-        p.UsernameClaim, p.EmailClaim,
-        p.IsEnabled, p.ConsoleEnabled, p.PublicEnabled, p.CreateAccounts, p.Position,
-        p.CreatedAt, p.UpdatedAt,
+        p.Id,
+        p.Slug,
+        p.Name,
+        p.Authority,
+        p.ClientId,
+        p.Scopes,
+        p.UsernameClaim,
+        p.EmailClaim,
+        p.IsEnabled,
+        p.ConsoleEnabled,
+        p.PublicEnabled,
+        p.CreateAccounts,
+        p.Position,
+        p.CreatedAt,
+        p.UpdatedAt,
 
         HasClientSecret = p.ClientSecret.Length > 0,
         RedirectUri = RedirectUri(ctx, settings, p.Slug)
