@@ -77,7 +77,7 @@ cp -R "$TMP/payload/." "$DIR/"
 chmod +x "$DIR/Baseport"
 
 mkdir -p "$BIN"
-cat > "$BIN/baseport" <<EOF
+cat > "$BIN/baseport.new" <<EOF
 #!/bin/sh
 # baseport wrapper
 DIR="$DIR"
@@ -86,7 +86,7 @@ SELF="$BIN/baseport"
 REPO="$REPO"
 INSTALLER="$INSTALLER"
 EOF
-cat >> "$BIN/baseport" <<'SHIM'
+cat >> "$BIN/baseport.new" <<'SHIM'
 set -eu
 UNIT=/etc/systemd/system/baseport.service
 
@@ -434,7 +434,8 @@ accounts|providers)
   ;;
 esac
 SHIM
-chmod +x "$BIN/baseport"
+chmod +x "$BIN/baseport.new"
+mv -f "$BIN/baseport.new" "$BIN/baseport"
 
 # A wrapper from an earlier install keeps its own directory and can shadow this one on PATH, drop the ones whose directory is gone.
 for OTHER in /usr/local/bin/baseport "$HOME/.local/bin/baseport"; do
