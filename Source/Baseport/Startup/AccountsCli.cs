@@ -18,6 +18,34 @@ public static class AccountsCli
 
     private static string Quote(string path) => path.Contains(' ') ? $"\"{path}\"" : path;
 
+    internal static string OpenProblem(string connectionString, string[] args, Exception ex)
+    {
+        var path = DatabasePath(connectionString);
+        var shown = args is ["accounts", "password", _, _] ? [.. args[..3], "<password>"] : args;
+        var rerun = $"sudo baseport {string.Join(' ', shown.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}";
+        return ex switch
+        {
+            Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 8 or 14 } or UnauthorizedAccessException =>
+                $"{Environment.UserName} cannot write {path}, its -wal and -shm files, or the directory they are in. Run it as the account that owns the install:\n  {rerun}",
+            Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 5 or 6 } =>
+                $"{path} is locked by another process. Try again in a moment.",
+            _ => $"Could not open the database at {path}: {ex.Message}"
+        };
+    }
+
+    private static string DatabasePath(string connectionString)
+    {
+        try
+        {
+            var source = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;
+            return source.Length == 0 ? connectionString : Path.GetFullPath(source);
+        }
+        catch (ArgumentException)
+        {
+            return connectionString;
+        }
+    }
+
     internal static bool MissingDatabase(string connectionString)
     {
         string source;
@@ -59,11 +87,23 @@ public static class AccountsCli
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Could not open the database at \"{connectionString}\": {ex.Message}");
+            Console.Error.WriteLine(OpenProblem(connectionString, args, ex));
             return 1;
         }
 
-        var rest = args.Skip(1).ToArray();
+        try
+        {
+            return await DispatchAsync(db, args.Skip(1).ToArray());
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or DbUpdateException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine(OpenProblem(connectionString, args, ex.InnerException ?? ex));
+            return 1;
+        }
+    }
+
+    private static async Task<int> DispatchAsync(AppDbContext db, string[] rest)
+    {
         if (rest is ["list"]) return await ListAsync(db);
         if (rest is ["promote", var promote]) return await SetRoleAsync(db, promote, AccountRoles.Admin);
         if (rest is ["demote", var demote]) return await SetRoleAsync(db, demote, AccountRoles.Consumer);

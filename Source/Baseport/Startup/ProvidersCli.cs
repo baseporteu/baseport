@@ -25,14 +25,22 @@ public static class ProvidersCli
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Could not open the database at \"{connectionString}\": {ex.Message}");
+            Console.Error.WriteLine(AccountsCli.OpenProblem(connectionString, args, ex));
             return 1;
         }
 
         var rest = args.Skip(1).ToArray();
-        if (rest is ["status"]) return await PrintStatusAsync(db);
-        if (rest is [("postgres" or "tds") and var provider, ("enable" or "disable") and var action, ..])
-            return await SetAsync(db, provider, action, rest[2..], config.GetValue("Baseport:WireRemoteAccess", false));
+        try
+        {
+            if (rest is ["status"]) return await PrintStatusAsync(db);
+            if (rest is [("postgres" or "tds") and var provider, ("enable" or "disable") and var action, ..])
+                return await SetAsync(db, provider, action, rest[2..], config.GetValue("Baseport:WireRemoteAccess", false));
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or DbUpdateException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine(AccountsCli.OpenProblem(connectionString, args, ex.InnerException ?? ex));
+            return 1;
+        }
 
         PrintUsage();
         return rest.Length == 0 ? 0 : 1;

@@ -154,6 +154,65 @@ public class AccountsCliTests : IDisposable
         Assert.Equal(1, await RunAsync("frobnicate", "jane"));
     }
 
+    [Fact]
+    public async Task ReadOnlyDatabaseExplainsInsteadOfCrashing()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        await SeedAsync("ro-user", AccountRoles.Consumer);
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        var file = Path.Combine(_directory, "cli.db");
+        File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        var error = new StringWriter();
+        var original = Console.Error;
+        Console.SetError(error);
+        try
+        {
+            Assert.Equal(1, await RunAsync("promote", "ro-user"));
+        }
+        finally
+        {
+            Console.SetError(original);
+            File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        }
+
+        Assert.Contains("cannot write", error.ToString());
+        Assert.Contains("sudo baseport accounts promote ro-user", error.ToString());
+    }
+
+    [Fact]
+    public void PermissionAdviceNeverEchoesAPassword()
+    {
+        var message = AccountsCli.OpenProblem("Data Source=/x/baseport.db", ["accounts", "password", "bob", "Hunter2-secret"],
+            new Microsoft.Data.Sqlite.SqliteException("readonly", 8));
+
+        Assert.DoesNotContain("Hunter2-secret", message);
+        Assert.Contains("sudo baseport accounts password bob <password>", message);
+    }
+
+    [Theory]
+    [InlineData(8, "cannot write")]
+    [InlineData(14, "cannot write")]
+    [InlineData(5, "locked by another process")]
+    [InlineData(1, "Could not open the database")]
+    public void OpenProblemNamesTheCause(int code, string expected)
+    {
+        var message = AccountsCli.OpenProblem("Data Source=/x/baseport.db", ["accounts", "list"],
+            new Microsoft.Data.Sqlite.SqliteException("boom", code));
+
+        Assert.Contains(expected, message);
+        Assert.Contains("/x/baseport.db", message);
+    }
+
+    [Fact]
+    public void QuotedArgumentsSurviveTheAdvice()
+    {
+        var message = AccountsCli.OpenProblem("Data Source=/x/baseport.db", ["accounts", "rename", "old", "new name"],
+            new UnauthorizedAccessException());
+
+        Assert.Contains("sudo baseport accounts rename old \"new name\"", message);
+    }
+
     public void Dispose()
     {
         Environment.SetEnvironmentVariable("Baseport__ConnectionString", null);

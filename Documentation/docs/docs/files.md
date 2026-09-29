@@ -9,18 +9,18 @@ A `file` field renders a file input in forms and the console. Files are saved to
 
 ## Buckets
 
-A bucket is declared in **Settings > Host > Buckets** before the API accepts it. An undeclared or disabled bucket returns `404`.
+Buckets are declared in **Settings > Host > Buckets**. An undeclared or disabled bucket returns `404`.
 
 | Setting | Effect |
 | --- | --- |
 | Name | URL segment: 1 to 32 characters of lower-case letters, digits and hyphens |
-| Enabled | Off returns `404` and removes the bucket from the OpenAPI document |
-| Methods | `GET`, `POST`, `DELETE`; checked together with the API token's methods, `405` with `Allow` otherwise |
-| Accept end-user tokens | Off refuses end-user JWTs with `403`; operator API tokens are unaffected |
+| Enabled | Off returns `404` |
+| Methods | `GET`, `POST`, `DELETE`, combined with the API token's methods; `405` otherwise |
+| Accept end-user tokens | Off returns `403` for end-user JWTs |
 | File size limit | 1 to 25 MB per file, `413` above it |
-| Accepted types | Comma separated MIME types, wildcards such as `image/*` allowed; empty accepts every allowed extension. `415` otherwise |
+| Accepted types | Comma separated MIME types, e.g. `image/*, application/pdf`; empty accepts all. `415` otherwise |
 
-The type is derived from the file extension. Each enabled bucket is documented in the OpenAPI document under **Storage**.
+The type is derived from the file extension.
 
 ## Uploading
 
@@ -49,7 +49,7 @@ The returned `url` is the value for a `file` field.
 | `GET /api/v1/files/{bucket}/{name}` | Read it back, with range requests |
 | `DELETE /api/v1/files/{bucket}/{name}` | Delete it |
 
-All three require a bearer token and a declared bucket. Files are stored in a folder per bucket under `uploads/`. Deleting a bucket leaves its files on disk and reachable at their URLs.
+All three require a bearer token. Files are stored under `uploads/{bucket}/`. Deleting a bucket keeps its files and their URLs.
 
 ## Limits
 

@@ -48,13 +48,13 @@ curl -X POST http://localhost:5000/api/auth/v1/login \
 | `DELETE /api/auth/v1/delete` | Delete the caller's account |
 | `GET /api/auth/v1/jwks.json` | Public signing key |
 
-`change_password`, `delete` and `status` accept an end-user JWT only; operator API tokens are not sessions.
+`change_password`, `delete` and `status` require an end-user JWT.
 
 | Status | Cause |
 | --- | --- |
 | `400` | Malformed JSON or an unknown body member |
-| `401` | Wrong credentials, invalid refresh token, or an authenticator code is needed (`totp: true`) |
-| `403` | Registration closed, or the current password is wrong on `change_password` |
+| `401` | Wrong credentials, invalid refresh token, or authenticator code required (`totp: true`) |
+| `403` | Registration closed, or wrong current password on `change_password` |
 | `409` | Username or email already registered |
 | `413` | Body over 16 KB |
 | `422` | Username, email or password rejected by policy |

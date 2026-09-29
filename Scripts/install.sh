@@ -407,6 +407,19 @@ logs)
 help|-h|--help)
   exec "$DIR/Baseport" help
   ;;
+version)
+  exec "$DIR/Baseport" version
+  ;;
+accounts|providers)
+  cd "$DIR"
+  if [ "$(id -u)" = "0" ] && id baseport >/dev/null 2>&1 && [ "$(stat -c %U "$DIR")" = "baseport" ]; then
+    exec runuser -u baseport -- env DOTNET_BUNDLE_EXTRACT_BASE_DIR="$DIR/.net" "$DIR/Baseport" "$@"
+  fi
+  for P in "$DIR" "$DIR/baseport.db" "$DIR/baseport.db-wal" "$DIR/baseport.db-shm"; do
+    if [ -e "$P" ] && [ ! -w "$P" ]; then need_root "$@"; fi
+  done
+  exec "$DIR/Baseport" "$@"
+  ;;
 *)
   # Started by its absolute path, not ./Baseport: "stop --force", "status" and doctor all find a foreground instance by matching this command line, and a relative argv[0] matches none of them.
   if command -v systemctl >/dev/null 2>&1 && [ -e "$UNIT" ] && systemctl is-active --quiet baseport 2>/dev/null; then

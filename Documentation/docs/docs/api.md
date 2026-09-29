@@ -11,21 +11,13 @@ Every route under `/api/v1` requires a bearer token: an account's API token or a
 Authorization: Bearer <token>
 ```
 
-The OpenAPI document declares both as `http` bearer schemes: `ApiToken` for operator-issued tokens and `UserJwt` for end-user tokens, the latter only while public authentication is on. Each operation lists the schemes it accepts.
+The OpenAPI document names them `ApiToken` (account token) and `UserJwt` (end-user sign-in, present while public authentication is on).
 
 ## OpenAPI document
 
 Each instance publishes an OpenAPI 3.2 document at `/api/openapi.json`, rendered at `/docs`. Turning it off in **Settings** makes the document return `404`; the `/api/v1` routes are unaffected.
 
-The document describes records, end-user authentication, storage buckets and transactions, each only while its switch is on. Table namespaces are 3.2 parent tags (`kind: nav`) and table display names are tag `summary` values.
-
-| Header | Value |
-| --- | --- |
-| `ETag` | Strong tag of the current document |
-| `Cache-Control` | `no-cache` |
-| `If-None-Match` | Returns `304` when the tag is current |
-
-`info.version` is the Baseport version. The document and `/api/auth/v1/jwks.json` share a budget of 60 requests per minute per client.
+The document covers records, end-user authentication, buckets and transactions, each while its switch is on. Responses carry an `ETag`; `If-None-Match` returns `304`. `info.version` is the Baseport version. Limit: 60 requests per minute per client, shared with `/api/auth/v1/jwks.json`.
 
 ## Records
 
@@ -124,9 +116,9 @@ Values for server-owned and read-only fields are ignored.
 | `false` (default) | Each operation commits on its own; an error leaves earlier operations applied. |
 | `true` | One database transaction; the first error rolls back the batch. |
 
-Each operation passes the same validation, method switches and access rules as the single-record routes. The body is limited to 4 MB, and unknown members return `400`. An operation with an unknown `op`, or an `update`/`delete` without `recordId`, returns `400` before any operation runs.
+Each operation passes the same validation, method switches and access rules as the single-record routes. Body limit: 4 MB. Unknown members, an unknown `op`, or `update`/`delete` without `recordId` return `400` before any operation runs.
 
-A failure adds `index` (the failing operation) and `completed` (operations already committed) to the problem document:
+A failure adds `index` (failing operation) and `completed` (operations committed before it):
 
 ```json
 {
@@ -139,7 +131,7 @@ A failure adds `index` (the failing operation) and `completed` (operations alrea
 }
 ```
 
-`completed` is always empty when `transaction` is `true`.
+`completed` is empty when `transaction` is `true`.
 
 ## Files
 
@@ -149,7 +141,7 @@ A failure adds `index` (the failing operation) and `completed` (operations alrea
 | `GET` | `/api/v1/files/{bucket}/{name}` |
 | `DELETE` | `/api/v1/files/{bucket}/{name}` |
 
-A bucket answers only when declared and enabled. See [Files and uploads](/docs/files).
+Buckets are declared in Settings. See [Files and uploads](/docs/files).
 
 ## End user authentication
 
@@ -167,7 +159,7 @@ Available when public authentication is on. See [Authentication](/docs/authentic
 | `DELETE` | `/api/auth/v1/delete` |
 | `GET` | `/api/auth/v1/jwks.json` |
 
-Request bodies are limited to 16 KB, and unknown members return `400`.
+Body limit: 16 KB. Unknown members return `400`.
 
 ## Forms
 
@@ -198,14 +190,14 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents,
 }
 ```
 
-`errors` and `invalid` extend the standard members. `invalid` lists the rejected field names. Every route under `/api/v1`, `/api/auth/v1` and `/api/transaction` answers errors in this format, including rate limits, oversized bodies, malformed JSON and unknown routes.
+`errors` and `invalid` extend the standard members. `invalid` lists the rejected field names. All errors under `/api/v1`, `/api/auth/v1` and `/api/transaction` use this format.
 
 | Status | Meaning |
 | --- | --- |
 | `409` | Conflict with stored data: a duplicate unique value, or a concurrent write. |
 | `422` | The record is invalid; a retry needs a changed body. |
 | `413` | Body over the route's limit. |
-| `415` | Upload type refused by the bucket, or not `multipart/form-data`. |
+| `415` | File type refused by the bucket, or not `multipart/form-data`. |
 | `503` | Subscriber limit reached on `/subscribe` (1,000 per instance). `Retry-After: 30`. |
 | `507` | Upload storage full or disk space low. |
 
