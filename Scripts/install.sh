@@ -313,9 +313,11 @@ doctor)
     warn "no database yet, the first start creates one and prints a one-time admin login."
   fi
 
-  if grep -qsE '"AllowInsecureSignIn"[[:space:]]*:[[:space:]]*true' "$DIR/appsettings.json" \
-    || grep -qsiE '^[[:space:]]*(export[[:space:]]+)?(Baseport__AllowInsecureSignIn|BASEPORT_ALLOW_INSECURE_SIGNIN)=["'"'"']?true' "$DIR/.env" \
-    || grep -qsiE 'Baseport__AllowInsecureSignIn=true' "$UNIT"; then
+  INSECURE=$(cd "$DIR" && "$DIR/Baseport" config 2>/dev/null | awk '$1 == "Baseport:AllowInsecureSignIn" { print tolower($2); exit }')
+  UNITENV=""
+  if [ -e "$UNIT" ]; then UNITENV=$( (systemctl show baseport -p Environment --value 2>/dev/null; cat "$UNIT") | tr ' ' '\n'); fi
+  if [ "$INSECURE" = "true" ] \
+    || printf '%s\n' "$UNITENV" | grep -qsiE '(Baseport__AllowInsecureSignIn|BASEPORT_ALLOW_INSECURE_SIGNIN)=["'"'"']?true'; then
     bad "Baseport:AllowInsecureSignIn is on: sign-in works over plain HTTP. Turn it off before exposing this instance."
   fi
 
