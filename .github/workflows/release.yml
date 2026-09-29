@@ -143,13 +143,25 @@ jobs:
       - name: Generate release notes
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          TAG="${{ github.event.inputs.tag_name }}"
+          REPO="${{ github.server_url }}/${{ github.repository }}"
 
-          echo "### What's Changed" > release_notes.md
+          git log ${PREV_TAG:+${PREV_TAG}..}HEAD --no-merges --format="%s by @%an in %h" \
+            | grep -v '^chore: bump version to ' > commits.txt || true
 
+          {
+            echo "### What's Changed"
+            for type in feat fix refactor security chore; do
+              grep -E "^${type}(\(.*\))?!?:" commits.txt || true
+            done
+            grep -vE '^(feat|fix|refactor|security|chore)(\(.*\))?!?:' commits.txt || true
+          } | sed '2,$s/^/* [x] /' > release_notes.md
+
+          echo "" >> release_notes.md
           if [ -n "$PREV_TAG" ]; then
-            git log ${PREV_TAG}..HEAD --no-merges --pretty=format:"* %s by @%an in %h" >> release_notes.md
+            echo "**Full Changelog**: ${REPO}/compare/${PREV_TAG}...${TAG}" >> release_notes.md
           else
-            git log --no-merges --pretty=format:"* %s by @%an in %h" >> release_notes.md
+            echo "**Full Changelog**: ${REPO}/commits/${TAG}" >> release_notes.md
           fi
 
       - name: Create GitHub release
