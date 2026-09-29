@@ -9,6 +9,10 @@ public static class BaseportEndpoints
         app.MapOidcEndpoints();
         app.MapClientErrorEndpoints();
         app.MapStorageEndpoints();
+        app.MapSecretEndpoints();
+        app.MapConnectionEndpoints();
+        app.MapImportEndpoints();
+        app.MapCloneEndpoints();
         app.MapTableEndpoints();
         app.MapFormEndpoints();
         app.MapActionEndpoints();

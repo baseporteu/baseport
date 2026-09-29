@@ -308,8 +308,52 @@
                             </div>
                         </div>
 
+                        <div class='settings-pane hidden' data-pane='secrets'>
+                            <div class='card'>
+                                <div class='card-header'>
+                                    <div><h2>Secrets</h2></div>
+                                    <button class='btn btn-outline' onclick='openSecretSheet()'>Add secret</button>
+                                </div>
+                                <div class='table-wrap'>
+                                    <table class='table'>
+                                        <thead><tr><th>Name</th><th>Updated</th><th>Last used</th><th></th></tr></thead>
+                                        <tbody id='secretBody'></tbody>
+                                    </table>
+                                </div>
+                                <p id='secretEmpty' class='muted empty-hint'>No secrets stored.</p>
+                            </div>
+                        </div>
+                        <div class='settings-pane hidden' data-pane='connections'>
+                            <div class='card'>
+                                <div class='card-header'>
+                                    <div><h2>Connections</h2></div>
+                                    <button class='btn btn-outline' onclick='openConnectionSheet()'>Add connection</button>
+                                </div>
+                                <div class='table-wrap'>
+                                    <table class='table'>
+                                        <thead><tr><th>Name</th><th>Base URL</th><th>Protocol</th><th>Authentication</th><th></th></tr></thead>
+                                        <tbody id='connectionBody'></tbody>
+                                    </table>
+                                </div>
+                                <p id='connectionEmpty' class='muted empty-hint'>No connections.</p>
+                            </div>
+                        </div>
                         <div class='settings-pane hidden' data-pane='jobs'>
                             <div class='card'>
+                                <div class='card-header'>
+                                    <div><h2>Clones</h2></div>
+                                    <button class='btn btn-outline' onclick='openCloneSheet()'>Add clone</button>
+                                </div>
+                                <div class='table-wrap'>
+                                    <table class='table'>
+                                        <thead><tr><th>Name</th><th>Mode</th><th>Schedule</th><th>Next run</th><th>Last run</th><th></th></tr></thead>
+                                        <tbody id='cloneBody'></tbody>
+                                    </table>
+                                </div>
+                                <p id='cloneEmpty' class='muted empty-hint'>No clones.</p>
+                            </div>
+                            <div class='card'>
+                                <div class='card-header'><div><h2>Maintenance</h2></div></div>
                                 <div class='table-wrap'>
                                     <table class='table'>
                                         <thead><tr><th>Name</th><th>Schedule</th><th>Next run</th><th>Last run</th><th>Enabled</th><th></th></tr></thead>

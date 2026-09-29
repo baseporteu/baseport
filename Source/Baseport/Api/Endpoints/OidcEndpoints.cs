@@ -213,7 +213,7 @@ public static class OidcEndpoints
         p.CreatedAt,
         p.UpdatedAt,
 
-        HasClientSecret = p.ClientSecret.Length > 0,
+        HasClientSecret = p.ClientSecretProtected.Length > 0,
         RedirectUri = RedirectUri(ctx, settings, p.Slug)
     };
 
@@ -264,7 +264,7 @@ public static class OidcEndpoints
         provider.Scopes = scopes;
 
         if (body["clientSecret"] is JsonValue sv && sv.TryGetValue<string>(out var secret))
-            provider.ClientSecret = secret.Trim();
+            provider.ClientSecretProtected = Secrets.Protect(secret.Trim());
         provider.UsernameClaim = Text(body, "usernameClaim", provider.UsernameClaim).Trim() is { Length: > 0 } uc ? uc : "preferred_username";
         provider.EmailClaim = Text(body, "emailClaim", provider.EmailClaim).Trim() is { Length: > 0 } ec ? ec : "email";
         provider.IsEnabled = enabled;

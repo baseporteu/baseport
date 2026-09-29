@@ -81,7 +81,7 @@ public class TotpDoorTests : IDisposable
         _db.Database.EnsureCreated();
         _db.AppSettings.Add(new AppSettings { PublicAuthEnabled = true });
         _db.SaveChanges();
-        Secrets.Configure(new EphemeralDataProtectionProvider());
+        TestSecrets.Ensure();
         UserTokens.Initialize(null);
         UserTokens.Configure(new AppSettings());
     }

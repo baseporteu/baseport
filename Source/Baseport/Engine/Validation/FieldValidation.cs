@@ -747,6 +747,8 @@ public static class FieldValidation
 
     private static readonly Regex ApiNamePattern = new(@"^[a-z][a-z0-9-]{1,62}$", RegexOptions.Compiled);
 
+    public static bool IsApiName(string value) => ApiNamePattern.IsMatch(value);
+
     private static readonly HashSet<string> ReservedApiNames =
         new(StringComparer.OrdinalIgnoreCase) { "api", "v1", "openapi", "openapi.json", "tables", "forms", "auth", "admin" };
 

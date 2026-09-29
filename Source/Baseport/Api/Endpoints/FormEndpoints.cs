@@ -571,8 +571,8 @@ $$"""
             table.ProxyUrl);
         req.Headers.Accept.ParseAdd("application/json");
         req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36");
-        if (!string.IsNullOrWhiteSpace(table.ProxyToken))
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", table.ProxyToken);
+        if (Secrets.Unprotect(table.ProxyTokenProtected) is { Length: > 0 } token)
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         req.Content = JsonContent.Create(obj);
 
         var started = System.Diagnostics.Stopwatch.GetTimestamp();

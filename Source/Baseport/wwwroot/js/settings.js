@@ -71,6 +71,8 @@ function applySettingsPage(page) {
         auth: 'Authentication',
         providers: 'Providers',
         sites: 'Sites',
+        secrets: 'Secrets',
+        connections: 'Connections',
         jobs: 'Jobs',
         backups: 'Backups'
     };
@@ -79,7 +81,9 @@ function applySettingsPage(page) {
         auth: 'User accounts, REST API tokens and per-table access.',
         providers: 'Native database wire-protocol listeners.',
         sites: 'Where published forms may be embedded.',
-        jobs: 'Background maintenance tasks.',
+        secrets: 'Credentials for outbound requests. Encrypted at rest, never shown again.',
+        connections: 'Remote APIs and Baseport instances to import from.',
+        jobs: 'Scheduled clones and background maintenance.',
         backups: 'Stored snapshots of the database.',
     };
     document.getElementById('settingsTitle').innerText = titles[page];
@@ -129,6 +133,9 @@ async function loadSettings() {
     await loadApiTables();
     await loadOidcProviders();
     await loadBuckets();
+    await loadSecrets();
+    await loadConnections();
+    await loadClones();
     await loadJobs();
     await loadBackups();
 }
@@ -1106,4 +1113,120 @@ function openBucketSheet(id) {
     actions.append(saveBtn);
 
     ui.sheet(b ? b.name : 'Add bucket', body, actions);
+}
+
+let secretData = [];
+
+async function loadSecrets() {
+    const body = document.getElementById('secretBody');
+    if (!body) return;
+    const loaded = await ui.send('/api/_admin/secrets', {
+        method: 'GET',
+        failure: 'Could not load secrets.'
+    });
+    if (!loaded) return;
+    secretData = loaded;
+    body.innerHTML = '';
+    document.getElementById('secretEmpty').classList.toggle('hidden', secretData.length > 0);
+
+    secretData.forEach((s) => {
+        const tr = document.createElement('tr');
+        tr.className = 'row-link';
+        tr.onclick = (ev) => {
+            if (ev.target.closest('button')) return;
+            openSecretSheet(s.id);
+        };
+        const name = document.createElement('td');
+        name.className = 'mono';
+        name.textContent = s.name;
+        const updated = document.createElement('td');
+        updated.className = 'muted';
+        updated.textContent = ui.when(s.updatedAt);
+        const used = document.createElement('td');
+        used.className = 'muted';
+        used.textContent = s.lastUsedAt ? ui.when(s.lastUsedAt) : 'Never';
+        const actions = document.createElement('td');
+        actions.className = 'cell-actions end';
+        actions.append(ui.button('Replace', () => openSecretSheet(s.id), {
+            size: 'btn-sm',
+            variant: 'btn-outline'
+        }));
+        tr.append(name, updated, used, actions);
+        body.append(tr);
+    });
+}
+
+function openSecretSheet(id) {
+    const s = id ? secretData.find((x) => x.id === id) : null;
+    const body = document.createElement('div');
+
+    const name = ui.field('Name', {
+        id: 'secretName',
+        value: s ? s.name : '',
+        placeholder: 'crm-token',
+        mono: true,
+        help: 'Lowercase letters, digits and hyphens.',
+    });
+    name.ctrl.addEventListener('input', () => {
+        name.ctrl.value = name.ctrl.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+    });
+    if (s) name.ctrl.readOnly = true;
+    const value = ui.field('Value', {
+        id: 'secretValue',
+        type: 'password',
+        value: '',
+        placeholder: s ? 'Type a new value to replace the stored one' : '',
+        help: 'Stored encrypted. It is never shown again.',
+    });
+    value.ctrl.autocomplete = 'off';
+    body.append(name, value);
+
+    const actions = ui.el('div', 'form-actions');
+    if (s) {
+        actions.append(ui.button('Delete', async () => {
+            const ok = await ui.confirm({
+                title: 'Delete secret',
+                message: `Remove ${s.name}? Anything using it stops authenticating.`,
+                confirmLabel: 'Delete',
+                danger: true,
+            });
+            if (!ok) return;
+            const done = await ui.send(`/api/_admin/secrets/${s.id}`, {
+                method: 'DELETE',
+                success: 'Secret deleted.',
+                failure: 'Could not delete the secret.',
+            });
+            if (!done) return;
+            ui.closeSheet();
+            await loadSecrets();
+        }, {
+            variant: 'btn-danger'
+        }), ui.el('div', 'form-actions-spacer'));
+    }
+    actions.append(ui.button('Cancel', ui.closeSheet, {
+        variant: 'btn-outline'
+    }));
+    const saveBtn = ui.button(s ? 'Replace' : 'Add secret', () =>
+        ui.busy(saveBtn, async () => {
+            const saved = s
+                ? await ui.send(`/api/_admin/secrets/${s.id}`, {
+                    method: 'PUT',
+                    body: { value: value.ctrl.value },
+                    success: 'Secret replaced.',
+                    failure: 'Could not replace the secret.',
+                })
+                : await ui.send('/api/_admin/secrets', {
+                    method: 'POST',
+                    body: { name: name.ctrl.value.trim(), value: value.ctrl.value },
+                    success: 'Secret added.',
+                    failure: 'Could not add the secret.',
+                });
+            value.ctrl.value = '';
+            if (!saved) return;
+            ui.closeSheet();
+            await loadSecrets();
+        }));
+    actions.append(saveBtn);
+
+    ui.sheet(s ? s.name : 'Add secret', body, actions);
 }

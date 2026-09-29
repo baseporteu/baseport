@@ -19,3 +19,14 @@ internal static class TestDb
         return new AppDbContext(options.Options);
     }
 }
+
+internal static class TestSecrets
+{
+    private static readonly Lazy<bool> Configured = new(() =>
+    {
+        Secrets.Configure(new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
+        return true;
+    });
+
+    public static void Ensure() => _ = Configured.Value;
+}

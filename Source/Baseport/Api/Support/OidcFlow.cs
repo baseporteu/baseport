@@ -120,7 +120,7 @@ public static class OidcFlow
             ["code_verifier"] = flow.Verifier
         };
 
-        if (!string.IsNullOrEmpty(provider.ClientSecret)) form["client_secret"] = provider.ClientSecret;
+        if (Secrets.Unprotect(provider.ClientSecretProtected) is { Length: > 0 } clientSecret) form["client_secret"] = clientSecret;
 
         using var request = new HttpRequestMessage(HttpMethod.Post, document.TokenEndpoint) { Content = new FormUrlEncodedContent(form) };
         using var response = await http.SendAsync(request, token);

@@ -33,6 +33,10 @@ public class AppDbContext : DbContext
     public DbSet<JobConfig> JobConfigs => Set<JobConfig>();
     public DbSet<OidcProvider> OidcProviders => Set<OidcProvider>();
     public DbSet<Bucket> Buckets => Set<Bucket>();
+    public DbSet<Secret> Secrets => Set<Secret>();
+    public DbSet<Connection> Connections => Set<Connection>();
+    public DbSet<ImportRun> ImportRuns => Set<ImportRun>();
+    public DbSet<Clone> Clones => Set<Clone>();
 
     public Task<AppSettings?> SettingsAsync() =>
         AppSettings.OrderBy(s => s.Id).FirstOrDefaultAsync();
@@ -54,6 +58,10 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<JobConfig>().ToTable("_jobs");
         modelBuilder.Entity<OidcProvider>().ToTable("_oidc_providers");
         modelBuilder.Entity<Bucket>().ToTable("_buckets").HasIndex(b => b.Name).IsUnique();
+        modelBuilder.Entity<Secret>().ToTable("_secrets").HasIndex(s => s.Name).IsUnique();
+        modelBuilder.Entity<Connection>().ToTable("_connections").HasIndex(c => c.Name).IsUnique();
+        modelBuilder.Entity<ImportRun>().ToTable("_import_runs").HasIndex(r => new { r.TableId, r.CreatedAt });
+        modelBuilder.Entity<Clone>().ToTable("_clones").HasIndex(c => c.Name).IsUnique();
 
         modelBuilder.Entity<TableDefinition>()
             .HasMany(t => t.Fields)

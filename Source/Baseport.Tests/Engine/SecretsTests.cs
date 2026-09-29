@@ -6,7 +6,7 @@ namespace Baseport.Tests;
 
 public class SecretsTests
 {
-    public SecretsTests() => Secrets.Configure(new EphemeralDataProtectionProvider());
+    public SecretsTests() => TestSecrets.Ensure();
 
     [Fact]
     public void A_secret_round_trips_through_protect_and_unprotect()

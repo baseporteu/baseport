@@ -14,7 +14,7 @@ const readSource = (...parts) => {
     if (!fs.existsSync(file)) throw new Error(`missing ${path.relative(SRC, file)}; update the path in this test`);
     return fs.readFileSync(file, 'utf8');
 };
-const ADMIN_SCRIPTS = ['ui.js', 'js/core.js', 'js/proxy.js', 'js/tables.js', 'js/records.js', 'js/import.js',
+const ADMIN_SCRIPTS = ['ui.js', 'js/core.js', 'js/proxy.js', 'js/tables.js', 'js/records.js', 'js/import.js', 'js/remote.js',
     'js/sidebar.js', 'js/schema.js', 'js/sql.js', 'js/accounts.js', 'js/actions.js',
     'js/settings.js', 'forms.js', 'js/auth.js'
 ];
@@ -468,6 +468,41 @@ test('the client mirrors the API name pattern the server enforces', () => {
     const clientPattern = /\/\^\[a-z\]\[a-z0-9-\]\{1,62\}\$\//.test(read('js/tables.js'));
     assert.ok(serverPattern, 'the server pattern changed; update the console to match');
     assert.ok(clientPattern, 'the console pattern changed; update the server to match');
+});
+
+function loadRemoteHeaders() {
+    const remote = read('js/remote.js');
+    const slice = remote.slice(remote.indexOf('const SECRET_REF'), remote.indexOf('let connectionData'))
+        + remote.slice(remote.indexOf('function headersToText'), remote.indexOf('async function openConnectionSheet'));
+    const module = {};
+    eval(slice + '\n;module.headersToText = headersToText; module.headersFromText = headersFromText;');
+    return module;
+}
+
+test('a header naming a secret sends the secret id, never a value', () => {
+    const module = loadRemoteHeaders();
+    const secrets = [{ id: 's1', name: 'crm-key' }];
+    const parsed = module.headersFromText('X-Api-Key: {{crm-key}}\nAccept-Language: nl', secrets);
+    assert.deepStrictEqual(parsed.headers, [{ name: 'X-Api-Key', secretId: 's1' }, { name: 'Accept-Language', value: 'nl' }]);
+    assert.strictEqual(module.headersToText(parsed.headers, secrets), 'X-Api-Key: {{crm-key}}\nAccept-Language: nl');
+});
+
+test('a header naming an unknown secret is refused, not sent as text', () => {
+    const module = loadRemoteHeaders();
+    assert.ok(module.headersFromText('X-Api-Key: {{missing}}', []).error, 'an unknown secret was sent as a literal value');
+    assert.ok(module.headersFromText('no colon here', []).error, 'a line without a name was accepted');
+});
+
+test('a header value with braces inside stays literal', () => {
+    const module = loadRemoteHeaders();
+    assert.deepStrictEqual(module.headersFromText('X-Tag: a {{b}} c', []).headers, [{ name: 'X-Tag', value: 'a {{b}} c' }]);
+});
+
+test('import from an API is offered next to file import', () => {
+    assert.ok(read('admin/views/tables.html').includes("openRemoteImport()'>Import from API"), 'the tables menu lost Import from API');
+    assert.ok(read('admin/views/settings.html').includes("data-pane='connections'"), 'Settings lost the connections pane');
+    assert.ok(read('admin/views/settings.html').includes("id='cloneBody'"), 'the jobs pane lost its clones');
+    assert.ok(!/type:\s*'password'/.test(read('js/remote.js')), 'a connection sheet asks for a secret value instead of a stored secret');
 });
 
 /* the OTP login flow */

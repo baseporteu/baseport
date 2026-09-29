@@ -94,8 +94,8 @@ public static class ProxyQuery
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.Accept.ParseAdd("application/json");
                 req.Headers.UserAgent.ParseAdd(OpenApiProxy.BrowserUserAgent);
-                if (!string.IsNullOrWhiteSpace(table.ProxyToken))
-                    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", table.ProxyToken);
+                if (Secrets.Unprotect(table.ProxyTokenProtected) is { Length: > 0 } token)
+                    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
                 using var resp = await http.SendAsync(req);
                 var raw = await resp.Content.ReadAsStringAsync();

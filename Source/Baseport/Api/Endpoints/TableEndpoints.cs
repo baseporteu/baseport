@@ -73,9 +73,9 @@ public static class TableEndpoints
                 if (patch["proxyMethod"] is JsonValue pm && pm.TryGetValue<string>(out var method)) table.ProxyMethod = method.Trim().ToUpperInvariant();
 
                 if (patch["proxyToken"] is JsonValue pt && pt.TryGetValue<string>(out var token) && !string.IsNullOrWhiteSpace(token))
-                    table.ProxyToken = token.Trim();
+                    table.ProxyTokenProtected = Secrets.Protect(token.Trim());
                 if (patch["clearProxyToken"] is JsonValue ct && ct.TryGetValue<bool>(out var clear) && clear)
-                    table.ProxyToken = "";
+                    table.ProxyTokenProtected = "";
             }
 
             var others = await db.Tables.Where(t => t.Id != publicId).Select(t => t.Name).ToListAsync();
@@ -241,6 +241,7 @@ public static class TableEndpoints
         {
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.Id == publicId);
             if (table == null) return Results.NotFound();
+            db.Clones.RemoveRange(db.Clones.Where(c => c.TableId == table.Id));
             db.Tables.Remove(table);
             await db.SaveChangesAsync();
             await RecordIndexes.DropForAsync(db, table.Fields);
@@ -284,7 +285,7 @@ public static class TableEndpoints
                 IsProxy = true,
                 ProxyUrl = fullUrl,
                 ProxyMethod = method,
-                ProxyToken = token,
+                ProxyTokenProtected = token.Length > 0 ? Secrets.Protect(token) : "",
                 ProxyReadUrl = readUrl,
                 ProxyQueryJson = JsonSerializer.Serialize(readOp?.QueryParams ?? new List<string>()),
                 CreatedAt = DateTime.UtcNow,

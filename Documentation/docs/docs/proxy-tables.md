@@ -17,7 +17,7 @@ A proxy table is defined by an operation in a remote OpenAPI 3.x document. It st
 | Target operation | The operation that receives form submissions, usually `POST` or `PUT` |
 | Path parameters | Values for placeholders in the operation path |
 | Table name | Console name of the new table |
-| Bearer token | Optional. Sent as `Authorization: Bearer` on every remote call, stored on this table only |
+| Bearer token | Optional. Sent as `Authorization: Bearer` on every remote call, stored encrypted on this table only |
 
 Fields are generated from the operation's request body schema:
 

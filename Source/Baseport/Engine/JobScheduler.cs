@@ -58,6 +58,9 @@ public sealed class JobScheduler : BackgroundService
             await db.SaveChangesAsync(ct);
         }
 
+        var runner = scope.ServiceProvider.GetRequiredService<ImportRunner>();
+        foreach (var runId in await Clones.QueueDueAsync(db, now, ct)) runner.Enqueue(runId);
+
         await RunScheduledQueriesAsync(scope, db, now, ct);
         await RunDueActionRunsAsync(scope, db, now, ct);
     }

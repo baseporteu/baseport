@@ -22,7 +22,7 @@ public class TableDefinition
     public bool IsProxy { get; set; } = false;
     public string ProxyUrl { get; set; } = "";
     public string ProxyMethod { get; set; } = "POST";
-    public string ProxyToken { get; set; } = "";
+    public string ProxyTokenProtected { get; set; } = "";
     public string ProxyReadUrl { get; set; } = "";
     public string ProxyQueryJson { get; set; } = "[]";
     public bool ApiEnabled { get; set; } = false;
@@ -257,6 +257,116 @@ public class UserAccount
     public long TotpLastStep { get; set; }
 }
 
+public class Clone
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string ConnectionId { get; set; } = "";
+    public string Path { get; set; } = "";
+    public string Paging { get; set; } = "auto";
+    public string RecordsPointer { get; set; } = "";
+    public string TableId { get; set; } = "";
+    public string Mode { get; set; } = CloneModes.Upsert;
+    public string KeyField { get; set; } = "";
+    public string Schedule { get; set; } = "0 0 * * * *";
+    public bool Enabled { get; set; } = true;
+    public bool AllowLargeDeletes { get; set; }
+    public DateTime? NextRunAt { get; set; }
+    public DateTime? LastRunAt { get; set; }
+    public string LastRunId { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public static class CloneModes
+{
+    public const string Append = "append";
+    public const string Upsert = "upsert";
+    public const string Mirror = "mirror";
+    public static readonly string[] All = [Append, Upsert, Mirror];
+}
+
+public class ImportRun
+{
+    public string Id { get; set; } = "";
+    public string Kind { get; set; } = ImportRunKinds.Import;
+    public string CloneId { get; set; } = "";
+    public string ConnectionId { get; set; } = "";
+    public string Path { get; set; } = "";
+    public string Paging { get; set; } = "auto";
+    public string RecordsPointer { get; set; } = "";
+    public string TableId { get; set; } = "";
+    public string Status { get; set; } = ImportRunStatus.Queued;
+    public int Pages { get; set; }
+    public int Rows { get; set; }
+    public int Inserted { get; set; }
+    public int Updated { get; set; }
+    public int Deleted { get; set; }
+    public int Rejected { get; set; }
+    public string Strategy { get; set; } = "";
+    public string Message { get; set; } = "";
+    public string ErrorsJson { get; set; } = "[]";
+    public DateTime CreatedAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? FinishedAt { get; set; }
+}
+
+public static class ImportRunKinds
+{
+    public const string Import = "import";
+    public const string Clone = "clone";
+}
+
+public static class ImportRunStatus
+{
+    public const string Queued = "queued";
+    public const string Running = "running";
+    public const string Done = "done";
+    public const string Failed = "failed";
+}
+
+public class Connection
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string BaseUrl { get; set; } = "";
+    public string Protocol { get; set; } = ConnectionProtocols.Rest;
+    public string AuthKind { get; set; } = ConnectionAuth.None;
+    public string AuthHeaderName { get; set; } = "";
+    public string BasicUsername { get; set; } = "";
+    public string AuthSecretId { get; set; } = "";
+    public string HeadersJson { get; set; } = "[]";
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public static class ConnectionProtocols
+{
+    public const string Rest = "rest";
+    public const string OData = "odata";
+    public const string Baseport = "baseport";
+    public static readonly string[] All = [Rest, OData, Baseport];
+}
+
+public static class ConnectionAuth
+{
+    public const string None = "none";
+    public const string Bearer = "bearer";
+    public const string Basic = "basic";
+    public const string Header = "header";
+    public static readonly string[] All = [None, Bearer, Basic, Header];
+}
+
+public class Secret
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string ValueProtected { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public DateTime? LastUsedAt { get; set; }
+}
+
 public class Bucket
 {
     public string Id { get; set; } = "";
@@ -317,7 +427,7 @@ public class OidcProvider
     public string Name { get; set; } = "";
     public string Authority { get; set; } = "";
     public string ClientId { get; set; } = "";
-    public string ClientSecret { get; set; } = "";
+    public string ClientSecretProtected { get; set; } = "";
     public string Scopes { get; set; } = "openid profile email";
 
     public string UsernameClaim { get; set; } = "preferred_username";

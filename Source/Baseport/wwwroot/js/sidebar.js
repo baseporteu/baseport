@@ -161,6 +161,8 @@ const SIDEBARS = {
             ['auth', 'Authentication'],
             ['providers', 'Providers'],
             ['sites', 'Sites'],
+            ['secrets', 'Secrets'],
+            ['connections', 'Connections'],
             ['jobs', 'Jobs'],
             ['backups', 'Backups'],
         ].map(([page, label]) => ({

@@ -81,6 +81,7 @@ A backup covers the whole working directory:
 | --- | --- |
 | `baseport.db` | Schema, records, accounts, settings |
 | `baseport.key` | ES256 token signing key. Without it every issued token is invalid |
+| `keys/` | Encryption keys for secrets, proxy tokens and provider client secrets |
 | `uploads/` | Uploaded files, not stored in the database |
 | `appsettings.json` | Local configuration |
 
@@ -98,6 +99,8 @@ The scheduler runs maintenance jobs; schedules and switches are under **Settings
 | `session-cleanup` | hourly | Remove expired sessions, sign-in codes and lockouts |
 | `anonymous-cleanup` | 04:15 daily | Delete abandoned anonymous accounts, see [Authentication](/docs/authentication) |
 | `query-optimizer` | 05:00 Sundays | `PRAGMA optimize` |
+
+Clones are listed above the jobs; see [Import](/docs/import#clones).
 | `search-index` | 05:30 Sundays | Optimize the full text index, rebuild on drift |
 | `file-deletions` | **off** | Delete uploads no record refers to, see [Files and uploads](/docs/files) |
 

@@ -6,7 +6,7 @@ namespace Baseport.Tests;
 
 public class BackupExportTests
 {
-    static BackupExportTests() => Secrets.Configure(new EphemeralDataProtectionProvider());
+    static BackupExportTests() => TestSecrets.Ensure();
 
     private sealed class FakeUploader : IBackupUploader
     {

@@ -24,7 +24,7 @@ public static class ApiDtos
         t.ProxyMethod,
         t.ProxyReadUrl,
 
-        HasProxyToken = !string.IsNullOrEmpty(t.ProxyToken),
+        HasProxyToken = !string.IsNullOrEmpty(t.ProxyTokenProtected),
         t.ApiEnabled,
         t.ApiDocsEnabled,
         t.ApiName,

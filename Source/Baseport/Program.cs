@@ -141,6 +141,9 @@ try
     builder.Services.AddSingleton<AuditLogWriter>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditLogWriter>());
 
+    builder.Services.AddSingleton<ImportRunner>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<ImportRunner>());
+
     builder.Services.AddHostedService<PostgresServer>();
     builder.Services.AddHostedService<TdsServer>();
 

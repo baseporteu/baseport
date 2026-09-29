@@ -54,6 +54,7 @@ public partial class ApiContractTests
         builder.Services.AddOutboundHttp();
         builder.Services.AddBaseportRateLimiter();
         builder.Services.AddSingleton<AuditLogWriter>();
+        builder.Services.AddSingleton<ImportRunner>();
 
         var app = builder.Build();
         app.MapBaseportEndpoints();
