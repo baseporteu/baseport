@@ -50,19 +50,26 @@ public static class FileStore
         return (name, null);
     }
 
-    public static string? Problem(IFormFile file, string bucket = "")
+    public enum Refusal { Empty, TooLarge, Type, Bucket, Full }
+
+    public sealed record Rejection(Refusal Reason, string Message);
+
+    public static string? Problem(IFormFile file, string bucket = "") => Check(file, bucket)?.Message;
+
+    public static Rejection? Check(IFormFile file, string bucket = "", long maxBytes = MaxBytes)
     {
-        if (file.Length == 0) return "The uploaded file is empty.";
-        if (file.Length > MaxBytes) return $"The uploaded file exceeds the {MaxBytes / 1024 / 1024} MB limit.";
+        if (file.Length == 0) return new(Refusal.Empty, "The uploaded file is empty.");
+        var limit = Math.Min(maxBytes, MaxBytes);
+        if (file.Length > limit) return new(Refusal.TooLarge, $"The uploaded file exceeds the {limit / 1024 / 1024} MB limit.");
         if (bucket.Length > 0 && !IsBucket(bucket))
-            return "A bucket name is 1 to 32 characters of lower-case letters, digits and hyphens.";
+            return new(Refusal.Bucket, "A bucket name is 1 to 32 characters of lower-case letters, digits and hyphens.");
 
         var ext = Path.GetExtension(file.FileName);
-        if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext)) return $"Files of type '{ext}' are not allowed.";
+        if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext)) return new(Refusal.Type, $"Files of type '{ext}' are not allowed.");
 
-        if (UsedBytes + file.Length > CapBytes) return "This instance's upload storage is full.";
+        if (UsedBytes + file.Length > CapBytes) return new(Refusal.Full, "This instance's upload storage is full.");
         return BackupStore.FreeBytes(Directory) is { } free && free - file.Length < MinFreeBytes
-            ? "The server is low on disk space, so uploads are paused."
+            ? new(Refusal.Full, "The server is low on disk space, so uploads are paused.")
             : null;
     }
 

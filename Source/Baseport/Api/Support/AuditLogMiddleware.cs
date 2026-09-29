@@ -40,7 +40,7 @@ public static class AuditLogMiddleware
                 Message = note ?? "",
 
                 UserId = AdminAuth.UserIdFor(context) ?? "",
-                ClientIp = RateLimit.ClientKey(context)
+                ClientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown"
             });
         });
 }

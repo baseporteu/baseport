@@ -6,6 +6,9 @@ namespace Baseport;
 
 public static class ApiAuth
 {
+    private const string JwtKey = "baseport.jwt";
+
+    public static bool ViaJwt(HttpContext ctx) => ctx.Items.ContainsKey(JwtKey);
 
     public static string HashToken(string token) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
@@ -18,7 +21,12 @@ public static class ApiAuth
         var presented = header["Bearer ".Length..].Trim();
         if (presented.Length == 0) return null;
 
-        var account = await ResolveByTokenAsync(db, presented) ?? await ResolveJwtAsync(db, presented);
+        var account = await ResolveByTokenAsync(db, presented);
+        if (account is null && await ResolveJwtAsync(db, presented) is { } jwt)
+        {
+            account = jwt;
+            ctx.Items[JwtKey] = true;
+        }
         if (account is not null) ctx.Items[AdminAuth.ResolvedKey] = account.Id;
         return account;
     }
@@ -26,7 +34,7 @@ public static class ApiAuth
     public static async Task<UserAccount?> ResolveJwtAsync(AppDbContext db, string token)
     {
         var settings = await db.SettingsAsync();
-        if (settings is null || !settings.PublicAuthEnabled) return null;
+        if (settings is null || !UserAuthEndpoints.Enabled(settings)) return null;
 
         var now = DateTime.UtcNow;
         var claims = UserTokens.Verify(token, now);

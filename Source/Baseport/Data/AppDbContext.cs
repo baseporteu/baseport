@@ -32,6 +32,7 @@ public class AppDbContext : DbContext
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
     public DbSet<JobConfig> JobConfigs => Set<JobConfig>();
     public DbSet<OidcProvider> OidcProviders => Set<OidcProvider>();
+    public DbSet<Bucket> Buckets => Set<Bucket>();
 
     public Task<AppSettings?> SettingsAsync() =>
         AppSettings.OrderBy(s => s.Id).FirstOrDefaultAsync();
@@ -52,6 +53,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<AppSettings>().ToTable("_settings");
         modelBuilder.Entity<JobConfig>().ToTable("_jobs");
         modelBuilder.Entity<OidcProvider>().ToTable("_oidc_providers");
+        modelBuilder.Entity<Bucket>().ToTable("_buckets").HasIndex(b => b.Name).IsUnique();
 
         modelBuilder.Entity<TableDefinition>()
             .HasMany(t => t.Fields)

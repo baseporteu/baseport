@@ -10,6 +10,8 @@ VENDOR_DIR="$ROOT/Source/Baseport/wwwroot/js/vendor"
 mkdir -p "$VENDOR_DIR"
 
 SCALAR_VERSION="1.72.1"
+OAS_SCHEMA_URL="https://spec.openapis.org/oas/3.2/schema/2026-08-30"
+OAS_SCHEMA_SHA256="ec53db6e114b768ff2d273b232bda210f51b70c5e57d57ac8daf7e8496a6e073"
 PREACT_VERSION="10.29.8"
 HTM_VERSION="3.1.1"
 
@@ -42,6 +44,12 @@ vendor "@scalar/api-reference" "$SCALAR_VERSION" "dist/browser/standalone.js" "s
 echo "[Preact + htm]"
 vendor preact "$PREACT_VERSION" "dist/preact.min.js" "preact.min.js"
 vendor htm "$HTM_VERSION" "dist/htm.js" "htm.js"
+
+echo "[OpenAPI 3.2 schema]"
+curl -fsSL "$OAS_SCHEMA_URL" -o "$TMP/oas.json"
+echo "$OAS_SCHEMA_SHA256  $TMP/oas.json" | sha256sum -c --quiet - || { echo "OpenAPI schema does not match its pinned hash, refusing" >&2; exit 1; }
+mv "$TMP/oas.json" "$ROOT/Source/Baseport.Tests/Fixtures/oas-3.2-schema.json"
+echo "   verified, saved Baseport.Tests/Fixtures/oas-3.2-schema.json"
 
 echo "[Onest font]"
 FONTS_DIR="$ROOT/Source/Baseport/wwwroot/fonts"

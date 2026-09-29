@@ -41,18 +41,16 @@ public class UploadTests
     }
 
     [Theory]
-    [InlineData("GET", "POST", false)]
-    [InlineData("GET", "DELETE", false)]
-    [InlineData("POST", "GET", false)]
-    [InlineData("GET,POST,DELETE", "POST", true)]
-    public void Storage_honours_the_methods_of_the_key(string keyMethods, string method, bool allowed)
+    [InlineData("GET", "GET,POST,DELETE", "POST", false)]
+    [InlineData("GET", "GET,POST,DELETE", "DELETE", false)]
+    [InlineData("POST", "GET,POST,DELETE", "GET", false)]
+    [InlineData("GET,POST,DELETE", "GET,POST,DELETE", "POST", true)]
+    [InlineData("GET,POST,DELETE", "GET", "POST", false)]
+    [InlineData("GET,POST,DELETE", "GET,POST", "DELETE", false)]
+    [InlineData("GET,POST,PATCH,PUT,DELETE", "GET", "get", true)]
+    public void StorageNeedsBucketAndKeyMethod(string keyMethods, string bucketMethods, string method, bool allowed)
     {
-        var ctx = new DefaultHttpContext();
-        ctx.Request.Method = method;
-
-        var refusal = StorageEndpoints.KeyGate(new UserAccount { ApiTokenMethods = keyMethods }, ctx);
-
-        Assert.Equal(allowed, refusal is null);
-        if (!allowed) Assert.Equal(keyMethods, ctx.Response.Headers.Allow.ToString());
+        var bucket = new Bucket { ApiMethods = bucketMethods };
+        Assert.Equal(allowed, BucketMethods.Allows(bucket, new UserAccount { ApiTokenMethods = keyMethods }, method));
     }
 }

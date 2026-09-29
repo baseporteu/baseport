@@ -24,7 +24,7 @@ public static class AdminSurface
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
                 if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
-                    await context.Response.WriteAsJsonAsync(new { errors = new[] { "No such endpoint." } });
+                    await context.Response.WriteAsJsonAsync(ApiProblems.Body(context, ApiProblem.NotFound, "No such endpoint."), options: null, contentType: ApiProblems.ContentType);
                 return;
             }
 

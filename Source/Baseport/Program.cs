@@ -127,6 +127,7 @@ try
     builder.Services.AddResponseCompression();
 
     builder.Services.AddBaseportRateLimiter();
+    builder.Services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
 
     builder.Services.AddHostedService<JobScheduler>();
 
@@ -166,9 +167,13 @@ try
 
         ctx.Response.StatusCode = status;
         if (ctx.Request.Path.StartsWithSegments("/api"))
-            await ctx.Response.WriteAsJsonAsync(new { errors = new[] { status >= 500 ? "Internal server error." : "The request could not be parsed." } });
+        {
+            var problem = ApiProblem.ForStatus(status);
+            await ctx.Response.WriteAsJsonAsync(ApiProblems.Body(ctx, problem, status >= 500 ? "Internal server error." : problem.Title), options: null, contentType: ApiProblems.ContentType);
+        }
     }));
 
+    app.UseBodyLimits();
     app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/api/forms"), b => b.UseCors("embed"));
     app.UseRateLimiter();
     app.UseSecurityHeaders();
@@ -204,19 +209,7 @@ try
         await ActionDefCache.ReloadFromDbAsync(db);
     }
 
-    app.MapAuthEndpoints();
-    app.MapUserAuthEndpoints();
-    app.MapOidcEndpoints();
-    app.MapClientErrorEndpoints();
-    app.MapStorageEndpoints();
-    app.MapTableEndpoints();
-    app.MapFormEndpoints();
-    app.MapActionEndpoints();
-    app.MapAdminEndpoints();
-    app.MapPublicApiEndpoints();
-    app.MapTransactionEndpoints();
-    app.MapFragmentEndpoints();
-    app.MapConsoleEndpoints();
+    app.MapBaseportEndpoints();
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {

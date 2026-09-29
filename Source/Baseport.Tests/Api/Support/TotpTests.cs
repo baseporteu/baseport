@@ -138,7 +138,7 @@ public class TotpDoorTests : IDisposable
         AuthEndpoints.LoginAsync(_db, Request(), new JsonObject { ["username"] = username, ["password"] = Password, ["code"] = code });
 
     private Task<IResult> PublicAsync(string username, string? code) =>
-        UserAuthEndpoints.LoginAsync(_db, Request(), new JsonObject { ["email_or_username"] = username, ["password"] = Password, ["totp_code"] = code });
+        UserAuthEndpoints.LoginAsync(_db, Request(), new LoginRequest(username, Password, code));
 
     [Fact]
     public async Task An_enrolled_admin_cannot_sign_in_at_either_door_without_a_code()

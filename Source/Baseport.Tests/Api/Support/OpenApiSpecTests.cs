@@ -26,7 +26,7 @@ public class OpenApiSpecTests
 
     private static string? DataRef(JsonObject data) => data["$ref"]?.GetValue<string>();
 
-    private static JsonObject ErrorSchema() => (OpenApiSpec.BuildSchemas(new List<TableDefinition> { Table() })["Error"] as JsonObject)!;
+    private static JsonObject ErrorSchema() => (OpenApiSpec.BuildSchemas(new List<TableDefinition> { Table() })[OpenApiSpec.ProblemSchema] as JsonObject)!;
 
     [Fact]
     public void A_records_data_field_points_at_its_own_table_schema_everywhere_it_appears()
@@ -58,9 +58,17 @@ public class OpenApiSpecTests
 
         var item = op!["responses"]!["200"]!["content"]!["text/event-stream"]!["itemSchema"]!;
         Assert.Equal("object", item["type"]!.GetValue<string>());
+        Assert.Equal(OpenApiSpec.StreamEvent, item["properties"]!["event"]!["const"]!.GetValue<string>());
+
+        var data = item["properties"]!["data"]!;
+        Assert.Equal("application/json", data["contentMediaType"]!.GetValue<string>());
+        var payload = data["contentSchema"]!["properties"]!;
         Assert.Equal(
             new[] { "create", "update", "delete" },
-            (item["properties"]!["action"]!["enum"] as JsonArray)!.Select(v => v!.GetValue<string>()));
+            (payload["action"]!["enum"] as JsonArray)!.Select(v => v!.GetValue<string>()));
+        Assert.Equal("#/components/schemas/Orders", payload["record"]!["anyOf"]![0]!["$ref"]!.GetValue<string>());
+        Assert.Equal("null", payload["record"]!["anyOf"]![1]!["type"]!.GetValue<string>());
+        Assert.Null(item["properties"]!["id"]);
     }
 
     [Fact]
@@ -107,7 +115,7 @@ public class OpenApiSpecTests
         Assert.NotNull(resp);
         Assert.NotNull(resp!["description"]);
         var schema = resp!["content"]![ApiProblems.ContentType]!["schema"] as JsonObject;
-        Assert.Equal("#/components/schemas/Error", schema?["$ref"]?.GetValue<string>());
+        Assert.Equal($"#/components/schemas/{OpenApiSpec.ProblemSchema}", schema?["$ref"]?.GetValue<string>());
     }
 
     [Fact]
@@ -315,17 +323,43 @@ public class OpenApiSpecTests
         Assert.Equal(returned.Select(p => p.Key).OrderBy(k => k), documented.Select(p => p.Key).OrderBy(k => k));
     }
 
+    private static List<string> SchemesOf(JsonNode? operation) =>
+        (operation!["security"] as JsonArray)!.SelectMany(s => s!.AsObject().Select(p => p.Key)).ToList();
+
     [Fact]
     public void Every_operation_requires_a_bearer_token()
     {
         foreach (var (_, path) in OpenApiSpec.BuildPaths(new List<TableDefinition> { Detailed() }))
-        foreach (var (_, operation) in path!.AsObject())
-            Assert.Contains((operation!["security"] as JsonArray)!, s => s!.AsObject().ContainsKey(OpenApiSpec.SecurityScheme));
+            foreach (var (_, operation) in path!.AsObject())
+                Assert.Equal(new[] { OpenApiSpec.ApiTokenScheme }, SchemesOf(operation));
     }
 
     [Fact]
-    public void The_security_scheme_is_named_the_way_the_reference_renders_it() =>
-        Assert.Equal("Bearer", OpenApiSpec.SecurityScheme);
+    public void RecordOpsAcceptUserJwt()
+    {
+        foreach (var (_, path) in OpenApiSpec.BuildPaths(new List<TableDefinition> { Detailed() }, jwt: true))
+            foreach (var (_, operation) in path!.AsObject())
+                Assert.Equal(new[] { OpenApiSpec.ApiTokenScheme, OpenApiSpec.UserJwtScheme }, SchemesOf(operation));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UserJwtSchemeFollowsPublicAuth(bool publicAuth)
+    {
+        var doc = OpenApiSpec.BuildDocument(new DocumentInputs(new[] { Detailed() }, new AppSettings { PublicAuthEnabled = publicAuth }, "1", [], []));
+        var schemes = doc["components"]!["securitySchemes"]!.AsObject();
+
+        Assert.Equal("bearer", schemes[OpenApiSpec.ApiTokenScheme]!["scheme"]!.GetValue<string>());
+        Assert.Equal(publicAuth, schemes.ContainsKey(OpenApiSpec.UserJwtScheme));
+        if (publicAuth) Assert.Equal("JWT", schemes[OpenApiSpec.UserJwtScheme]!["bearerFormat"]!.GetValue<string>());
+        Assert.Null(doc["security"]);
+
+        var referenced = Walk(doc["paths"]).Where(o => o.ContainsKey("security"))
+            .SelectMany(o => (o["security"] as JsonArray)!.SelectMany(r => r!.AsObject().Select(p => p.Key)))
+            .Distinct();
+        Assert.All(referenced, name => Assert.True(schemes.ContainsKey(name), name));
+    }
 
     [Fact]
     public void No_query_parameter_carries_a_sigil()
@@ -380,7 +414,8 @@ public class OpenApiSpecTests
         var tag = (OpenApiSpec.BuildTags(new List<TableDefinition> { t })[0] as JsonObject)!;
 
         Assert.Equal("sales-orders", tag["name"]!.GetValue<string>());
-        Assert.Equal("Sales orders", tag["x-displayName"]!.GetValue<string>());
+        Assert.Equal("Sales orders", tag["summary"]!.GetValue<string>());
+        Assert.Null(tag["x-displayName"]);
 
         var op = OpenApiSpec.BuildPaths(new List<TableDefinition> { t })["/api/v1/sales-orders/records"]!["get"]!;
         Assert.Contains((op["tags"] as JsonArray)!, n => n!.GetValue<string>() == "sales-orders");
@@ -409,30 +444,170 @@ public class OpenApiSpecTests
         Assert.Equal("Customer orders.", tag["description"]!.GetValue<string>());
     }
 
-    [Fact]
-    public void Namespaces_become_tag_groups_and_nothing_is_left_out_of_them()
+    private static List<JsonObject> Tags(params TableDefinition[] tables) =>
+        OpenApiSpec.BuildTags(tables).Select(n => (JsonObject)n!).ToList();
+
+    private static TableDefinition Named(string apiName, string ns)
     {
+        var t = Detailed();
+        t.ApiName = apiName;
+        t.ApiNamespace = ns;
+        return t;
+    }
 
-        var grouped = Detailed();
-        grouped.ApiNamespace = "Sales";
-        var loose = Detailed();
-        loose.ApiName = "customers";
-        loose.ApiNamespace = "";
+    [Fact]
+    public void NamespaceEmitsParentTag()
+    {
+        var tags = Tags(Named("sales-orders", "Sales"), Named("customers", ""));
 
-        var groups = OpenApiSpec.BuildTagGroups(new List<TableDefinition> { grouped, loose })!;
-        var tagged = groups.SelectMany(g => (g!["tags"] as JsonArray)!.Select(n => n!.GetValue<string>())).ToList();
+        var parent = Assert.Single(tags, t => t["kind"]?.GetValue<string>() == "nav");
+        Assert.Equal("ns:Sales", parent["name"]!.GetValue<string>());
+        Assert.Equal("Sales", parent["summary"]!.GetValue<string>());
 
-        Assert.Equal(new[] { "sales-orders", "customers" }.OrderBy(x => x), tagged.OrderBy(x => x));
-        Assert.Contains(groups, g => g!["name"]!.GetValue<string>() == "Sales");
+        var grouped = tags.Single(t => t["name"]!.GetValue<string>() == "sales-orders");
+        Assert.Equal("ns:Sales", grouped["parent"]!.GetValue<string>());
+
+        var loose = tags.Single(t => t["name"]!.GetValue<string>() == "customers");
+        Assert.Null(loose["parent"]);
+        Assert.DoesNotContain(tags, t => t["name"]!.GetValue<string>() == "Other");
     }
 
     [Fact]
     public void No_namespace_anywhere_means_no_grouping_at_all()
     {
-        var t = Detailed();
-        t.ApiNamespace = "";
+        var tags = Tags(Named("sales-orders", ""), Named("customers", "  "));
 
-        Assert.Null(OpenApiSpec.BuildTagGroups(new List<TableDefinition> { t }));
+        Assert.All(tags, t =>
+        {
+            Assert.Null(t["kind"]);
+            Assert.Null(t["parent"]);
+        });
+        Assert.Equal(2, tags.Count);
+    }
+
+    [Fact]
+    public void NamespaceMatchingApiNameStaysUnique()
+    {
+        var tags = Tags(Named("orders", "orders"));
+
+        var names = tags.Select(t => t["name"]!.GetValue<string>()).ToList();
+        Assert.Equal(names.Count, names.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal("ns:orders", tags.Single(t => t["name"]!.GetValue<string>() == "orders")["parent"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void NamespaceIsCaseInsensitive()
+    {
+        var tags = Tags(Named("a-table", "Sales"), Named("b-table", "sales "), Named("c-table", "SALES"));
+
+        var parent = Assert.Single(tags, t => t["kind"]?.GetValue<string>() == "nav");
+        var parentName = parent["name"]!.GetValue<string>();
+        Assert.All(tags.Where(t => t["kind"] is null), t => Assert.Equal(parentName, t["parent"]!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void ParentTagsAreDeclared()
+    {
+        var tags = Tags(Named("a-table", "Sales"), Named("b-table", "Billing"), Named("c-table", ""));
+        var declared = tags.Select(t => t["name"]!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+
+        Assert.All(tags.Where(t => t["parent"] is not null), t => Assert.Contains(t["parent"]!.GetValue<string>(), declared));
+        Assert.Equal(new[] { "ns:Billing", "ns:Sales" }, tags.Where(t => t["kind"] is not null).Select(t => t["name"]!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void NoNullableKeyword()
+    {
+        var t = Detailed();
+        var tables = new List<TableDefinition> { t };
+        var document = new JsonObject
+        {
+            ["paths"] = OpenApiSpec.BuildPaths(tables),
+            ["schemas"] = OpenApiSpec.BuildSchemas(tables)
+        };
+
+        Assert.DoesNotContain(Walk(document), o => o.ContainsKey("nullable"));
+    }
+
+    [Fact]
+    public void NullableMembersUseTypeUnion()
+    {
+        var paths = Paths(Table());
+        var cursor = paths["/api/v1/orders/records"]!["get"]!["responses"]!["200"]!["content"]!["application/json"]!["schema"]!["properties"]!["nextCursor"]!;
+        Assert.Equal(new[] { "string", "null" }, (cursor["type"] as JsonArray)!.Select(n => n!.GetValue<string>()));
+
+        var record = paths["/api/v1/orders/subscribe"]!["get"]!["responses"]!["200"]!["content"]!["text/event-stream"]!["itemSchema"]!["properties"]!["data"]!["contentSchema"]!["properties"]!["record"]!;
+        Assert.Contains(record["anyOf"]!.AsArray(), s => s!["type"]?.GetValue<string>() == "null");
+    }
+
+    private static JsonObject Document(params TableDefinition[] tables) =>
+        OpenApiSpec.BuildDocument(new DocumentInputs(tables, new AppSettings { ApiTitle = "Shop", ApiDescription = "Orders and more" }, "1.2.3", [], []));
+
+    [Fact]
+    public void DocumentHeader()
+    {
+        var doc = Document(Table());
+
+        Assert.Equal("3.2.0", doc["openapi"]!.GetValue<string>());
+        Assert.Equal("1.2.3", doc["info"]!["version"]!.GetValue<string>());
+        Assert.Equal("Shop", doc["info"]!["title"]!.GetValue<string>());
+        Assert.Equal("Orders and more", doc["info"]!["description"]!.GetValue<string>());
+        Assert.Null(doc["x-tagGroups"]);
+    }
+
+    [Fact]
+    public void UnpublishedTablesAreAbsent()
+    {
+        var published = Table();
+        var off = Named("hidden-api", "Sales");
+        off.ApiEnabled = false;
+        var undocumented = Named("quiet-api", "Billing");
+        undocumented.ApiDocsEnabled = false;
+
+        var json = Document(published, off, undocumented).ToJsonString();
+
+        Assert.Contains("/api/v1/orders/records", json);
+        Assert.DoesNotContain("hidden-api", json);
+        Assert.DoesNotContain("quiet-api", json);
+        Assert.DoesNotContain("ns:Sales", json);
+        Assert.DoesNotContain("ns:Billing", json);
+    }
+
+    [Fact]
+    public void InputOrderDoesNotChangeTheDocument()
+    {
+        var tables = new[] { Named("sales-orders", "Sales"), Named("quotes", "sales "), Named("clash", "SALES"), Named("customers", "") };
+
+        var forward = Document(tables).ToJsonString();
+        var reversed = Document(tables.Reverse().ToArray()).ToJsonString();
+
+        Assert.Equal(forward, reversed);
+        Assert.Contains("\"ns:SALES\"", forward);
+    }
+
+    [Fact]
+    public void GroupedDocumentHasNoTagGroups()
+    {
+        var doc = Document(Named("sales-orders", "Sales"), Named("customers", ""));
+
+        Assert.Null(doc["x-tagGroups"]);
+        Assert.DoesNotContain(Walk(doc), o => o.ContainsKey("x-displayName"));
+    }
+
+    private static IEnumerable<JsonObject> Walk(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject o:
+                yield return o;
+                foreach (var (_, child) in o)
+                    foreach (var inner in Walk(child)) yield return inner;
+                break;
+            case JsonArray a:
+                foreach (var child in a)
+                    foreach (var inner in Walk(child)) yield return inner;
+                break;
+        }
     }
 
     [Fact]
@@ -464,12 +639,18 @@ public class OpenApiSpecTests
         var table = Table();
         table.Fields.Add(new FieldDefinition
         {
-            Id = Ids.NewShortId(12), TableId = "x", Name = "lines", DataType = "array",
+            Id = Ids.NewShortId(12),
+            TableId = "x",
+            Name = "lines",
+            DataType = "array",
             OptionsJson = """{"fields":[{"name":"qty","dataType":"number"}]}"""
         });
         table.Fields.Add(new FieldDefinition
         {
-            Id = Ids.NewShortId(12), TableId = "x", Name = "tags", DataType = "multiselect",
+            Id = Ids.NewShortId(12),
+            TableId = "x",
+            Name = "tags",
+            DataType = "multiselect",
             OptionsJson = """["a","b"]"""
         });
 

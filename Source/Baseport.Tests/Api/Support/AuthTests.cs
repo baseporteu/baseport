@@ -344,6 +344,14 @@ public class AuthTests
         return ctx;
     }
 
+    [Theory]
+    [InlineData("2001:db8:1:2::1", "2001:db8:1:2:ffff:ffff:ffff:ffff", true)]
+    [InlineData("2001:db8:1:2::1", "2001:db8:1:3::1", false)]
+    [InlineData("::ffff:203.0.113.7", "203.0.113.7", true)]
+    [InlineData("203.0.113.7", "203.0.113.8", false)]
+    public void Ipv6HostSharesItsPrefix(string a, string b, bool same) =>
+        Assert.Equal(same, RateLimit.ClientKey(Context(a, "")) == RateLimit.ClientKey(Context(b, "")));
+
     [Fact]
     public void A_spoofed_forwarded_header_cannot_buy_a_fresh_budget()
     {

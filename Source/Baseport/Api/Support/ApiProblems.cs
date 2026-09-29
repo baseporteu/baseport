@@ -3,7 +3,7 @@ namespace Baseport;
 public readonly record struct ApiProblem(int Status, string Type, string Title)
 {
     public static readonly ApiProblem BadRequest = new(400, Urn("bad-request"), "Malformed request");
-    public static readonly ApiProblem Unauthorized = new(401, Urn("unauthorized"), "Missing or invalid bearer token");
+    public static readonly ApiProblem Unauthorized = new(401, Urn("unauthorized"), "Not authenticated");
     public static readonly ApiProblem Forbidden = new(403, Urn("forbidden"), "Not permitted");
     public static readonly ApiProblem NotFound = new(404, Urn("not-found"), "Not found");
     public static readonly ApiProblem MethodNotAllowed = new(405, Urn("method-not-allowed"), "Method not enabled");
@@ -14,6 +14,7 @@ public readonly record struct ApiProblem(int Status, string Type, string Title)
     public static readonly ApiProblem UnsupportedMediaType = new(415, Urn("unsupported-media-type"), "Unsupported content type");
     public static readonly ApiProblem Unprocessable = new(422, Urn("validation-failed"), "Validation failed");
     public static readonly ApiProblem TooManyRequests = new(429, Urn("too-many-requests"), "Rate limit exceeded");
+    public static readonly ApiProblem InsufficientStorage = new(507, Urn("insufficient-storage"), "Storage is full");
     public static readonly ApiProblem Internal = new(500, Urn("internal-error"), "Internal server error");
     public static readonly ApiProblem BadGateway = new(502, Urn("bad-gateway"), "Invalid response from an upstream service");
     public static readonly ApiProblem ServiceUnavailable = new(503, Urn("service-unavailable"), "Temporarily unavailable");
@@ -22,8 +23,15 @@ public readonly record struct ApiProblem(int Status, string Type, string Title)
     public static readonly IReadOnlyList<ApiProblem> All =
     [
         BadRequest, Unauthorized, Forbidden, NotFound, MethodNotAllowed, NotAcceptable, Conflict,
-        PreconditionFailed, TooLarge, UnsupportedMediaType, Unprocessable, TooManyRequests, Internal, BadGateway, ServiceUnavailable, GatewayTimeout
+        PreconditionFailed, TooLarge, UnsupportedMediaType, Unprocessable, TooManyRequests, InsufficientStorage, Internal, BadGateway, ServiceUnavailable, GatewayTimeout
     ];
+
+    public static ApiProblem ForStatus(int status)
+    {
+        foreach (var problem in All)
+            if (problem.Status == status) return problem;
+        return status >= 500 ? Internal : BadRequest;
+    }
 
     private static string Urn(string slug) => $"urn:baseport:problem:{slug}";
 }
@@ -37,15 +45,17 @@ public static class ApiProblems
         ApiProblem problem,
         string detail,
         IReadOnlyList<string>? errors = null,
-        IReadOnlyList<string>? invalid = null) =>
-        Results.Json(Body(ctx, problem, detail, errors, invalid), statusCode: problem.Status, contentType: ContentType);
+        IReadOnlyList<string>? invalid = null,
+        IReadOnlyDictionary<string, object?>? extensions = null) =>
+        Results.Json(Body(ctx, problem, detail, errors, invalid, extensions), statusCode: problem.Status, contentType: ContentType);
 
     public static Dictionary<string, object?> Body(
         HttpContext ctx,
         ApiProblem problem,
         string detail,
         IReadOnlyList<string>? errors = null,
-        IReadOnlyList<string>? invalid = null)
+        IReadOnlyList<string>? invalid = null,
+        IReadOnlyDictionary<string, object?>? extensions = null)
     {
         var body = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -57,6 +67,8 @@ public static class ApiProblems
             ["errors"] = errors is { Count: > 0 } ? errors : [detail]
         };
         if (invalid is { Count: > 0 }) body["invalid"] = invalid;
+        if (extensions is not null)
+            foreach (var (key, value) in extensions) body.TryAdd(key, value);
         return body;
     }
 

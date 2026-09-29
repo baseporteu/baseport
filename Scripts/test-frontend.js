@@ -1029,6 +1029,10 @@ test('the API reference is served entirely from this origin', () => {
         'the vendored bundle is missing; run Scripts/pull-vendors.sh');
     assert.ok(/withDefaultFonts:\s*false/.test(docs), 'Scalar would fetch fonts from fonts.scalar.com');
     assert.ok(/proxyUrl:\s*''/.test(docs), "Scalar would route try-it requests through proxy.scalar.com");
+    assert.ok(/agent:\s*\{\s*disabled:\s*true\s*\}/.test(docs), 'Scalar would offer Ask AI, which sends the document to scalar.com');
+    assert.ok(/mcp:\s*\{\s*disabled:\s*true\s*\}/.test(docs), 'Scalar would offer Generate MCP through scalar.com');
+    assert.ok(/telemetry:\s*false/.test(docs), 'Scalar telemetry is on by default');
+    assert.ok(/showDeveloperTools:\s*'never'/.test(docs), 'Scalar would show its hosted-service toolbar');
 });
 
 test('the API reference documents the published spec, not an internal one', () => {
@@ -2180,8 +2184,8 @@ test('the OpenAPI switch is dead while the table is not exposed', () => {
 
 test('the API reference preselects the security scheme the document defines', () => {
     const spec = readSource('Api', 'Support', 'OpenApiSpec.cs');
-    const match = spec.match(/SecurityScheme\s*=\s*"([^"]+)"/);
-    assert.ok(match, 'OpenApiSpec no longer defines SecurityScheme');
+    const match = spec.match(/ApiTokenScheme\s*=\s*"([^"]+)"/);
+    assert.ok(match, 'OpenApiSpec no longer defines ApiTokenScheme');
 
     const docs = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'docs.html'), 'utf8');
     assert.ok(

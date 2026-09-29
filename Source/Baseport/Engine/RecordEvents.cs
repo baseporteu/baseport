@@ -117,7 +117,10 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor, IDbTransac
 
     internal static bool SchemaEntriesChanged(Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker tracker) =>
         tracker.Entries<TableDefinition>().Any(e => e.State != EntityState.Unchanged)
-        || tracker.Entries<FieldDefinition>().Any(e => e.State != EntityState.Unchanged);
+        || tracker.Entries<FieldDefinition>().Any(e => e.State != EntityState.Unchanged)
+        || tracker.Entries<AppSettings>().Any(e => e.State != EntityState.Unchanged)
+        || tracker.Entries<OidcProvider>().Any(e => e.State != EntityState.Unchanged)
+        || tracker.Entries<Bucket>().Any(e => e.State != EntityState.Unchanged);
 
     private List<RecordEvent> Flush(DbContext? context)
     {

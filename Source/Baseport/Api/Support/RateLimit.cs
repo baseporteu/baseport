@@ -54,9 +54,9 @@ public static class RateLimit
             {
                 ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
                 ctx.HttpContext.Response.Headers.RetryAfter = "60";
-                ctx.HttpContext.Response.ContentType = ApiProblems.ContentType;
                 await ctx.HttpContext.Response.WriteAsJsonAsync(
-                    ApiProblems.Body(ctx.HttpContext, ApiProblem.TooManyRequests, "Too many requests. Wait a minute and try again."), token);
+                    ApiProblems.Body(ctx.HttpContext, ApiProblem.TooManyRequests, "Too many requests. Wait a minute and try again."),
+                    options: null, contentType: ApiProblems.ContentType, cancellationToken: token);
             };
         });
 }

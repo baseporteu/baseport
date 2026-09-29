@@ -255,6 +255,20 @@ public class UserAuthTests : IDisposable
         Assert.False(File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "baseport.key")));
     }
 
+    [Fact]
+    public async Task UsernameAndEmailConflictAlike()
+    {
+        await SchemaBootstrap.ApplyAsync(_db);
+        _db.UserAccounts.Add(Jane());
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(await UserAuthEndpoints.TakenAsync(_db, "jane", "other@example.com", ""));
+        Assert.True(await UserAuthEndpoints.TakenAsync(_db, "other", "jane@example.com", ""));
+        Assert.False(await UserAuthEndpoints.TakenAsync(_db, "other", "other@example.com", ""));
+        Assert.False(await UserAuthEndpoints.TakenAsync(_db, "other", "", ""));
+        Assert.False(await UserAuthEndpoints.TakenAsync(_db, "jane", "jane@example.com", "user00000001"));
+    }
+
     [Theory]
     [InlineData("jane@example.com")]
     [InlineData("j@x.io")]

@@ -128,6 +128,7 @@ async function loadSettings() {
     document.getElementById('settingsTdsBindAddress').value = settingsData.tdsBindAddress || '127.0.0.1';
     await loadApiTables();
     await loadOidcProviders();
+    await loadBuckets();
     await loadJobs();
     await loadBackups();
 }
@@ -938,4 +939,171 @@ function openOidcSheet(id) {
 function callbackFor(slug) {
     const origin = (settingsData && settingsData.siteUrl || '').trim().replace(/\/+$/, '') || location.origin;
     return `${origin}/api/auth/oidc/${slug || '<key>'}/callback`;
+}
+
+let bucketData = [];
+
+async function loadBuckets() {
+    const body = document.getElementById('bucketBody');
+    if (!body) return;
+    const loaded = await ui.send('/api/_admin/buckets', {
+        method: 'GET',
+        failure: 'Could not load buckets.'
+    });
+    if (!loaded) return;
+    bucketData = loaded;
+    body.innerHTML = '';
+    document.getElementById('bucketEmpty').classList.toggle('hidden', bucketData.length > 0);
+
+    bucketData.forEach((b) => {
+        const tr = document.createElement('tr');
+        tr.className = 'row-link';
+        tr.onclick = (ev) => {
+            if (ev.target.closest('button, label')) return;
+            openBucketSheet(b.id);
+        };
+
+        const name = document.createElement('td');
+        name.className = 'mono';
+        name.textContent = b.name;
+        tr.append(name);
+
+        const methods = document.createElement('td');
+        methods.className = 'muted mono';
+        methods.textContent = b.apiMethods.join(', ');
+        tr.append(methods);
+
+        const endUsers = document.createElement('td');
+        endUsers.className = 'muted';
+        endUsers.textContent = b.allowJwt ? 'Allowed' : 'Refused';
+        tr.append(endUsers);
+
+        const enabledTd = document.createElement('td');
+        const toggle = switchHtml(`bucketEnabled-${b.id}`, b.apiEnabled);
+        toggle.querySelector('input').addEventListener('change', (ev) =>
+            saveBucket(b.id, { apiEnabled: ev.target.checked }));
+        enabledTd.append(toggle);
+        tr.append(enabledTd);
+
+        const actions = document.createElement('td');
+        actions.className = 'cell-actions end';
+        actions.append(ui.button('Configure', () => openBucketSheet(b.id), {
+            size: 'btn-sm',
+            variant: 'btn-outline'
+        }));
+        tr.append(actions);
+
+        body.append(tr);
+    });
+}
+
+async function saveBucket(id, body) {
+    const saved = await ui.send(`/api/_admin/buckets/${id}`, {
+        method: 'PATCH',
+        body,
+        success: 'Bucket saved.',
+        failure: 'Could not save the bucket.',
+    });
+    await loadBuckets();
+    return saved;
+}
+
+function openBucketSheet(id) {
+    const b = id ? bucketData.find((x) => x.id === id) : null;
+    const body = document.createElement('div');
+
+    const name = ui.field('Name', {
+        id: 'bucketName',
+        value: b ? b.name : '',
+        placeholder: 'avatars',
+        mono: true,
+        help: 'Lowercase letters, digits and hyphens. Part of the URL.',
+    });
+    name.ctrl.addEventListener('input', () => {
+        name.ctrl.value = name.ctrl.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+    });
+    const description = ui.field('Description', {
+        id: 'bucketDescription',
+        type: 'textarea',
+        rows: 3,
+        value: b ? b.description : '',
+        help: 'Shown in the API reference.',
+    });
+    const maxMegabytes = ui.field('File size limit (MB)', {
+        id: 'bucketMaxMegabytes',
+        type: 'number',
+        value: b ? b.maxMegabytes : 25,
+    });
+    const contentTypes = ui.field('Accepted types', {
+        id: 'bucketContentTypes',
+        value: b ? b.contentTypes : '',
+        placeholder: 'image/*, application/pdf',
+        mono: true,
+        help: 'Comma separated. Empty accepts every allowed file type.',
+    });
+    const enabled = ui.switchRow('Enabled', {
+        id: 'bucketApiEnabled',
+        checked: b ? b.apiEnabled : true
+    });
+    const allowJwt = ui.switchRow('Accept end-user tokens', {
+        id: 'bucketAllowJwt',
+        checked: b ? b.allowJwt : false
+    });
+    const methods = ui.methodSwitches(['GET', 'POST', 'DELETE'], b ? b.apiMethods : ['GET', 'POST', 'DELETE'],
+        'A method turned off is removed from the documentation and refused by the API.');
+
+    body.append(name, description, maxMegabytes, contentTypes, enabled, allowJwt, methods);
+
+    const payload = () => ({
+        name: name.ctrl.value.trim(),
+        description: description.ctrl.value.trim(),
+        maxMegabytes: Number(maxMegabytes.ctrl.value),
+        contentTypes: contentTypes.ctrl.value.trim(),
+        apiEnabled: enabled.ctrl.checked,
+        allowJwt: allowJwt.ctrl.checked,
+        apiMethods: methods.selected(),
+    });
+
+    const actions = ui.el('div', 'form-actions');
+    if (b) {
+        actions.append(ui.button('Delete', async () => {
+            const ok = await ui.confirm({
+                title: 'Delete bucket',
+                message: `Remove ${b.name}? Stored files stay on disk and remain reachable at their URLs.`,
+                confirmLabel: 'Delete',
+                danger: true,
+            });
+            if (!ok) return;
+            const done = await ui.send(`/api/_admin/buckets/${b.id}`, {
+                method: 'DELETE',
+                success: 'Bucket deleted.',
+                failure: 'Could not delete the bucket.',
+            });
+            if (!done) return;
+            ui.closeSheet();
+            await loadBuckets();
+        }, {
+            variant: 'btn-danger'
+        }), ui.el('div', 'form-actions-spacer'));
+    }
+    actions.append(ui.button('Cancel', ui.closeSheet, {
+        variant: 'btn-outline'
+    }));
+    const saveBtn = ui.button(b ? 'Save' : 'Add bucket', () =>
+        ui.busy(saveBtn, async () => {
+            const saved = b
+                ? await saveBucket(b.id, payload())
+                : await ui.send('/api/_admin/buckets', {
+                    method: 'POST',
+                    body: payload(),
+                    success: 'Bucket added.',
+                    failure: 'Could not add the bucket.',
+                });
+            if (!saved) return;
+            ui.closeSheet();
+            await loadBuckets();
+        }));
+    actions.append(saveBtn);
+
+    ui.sheet(b ? b.name : 'Add bucket', body, actions);
 }

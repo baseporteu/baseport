@@ -127,6 +127,37 @@ const ui = (() => {
         return row;
     }
 
+    function methodSwitches(methods, selected, help) {
+        const wrap = el('div', 'field');
+        wrap.append(el('span', 'field-label-text', {
+            textContent: 'Methods'
+        }));
+        const list = el('ul', 'api-table-list');
+        const boxes = {};
+        methods.forEach((method) => {
+            const row = el('li', 'api-table-row');
+            row.append(el('span', 'api-table-name mono', {
+                textContent: method
+            }));
+            const label = el('label', 'switch');
+            const box = el('input', null, {
+                type: 'checkbox',
+                checked: (selected || []).includes(method)
+            });
+            label.append(box, el('span', 'track'), el('span', 'thumb'));
+            row.append(label);
+            list.append(row);
+            boxes[method] = box;
+        });
+        wrap.append(list);
+        if (help) wrap.append(el('span', 'field-help', {
+            textContent: help
+        }));
+        wrap.boxes = boxes;
+        wrap.selected = () => methods.filter((m) => boxes[m].checked);
+        return wrap;
+    }
+
     function copyable(block, text) {
         const wrap = el('div', 'copy-wrap');
         const btn = el('button', 'copy-btn', {
@@ -934,6 +965,7 @@ const ui = (() => {
         copyValue,
         copyable,
         switchRow,
+        methodSwitches,
         handle,
         markInvalid,
         send,

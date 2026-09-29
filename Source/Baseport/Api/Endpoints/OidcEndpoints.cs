@@ -20,7 +20,7 @@ public static class OidcEndpoints
             if (provider is null) return Results.NotFound();
 
             var settings = await db.SettingsAsync() ?? new AppSettings();
-            if (!console && !settings.PublicAuthEnabled) return Results.NotFound();
+            if (!console && !UserAuthEndpoints.Enabled(settings)) return Results.NotFound();
 
             try
             {
@@ -96,7 +96,7 @@ public static class OidcEndpoints
             if (provider is null || provider.Id != flow.ProviderId)
                 return Results.Redirect(Back(flow.Console, OidcFlow.Failed));
 
-            if (!flow.Console && !(await db.SettingsAsync() ?? new AppSettings()).PublicAuthEnabled)
+            if (!flow.Console && !UserAuthEndpoints.Enabled(await db.SettingsAsync() ?? new AppSettings()))
                 return Results.NotFound();
 
             OidcIdentity? identity;

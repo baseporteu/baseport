@@ -28,6 +28,7 @@
     <PackageVersion Include="Microsoft.Extensions.Http" Version="8.0.1" />
   </ItemGroup>
   <ItemGroup Label="Tests">
+    <PackageVersion Include="JsonSchema.Net" Version="9.4.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="xunit.v3" Version="3.1.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />

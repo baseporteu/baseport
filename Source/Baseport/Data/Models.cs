@@ -257,6 +257,58 @@ public class UserAccount
     public long TotpLastStep { get; set; }
 }
 
+public class Bucket
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
+    public bool ApiEnabled { get; set; } = false;
+    public string ApiMethods { get; set; } = BucketMethods.Default;
+    public bool AllowJwt { get; set; } = false;
+    public int MaxMegabytes { get; set; } = (int)(FileStore.MaxBytes / 1024 / 1024);
+    public string ContentTypes { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public static class BucketMethods
+{
+    public static readonly string[] All = ["GET", "POST", "DELETE"];
+
+    public const string Default = "GET,POST,DELETE";
+
+    public static List<string> Parse(string? stored) =>
+        (stored ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(m => m.ToUpperInvariant())
+            .Where(All.Contains)
+            .Distinct()
+            .ToList();
+
+    public static string Serialize(IEnumerable<string> methods) => string.Join(",", Parse(string.Join(",", methods)));
+
+    public static bool Allows(Bucket bucket, UserAccount caller, string method)
+    {
+        var m = method.ToUpperInvariant();
+        return Parse(bucket.ApiMethods).Contains(m) && ApiMethods.Parse(caller.ApiTokenMethods).Contains(m);
+    }
+
+    public static List<string> ContentTypes(Bucket bucket) =>
+        bucket.ContentTypes
+            .Split([',', ' ', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.ToLowerInvariant())
+            .Distinct()
+            .ToList();
+
+    public static bool AcceptsType(Bucket bucket, string contentType)
+    {
+        var allowed = ContentTypes(bucket);
+        if (allowed.Count == 0) return true;
+        var type = contentType.ToLowerInvariant();
+        return allowed.Any(a => a == type || (a.EndsWith("/*", StringComparison.Ordinal) && type.StartsWith(a[..^1], StringComparison.Ordinal)));
+    }
+}
+
 public class OidcProvider
 {
     public string Id { get; set; } = "";

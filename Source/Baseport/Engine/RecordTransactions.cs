@@ -9,28 +9,31 @@ public static class RecordTransactions
 
     public sealed record Operation(string Op, string ApiName, string? RecordId, JsonObject? Value);
 
-    public sealed record Outcome(IReadOnlyList<string> Ids, ApiProblem? Problem, string? Detail)
+    public sealed record Outcome(IReadOnlyList<string> Ids, ApiProblem? Problem, string? Detail, int? FailedIndex = null)
     {
         public bool HasErrors => Problem is not null;
     }
+
+    public static readonly IReadOnlyList<string> Kinds = ["create", "update", "delete"];
 
     public static async Task<Outcome> ExecuteAsync(AppDbContext db, IReadOnlyList<Operation> ops, bool transactional, UserAccount caller, CancellationToken ct)
     {
         if (ops.Count == 0) return new Outcome([], null, null);
         if (ops.Count > MaxOperations)
             return new Outcome([], ApiProblem.BadRequest, $"A transaction carries at most {MaxOperations} operations.");
+        if (Malformed(ops) is { } malformed) return malformed;
 
         var tx = transactional ? await db.Database.BeginTransactionAsync(ct) : null;
         try
         {
             var ids = new List<string>();
-            foreach (var op in ops)
+            for (var i = 0; i < ops.Count; i++)
             {
-                var result = await ApplyAsync(db, op, caller, ct);
+                var result = await ApplyAsync(db, ops[i], caller, ct);
                 if (result.Problem is not null)
                 {
                     if (tx is not null) await tx.RollbackAsync(ct);
-                    return result;
+                    return result with { Ids = tx is null ? ids : [], FailedIndex = i };
                 }
                 ids.Add(result.Ids[0]);
             }
@@ -44,11 +47,24 @@ public static class RecordTransactions
         }
     }
 
+    private static Outcome? Malformed(IReadOnlyList<Operation> ops)
+    {
+        for (var i = 0; i < ops.Count; i++)
+        {
+            var op = ops[i];
+            if (!Kinds.Contains(op.Op))
+                return new Outcome([], ApiProblem.BadRequest, $"'{op.Op}' must be create, update or delete.", i);
+            if (string.IsNullOrWhiteSpace(op.ApiName))
+                return new Outcome([], ApiProblem.BadRequest, "Each operation needs an apiName.", i);
+            if (op.Op != "create" && string.IsNullOrEmpty(op.RecordId))
+                return new Outcome([], ApiProblem.BadRequest, $"{op.Op} needs a recordId.", i);
+        }
+        return null;
+    }
+
     private static async Task<Outcome> ApplyAsync(AppDbContext db, Operation op, UserAccount caller, CancellationToken ct)
     {
-        var verb = op.Op switch { "create" => "POST", "update" => "PATCH", "delete" => "DELETE", _ => null };
-        if (verb is null)
-            return Fail(ApiProblem.BadRequest, $"'{op.Op}' must be create, update or delete.");
+        var verb = op.Op switch { "create" => "POST", "update" => "PATCH", _ => "DELETE" };
 
         var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.ApiName == op.ApiName && t.ApiEnabled, ct);
         if (table is null)
@@ -85,9 +101,6 @@ public static class RecordTransactions
                 }
             case "update":
                 {
-                    if (string.IsNullOrEmpty(op.RecordId))
-                        return Fail(ApiProblem.BadRequest, "update needs a recordId.");
-
                     var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == op.RecordId, ct);
                     if (record is null)
                         return Fail(ApiProblem.NotFound, $"Record '{op.RecordId}' not found in '{op.ApiName}'.");
@@ -108,9 +121,6 @@ public static class RecordTransactions
                 }
             case "delete":
                 {
-                    if (string.IsNullOrEmpty(op.RecordId))
-                        return Fail(ApiProblem.BadRequest, "delete needs a recordId.");
-
                     var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == op.RecordId, ct);
                     if (record is null)
                         return Fail(ApiProblem.NotFound, $"Record '{op.RecordId}' not found in '{op.ApiName}'.");

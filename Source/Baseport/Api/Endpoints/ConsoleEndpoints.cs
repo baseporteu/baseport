@@ -39,7 +39,7 @@ public static class ConsoleEndpoints
         {
             ctx.Response.StatusCode = StatusCodes.Status404NotFound;
             if (ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
-                await ctx.Response.WriteAsJsonAsync(new { errors = new[] { "No such endpoint." } });
+                await ctx.Response.WriteAsJsonAsync(ApiProblems.Body(ctx, ApiProblem.NotFound, "No such endpoint."), options: null, contentType: ApiProblems.ContentType);
         });
     }
 
@@ -81,7 +81,7 @@ public static class ConsoleEndpoints
 
             if (!authPage && part == "admin/_shell.html")
             {
-                await ctx.Response.WriteAsync(html, token);
+                await ctx.Response.WriteAsync(html.Replace("<!--__VERSION__-->", Html.Text(CliHelp.Version), StringComparison.Ordinal), token);
                 await ctx.Response.WriteAsync(bootstrap, token);
                 continue;
             }

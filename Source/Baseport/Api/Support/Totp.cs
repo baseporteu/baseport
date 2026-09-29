@@ -8,6 +8,9 @@ public enum SecondFactor { Ok, Required, Invalid }
 
 public static class Totp
 {
+    public static readonly IReadOnlyDictionary<string, object?> RequiredExtension =
+        new Dictionary<string, object?>(StringComparer.Ordinal) { ["totp"] = true };
+
     private const int StepSeconds = 30;
     private const string Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 

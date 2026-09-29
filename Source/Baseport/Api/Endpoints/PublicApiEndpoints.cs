@@ -11,45 +11,27 @@ public static class PublicApiEndpoints
     public static void MapPublicApiEndpoints(this WebApplication app)
     {
 
-        app.MapGet("/api/openapi.json", async (AppDbContext db) =>
+        app.MapGet("/api/openapi.json", async (AppDbContext db, HttpContext ctx) =>
         {
             var settings = await db.SettingsAsync() ?? new AppSettings();
             if (!settings.OpenApiEnabled) return Results.NotFound();
 
             var version = OpenApiCache.CurrentVersion;
-            if (OpenApiCache.Get(version) is { } cached) return Results.Content(cached, "application/json");
-
-            var tables = (await db.Tables.Include(t => t.Fields).ToListAsync())
-                .Where(t => t.ApiEnabled && t.ApiDocsEnabled).ToList();
-            var spec = new JsonObject
+            var document = OpenApiCache.Get(version);
+            if (document is null)
             {
-                ["openapi"] = "3.2.0",
-                ["info"] = new JsonObject
-                {
-                    ["title"] = settings.ApiTitle,
-                    ["version"] = "0.1.0",
-                    ["description"] = settings.ApiDescription
-                },
-                ["servers"] = new JsonArray(new JsonObject { ["url"] = "/" }),
-                ["tags"] = OpenApiSpec.BuildTags(tables),
-                ["security"] = new JsonArray(new JsonObject { [OpenApiSpec.SecurityScheme] = new JsonArray() }),
-                ["paths"] = OpenApiSpec.BuildPaths(tables),
-                ["components"] = new JsonObject
-                {
-                    ["securitySchemes"] = new JsonObject
-                    {
-                        [OpenApiSpec.SecurityScheme] = new JsonObject { ["type"] = "http", ["scheme"] = "bearer" }
-                    },
-                    ["schemas"] = OpenApiSpec.BuildSchemas(tables)
-                }
-            };
+                var tables = await db.Tables.Include(t => t.Fields).ToListAsync(ctx.RequestAborted);
+                var providers = await OidcEndpoints.OfferedAsync(db, console: false);
+                var buckets = await db.Buckets.AsNoTracking().ToListAsync(ctx.RequestAborted);
+                var json = OpenApiSpec.BuildDocument(new DocumentInputs(tables, settings, CliHelp.Version, providers, buckets)).ToJsonString();
+                document = OpenApiCache.Set(version, json);
+            }
 
-            if (OpenApiSpec.BuildTagGroups(tables) is { } groups) spec["x-tagGroups"] = groups;
-
-            var json = spec.ToJsonString();
-            OpenApiCache.Set(version, json);
-            return Results.Content(json, "application/json");
-        });
+            ctx.Response.Headers.ETag = document.ETag;
+            ctx.Response.Headers.CacheControl = "no-cache";
+            if (OpenApiCache.NotModified(ctx.Request.Headers.IfNoneMatch, document)) return Results.StatusCode(StatusCodes.Status304NotModified);
+            return Results.Content(document.Json, "application/json");
+        }).RequireRateLimiting(RateLimit.Docs);
 
         app.MapGet("/api/v1/{apiName}/records", async (AppDbContext db, HttpContext ctx, string apiName, string? q, string? sort, string? order, int? page, int? pageSize, string? cursor, string[]? filter) =>
         {
@@ -111,7 +93,7 @@ public static class PublicApiEndpoints
 
             var (channel, refusal) = OpenSubscription(ctx);
             if (channel is null) return refusal!;
-            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, null, caller.Id, caller.Role, ctx.RequestAborted), "record");
+            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, null, caller.Id, caller.Role, ctx.RequestAborted), OpenApiSpec.StreamEvent);
         });
 
         app.MapGet("/api/v1/{apiName}/subscribe/{rid}", async (IServiceScopeFactory scopes, HttpContext ctx, string apiName, string rid) =>
@@ -133,7 +115,7 @@ public static class PublicApiEndpoints
 
             var (channel, refusal) = OpenSubscription(ctx);
             if (channel is null) return refusal!;
-            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, rid, caller.Id, caller.Role, ctx.RequestAborted), "record");
+            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, rid, caller.Id, caller.Role, ctx.RequestAborted), OpenApiSpec.StreamEvent);
         });
 
         app.MapGet("/api/v1/{apiName}/records/{rid}", async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
@@ -271,7 +253,7 @@ public static class PublicApiEndpoints
         return (channel, null);
     }
 
-    private static async IAsyncEnumerable<object> Stream(
+    private static async IAsyncEnumerable<RecordChangeDto> Stream(
         Channel<RecordEvent> channel, IServiceScopeFactory scopes, string tableId, string? recordId, string userId, string callerRole,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
     {
@@ -280,12 +262,7 @@ public static class PublicApiEndpoints
             if (e.TableId != tableId) continue;
             if (recordId is not null && e.RecordId != recordId) continue;
             if (await AllowedFieldsAsync(scopes, tableId, userId, callerRole, e, token) is not { } fields) continue;
-            yield return new
-            {
-                action = e.Action,
-                id = e.RecordId,
-                record = EventRecord(e.Json, fields)
-            };
+            yield return new RecordChangeDto(e.Action, e.RecordId, EventRecord(e.Json, fields));
         }
     }
 

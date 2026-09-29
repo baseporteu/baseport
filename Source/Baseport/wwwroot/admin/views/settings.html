@@ -49,6 +49,22 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class='card'>
+                                <div class='card-header'>
+                                    <div>
+                                        <h2>Buckets</h2>
+                                        <p class='muted'>File storage at <code>/api/v1/files/{bucket}</code>. A bucket answers only when declared and enabled.</p>
+                                    </div>
+                                    <button class='btn btn-outline' onclick='openBucketSheet()'>Add bucket</button>
+                                </div>
+                                <div class='table-wrap'>
+                                    <table class='table'>
+                                        <thead><tr><th>Name</th><th>Methods</th><th>End users</th><th>Enabled</th><th></th></tr></thead>
+                                        <tbody id='bucketBody'></tbody>
+                                    </table>
+                                </div>
+                                <p id='bucketEmpty' class='muted empty-hint'>No buckets declared. File uploads through the API are refused.</p>
+                            </div>
                         </div>
                         <div class='settings-pane hidden' data-pane='auth'>
                             <div class='card'>

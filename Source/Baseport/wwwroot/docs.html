@@ -15,17 +15,13 @@
             theme: 'default',
             layout: 'modern',
             hideModels: true,
-            // Nothing on this page may call out. Scalar's defaults fetch fonts
-            // from fonts.scalar.com and route "try it" through
-            // proxy.scalar.com, which would put a third party in the request
-            // path of a page we publish, and hand it whatever token a reader
-            // pastes into the auth panel. The API is same-origin, no proxy
-            // is needed for it to work.
             withDefaultFonts: false,
             proxyUrl: '',
-            // Bearer only: the console session is a cookie and has no business
-            // being offered on a page anyone can open.
-            authentication: { preferredSecurityScheme: 'Bearer' }
+            authentication: { preferredSecurityScheme: 'ApiToken' },
+            agent: { disabled: true },
+            mcp: { disabled: true },
+            telemetry: false,
+            showDeveloperTools: 'never'
         });
     </script>
     <script src='/js/vendor/scalar-api-reference.js'></script>

@@ -48,6 +48,19 @@ curl -X POST http://localhost:5000/api/auth/v1/login \
 | `DELETE /api/auth/v1/delete` | Delete the caller's account |
 | `GET /api/auth/v1/jwks.json` | Public signing key |
 
+`change_password`, `delete` and `status` accept an end-user JWT only; operator API tokens are not sessions.
+
+| Status | Cause |
+| --- | --- |
+| `400` | Malformed JSON or an unknown body member |
+| `401` | Wrong credentials, invalid refresh token, or an authenticator code is needed (`totp: true`) |
+| `403` | Registration closed, or the current password is wrong on `change_password` |
+| `409` | Username or email already registered |
+| `413` | Body over 16 KB |
+| `422` | Username, email or password rejected by policy |
+
+Errors are [problem documents](/docs/api#errors).
+
 The role is not read from the token. Every request re-reads the account, so a demotion applies on the next request.
 
 Five failed sign-ins lock the account for five minutes, per account and client address.

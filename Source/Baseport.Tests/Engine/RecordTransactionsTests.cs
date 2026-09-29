@@ -154,6 +154,104 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
+    public async Task PartialFailureReportsCommittedIds()
+    {
+        await NotesAsync();
+
+        var outcome = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
+        {
+            Create("notes", "one"),
+            Create("notes", "two"),
+            new("create", "no-such-table", null, new JsonObject()),
+            Create("notes", "never")
+        }, transactional: false, Caller(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, outcome.FailedIndex);
+        Assert.Equal(2, outcome.Ids.Count);
+        var stored = await _db.Records.Select(r => r.Id).ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(stored.Order(), outcome.Ids.Order());
+    }
+
+    [Fact]
+    public async Task RolledBackBatchReportsNothingCompleted()
+    {
+        await NotesAsync();
+
+        var outcome = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
+        {
+            Create("notes", "one"),
+            new("create", "no-such-table", null, new JsonObject())
+        }, transactional: true, Caller(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, outcome.FailedIndex);
+        Assert.Empty(outcome.Ids);
+        Assert.Equal(0, await _db.Records.CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData("update", "notes", null, "update needs a recordId.")]
+    [InlineData("delete", "notes", "", "delete needs a recordId.")]
+    [InlineData("upsert", "notes", "x", "'upsert' must be create, update or delete.")]
+    [InlineData("create", "", null, "Each operation needs an apiName.")]
+    public async Task MalformedBatchWritesNothing(string kind, string apiName, string? recordId, string detail)
+    {
+        await NotesAsync();
+
+        var outcome = await RecordTransactions.ExecuteAsync(_db, new List<RecordTransactions.Operation>
+        {
+            Create("notes", "one"),
+            Create("notes", "two"),
+            new(kind, apiName, recordId, new JsonObject())
+        }, transactional: false, Caller(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ApiProblem.BadRequest, outcome.Problem);
+        Assert.Equal(detail, outcome.Detail);
+        Assert.Equal(2, outcome.FailedIndex);
+        Assert.Empty(outcome.Ids);
+        Assert.Equal(0, await _db.Records.CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void FailureExtensionsListCompletedPositions()
+    {
+        var outcome = new RecordTransactions.Outcome(["a", "b"], ApiProblem.NotFound, "gone", 2);
+
+        var extensions = TransactionEndpoints.Extensions(outcome)!;
+
+        Assert.Equal(2, extensions["index"]);
+        Assert.Equal(new[] { new TransactionCompletedDto(0, "a"), new TransactionCompletedDto(1, "b") }, (IEnumerable<TransactionCompletedDto>)extensions["completed"]!);
+        Assert.Null(TransactionEndpoints.Extensions(new RecordTransactions.Outcome([], ApiProblem.BadRequest, "x")));
+    }
+
+    [Fact]
+    public void RequestRefusesUnknownMembers()
+    {
+        Assert.Throws<System.Text.Json.JsonException>(() => System.Text.Json.JsonSerializer.Deserialize<TransactionRequest>(
+            """{"operations":[],"transactional":true}""", System.Text.Json.JsonSerializerOptions.Web));
+        Assert.Throws<System.Text.Json.JsonException>(() => System.Text.Json.JsonSerializer.Deserialize<TransactionRequest>(
+            """{"operations":[{"op":"create","apiName":"notes","record_id":"x"}]}""", System.Text.Json.JsonSerializerOptions.Web));
+    }
+
+    [Fact]
+    public void SdkOperationShapeBinds()
+    {
+        var sdk = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            operations = new[] { Baseport.Client.RecordOperation.Update("notes", "r1", new { body = "x" }) },
+            transaction = true
+        }, System.Text.Json.JsonSerializerOptions.Web);
+
+        var request = System.Text.Json.JsonSerializer.Deserialize<TransactionRequest>(sdk, System.Text.Json.JsonSerializerOptions.Web)!;
+
+        Assert.True(request.Transaction);
+        var op = Assert.Single(request.Operations!);
+        Assert.Equal("update", op.Op);
+        Assert.Equal("notes", op.ApiName);
+        Assert.Equal("r1", op.RecordId);
+        Assert.Equal("x", op.Value!["body"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task Transactional_mode_rolls_back_every_operation_when_one_fails()
     {
         var table = await NotesAsync();

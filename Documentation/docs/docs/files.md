@@ -7,6 +7,21 @@ description: "File fields, the storage API and upload serving"
 
 A `file` field renders a file input in forms and the console. Files are saved to `uploads/` next to the database; the field stores the file's URL.
 
+## Buckets
+
+A bucket is declared in **Settings > Host > Buckets** before the API accepts it. An undeclared or disabled bucket returns `404`.
+
+| Setting | Effect |
+| --- | --- |
+| Name | URL segment: 1 to 32 characters of lower-case letters, digits and hyphens |
+| Enabled | Off returns `404` and removes the bucket from the OpenAPI document |
+| Methods | `GET`, `POST`, `DELETE`; checked together with the API token's methods, `405` with `Allow` otherwise |
+| Accept end-user tokens | Off refuses end-user JWTs with `403`; operator API tokens are unaffected |
+| File size limit | 1 to 25 MB per file, `413` above it |
+| Accepted types | Comma separated MIME types, wildcards such as `image/*` allowed; empty accepts every allowed extension. `415` otherwise |
+
+The type is derived from the file extension. Each enabled bucket is documented in the OpenAPI document under **Storage**.
+
 ## Uploading
 
 ```bash
@@ -34,16 +49,16 @@ The returned `url` is the value for a `file` field.
 | `GET /api/v1/files/{bucket}/{name}` | Read it back, with range requests |
 | `DELETE /api/v1/files/{bucket}/{name}` | Delete it |
 
-All three require a bearer token. A bucket is a folder under `uploads/`; bucket names are 1 to 32 characters of lower-case letters, digits and hyphens.
+All three require a bearer token and a declared bucket. Files are stored in a folder per bucket under `uploads/`. Deleting a bucket leaves its files on disk and reachable at their URLs.
 
 ## Limits
 
 | Limit | Value |
 | --- | --- |
-| File size | 25 MB |
+| File size | 25 MB, or lower per bucket |
 | Extensions | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.pdf`, `.txt`, `.csv`, `.json`, `.zip` |
 | Instance total | **Upload storage (MB)** in **Settings > Host**, default 10,240 MB |
-| Free disk | Uploads are refused below 1 GB free |
+| Free disk | Uploads are refused below 1 GB free, `507` |
 | `POST /api/v1/files/{bucket}` | 30 per minute per client |
 
 Stored names are 22 random characters plus the original extension; the uploaded filename is not used. The instance total is approximate under concurrent uploads; the free-disk floor is the hard limit.

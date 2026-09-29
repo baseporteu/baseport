@@ -22,7 +22,7 @@ public class OpenApiCacheTests
         OpenApiCache.Invalidate();
         var version = OpenApiCache.CurrentVersion;
         OpenApiCache.Set(version, "{\"cached\":true}");
-        Assert.Equal("{\"cached\":true}", OpenApiCache.Get(version));
+        Assert.Equal("{\"cached\":true}", OpenApiCache.Get(version)?.Json);
     }
 
     [Fact]
@@ -36,6 +36,75 @@ public class OpenApiCacheTests
         var next = OpenApiCache.CurrentVersion;
         Assert.NotEqual(version, next);
         Assert.Null(OpenApiCache.Get(next));
+    }
+
+    [Fact]
+    public void ETagFollowsContent()
+    {
+        OpenApiCache.Invalidate();
+        var first = OpenApiCache.Set(OpenApiCache.CurrentVersion, "{\"a\":1}");
+        OpenApiCache.Invalidate();
+        var same = OpenApiCache.Set(OpenApiCache.CurrentVersion, "{\"a\":1}");
+        OpenApiCache.Invalidate();
+        var changed = OpenApiCache.Set(OpenApiCache.CurrentVersion, "{\"a\":2}");
+
+        Assert.Equal(first.ETag, same.ETag);
+        Assert.NotEqual(first.ETag, changed.ETag);
+        Assert.StartsWith("\"", first.ETag);
+        Assert.EndsWith("\"", first.ETag);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("\"stale\"", false)]
+    [InlineData("*", true)]
+    [InlineData("CURRENT", true)]
+    [InlineData("W/CURRENT", true)]
+    [InlineData("\"stale\", CURRENT", true)]
+    [InlineData("not-a-tag", false)]
+    public void NotModifiedMatchesIfNoneMatch(string? header, bool expected)
+    {
+        var document = new OpenApiCache.Document(1, "{}", "\"abc\"");
+        var value = header?.Replace("CURRENT", document.ETag, StringComparison.Ordinal);
+        var headers = value is null ? Microsoft.Extensions.Primitives.StringValues.Empty : new Microsoft.Extensions.Primitives.StringValues(value);
+
+        Assert.Equal(expected, OpenApiCache.NotModified(headers, document));
+    }
+
+    [Fact]
+    public void OlderVersionDoesNotOverwriteNewer()
+    {
+        OpenApiCache.Invalidate();
+        var older = OpenApiCache.CurrentVersion;
+        OpenApiCache.Invalidate();
+        var newer = OpenApiCache.CurrentVersion;
+
+        OpenApiCache.Set(newer, "new");
+        OpenApiCache.Set(older, "old");
+
+        Assert.Equal("new", OpenApiCache.Get(newer)?.Json);
+        Assert.Null(OpenApiCache.Get(older));
+    }
+
+    [Fact]
+    public async Task ConcurrentSetsKeepNewest()
+    {
+        var versions = Enumerable.Range(0, 64).Select(_ =>
+        {
+            OpenApiCache.Invalidate();
+            return OpenApiCache.CurrentVersion;
+        }).ToArray();
+
+        await Parallel.ForEachAsync(versions.Reverse(), TestContext.Current.CancellationToken, (v, _) =>
+        {
+            OpenApiCache.Set(v, v.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return ValueTask.CompletedTask;
+        });
+
+        var last = versions[^1];
+        Assert.Equal(last.ToString(System.Globalization.CultureInfo.InvariantCulture), OpenApiCache.Get(last)?.Json);
+        Assert.All(versions[..^1], v => Assert.Null(OpenApiCache.Get(v)));
     }
 }
 
@@ -86,6 +155,26 @@ public class OpenApiCacheInvalidationTests : IDisposable
 
         _db.Records.Add(new Record { Id = Ids.NewShortId(12), TableId = table.Id, JsonData = "{}", CreatedAt = DateTime.UtcNow });
         Assert.False(RecordChangeInterceptor.SchemaEntriesChanged(_db.ChangeTracker));
+    }
+
+    [Fact]
+    public async Task SettingsChangeBumpsTheVersion()
+    {
+        _db.AppSettings.Add(new AppSettings());
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var settings = await _db.AppSettings.SingleAsync(TestContext.Current.CancellationToken);
+        var before = OpenApiCache.CurrentVersion;
+        settings.ApiTitle = "Renamed";
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        Assert.True(OpenApiCache.CurrentVersion > before);
+    }
+
+    [Fact]
+    public void AnOidcProviderAddIsASchemaChange()
+    {
+        _db.OidcProviders.Add(new OidcProvider { Id = Ids.NewShortId(12), Slug = "acme" });
+        Assert.True(RecordChangeInterceptor.SchemaEntriesChanged(_db.ChangeTracker));
     }
 
     [Fact]

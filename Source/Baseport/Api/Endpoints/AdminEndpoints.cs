@@ -423,7 +423,7 @@ public static class AdminEndpoints
                 s.TdsEnabled,
                 s.TdsPort,
                 s.TdsBindAddress,
-                version = "0.1.0",
+                version = CliHelp.Version,
                 uptime = DateTime.UtcNow - Ids.StartedAt,
                 openapiPath = "/api/openapi.json",
                 docsPath = "/docs",

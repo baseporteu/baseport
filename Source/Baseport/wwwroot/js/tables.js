@@ -185,31 +185,8 @@ function openEndpointSheet(id) {
         placeholder: 'What this endpoint is for, and how to use it.',
     });
 
-    const methods = ui.el('div', 'field');
-    methods.append(ui.el('span', 'field-label-text', {
-        textContent: 'Methods'
-    }));
-    const list = ui.el('ul', 'api-table-list');
-    const boxes = {};
-    ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].forEach((method) => {
-        const row = ui.el('li', 'api-table-row');
-        row.append(ui.el('span', 'api-table-name mono', {
-            textContent: method
-        }));
-        const label = ui.el('label', 'switch');
-        const box = ui.el('input', null, {
-            type: 'checkbox',
-            checked: (table.apiMethods || []).includes(method)
-        });
-        label.append(box, ui.el('span', 'track'), ui.el('span', 'thumb'));
-        row.append(label);
-        list.append(row);
-        boxes[method] = box;
-    });
-    methods.append(list);
-    methods.append(ui.el('span', 'field-help', {
-        textContent: 'When a method is turned off, it is removed from the documentation and rejected by the API.'
-    }));
+    const methods = ui.methodSwitches(['GET', 'POST', 'PATCH', 'PUT', 'DELETE'], table.apiMethods,
+        'When a method is turned off, it is removed from the documentation and rejected by the API.');
 
     body.append(exposed, apiName, docsEnabled, displayName, namespace, documentation, methods);
 
@@ -225,7 +202,7 @@ function openEndpointSheet(id) {
                     apiDisplayName: displayName.ctrl.value,
                     apiNamespace: namespace.ctrl.value,
                     apiDocumentation: documentation.ctrl.value,
-                    apiMethods: Object.keys(boxes).filter((m) => boxes[m].checked),
+                    apiMethods: methods.selected(),
                 },
                 success: 'Endpoint updated.',
             });
