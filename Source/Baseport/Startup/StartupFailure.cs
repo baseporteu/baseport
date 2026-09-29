@@ -23,6 +23,7 @@ public static class StartupFailure
                     return $"{Address(ex)} is not an address on this machine. Check the host in --urls.";
 
                 case InvalidOperationException when e.Message.Contains("delete the database file", StringComparison.OrdinalIgnoreCase):
+                case InvalidOperationException when e.Message.StartsWith("Baseport:", StringComparison.Ordinal):
                     return e.Message;
 
                 case SqliteException { SqliteErrorCode: 14 }:

@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http;
+
 namespace Baseport;
 
 public static class AdminSurface
@@ -15,6 +17,14 @@ public static class AdminSurface
 
         Port = parsed.Port;
         return url;
+    }
+
+    public static string? Conflict(string adminUrl, IEnumerable<string> publicUrls)
+    {
+        var admin = BindingAddress.Parse(adminUrl).Port;
+        return publicUrls.Any(u => BindingAddress.Parse(u.Trim()).Port == admin)
+            ? $"Baseport:AdminAddress uses port {admin}, which --urls already serves. The console needs its own port, for example 127.0.0.1:5264."
+            : null;
     }
 
     public static IApplicationBuilder UseAdminSurface(this IApplicationBuilder app) =>

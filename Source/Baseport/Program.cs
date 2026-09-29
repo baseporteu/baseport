@@ -109,8 +109,9 @@ try
 
     if (AdminSurface.Configure(config["AdminAddress"]) is { } adminUrl)
     {
-        var configured = builder.Configuration["urls"] ?? "http://localhost:5000";
-        builder.WebHost.UseUrls([.. configured.Split(';', StringSplitOptions.RemoveEmptyEntries), adminUrl]);
+        var configured = (builder.Configuration["urls"] ?? "http://localhost:5000").Split(';', StringSplitOptions.RemoveEmptyEntries);
+        if (AdminSurface.Conflict(adminUrl, configured) is { } conflict) throw new InvalidOperationException(conflict);
+        builder.WebHost.UseUrls([.. configured, adminUrl]);
     }
 
     builder.Services.AddDbContextPool<AppDbContext>(options =>

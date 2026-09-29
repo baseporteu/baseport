@@ -298,6 +298,33 @@ public class AdminSurfaceTests
         AdminSurface.Configure("");
     }
 
+    [Theory]
+    [InlineData("http://0.0.0.0:5000", "http://0.0.0.0:5000", true)]
+    [InlineData("http://127.0.0.1:5000", "http://*:5000", true)]
+    [InlineData("http://127.0.0.1:5000", "http://localhost:5000;http://[::]:6000", true)]
+    [InlineData("http://127.0.0.1:5264", "http://0.0.0.0:5000", false)]
+    [InlineData("http://127.0.0.1:5264", "http://+:5000;https://localhost:5001", false)]
+    public void AdminPortMustDifferFromPublicPorts(string admin, string urls, bool conflict)
+    {
+        var message = AdminSurface.Conflict(admin, urls.Split(';'));
+
+        Assert.Equal(conflict, message is not null);
+        if (conflict)
+        {
+            Assert.StartsWith("Baseport:AdminAddress", message);
+            Assert.Equal(message, StartupFailure.Describe(new InvalidOperationException(message)));
+        }
+    }
+
+    [Fact]
+    public void InvalidAdminAddressIsOneLine()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => AdminSurface.Configure("not an address"));
+        AdminSurface.Configure("");
+
+        Assert.Equal(ex.Message, StartupFailure.Describe(ex));
+    }
+
     [Fact]
     public void A_nonsense_admin_address_fails_the_start_rather_than_binding_nothing()
     {
