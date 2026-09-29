@@ -284,12 +284,44 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void A_derived_field_is_not_offered_as_an_input()
+    public void ComputedFieldsAreReadOnly()
     {
-        var props = (OpenApiSpec.BuildSchemas(new List<TableDefinition> { Detailed() })["SalesOrders"]!["properties"] as JsonObject)!;
+        var t = Detailed();
+        t.Fields.Add(new() { Id = Ids.NewShortId(12), Name = "Ref", DataType = "systemid" });
+        var schema = OpenApiSpec.BuildSchemas(new List<TableDefinition> { t })["SalesOrders"]!;
+        var props = schema["properties"]!.AsObject();
+        var required = schema["required"]!.AsArray().Select(n => n!.GetValue<string>()).ToList();
 
-        Assert.False(props.ContainsKey("Margin"), "a calculated field cannot be written, it must not appear in the request schema");
-        Assert.True(props.ContainsKey("OrderNo"));
+        foreach (var name in new[] { "Margin", "Ref" })
+        {
+            Assert.True(props[name]!["readOnly"]!.GetValue<bool>(), name);
+            Assert.DoesNotContain(name, required);
+        }
+        Assert.Null(props["OrderNo"]!["readOnly"]);
+    }
+
+    [Fact]
+    public void SystemIdIsDocumentedWithoutBeingHidden()
+    {
+        var t = Detailed();
+        var field = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Ref", DataType = "systemid", Label = "Reference" };
+        t.Fields.Add(field);
+
+        var props = OpenApiSpec.BuildSchemas(new List<TableDefinition> { t })["SalesOrders"]!["properties"]!.AsObject();
+
+        Assert.False(field.IsHidden);
+        Assert.Equal("Reference", props["Ref"]!["title"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void SecretFieldsAreWriteOnly()
+    {
+        var t = Detailed();
+        t.Fields.Add(new() { Id = Ids.NewShortId(12), Name = "Pin", DataType = "password" });
+
+        var props = OpenApiSpec.BuildSchemas(new List<TableDefinition> { t })["SalesOrders"]!["properties"]!.AsObject();
+
+        Assert.True(props["Pin"]!["writeOnly"]!.GetValue<bool>());
     }
 
     [Fact]
