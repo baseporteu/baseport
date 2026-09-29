@@ -11,15 +11,7 @@ Baseport is pre-alpha. The database schema and API surface change between commit
 
 ## Configuration
 
-Settings are read from `appsettings.json` beside the binary. Every `Baseport:*` setting is also an environment variable, with `__` replacing the colon.
-
-```ini
-Baseport__ConnectionString=Data Source=/data/baseport.db
-Baseport__TrustForwardedHeaders=true
-Baseport__AdminAddress=0.0.0.0:5264
-```
-
-`docker-compose.yml` forwards shorter aliases from a `.env` file to the same settings:
+Settings go in `.env` in the install directory. Docker reads the `.env` beside `docker-compose.yml`.
 
 ```ini
 BASEPORT_CONNECTION_STRING=Data Source=/data/baseport.db
@@ -42,16 +34,16 @@ Runtime settings are managed under **Settings** in the console and stored in the
 
 ## Reverse proxy
 
-`Baseport__TrustForwardedHeaders=true` (`BASEPORT_TRUST_FORWARDED_HEADERS` in Docker) makes Baseport read the client address and scheme from the proxy's forwarded headers. Without it:
+`BASEPORT_TRUST_FORWARDED_HEADERS=true` makes Baseport read the client address and scheme from the proxy's forwarded headers. Without it:
 
 - rate limits key on the proxy address, so all clients share one budget;
 - sign-in is refused with "Sign-in needs HTTPS on this address", because the request appears to be plain HTTP.
 
 Session cookies are `Secure` unless the host is `localhost`, `127.0.0.1` or `[::1]`. Sign-in over plain HTTP on any other host is refused.
 
-`Baseport__AllowInsecureSignIn=true` lifts both rules for a trusted network without TLS, such as a test server at `http://servername:5000`. Session cookies are then sent without `Secure` and can be taken over by anyone on the network path. The setting is config-only, logs a warning on every start, and fails `baseport doctor`. An SSH tunnel (`ssh -L 5000:localhost:5000 servername`, then `localhost:5000`) avoids it.
+`BASEPORT_ALLOW_INSECURE_SIGNIN=true` lifts both rules for a trusted network without TLS, such as a test server at `http://servername:5000`. Session cookies are then sent without `Secure` and can be taken over by anyone on the network path. The setting is config-only, logs a warning on every start, and fails `baseport doctor`. An SSH tunnel (`ssh -L 5000:localhost:5000 servername`, then `localhost:5000`) avoids it.
 
-`Baseport__AdminAddress` (`BASEPORT_ADMIN_ADDRESS` in Docker) moves the console to a second listener; the console routes return `404` on the public port. Publish that port on loopback only; in `docker-compose.yml`, add an entry such as `"127.0.0.1:5264:5264"` under `ports:`.
+`BASEPORT_ADMIN_ADDRESS` moves the console to a second listener; the console routes return `404` on the public port. Publish that port on loopback only; in `docker-compose.yml`, add an entry such as `"127.0.0.1:5264:5264"` under `ports:`.
 
 ## Service install
 
@@ -126,7 +118,7 @@ Saved SQL queries can run on the same scheduler; see [SQL and scheduled queries]
 
 ## Wire listeners
 
-Both wire protocols send the API token in cleartext. A listener binds only to a loopback address unless `Baseport:WireRemoteAccess` is `true` in `appsettings.json` (`Baseport__WireRemoteAccess=true` in Docker, where container loopback is unreachable from the host; the port also needs publishing). The console, the CLI and the listener at start all refuse a public bind address without it. A remote listener belongs behind a TLS tunnel.
+Both wire protocols send the API token in cleartext. A listener binds only to a loopback address unless `BASEPORT_ALLOW_REMOTE_PROVIDERS=true`. In Docker, container loopback is unreachable from the host, so the setting and a published port are both required. The console, the CLI and the listener at start all refuse a public bind address without it. A remote listener belongs behind a TLS tunnel.
 
 | Limit | Value |
 | --- | --- |

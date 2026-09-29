@@ -24,7 +24,7 @@ COPY --from=build --chown=baseport:baseport /app/publish/Baseport ./Baseport
 RUN mkdir -p /data && chown baseport:baseport /data
 USER baseport
 
-ENV Baseport__ConnectionString="Data Source=/data/baseport.db" \
+ENV BASEPORT_CONNECTION_STRING="Data Source=/data/baseport.db" \
     ASPNETCORE_URLS="http://+:5000"
 WORKDIR /data
 

@@ -69,12 +69,7 @@ public static class AccountsCli
 
     public static async Task<int> RunAsync(string[] args, string bundledSettings, string localSettings)
     {
-        var config = new ConfigurationBuilder()
-            .AddJsonFile(bundledSettings, optional: true)
-            .AddJsonFile(localSettings, optional: true)
-            .AddJsonFile(Path.Combine(Directory.GetCurrentDirectory(), $"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json"), optional: true)
-            .AddEnvironmentVariables()
-            .Build();
+        var config = ConfigCli.Build(bundledSettings, localSettings);
         var connectionString = config["Baseport:ConnectionString"] ?? "Data Source=baseport.db";
 
         if (MissingDatabase(connectionString)) return 1;

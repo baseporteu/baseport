@@ -5,7 +5,9 @@ description: "Every Baseport setting in appsettings.json and the environment"
 
 # Configuration reference
 
-Process settings are read from `appsettings.json` beside the binary, then from `appsettings.json` in the working directory, then from `appsettings.{Environment}.json` and environment variables. An environment variable replaces `:` with `__`: `Baseport:AdminAddress` becomes `Baseport__AdminAddress`.
+Process settings are read in this order, later sources winning: `appsettings.json` beside the binary, `appsettings.json` in the working directory, `appsettings.{Environment}.json`, `.env` beside the binary, environment variables, command-line arguments. An environment variable replaces `:` with `__` (`Baseport__AdminAddress`) or uses its alias (`BASEPORT_ADMIN_ADDRESS`).
+
+`baseport config` lists each setting with its source. `baseport config --check` and `baseport doctor` report `.env` lines that are invalid or override another source.
 
 Runtime settings (currency, time zone, authentication, jobs, sites, uploads, listeners) are managed under **Settings** in the console and stored in the database.
 
@@ -17,8 +19,7 @@ Runtime settings (currency, time zone, authentication, jobs, sites, uploads, lis
 | `TrustForwardedHeaders` | `false` | Read client address and scheme from `X-Forwarded-For` and `X-Forwarded-Proto`. Required behind a reverse proxy |
 | `AdminAddress` | unset | Second listener for the console. Console and console-auth routes return `404` on the public port |
 | `AllowInsecureSignIn` | `false` | Allow sign-in over plain HTTP off localhost; session cookies lose `Secure`. Logs a warning on start and fails `baseport doctor` |
-| `WireRemoteAccess` | `false` | Allow the Postgres and TDS listeners to bind a non-loopback address |
-| `PreviewSecret` | generated | Signing key for form preview links. Overrides the per-instance value stored in the database |
+| `AllowRemoteProviders` | `false` | Allow the Postgres and TDS listeners to bind a non-loopback address |
 
 `TrustForwardedHeaders` accepts forwarded headers from a loopback proxy only (the ASP.NET Core default). A proxy on another host is not trusted; its clients share one rate-limit budget and sign-in sees plain HTTP. There is no setting for other proxy addresses yet.
 
@@ -29,19 +30,22 @@ Runtime settings (currency, time zone, authentication, jobs, sites, uploads, lis
 | `--urls` | `http://0.0.0.0:5000` | Listening addresses, `;`-separated. Also `ASPNETCORE_URLS` |
 | `ASPNETCORE_ENVIRONMENT` | `Production` | Selects `appsettings.{Environment}.json` |
 
-## Docker aliases
+## .env
 
-`docker-compose.yml` reads a `.env` file beside it:
+The installer creates `.env` in the install directory with every setting commented out; updates keep it. `docker-compose.yml` passes the same file to the container. A line is `NAME=value`, with an alias or a `Baseport__<Key>` name.
 
-| Variable | Setting | Default |
-| --- | --- | --- |
-| `BASEPORT_TAG` | Image tag | `latest` |
-| `BASEPORT_PORT` | Published host port | `5000` |
-| `BASEPORT_CONNECTION_STRING` | `Baseport:ConnectionString` | `Data Source=/data/baseport.db` |
-| `BASEPORT_TRUST_FORWARDED_HEADERS` | `Baseport:TrustForwardedHeaders` | `false` |
-| `BASEPORT_ADMIN_ADDRESS` | `Baseport:AdminAddress` | unset |
+| Alias | Setting |
+| --- | --- |
+| `BASEPORT_URLS` | `--urls` |
+| `BASEPORT_CONNECTION_STRING` | `Baseport:ConnectionString` |
+| `BASEPORT_TRUST_FORWARDED_HEADERS` | `Baseport:TrustForwardedHeaders` |
+| `BASEPORT_ADMIN_ADDRESS` | `Baseport:AdminAddress` |
+| `BASEPORT_ALLOW_INSECURE_SIGNIN` | `Baseport:AllowInsecureSignIn` |
+| `BASEPORT_ALLOW_REMOTE_PROVIDERS` | `Baseport:AllowRemoteProviders` |
+| `BASEPORT_TAG` | Image tag, Docker only |
+| `BASEPORT_PORT` | Published host port, Docker only |
 
-Other settings are passed as `Baseport__<Key>` entries under `environment:`.
+`BASEPORT_URLS` has no effect under `baseport service`, which passes `--urls`.
 
 ## Logging
 

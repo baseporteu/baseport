@@ -7,12 +7,7 @@ public static class ProvidersCli
 {
     public static async Task<int> RunAsync(string[] args, string bundledSettings, string localSettings)
     {
-        var config = new ConfigurationBuilder()
-            .AddJsonFile(bundledSettings, optional: true)
-            .AddJsonFile(localSettings, optional: true)
-            .AddJsonFile(Path.Combine(Directory.GetCurrentDirectory(), $"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json"), optional: true)
-            .AddEnvironmentVariables()
-            .Build();
+        var config = ConfigCli.Build(bundledSettings, localSettings);
         var connectionString = config["Baseport:ConnectionString"] ?? "Data Source=baseport.db";
 
         if (AccountsCli.MissingDatabase(connectionString)) return 1;
@@ -34,7 +29,7 @@ public static class ProvidersCli
         {
             if (rest is ["status"]) return await PrintStatusAsync(db);
             if (rest is [("postgres" or "tds") and var provider, ("enable" or "disable") and var action, ..])
-                return await SetAsync(db, provider, action, rest[2..], config.GetValue("Baseport:WireRemoteAccess", false));
+                return await SetAsync(db, provider, action, rest[2..], config.GetValue("Baseport:AllowRemoteProviders", false));
         }
         catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or DbUpdateException or UnauthorizedAccessException)
         {

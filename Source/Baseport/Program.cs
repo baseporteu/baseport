@@ -15,11 +15,22 @@ if (!File.Exists(bundledSettings) && !File.Exists(localSettings))
     return 1;
 }
 
-if (args.Length > 0 && args[0] == "providers")
-    return await ProvidersCli.RunAsync(args, bundledSettings, localSettings);
+try
+{
+    if (args.Length > 0 && args[0] == "providers")
+        return await ProvidersCli.RunAsync(args, bundledSettings, localSettings);
 
-if (args.Length > 0 && args[0] == "accounts")
-    return await AccountsCli.RunAsync(args, bundledSettings, localSettings);
+    if (args.Length > 0 && args[0] == "accounts")
+        return await AccountsCli.RunAsync(args, bundledSettings, localSettings);
+
+    if (args.Length > 0 && args[0] == "config")
+        return ConfigCli.Run(args, bundledSettings, localSettings);
+}
+catch (UnauthorizedAccessException ex)
+{
+    Console.Error.WriteLine($"{ex.Message} Run it as the account that owns the install: sudo baseport {args[0]}");
+    return 1;
+}
 
 if (args.Length > 0 && args[0] is "help" or "-h" or "--help")
     return CliHelp.List("commands", CliHelp.Commands);
@@ -85,19 +96,14 @@ try
     builder.Host.UseSerilog();
     builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
-    builder.Configuration.Sources.Insert(0, new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
-    {
-        Path = bundledSettings,
-        Optional = true,
-        ReloadOnChange = true,
-        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(AppContext.BaseDirectory)
-    });
+    builder.Configuration.Sources.Insert(0, BundledSettings.Source(AppContext.BaseDirectory));
+    EnvFile.InsertBeforeEnvironment(builder.Configuration.Sources, EnvFile.Source(EnvFile.InstallDirectory()));
+    EnvFile.InsertBeforeEnvironment(builder.Configuration.Sources, EnvFile.EnvironmentAliases());
 
     var config = builder.Configuration.GetSection("Baseport");
     var connectionString = config["ConnectionString"] ?? "Data Source=baseport.db";
-    var previewSecret = config["PreviewSecret"];
     var trustForwardedHeaders = config.GetValue("TrustForwardedHeaders", false);
-    Baseport.Providers.WireBind.RemoteAllowed = config.GetValue("WireRemoteAccess", false);
+    Baseport.Providers.WireBind.RemoteAllowed = config.GetValue("AllowRemoteProviders", false);
     AdminAuth.AllowInsecureSignIn = config.GetValue("AllowInsecureSignIn", false);
     FileStore.Initialize(connectionString);
 
@@ -205,7 +211,7 @@ try
         await AdminAuth.EnsureAdminPasswordAsync(db);
 
         var settings = await db.SettingsAsync() ?? new AppSettings();
-        PreviewAuth.Initialize(previewSecret ?? settings.PreviewSecret, TimeSpan.FromDays(1));
+        PreviewAuth.Initialize(settings.PreviewSecret, TimeSpan.FromDays(1));
 
         await ActionDefCache.ReloadFromDbAsync(db);
     }

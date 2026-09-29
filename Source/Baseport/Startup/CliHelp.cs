@@ -15,18 +15,26 @@ public static class CliHelp
 
     public static readonly string[] Commands =
     {
-        "accounts                      list, promote and repair admin accounts",
-        "providers                     turn the Postgres and TDS endpoints on or off",
-        "status                        say whether Baseport is running, and where",
-        "doctor                        check this install and name what is wrong",
-        "logs [lines]                  follow the log files, and show the first-start login",
-        "service [--urls URL]          install the systemd service (Linux, root)",
-        "start | stop | restart        control that service (Linux, root)",
-        "stop --force                  stop whatever is running, service or foreground",
-        "update                        replace this install with the latest release",
-        "uninstall [--purge]           remove Baseport, --purge deletes the data too",
-        "version                       print the version",
-        "help                          this list"
+        // Help & Information
+        "help",
+        "version                       Display the application version",
+        "status                        Show whether Baseport is running and its location",
+        "config [--check]              Display each setting and its source",
+        "doctor                        Verify the installation and diagnose issues",
+        "logs [lines]                  Follow log files and show initial login details",
+
+        // Operations
+        "accounts                      List, promote, and repair admin accounts",
+        "providers                     Toggle Postgres and TDS endpoints on or off",
+
+        // Service control
+        "start | stop | restart        Control the systemd service (Linux, root)",
+        "stop --force                  Stop any running service or foreground process",
+
+        // Installation
+        "service [--urls URL]          Install the systemd service (Linux, root)",
+        "update                        Replace the installation with the latest release",
+        "uninstall [--purge]           Remove Baseport, with optional data deletion"
     };
 
     public static int List(string what, IEnumerable<string> commands, string? error = null)
@@ -36,7 +44,8 @@ public static class CliHelp
         output.WriteLine($"baseport version: {Version}");
         output.WriteLine();
         output.WriteLine($"Choose one of the available {what}:");
-        foreach (var c in commands) output.WriteLine($"        {c}");
+        foreach (var c in commands)
+            output.WriteLine($"        {c}");
         return error is null ? 0 : 1;
     }
 

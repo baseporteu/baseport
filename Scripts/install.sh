@@ -64,7 +64,7 @@ curl -fsSL -o "$TMP/$ASSET.sha256" "$BASE/$ASSET.sha256" || fail "Release $TAG h
 mkdir -p "$TMP/payload"
 tar -xzf "$TMP/$ASSET" -C "$TMP/payload"
 
-for KEEP in baseport.db baseport.db-shm baseport.db-wal baseport.key log uploads backups; do
+for KEEP in baseport.db baseport.db-shm baseport.db-wal baseport.key .env log uploads backups; do
   rm -rf "${TMP:?}/payload/$KEEP"
 done
 
@@ -75,6 +75,22 @@ if [ -f "$DIR/appsettings.json" ]; then rm -f "$TMP/payload/appsettings.json"; f
 mkdir -p "$DIR"
 cp -R "$TMP/payload/." "$DIR/"
 chmod +x "$DIR/Baseport"
+
+if [ ! -e "$DIR/.env" ]; then
+  cat > "$DIR/.env" <<'ENVFILE'
+# Precedence: appsettings.json < this file < process environment variables < command-line arguments.
+# BASEPORT_URLS=http://localhost:5000
+# BASEPORT_ADMIN_ADDRESS=127.0.0.1:5264
+# BASEPORT_TRUST_FORWARDED_HEADERS=false
+# BASEPORT_CONNECTION_STRING=Data Source=baseport.db
+# BASEPORT_ALLOW_INSECURE_SIGNIN=false
+# BASEPORT_ALLOW_REMOTE_PROVIDERS=false
+ENVFILE
+  chmod 600 "$DIR/.env"
+  if [ "$(id -u)" = "0" ] && id baseport >/dev/null 2>&1 && [ "$(stat -c %U "$DIR")" = "baseport" ]; then
+    chown baseport:baseport "$DIR/.env"
+  fi
+fi
 
 mkdir -p "$BIN"
 cat > "$BIN/baseport.new" <<EOF
@@ -298,6 +314,7 @@ doctor)
   fi
 
   if grep -qsE '"AllowInsecureSignIn"[[:space:]]*:[[:space:]]*true' "$DIR/appsettings.json" \
+    || grep -qsiE '^[[:space:]]*(export[[:space:]]+)?(Baseport__AllowInsecureSignIn|BASEPORT_ALLOW_INSECURE_SIGNIN)=["'"'"']?true' "$DIR/.env" \
     || grep -qsiE 'Baseport__AllowInsecureSignIn=true' "$UNIT"; then
     bad "Baseport:AllowInsecureSignIn is on: sign-in works over plain HTTP. Turn it off before exposing this instance."
   fi
@@ -314,6 +331,15 @@ doctor)
     fi
   else
     warn "no baseport.service, Baseport only runs while your terminal does. Install one: sudo $SELF service"
+  fi
+
+  if CONFIG=$(cd "$DIR" && "$DIR/Baseport" config --check 2>&1); then
+    ok "configuration has no conflicts"
+  else
+    printf '%s\n' "$CONFIG" | while IFS= read -r LINE; do [ -n "$LINE" ] && warn "$LINE"; done
+  fi
+  if grep -qsE '^[[:space:]]*(export[[:space:]]+)?BASEPORT_URLS=' "$DIR/.env" && grep -qs -- '--urls' "$UNIT"; then
+    warn "BASEPORT_URLS in .env is ignored: baseport.service passes --urls. Set the address with: sudo $SELF service --urls URL"
   fi
 
   URL=$(service_url)
@@ -361,12 +387,12 @@ uninstall)
     for F in "$DIR"/* "$DIR"/.[!.]*; do
       [ -e "$F" ] || continue
       case "${F##*/}" in
-        baseport.db|baseport.db-shm|baseport.db-wal|baseport.key|uploads|backups|log|appsettings.json) continue ;;
+        baseport.db|baseport.db-shm|baseport.db-wal|baseport.key|uploads|backups|log|appsettings.json|.env) continue ;;
       esac
       rm -rf "$F"
     done
     echo "Removed the Baseport program files from $DIR."
-    echo "Your data stayed: baseport.db, baseport.key, appsettings.json, uploads, backups, log."
+    echo "Your data stayed: baseport.db, baseport.key, appsettings.json, .env, uploads, backups, log."
     echo "Delete that as well with: rm -rf $DIR"
   fi
 
@@ -410,7 +436,7 @@ help|-h|--help)
 version)
   exec "$DIR/Baseport" version
   ;;
-accounts|providers)
+accounts|providers|config)
   cd "$DIR"
   if [ "$(id -u)" = "0" ] && id baseport >/dev/null 2>&1 && [ "$(stat -c %U "$DIR")" = "baseport" ]; then
     exec runuser -u baseport -- env DOTNET_BUNDLE_EXTRACT_BASE_DIR="$DIR/.net" "$DIR/Baseport" "$@"
@@ -418,6 +444,7 @@ accounts|providers)
   for P in "$DIR" "$DIR/baseport.db" "$DIR/baseport.db-wal" "$DIR/baseport.db-shm"; do
     if [ -e "$P" ] && [ ! -w "$P" ]; then need_root "$@"; fi
   done
+  if [ -e "$DIR/.env" ] && [ ! -r "$DIR/.env" ]; then need_root "$@"; fi
   exec "$DIR/Baseport" "$@"
   ;;
 *)

@@ -40,7 +40,7 @@ Severity is evaluated using CVSS 3.1. Fixes are published alongside a GitHub Sec
 ### Out of Scope
 - Third-party or unowned instances
 - Denial-of-service attacks relying solely on traffic volume
-- Findings that depend on explicitly overriding documented safeguards (`Baseport:AllowInsecureSignIn`, `Baseport:WireRemoteAccess`, or **Allow private targets** in Settings)
+- Findings that depend on explicitly overriding documented safeguards (`AllowInsecureSignIn`, `AllowRemoteProviders`, or **Allow private targets** in Settings)
 - Vulnerabilities in upstream dependencies without a demonstrated exploit path through Baseport (please report these upstream)
 
 Security testing must be strictly limited to instances that you own and operate yourself.

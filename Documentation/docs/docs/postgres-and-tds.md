@@ -22,7 +22,7 @@ baseport providers status
 | Postgres | `127.0.0.1:5432` |
 | TDS | `127.0.0.1:1433` |
 
-A non-loopback bind address requires `Baseport:WireRemoteAccess`; see [Going to production](/docs/going-to-production#wire-listeners).
+A non-loopback bind address requires `Baseport:AllowRemoteProviders`; see [Going to production](/docs/going-to-production#wire-listeners).
 
 ## Connecting
 

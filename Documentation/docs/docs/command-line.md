@@ -13,6 +13,7 @@ The installer adds a `baseport` wrapper to the PATH. It runs the binary from the
 | --- | --- |
 | `baseport help` | List the commands |
 | `baseport version` | Print the version |
+| `baseport config [--check]` | Each setting and its source; `--check` prints only problems |
 | `baseport status` | Whether Baseport is running, and where |
 | `baseport doctor` | Check the install; each `warn` and `FAIL` line names its fix |
 | `baseport logs [lines]` | Follow the log files, default 200 lines back, with the first-start login printed above the tail |
@@ -59,7 +60,7 @@ Operations the console refuses (see [Authentication](/docs/authentication#cli-on
 | `providers tds enable [--port N] [--bind ADDR]` | Enable the TDS listener |
 | `providers tds disable` | Disable it |
 
-A non-loopback `--bind` requires `Baseport:WireRemoteAccess`. See [Postgres and TDS clients](/docs/postgres-and-tds).
+A non-loopback `--bind` requires `Baseport:AllowRemoteProviders`. See [Postgres and TDS clients](/docs/postgres-and-tds).
 
 ## Install location
 

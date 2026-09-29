@@ -203,7 +203,7 @@ public class WireBindTests
     [InlineData("192.168.1.10")]
     [InlineData("::")]
     public void A_public_bind_address_is_refused_without_the_switch(string address) =>
-        Assert.Contains("Baseport:WireRemoteAccess", WireBind.Problem(address, "Postgres", remoteAllowed: false));
+        Assert.Contains("Baseport:AllowRemoteProviders", WireBind.Problem(address, "Postgres", remoteAllowed: false));
 
     [Fact]
     public void A_public_bind_address_is_accepted_with_the_switch() =>
@@ -219,7 +219,7 @@ public class WireBindTests
         var settings = new AppSettings();
         var body = new System.Text.Json.Nodes.JsonObject { ["tdsBindAddress"] = "0.0.0.0" };
 
-        Assert.Contains("Baseport:WireRemoteAccess", AdminEndpoints.ApplyProviderSettings(body, settings));
+        Assert.Contains("Baseport:AllowRemoteProviders", AdminEndpoints.ApplyProviderSettings(body, settings));
         Assert.Equal("127.0.0.1", settings.TdsBindAddress);
     }
 }

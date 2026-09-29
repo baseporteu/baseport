@@ -203,7 +203,7 @@
                         </div>
                         <div class='settings-pane hidden' data-pane='providers'>
                             <div class='card'>
-                                <div class='card-header'><div><h2>PostgreSQL</h2><p class='muted'>Enable the PostgreSQL wire protocol on this port. Tokens travel in cleartext, so it binds to loopback unless <code>Baseport:WireRemoteAccess</code> is set.</p></div></div>
+                                <div class='card-header'><div><h2>PostgreSQL</h2><p class='muted'>Enable the PostgreSQL wire protocol on this port. Tokens travel in cleartext, so it binds to loopback unless <code>Baseport:AllowRemoteProviders</code> is set.</p></div></div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsPostgresEnabled'>Enabled</label>
@@ -235,7 +235,7 @@
                                 </div>
                             </div>
                             <div class='card'>
-                                <div class='card-header'><div><h2>SQL Server (TDS)</h2><p class='muted'>Enable the TDS wire protocol on this port. Tokens travel in cleartext, so it binds to loopback unless <code>Baseport:WireRemoteAccess</code> is set.</p></div></div>
+                                <div class='card-header'><div><h2>SQL Server (TDS)</h2><p class='muted'>Enable the TDS wire protocol on this port. Tokens travel in cleartext, so it binds to loopback unless <code>Baseport:AllowRemoteProviders</code> is set.</p></div></div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsTdsEnabled'>Enabled</label>
