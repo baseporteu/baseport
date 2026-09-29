@@ -9,9 +9,6 @@ hero:
   actions:
     - theme: brand
       text: Get started
-      link: docs/how-to-use
-    - theme: alt
-      text: Documentation
       link: docs/
     - theme: alt
       text: View on GitHub
