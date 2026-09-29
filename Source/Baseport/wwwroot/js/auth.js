@@ -297,10 +297,11 @@ async function signIn(ev) {
         if (!(await ui.handle(res, {
                 failure: 'Sign-in failed.'
             }))) {
-            if (reply?.totp) showTotpField();
-            if (authMode() === 'otp') {
-                expireOtpFlow();
-            }
+            const totpShown = !document.getElementById('totpContainer').hidden;
+            if (totpShown) flagField('totpCode');
+            else if (reply?.totp) showTotpField();
+            else if (authMode() === 'otp') expireOtpFlow();
+            else flagField('loginPass');
             return false;
         }
         document.getElementById('loginPass').value = '';
@@ -311,6 +312,16 @@ async function signIn(ev) {
         btn.disabled = false;
     }
     return false;
+}
+
+function flagField(id) {
+    const el = document.getElementById(id);
+    el.classList.remove('input-invalid');
+    void el.offsetWidth; // restart the shake
+    el.classList.add('input-invalid');
+    el.addEventListener('input', () => el.classList.remove('input-invalid'), { once: true });
+    el.select();
+    el.focus();
 }
 
 function showTotpField() {

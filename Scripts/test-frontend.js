@@ -508,6 +508,25 @@ test('an account with two-factor gets a code field after its password is accepte
     assert.ok(read('admin/_auth.html').includes("id='totpContainer' hidden"), 'the code field is visible before it is asked for');
 });
 
+test('a refused password marks the password field', async () => {
+    const { dom, module } = loadAuthModule();
+    dom.byId.totpContainer.hidden = true;
+    global.fetch = async () => {
+        const reply = { errors: ['Invalid credentials.'] };
+        return { ok: false, status: 401, clone: () => ({ json: async () => reply }), json: async () => reply };
+    };
+    await module.signIn({ preventDefault() {} });
+    assert.ok(dom.byId.loginPass.classList.contains('input-invalid'), 'a wrong password leaves the field unmarked');
+});
+
+test('the sign-in backdrop is decoration and stays still on request', () => {
+    const page = read('admin/_auth.html');
+    const css = read('app.css');
+    assert.ok(/class='signin-rows' aria-hidden='true'/.test(page), 'the backdrop is exposed to assistive tech');
+    assert.ok(/prefers-reduced-motion: no-preference\) \{\s*\.signin-rows i/.test(css), 'the rows animate under reduced motion');
+    assert.ok(/\.signin-theme\s*{[^}]*z-index:\s*[1-9]/.test(css), 'the theme toggle sits under the sign-in pane');
+});
+
 test('the account menu offers two-factor', () => {
     const shell = read('admin/_shell.html');
     assert.ok(/id='accountMenu'[\s\S]*onclick='openTwoFactor\(\)'/.test(shell), 'the menu has no two-factor item');

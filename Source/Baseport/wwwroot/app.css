@@ -29,12 +29,12 @@
     --primary-foreground: 0 0% 98%;
     --accent: 240 4.8% 95.9%;
     --accent-foreground: 240 5.9% 10%;
-    --ring: var(--brand-h) 44% 35%;
+    --ring: var(--brand-h) 100% 23%;
     --destructive: 0 72% 51%;
     --success: 152 55% 36%;
-    --brand-h: 296;
-    --brand: var(--brand-h) 44% 35%;
-    --brand-solid: var(--brand-h) 44% 35%;
+    --brand-h: 159;
+    --brand: var(--brand-h) 100% 23%;
+    --brand-solid: var(--brand-h) 100% 23%;
     --brand-foreground: 0 0% 100%;
     --sidebar: var(--brand-h) 16% 95%;
     --sidebar-foreground: var(--brand-h) 12% 8%;
@@ -68,8 +68,8 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 72% 62%;
     --success: 152 45% 52%;
-    --brand: var(--brand-h) 44% 58%;
-    --brand-solid: var(--brand-h) 44% 46%;
+    --brand: var(--brand-h) 48% 59%;
+    --brand-solid: var(--brand-h) 75% 28%;
     --brand-foreground: 0 0% 100%;
     --sidebar: var(--brand-h) 12% 9%;
     --sidebar-foreground: var(--brand-h) 10% 96%;
@@ -77,7 +77,7 @@
     --sidebar-border: var(--brand-h) 10% 18%;
     --sidebar-muted: var(--brand-h) 8% 62%;
     --sidebar-active: var(--brand-h) 30% 16%;
-    --ring: var(--brand-h) 44% 58%;
+    --ring: var(--brand-h) 48% 59%;
 }
 
 * {
@@ -114,6 +114,7 @@ body {
     height: 100vh;
     position: sticky;
     top: 0;
+    z-index: 40;
     display: flex;
     flex-direction: column;
     border-right: 1px solid hsl(var(--sidebar-border));
@@ -155,7 +156,6 @@ body {
 }
 
 .brand-mark {
-    position: relative;
     width: 1.75rem;
     height: 1.75rem;
     flex-shrink: 0;
@@ -163,25 +163,11 @@ body {
     align-items: center;
     justify-content: center;
     border-radius: .375rem;
-    overflow: hidden;
-}
-
-.brand-tile {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    filter: brightness(1.6);
+    background: hsl(var(--brand-solid));
 }
 
 .brand-glyph {
-    position: relative;
-    z-index: 1;
     flex-shrink: 0;
-}
-
-[data-theme='dark'] .brand-tile {
-    filter: none;
 }
 
 .brand-name {
@@ -1681,15 +1667,30 @@ li.CodeMirror-hint-active {
     border: 1px solid hsl(var(--input));
     background: transparent;
     color: hsl(var(--foreground));
+    caret-color: hsl(var(--ring));
     font-size: .875rem;
     font-family: inherit;
     width: 100%;
+    transition: border-color .12s ease, box-shadow .12s ease, background-color .12s ease;
+}
+
+.input::placeholder {
+    color: hsl(var(--muted-foreground) / .8);
+}
+
+.input:hover:not(:focus, [readonly], :disabled) {
+    border-color: hsl(var(--muted-foreground) / .45);
 }
 
 .input:focus {
     outline: none;
     border-color: hsl(var(--ring));
-    box-shadow: 0 0 0 2px hsl(var(--ring) / .2);
+    box-shadow: 0 0 0 3px hsl(var(--ring) / .18);
+}
+
+.input:disabled {
+    opacity: .6;
+    cursor: not-allowed;
 }
 
 /* Still readable and still copyable, but plainly not editable: a field held for a reason, not a field that failed. */
@@ -1711,9 +1712,22 @@ li.CodeMirror-hint-active {
 }
 
 .input-invalid,
-.input-invalid:focus {
+.input-invalid:focus,
+.input-invalid:hover {
     border-color: hsl(var(--destructive));
-    box-shadow: 0 0 0 2px hsl(var(--destructive) / .2);
+    box-shadow: 0 0 0 3px hsl(var(--destructive) / .18);
+    caret-color: hsl(var(--destructive));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .input-invalid {
+        animation: input-shake .32s cubic-bezier(.36, .07, .19, .97);
+    }
+}
+
+@keyframes input-shake {
+    20%, 60% { transform: translateX(-3px); }
+    40%, 80% { transform: translateX(3px); }
 }
 
 /* native step arrows can't be themed to match this system in every browser (firefox has no shape lever at all), removed for one consistent look instead of a chromium-only reskin; arrow keys and typing still work */
@@ -2436,6 +2450,7 @@ li.CodeMirror-hint-active {
 
 .btn-danger {
     background: #d63d3d;
+    border-color: transparent;
     color: #fff;
 }
 
@@ -2672,6 +2687,7 @@ li.CodeMirror-hint-active {
     position: fixed;
     top: .75rem;
     right: .75rem;
+    z-index: 1;
 }
 
 .signin {
@@ -2686,7 +2702,6 @@ li.CodeMirror-hint-active {
     text-align: center;
 }
 
-/* The wordmark is one file, painted through a mask so it takes the foreground token and reads in either theme. */
 .signin-mark {
     width: 7.5rem;
     height: 1.61rem;
@@ -2871,6 +2886,73 @@ li.CodeMirror-hint-active {
     .signin-footer {
         animation-delay: .12s;
     }
+}
+
+/* Rows with records moving along them: the backdrop of the sign-in pane, wide screens only. */
+.signin-rows {
+    display: none;
+}
+
+@media (min-width: 64rem) {
+    .signin {
+        position: relative;
+        max-width: 40rem;
+        margin-left: auto;
+        border-left: 1px solid hsl(var(--border));
+    }
+
+    .signin-rows {
+        display: block;
+        position: fixed;
+        inset: 0 35rem 0 0;
+        overflow: hidden;
+        background-image:
+            repeating-linear-gradient(to bottom, transparent 0 47px, hsl(var(--border) / .7) 47px 48px),
+            repeating-linear-gradient(to right, transparent 0 199px, hsl(var(--border) / .4) 199px 200px);
+        -webkit-mask: linear-gradient(to bottom, transparent, #000 20%, #000 75%, transparent);
+        mask: linear-gradient(to bottom, transparent, #000 20%, #000 75%, transparent);
+    }
+
+    .signin-rows i {
+        position: absolute;
+        left: 0;
+        width: 6rem;
+        height: 1px;
+        background: linear-gradient(to right, transparent, hsl(var(--brand)));
+        opacity: 0;
+    }
+
+    .signin-rows i::after {
+        content: '';
+        position: absolute;
+        right: -2px;
+        top: -2px;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: hsl(var(--brand));
+        box-shadow: 0 0 8px 1px hsl(var(--brand) / .6);
+    }
+
+    .signin-rows i:nth-child(1) { top: 191px; --d: 9s; --o: -2s; }
+    .signin-rows i:nth-child(2) { top: 287px; --d: 13s; --o: -7s; }
+    .signin-rows i:nth-child(3) { top: 335px; --d: 8s; --o: -5s; }
+    .signin-rows i:nth-child(4) { top: 431px; --d: 11s; --o: -1s; }
+    .signin-rows i:nth-child(5) { top: 527px; --d: 14s; --o: -9s; }
+    .signin-rows i:nth-child(6) { top: 575px; --d: 10s; --o: -4s; }
+    .signin-rows i:nth-child(7) { top: 671px; --d: 12s; --o: -11s; }
+}
+
+@media (min-width: 64rem) and (prefers-reduced-motion: no-preference) {
+    .signin-rows i {
+        animation: signin-row var(--d) cubic-bezier(.4, 0, .2, 1) var(--o) infinite;
+    }
+}
+
+@keyframes signin-row {
+    0% { transform: translateX(-8rem); opacity: 0; }
+    10%, 85% { opacity: 1; }
+    100% { transform: translateX(calc(100vw - 35rem)); opacity: 0; }
 }
 
 @keyframes signin-rise {
