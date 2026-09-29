@@ -25,22 +25,15 @@ public sealed class AuditLogWriter : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        try
-        {
-            while (await _queue.Reader.WaitToReadAsync(stoppingToken))
-                await DrainAsync();
-        }
-        catch (OperationCanceledException)
-        {
-
-        }
+        while (await _queue.Reader.WaitToReadAsync(CancellationToken.None))
+            await DrainAsync();
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-
         _queue.Writer.TryComplete();
-        while (_queue.Reader.TryPeek(out _)) await DrainAsync();
+        if (ExecuteTask is { } running) await running.WaitAsync(cancellationToken);
+        else while (_queue.Reader.TryPeek(out _)) await DrainAsync();
         await base.StopAsync(cancellationToken);
     }
 

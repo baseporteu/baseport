@@ -51,6 +51,63 @@ public class AuditLogWriterTests : IDisposable
         Assert.All(stored, entry => Assert.Equal("user-1", entry.UserId));
     }
 
+    private sealed class SlowSave : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+    {
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+            System.Data.Common.DbCommand command,
+            Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("INSERT", StringComparison.Ordinal)) await Task.Delay(150, cancellationToken);
+            return result;
+        }
+    }
+
+    private static AuditLog Entry(string path) => new()
+    {
+        Id = Ids.NewShortId(12),
+        CreatedAt = DateTime.UtcNow,
+        Method = "POST",
+        Path = path,
+        Status = 200,
+        UserId = "user-1"
+    };
+
+    [Fact]
+    public async Task ShutdownDuringASaveLosesNothing()
+    {
+        using var services = new ServiceCollection()
+            .AddDbContext<AppDbContext>(o => o.UseSqlite(_connection).AddInterceptors(new SlowSave()))
+            .BuildServiceProvider();
+        var writer = new AuditLogWriter(services.GetRequiredService<IServiceScopeFactory>());
+        await writer.StartAsync(TestContext.Current.CancellationToken);
+
+        writer.Enqueue(Entry("/first"));
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        writer.Enqueue(Entry("/second"));
+        writer.Enqueue(Entry("/third"));
+        await writer.StopAsync(TestContext.Current.CancellationToken);
+
+        using var scope = _services.CreateScope();
+        var paths = await scope.ServiceProvider.GetRequiredService<AppDbContext>().AuditLogs
+            .Select(a => a.Path).ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(new[] { "/first", "/second", "/third" }, paths.Order());
+    }
+
+    [Fact]
+    public async Task EntriesAfterShutdownAreRefused()
+    {
+        var writer = new AuditLogWriter(_services.GetRequiredService<IServiceScopeFactory>());
+        await writer.StartAsync(TestContext.Current.CancellationToken);
+        await writer.StopAsync(TestContext.Current.CancellationToken);
+
+        writer.Enqueue(Entry("/late"));
+
+        using var scope = _services.CreateScope();
+        Assert.Equal(0, await scope.ServiceProvider.GetRequiredService<AppDbContext>().AuditLogs.CountAsync(TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public async Task ShutdownFlushesMoreThanOneBatch()
     {
