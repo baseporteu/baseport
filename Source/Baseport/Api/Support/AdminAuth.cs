@@ -45,7 +45,7 @@ public static class AdminAuth
 
     private static readonly Lazy<string> DecoyHash = new(() => HashPassword("constant-time-decoy"));
 
-    public static bool CheckPassword(string password, UserAccount? user)
+    public static bool CheckPassword(string password, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] UserAccount? user)
     {
         if (user is { IsDisabled: false, PasswordHash.Length: > 0 }) return VerifyPassword(password, user.PasswordHash);
 
@@ -120,6 +120,9 @@ public static class AdminAuth
 
     public static async Task EnsureAdminPasswordAsync(AppDbContext db)
     {
+        // precompute decoy hash
+        _ = DecoyHash.Value;
+
         var admin = await db.UserAccounts.FirstOrDefaultAsync(u => u.Role == AccountRoles.Admin);
         if (admin is null) return;
         if (!string.IsNullOrEmpty(admin.PasswordHash)) return;

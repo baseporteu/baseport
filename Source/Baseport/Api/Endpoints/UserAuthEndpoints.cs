@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
@@ -13,14 +12,14 @@ public static class UserAuthEndpoints
         var webRoot = app.Environment.WebRootPath;
 
         app.MapGet($"{ApiBase}/jwks.json", async (AppDbContext db) =>
-            await EnabledAsync(db) ? Results.Json(UserTokens.Jwks()) : Results.NotFound());
+            await EnabledAsync(db) ? Results.Json(UserTokens.Jwks()) : Results.NotFound()).RequireRateLimiting(RateLimit.Docs);
 
         app.MapPost($"{ApiBase}/anonymous", async (AppDbContext db, HttpContext ctx) =>
         {
             var settings = await db.SettingsAsync() ?? new AppSettings();
-            if (!settings.PublicAuthEnabled) return Results.NotFound();
-            if (!settings.AnonymousAuthEnabled)
-                return Error(403, "Anonymous accounts are not enabled on this instance.");
+            if (!Enabled(settings)) return Results.NotFound();
+            if (!AnonymousOpen(settings))
+                return Error(ctx, ApiProblem.Forbidden, "Anonymous accounts are not enabled on this instance.");
 
             var now = DateTime.UtcNow;
             var user = new UserAccount
@@ -37,32 +36,36 @@ public static class UserAuthEndpoints
             await db.SaveChangesAsync();
 
             AuditLogMiddleware.Note(ctx, $"Anonymous account {user.Username} created");
-            return Results.Created($"{ApiBase}/status", TokenPayload(await UserTokens.IssueAsync(db, user, now)));
+            return Results.Created($"{ApiBase}/status", TokenPairDto.From(await UserTokens.IssueAsync(db, user, now)));
         }).RequireRateLimiting(RateLimit.Auth);
 
-        app.MapPost($"{ApiBase}/register", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
+        app.MapPost($"{ApiBase}/register", async (AppDbContext db, HttpContext ctx, RegisterRequest body) =>
         {
             var settings = await db.SettingsAsync() ?? new AppSettings();
-            if (!settings.PublicAuthEnabled) return Results.NotFound();
-            if (!settings.PublicRegistrationEnabled)
-                return Error(403, "Sign-up is closed on this instance.");
+            if (!Enabled(settings)) return Results.NotFound();
+            if (!RegistrationOpen(settings))
+                return Error(ctx, ApiProblem.Forbidden, "Sign-up is closed on this instance.");
 
-            var email = Text(body, "email").Trim();
-            var password = Text(body, "password");
-            var username = Text(body, "username").Trim();
+            var email = (body.Email ?? "").Trim();
+            var password = body.Password ?? "";
+            var username = (body.Username ?? "").Trim();
 
             if (username.Length == 0) username = DeriveUsername(email);
 
             var errors = AccountValidation.Validate(username, email);
             if (AccountValidation.PasswordProblem(password) is { } problem) errors.Add(problem);
-            if (errors.Count > 0) return Results.BadRequest(new { errors });
+            if (errors.Count > 0) return ApiProblems.Write(ctx, ApiProblem.Unprocessable, errors);
 
             var claiming = await CurrentAsync(db, ctx) is { IsAnonymous: true } anonymous ? anonymous : null;
 
-            if (await db.UserAccounts.AnyAsync(u => u.Username == username && u.Id != (claiming == null ? "" : claiming.Id)))
-                return Error(409, "That username is taken.");
-            if (email.Length > 0 && await db.UserAccounts.AnyAsync(u => u.Email == email && u.Role == AccountRoles.User && u.Id != (claiming == null ? "" : claiming.Id)))
-                return Error(409, "That email is already registered.");
+            // hash before lookup to equalize timing
+            var hash = AdminAuth.HashPassword(password);
+
+            if (await TakenAsync(db, username, email, claiming?.Id ?? ""))
+            {
+                Serilog.Log.Warning("Registration refused for {Client}: username or email in use", RateLimit.ClientKey(ctx));
+                return Error(ctx, ApiProblem.Conflict, "That username or email is already registered.");
+            }
 
             var now = DateTime.UtcNow;
             var user = claiming ?? new UserAccount
@@ -73,7 +76,7 @@ public static class UserAuthEndpoints
             };
             user.Username = username;
             user.Email = email;
-            user.PasswordHash = AdminAuth.HashPassword(password);
+            user.PasswordHash = hash;
             user.IsAnonymous = false;
             user.UpdatedAt = now;
 
@@ -87,30 +90,30 @@ public static class UserAuthEndpoints
             }
 
             var tokens = await UserTokens.IssueAsync(db, user, now);
-            return Results.Created($"{ApiBase}/status", TokenPayload(tokens));
+            return Results.Created($"{ApiBase}/status", TokenPairDto.From(tokens));
         }).RequireRateLimiting(RateLimit.Auth);
 
         app.MapPost($"{ApiBase}/login", LoginAsync).RequireRateLimiting(RateLimit.Auth);
 
-        app.MapPost($"{ApiBase}/refresh", async (AppDbContext db, JsonObject body) =>
+        app.MapPost($"{ApiBase}/refresh", async (AppDbContext db, HttpContext ctx, RefreshRequest body) =>
         {
             if (!await EnabledAsync(db)) return Results.NotFound();
 
-            var reauth = await UserTokens.ReauthAsync(db, Text(body, "refresh_token"), DateTime.UtcNow);
+            var reauth = await UserTokens.ReauthAsync(db, body.RefreshToken ?? "", DateTime.UtcNow);
             return reauth is null
-                ? Error(401, "That refresh token is not valid or has expired.")
-                : Results.Ok(TokenPayload(reauth.Value.Tokens));
+                ? Error(ctx, ApiProblem.Unauthorized, "That refresh token is not valid or has expired.")
+                : Results.Ok(TokenPairDto.From(reauth.Value.Tokens));
         }).RequireRateLimiting(RateLimit.Auth);
 
-        app.MapPost($"{ApiBase}/logout", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
+        app.MapPost($"{ApiBase}/logout", async (AppDbContext db, HttpContext ctx, RefreshRequest body) =>
         {
             if (!await EnabledAsync(db)) return Results.NotFound();
 
-            await UserTokens.RevokeAsync(db, Text(body, "refresh_token"));
+            await UserTokens.RevokeAsync(db, body.RefreshToken ?? "");
 
             await UserTokens.RevokeAsync(db, ctx.Request.Cookies[AdminAuth.RefreshCookie] ?? "");
             AdminAuth.ClearCookies(ctx);
-            return Results.Ok(new { signed_out = true });
+            return Results.Ok(new SignedOutDto(true));
         });
 
         app.MapGet($"{ApiBase}/status", async (AppDbContext db, HttpContext ctx) =>
@@ -118,42 +121,32 @@ public static class UserAuthEndpoints
             if (!await EnabledAsync(db)) return Results.NotFound();
 
             var user = await CurrentAsync(db, ctx);
-            return user is null
-                ? Results.Ok(new { authenticated = false })
-                : Results.Ok(new
-                {
-                    authenticated = true,
-                    sub = user.Id,
-                    user.Username,
-                    user.Email,
-                    user.Role,
-                    anonymous = user.IsAnonymous
-                });
+            return Results.Ok(user is null ? AuthStatusDto.SignedOut : AuthStatusDto.For(user));
         });
 
-        app.MapPost($"{ApiBase}/change_password", async (AppDbContext db, HttpContext ctx, JsonObject body) =>
+        app.MapPost($"{ApiBase}/change_password", async (AppDbContext db, HttpContext ctx, ChangePasswordRequest body) =>
         {
             if (!await EnabledAsync(db)) return Results.NotFound();
 
             var user = await CurrentAsync(db, ctx);
-            if (user is null) return Error(401, "Sign in to continue.");
+            if (user is null) return Error(ctx, ApiProblem.Unauthorized, "Sign in to continue.");
 
-            var current = Text(body, "current_password");
-            var next = Text(body, "new_password");
+            var current = body.CurrentPassword ?? "";
+            var next = body.NewPassword ?? "";
 
             if (!LoginGuard.Allowed(LoginGuard.Key($"user:{user.Id}", ctx)))
             {
                 ctx.Response.Headers.RetryAfter = "300";
-                return Error(429, "Too many attempts. Wait a few minutes and try again.");
+                return Error(ctx, ApiProblem.TooManyRequests, "Too many attempts. Wait a few minutes and try again.");
             }
             if (AccountValidation.PasswordProblem(next) is { } problem)
-                return Results.BadRequest(new { errors = new[] { problem } });
+                return Error(ctx, ApiProblem.Unprocessable, problem);
             if (next == current)
-                return Results.BadRequest(new { errors = new[] { "The new password must be different from the current one." } });
+                return Error(ctx, ApiProblem.Unprocessable, "The new password must be different from the current one.");
             if (!AdminAuth.VerifyPassword(current, user.PasswordHash))
             {
                 LoginGuard.Failed(LoginGuard.Key($"user:{user.Id}", ctx));
-                return Results.BadRequest(new { errors = new[] { "The current password is incorrect." } });
+                return Error(ctx, ApiProblem.Forbidden, "The current password is incorrect.");
             }
 
             LoginGuard.Succeeded(LoginGuard.Key($"user:{user.Id}", ctx));
@@ -162,7 +155,7 @@ public static class UserAuthEndpoints
             await db.SaveChangesAsync();
             await UserTokens.RevokeAllAsync(db, user.Id);
 
-            return Results.Ok(TokenPayload(await UserTokens.IssueAsync(db, user, DateTime.UtcNow)));
+            return Results.Ok(TokenPairDto.From(await UserTokens.IssueAsync(db, user, DateTime.UtcNow)));
         }).RequireRateLimiting(RateLimit.Auth);
 
         app.MapDelete($"{ApiBase}/delete", async (AppDbContext db, HttpContext ctx) =>
@@ -170,18 +163,18 @@ public static class UserAuthEndpoints
             if (!await EnabledAsync(db)) return Results.NotFound();
 
             var user = await CurrentAsync(db, ctx);
-            if (user is null) return Error(401, "Sign in to continue.");
+            if (user is null) return Error(ctx, ApiProblem.Unauthorized, "Sign in to continue.");
 
             if (await db.UserAccounts.CountAsync(a => a.Id != user.Id && !a.IsDisabled) == 0)
-                return Error(409, "This is the last enabled account and cannot be deleted.");
+                return Error(ctx, ApiProblem.Conflict, "This is the last enabled account and cannot be deleted.");
             if (await AdminEndpoints.IsLastEnabledAdmin(db, user))
-                return Error(409, "This is the last enabled admin and cannot be deleted.");
+                return Error(ctx, ApiProblem.Conflict, "This is the last enabled admin and cannot be deleted.");
 
             await UserTokens.RevokeAllAsync(db, user.Id);
             db.UserAccounts.Remove(user);
             AdminAuth.ClearCookies(ctx);
             await db.SaveChangesAsync();
-            return Results.Ok(new { deleted = true });
+            return Results.Ok(new AccountDeletedDto(true));
         }).RequireRateLimiting(RateLimit.Auth);
 
         app.MapGet(UiBase, Entry);
@@ -193,7 +186,7 @@ public static class UserAuthEndpoints
             app.MapGet($"{UiBase}/{name}", async (AppDbContext db, HttpContext ctx) =>
             {
                 var settings = await db.SettingsAsync() ?? new AppSettings();
-                if (!settings.PublicAuthEnabled) return Results.NotFound();
+                if (!Enabled(settings)) return Results.NotFound();
                 if (name == "register" && !settings.PublicRegistrationEnabled) return Results.NotFound();
 
                 ctx.Response.Headers.CacheControl = "no-store";
@@ -250,63 +243,61 @@ public static class UserAuthEndpoints
             : "user-" + Ids.NewShortId(8);
     }
 
-    internal static async Task<IResult> LoginAsync(AppDbContext db, HttpContext ctx, JsonObject body)
+    internal static async Task<IResult> LoginAsync(AppDbContext db, HttpContext ctx, LoginRequest body)
     {
         if (!await EnabledAsync(db)) return Results.NotFound();
 
-        var handle = Text(body, "email_or_username").Trim();
-        var password = Text(body, "password");
+        var handle = (body.EmailOrUsername ?? "").Trim();
+        var password = body.Password ?? "";
 
         if (!LoginGuard.Allowed(LoginGuard.Key($"user:{handle}", ctx)))
         {
             ctx.Response.Headers.RetryAfter = "300";
-            return Error(429, "Too many sign-in attempts. Wait a few minutes and try again.");
+            return Error(ctx, ApiProblem.TooManyRequests, "Too many sign-in attempts. Wait a few minutes and try again.");
         }
 
         var user = await db.UserAccounts.FirstOrDefaultAsync(u =>
             u.Username == handle || (u.Email == handle && handle != ""));
 
-        var ok = AdminAuth.CheckPassword(password, user);
-
-        if (!ok)
+        if (!AdminAuth.CheckPassword(password, user))
         {
             LoginGuard.Failed(LoginGuard.Key($"user:{handle}", ctx));
             AuditLogMiddleware.Note(ctx, $"Failed end-user sign-in as \"{handle}\" with a password");
-            return Error(401, "Incorrect credentials.");
+            return Error(ctx, ApiProblem.Unauthorized, "Incorrect credentials.");
         }
 
         var now = DateTime.UtcNow;
-        var second = Totp.Check(user!, Text(body, "totp_code"), now);
+        var second = Totp.Check(user, body.TotpCode ?? "", now);
         if (second == SecondFactor.Required)
-            return Results.Json(new { errors = new[] { Totp.CodeNeeded }, totp = true }, statusCode: StatusCodes.Status401Unauthorized);
+            return ApiProblems.Write(ctx, ApiProblem.Unauthorized, Totp.CodeNeeded, extensions: Totp.RequiredExtension);
         if (second == SecondFactor.Invalid)
         {
             LoginGuard.Failed(LoginGuard.Key($"user:{handle}", ctx));
             AuditLogMiddleware.Note(ctx, $"Failed end-user sign-in as \"{handle}\" with an authenticator code");
-            return Results.Json(new { errors = new[] { "That authenticator code is not valid." }, totp = true }, statusCode: StatusCodes.Status401Unauthorized);
+            return ApiProblems.Write(ctx, ApiProblem.Unauthorized, "That authenticator code is not valid.", extensions: Totp.RequiredExtension);
         }
 
         LoginGuard.Succeeded(LoginGuard.Key($"user:{handle}", ctx));
-        user!.LastLoginAt = now;
+        user.LastLoginAt = now;
         await db.SaveChangesAsync();
 
         AuditLogMiddleware.Note(ctx, $"End-user sign-in as {user.Username} with a password");
-        return Results.Ok(TokenPayload(await UserTokens.IssueAsync(db, user, now)));
+        return Results.Ok(TokenPairDto.From(await UserTokens.IssueAsync(db, user, now)));
     }
 
+    internal static Task<bool> TakenAsync(AppDbContext db, string username, string email, string claimingId) =>
+        db.UserAccounts.AnyAsync(u => u.Id != claimingId &&
+            (u.Username == username || (email != "" && u.Email == email && u.Role == AccountRoles.User)));
+
+    public static bool Enabled(AppSettings settings) => settings.PublicAuthEnabled;
+
+    public static bool RegistrationOpen(AppSettings settings) => Enabled(settings) && settings.PublicRegistrationEnabled;
+
+    public static bool AnonymousOpen(AppSettings settings) => Enabled(settings) && settings.AnonymousAuthEnabled;
+
     private static async Task<bool> EnabledAsync(AppDbContext db) =>
-        (await db.SettingsAsync() ?? new AppSettings()).PublicAuthEnabled;
+        Enabled(await db.SettingsAsync() ?? new AppSettings());
 
-    private static object TokenPayload(UserTokenPair tokens) => new
-    {
-        auth_token = tokens.AuthToken,
-        refresh_token = tokens.RefreshToken,
-        expires_at = new DateTimeOffset(tokens.ExpiresAt, TimeSpan.Zero).ToUnixTimeSeconds()
-    };
-
-    private static string Text(JsonObject body, string name) =>
-        body[name] is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
-
-    private static IResult Error(int status, string message) =>
-        Results.Json(new { errors = new[] { message } }, statusCode: status);
+    private static IResult Error(HttpContext ctx, ApiProblem problem, string message) =>
+        ApiProblems.Write(ctx, problem, message);
 }

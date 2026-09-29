@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Threading.RateLimiting;
 
 namespace Baseport;
@@ -12,14 +14,26 @@ public static class RateLimit
     public const string Oidc = "auth-oidc";
     public const string ClientError = "client-error";
     public const string Upload = "upload";
+    public const string Docs = "docs";
 
     private static readonly (string Name, int PerMinute)[] Policies =
     {
-        (Submit, 20), (Lookup, 10), (List, 60), (Schema, 60), (Auth, 10), (Oidc, 20), (ClientError, 10), (Upload, 30)
+        (Submit, 20), (Lookup, 10), (List, 60), (Schema, 60), (Auth, 10), (Oidc, 20), (ClientError, 10), (Upload, 30), (Docs, 60)
     };
 
     public static string ClientKey(HttpContext ctx) =>
-        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        ctx.Connection.RemoteIpAddress is { } ip ? Bucket(ip) : "unknown";
+
+    // key ipv6 by /64 prefix
+    internal static string Bucket(IPAddress ip)
+    {
+        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        if (ip.AddressFamily != AddressFamily.InterNetworkV6) return ip.ToString();
+
+        var bytes = ip.GetAddressBytes();
+        Array.Clear(bytes, 8, 8);
+        return $"{new IPAddress(bytes)}/64";
+    }
 
     public static string PartitionKey(HttpContext ctx, string policy) =>
         $"{policy}:{ctx.Request.RouteValues["fpid"] ?? ""}:{ClientKey(ctx)}";
