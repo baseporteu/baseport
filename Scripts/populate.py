@@ -55,6 +55,7 @@ ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-"
 
 _cookie = ""
 DEMO_ACCOUNT = "demo-customer"
+LARGE_ORDER = 5000
 
 CUSTOMERS_DOC = """The accounts that place orders.
 
@@ -617,6 +618,8 @@ def order_fields(customers):
         {"name": "Notes", "label": "Internal notes", "dataType": "longtext", "isHidden": True},
         # stamped by the seeded "Orders - stamp last update" action on every write, not by hand
         {"name": "LastTouched", "label": "Last touched", "dataType": "date", "isHidden": True},
+        # set by the seeded "Orders - flag large orders" action on create; bulk rows get the same value
+        {"name": "LargeOrder", "label": "Large order", "dataType": "boolean", "isHidden": True},
     ]
 
 
@@ -917,6 +920,7 @@ def fill(db_path, counts, locations, products, customers, stock_levels, orders, 
             "ShipTo": {"Street": address["Street"], "PostalCode": address["PostalCode"],
                         "City": city, "Country": country},
             "Amounts": {"Net": net, "Vat": vat, "Gross": round(net + vat, 2)},
+            "LargeOrder": net > LARGE_ORDER,
         }, stamp(day), record_id=order_id)
         if status in ("shipped", "closed"):
             shippable_orders.append((order_id, order_no, day))
@@ -983,11 +987,9 @@ ORDER BY Revenue DESC"""
 
 
 def seed_actions(orders):
-    """Three worked examples, one per step kind the Action Engine has (updateRecord,
-    runExpression, httpRequest) - real steps against real fields, not a placeholder
-    no-op. httpRequest ships disabled: an outbound call to a system this demo does not
-    own would either need a live receiver nobody here runs, or a real endpoint to point
-    it at - it is left as a filled-in template an operator turns on once they have one."""
+    """Three actions on Orders: stamp LastTouched on update, set LargeOrder on create
+    (updateRecord with an expression), and an httpRequest template. The template ships
+    disabled: it needs a receiving endpoint this demo does not run."""
     existing = {a["name"] for a in call("GET", "/api/_admin/actions")[0]}
     if "Orders - stamp last update" in existing:
         print("  Actions: already present, skipping")
@@ -999,7 +1001,7 @@ def seed_actions(orders):
     })
     call("POST", "/api/_admin/actions", {
         "tableId": orders, "name": "Orders - flag large orders", "triggerKind": "onCreate",
-        "stepsJson": json.dumps([{"type": "runExpression", "expr": "Total > 5000"}]),
+        "stepsJson": json.dumps([{"type": "updateRecord", "setJson": {"LargeOrder": f"Total > {LARGE_ORDER}"}}]),
     })
     call("POST", "/api/_admin/actions", {
         "tableId": orders, "name": "Orders - notify ERP (template, disabled)",
@@ -1009,7 +1011,7 @@ def seed_actions(orders):
             "bodyTemplate": {"orderNo": "OrderNo", "customer": "Customer", "total": "Total"},
         }]),
     })
-    print("  Actions: 3 seeded (1 updateRecord, 1 runExpression, 1 httpRequest template, disabled)")
+    print("  Actions: 3 seeded (2 updateRecord, 1 httpRequest template, disabled)")
 
 
 def seed_portway():
