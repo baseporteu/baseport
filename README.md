@@ -52,8 +52,6 @@ baseport() {
 }
 ```
 
-Updating leaves `baseport.db`, `baseport.key`, `log/`, `uploads/` and `appsettings.json` alone.
-
 ## Documentation
 
 Full documentation lives at **[baseporteu.github.io/baseport](https://baseporteu.github.io/baseport/docs/)**.
