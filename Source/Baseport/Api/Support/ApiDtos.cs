@@ -36,6 +36,7 @@ public static class ApiDtos
         t.ReadRule,
         t.UpdateRule,
         t.DeleteRule,
+        t.ScopeField,
         t.CreatedAt,
         t.UpdatedAt,
         FormCount = formCount,
@@ -65,7 +66,9 @@ public static class ApiDtos
         f.IsUnique,
         f.IsHidden,
         f.IsIdentifier,
-        f.IsReadOnly
+        f.IsReadOnly,
+        f.ReadRule,
+        f.WriteRule
     };
 
     public static JsonObject WithoutSecrets(JsonObject data, IEnumerable<FieldDefinition> fields)

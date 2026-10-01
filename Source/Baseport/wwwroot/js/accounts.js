@@ -124,6 +124,15 @@ function openAccountForm(pid) {
         }),
     );
 
+    body.appendChild(
+        ui.field('Scope', {
+            id: 'accScope',
+            value: a ? a.scope || '' : '',
+            placeholder: 'e.g. ACME',
+            help: 'Customer this account is limited to on scoped endpoints.',
+        }),
+    );
+
     if (a) {
         body.appendChild(
             ui.field('Set password', {
@@ -146,7 +155,7 @@ function openAccountForm(pid) {
     }
 
     if (locked) {
-        ['accRole', 'accPassword', 'accDisabled']
+        ['accRole', 'accScope', 'accPassword', 'accDisabled']
             .forEach((id) => {
                 const input = body.querySelector(`#${id}`);
                 if (input) input.disabled = true;
@@ -292,6 +301,7 @@ async function submitAccount(pid) {
     const locked = pid && accountsData.find((x) => x.id === pid)?.role === 'admin';
     if (!locked) {
         body.role = document.getElementById('accRole').value;
+        body.scope = document.getElementById('accScope').value.trim();
         const disabled = document.getElementById('accDisabled');
         if (disabled) body.isDisabled = disabled.checked;
         const password = document.getElementById('accPassword');

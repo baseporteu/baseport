@@ -405,6 +405,13 @@ test('the console is mounted under /_/admin and routes are still written from th
 
 /* the API name guard */
 
+test('the scope picker offers the field types the server accepts', () => {
+    const js = read('js/tables.js').match(/const SCOPE_FIELD_TYPES = \[([^\]]*)\]/)[1];
+    const cs = readSource('Engine', 'RecordAccess.cs').match(/NormalizeType\(field\.DataType\) is ([^\n?]*)/)[1];
+    const list = (s) => [...s.matchAll(/["']([a-z]+)["']/g)].map((m) => m[1]).sort();
+    assert.deepStrictEqual(list(js), list(cs), 'console and server disagree on which fields may scope an endpoint');
+});
+
 function loadApiNameGuard() {
     const tables = read('js/tables.js');
     const slice = tables.slice(tables.indexOf('const API_NAME_PATTERN'),

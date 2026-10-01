@@ -57,6 +57,16 @@ public static class TableEndpoints
             if (patch["apiMethods"] is JsonArray methods)
                 table.ApiMethods = ApiMethods.Serialize(methods.Select(m => m?.GetValue<string>() ?? ""));
 
+            if (patch["scopeField"] is JsonValue sfv && sfv.TryGetValue<string>(out var scopeField))
+            {
+                scopeField = scopeField.Trim();
+                if (table.IsProxy && scopeField.Length > 0)
+                    return Results.BadRequest(new { errors = new[] { "A proxy table stores nothing here, so it cannot be scoped per customer." } });
+                if (RecordAccess.ScopeProblem(scopeField, table.Fields.ToList()) is { } scopeProblem)
+                    return Results.BadRequest(new { errors = new[] { scopeProblem } });
+                table.ScopeField = scopeField;
+            }
+
             foreach (var (key, permission) in RecordAccess.RuleKeys)
             {
                 if (patch[key] is not JsonValue rv || !rv.TryGetValue<string>(out var rule)) continue;
@@ -99,6 +109,10 @@ public static class TableEndpoints
 
             var errs = FieldValidation.ValidateFieldDefinition(field, others, others.Append(field.Name).ToList(), tpid => db.Tables.Any(t => t.Id == tpid));
             if (errs.Count > 0) return Results.BadRequest(new { errors = errs });
+            field.ReadRule = field.ReadRule.Trim();
+            field.WriteRule = field.WriteRule.Trim();
+            if (await RecordAccess.FieldRuleProblemAsync(db, table, table.Fields.Append(field).ToList(), field) is { } newRuleProblem)
+                return Results.BadRequest(new { errors = new[] { newRuleProblem } });
             var conflicts = await RecordEngine.ConstraintErrorsAsync(db, table, field);
             if (conflicts.Count > 0) return Results.Conflict(new { errors = conflicts });
             field.TableId = table.Id;
@@ -160,6 +174,8 @@ public static class TableEndpoints
             if (patch["isHidden"] is JsonValue hv && hv.TryGetValue<bool>(out var hidden)) field.IsHidden = hidden;
             if (patch["isUnique"] is JsonValue uv && uv.TryGetValue<bool>(out var unique)) field.IsUnique = unique;
             if (patch["isIdentifier"] is JsonValue iv && iv.TryGetValue<bool>(out var ident)) field.IsIdentifier = ident;
+            if (patch["readRule"] is JsonValue rrv && rrv.TryGetValue<string>(out var readRule)) field.ReadRule = readRule.Trim();
+            if (patch["writeRule"] is JsonValue wrv && wrv.TryGetValue<string>(out var writeRule)) field.WriteRule = writeRule.Trim();
 
             if (patch.ContainsKey("min")) field.Min = (patch["min"] as JsonValue)?.TryGetValue<double>(out var lo) == true ? lo : null;
             if (patch.ContainsKey("max")) field.Max = (patch["max"] as JsonValue)?.TryGetValue<double>(out var hi) == true ? hi : null;
@@ -169,6 +185,14 @@ public static class TableEndpoints
             var all = table.Fields.Select(f => f.Name).ToList();
             var errs = FieldValidation.ValidateFieldDefinition(field, others, all, tpid => db.Tables.Any(t => t.Id == tpid));
             if (errs.Count > 0) return Results.BadRequest(new { errors = errs });
+            if (await RecordAccess.FieldRuleProblemAsync(db, table, table.Fields.ToList(), field) is { } fieldRuleProblem)
+                return Results.BadRequest(new { errors = new[] { fieldRuleProblem } });
+            if (wasName == table.ScopeField)
+            {
+                table.ScopeField = field.Name;
+                if (RecordAccess.ScopeProblem(table.ScopeField, table.Fields.ToList()) is { } scopeProblem)
+                    return Results.BadRequest(new { errors = new[] { scopeProblem } });
+            }
             var conflicts = await RecordEngine.ConstraintErrorsAsync(db, table, field, wasName);
             if (conflicts.Count > 0) return Results.Conflict(new { errors = conflicts });
 
@@ -226,6 +250,8 @@ public static class TableEndpoints
                     blocked.Add($"Form '{form.Title}' has an unreadable layout.");
                 }
             }
+            if (field.Name == table.ScopeField)
+                blocked.Add($"'{field.Name}' scopes this endpoint per customer. Clear the scope first.");
             if (blocked.Count > 0) return Results.Conflict(new { errors = blocked });
 
             db.Fields.Remove(field);
@@ -595,6 +621,18 @@ public static class TableEndpoints
         var names = await db.Tables.Select(t => t.Name).ToListAsync();
         List<string> errs = [.. FieldValidation.ValidateTable(table, names)];
         errs.AddRange(FieldErrors(db, table));
+        table.ScopeField = table.ScopeField.Trim();
+        if (table.IsProxy && table.ScopeField.Length > 0)
+            errs.Add("A proxy table stores nothing here, so it cannot be scoped per customer.");
+        else if (RecordAccess.ScopeProblem(table.ScopeField, table.Fields.ToList()) is { } scopeProblem)
+            errs.Add(scopeProblem);
+        foreach (var field in table.Fields)
+        {
+            field.ReadRule = field.ReadRule.Trim();
+            field.WriteRule = field.WriteRule.Trim();
+            if (await RecordAccess.FieldRuleProblemAsync(db, table, table.Fields.ToList(), field) is { } fieldRuleProblem)
+                errs.Add(fieldRuleProblem);
+        }
         if (errs.Count > 0) return errs;
 
         foreach (var (_, permission) in RecordAccess.RuleKeys)

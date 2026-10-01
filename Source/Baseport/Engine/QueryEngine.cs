@@ -94,8 +94,7 @@ public static class QueryEngine
         int pageSize,
         IReadOnlyList<Filter>? filters = null,
         IReadOnlyList<FieldDefinition>? accessFields = null,
-        string? accessUserId = null,
-        string? accessRole = null,
+        AccessCaller access = default,
         Cursor? cursor = null,
         string? systemSort = null,
         bool literal = false)
@@ -106,7 +105,7 @@ public static class QueryEngine
         var args = new List<object> { table.Id };
         var where = "r.\"TableId\" = {0}";
 
-        if (accessFields is not null && RecordAccess.ListClause(table, accessFields, "r", accessUserId, accessRole, args) is { } clause)
+        if (accessFields is not null && RecordAccess.ListClause(table, accessFields, "r", access, args) is { } clause)
             where += $" AND ({clause})";
 
         foreach (var f in filters ?? Array.Empty<Filter>())
@@ -135,14 +134,15 @@ public static class QueryEngine
             var op = isRegex ? "REGEXP" : "LIKE";
             var escapeClause = isRegex || hasWildcard ? "" : " ESCAPE '\\'";
 
+            bool Unsearchable(FieldDefinition f) => FieldTypes.Of(f).Secret || accessFields is not null && !string.IsNullOrWhiteSpace(f.ReadRule);
             var scope = searchFields;
             if (scope.Count == 0)
             {
                 var all = await db.Fields.AsNoTracking().Where(f => f.TableId == table.Id).ToListAsync();
-                if (all.Any(f => FieldTypes.Of(f).Secret)) scope = all;
+                if (all.Any(Unsearchable)) scope = all;
             }
             var named = scope.Count > 0;
-            scope = scope.Where(f => !FieldTypes.Of(f).Secret).ToList();
+            scope = scope.Where(f => !Unsearchable(f)).ToList();
 
             string? match = null;
             if (!isRegex && !hasWildcard && !named && RecordSearch.MatchExpression(table.Id, term) is { } expression && await RecordSearch.AvailableAsync(db))

@@ -84,11 +84,13 @@ public static class RecordTransactions
             case "create":
                 {
                     var obj = op.Value ?? new JsonObject();
-                    var outcome = await RecordEngine.PrepareAsync(db, table, fields, obj);
+                    if (await RecordAccess.WriteRefusalAsync(db, table, fields, AccessCaller.Of(caller), obj) is { } createRefusal)
+                        return Fail(ApiProblem.Forbidden, $"{createRefusal} ('{op.ApiName}')");
+                    var outcome = await RecordEngine.PrepareAsync(db, table, fields, obj, scope: AccessCaller.Of(caller).Scope);
                     if (outcome.HasErrors)
                         return FailFrom(outcome, op.ApiName);
 
-                    if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, caller.Id, request: obj, callerRole: caller.Role))
+                    if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, AccessCaller.Of(caller), request: obj))
                         return Fail(ApiProblem.Forbidden, $"That record is not yours to create in '{op.ApiName}'.");
 
                     var record = new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = obj.ToJsonString(), CreatedAt = DateTime.UtcNow };
@@ -106,10 +108,12 @@ public static class RecordTransactions
                         return Fail(ApiProblem.NotFound, $"Record '{op.RecordId}' not found in '{op.ApiName}'.");
 
                     var obj = op.Value ?? new JsonObject();
-                    if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Update, caller.Id, op.RecordId, request: obj, callerRole: caller.Role))
+                    if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Update, AccessCaller.Of(caller), op.RecordId, request: obj))
                         return Fail(ApiProblem.Forbidden, $"Record '{op.RecordId}' is not yours to change.");
+                    if (await RecordAccess.WriteRefusalAsync(db, table, fields, AccessCaller.Of(caller), obj, op.RecordId) is { } updateRefusal)
+                        return Fail(ApiProblem.Forbidden, $"{updateRefusal} ('{op.ApiName}')");
 
-                    var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, obj, replace: false);
+                    var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, obj, replace: false, AccessCaller.Of(caller).Scope);
                     if (outcome.HasErrors)
                         return FailFrom(outcome, op.ApiName);
 
@@ -125,7 +129,7 @@ public static class RecordTransactions
                     if (record is null)
                         return Fail(ApiProblem.NotFound, $"Record '{op.RecordId}' not found in '{op.ApiName}'.");
 
-                    if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Delete, caller.Id, op.RecordId, callerRole: caller.Role))
+                    if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Delete, AccessCaller.Of(caller), op.RecordId))
                         return Fail(ApiProblem.Forbidden, $"Record '{op.RecordId}' is not yours to delete.");
 
                     db.Records.Remove(record);

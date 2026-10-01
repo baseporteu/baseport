@@ -2,10 +2,8 @@
 """Two minimal mock sites for testing Baseport embeds the way they actually get
 used: pasted onto someone else's domain, loaded cross-origin, spread across more
 than one page, behind the sidebar chrome a real customer or ops portal actually
-has. Styled with Pico CSS (classless: it styles bare <input>/<button>/<table>
-directly, which is exactly what embed.js renders - no override CSS needed to
-make a Baseport embed look native here). Standard library only, reads form ids
-straight out of baseport.db (no admin login needed).
+has. The embed is rethemed only through its --baserow-* properties. Standard
+library only, reads form ids straight out of baseport.db (no admin login needed).
 
     customers.site.com  the sales-facing site: a "My orders" list that links out
                          to a dedicated order page, plus place-order and sign-up
@@ -29,23 +27,8 @@ SITES = {
         "port": 8081,
         "heading": "Acme Direct",
         "tagline": "Customer Self-Service",
-        "logo_svg": """<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#696cff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-            <line x1="12" y1="22.08" x2="12" y2="12"></line>
-        </svg>""",
-        "theme_css": """
-            --pico-primary: #696cff;
-            --pico-primary-background: #696cff;
-            --pico-primary-border: #696cff;
-            --pico-primary-underline: rgba(105, 108, 255, .5);
-            --pico-primary-hover: #5f61e6;
-            --pico-primary-hover-background: #5f61e6;
-            --pico-primary-hover-border: #5f61e6;
-            --pico-primary-hover-underline: #5f61e6;
-            --pico-primary-focus: rgba(105, 108, 255, .375);
-            --pico-primary-inverse: #fff;
-        """,
+        "stamp": "AD",
+        "accent": "#ffc72c",
         "pages": {
             "/": {
                 "title": "My orders",
@@ -68,22 +51,8 @@ SITES = {
         "port": 8082,
         "heading": "Warehouse Ops",
         "tagline": "Fulfillment Worklist",
-        "logo_svg": """<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffab00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-            <polygon points="12 11 12 17 17 14"></polygon>
-        </svg>""",
-        "theme_css": """
-            --pico-primary: #ffab00;
-            --pico-primary-background: #ffab00;
-            --pico-primary-border: #ffab00;
-            --pico-primary-underline: rgba(255, 171, 0, .5);
-            --pico-primary-hover: #e69a00;
-            --pico-primary-hover-background: #e69a00;
-            --pico-primary-hover-border: #e69a00;
-            --pico-primary-hover-underline: #e69a00;
-            --pico-primary-focus: rgba(255, 171, 0, .375);
-            --pico-primary-inverse: #1a1a1a;
-        """,
+        "stamp": "WO",
+        "accent": "#ff6a13",
         "pages": {
             "/": {
                 "title": "Open orders worklist",
@@ -139,111 +108,216 @@ def render_page(hostname: str, spec: dict, page_path: str, baseport_url: str, db
     if page is None:
         return None
 
-    # Pico styles bare <input>/<select>/<button>/<table> by tag, which is exactly what embed.js renders -
-    # unlike the Bootstrap version this replaced, no override CSS is needed to make an embed look native here.
     blocks = []
     for label, candidates in page["forms"]:
         form_id = find_form_id(db_path, candidates)
         body = (
             f"<script src='{baseport_url}/embed.js?id={form_id}'></script>"
             if form_id else
-            "<p><em>Not found -- run POPULATE.sh, or check the title in SITES matches your seed.</em></p>"
+            "<p class='missing'>Not found. Run POPULATE.sh, or check the title in SITES matches your seed.</p>"
         )
-        # Avoid duplicate title when section label matches page title
-        header_html = f"<h2>{label}</h2>" if label != page["title"] else ""
-        blocks.append(f"<article>{header_html}{body}</article>")
+        blocks.append(f"<section class='sheet' aria-label='{label}'><div class='card'><div class='perf' aria-hidden='true'></div>{body}</div></section>")
 
-    nav_parts = []
-    for path, p in spec["pages"].items():
-        current = " aria-current='page'" if path == page_path else ""
-        nav_parts.append(f"<li><a href='{path}'{current}>{p['title']}</a></li>")
-    nav_items = "".join(nav_parts)
+    current = " aria-current='page'"
+    nav_items = "".join(
+        f"<li><a href='{path}'{current if path == page_path else ''}>{p['title']}</a></li>"
+        for path, p in spec["pages"].items()
+    )
 
     return f"""<!doctype html>
-<html lang='en' data-theme='light'><head><meta charset='utf-8'>
+<html lang='en'><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1'>
 <title>{spec['heading']} &middot; {page['title']}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css'>
+<link rel='preconnect' href='https://fonts.googleapis.com'>
+<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+<link href='https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap' rel='stylesheet'>
 <style>
 :root {{
-    --pico-font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-{spec['theme_css']}
+    --ink: #1a1a1a;
+    --muted: #6b6b66;
+    --paper: #ffffff;
+    --paper-dim: #f7f6f2;
+    --rule: #d8d5cc;
+    --accent: {spec['accent']};
+    --display: 'Oswald', 'Arial Narrow', sans-serif;
+    --lift: 0 3px 10px rgb(0 0 0 / .07);
+    color-scheme: light;
+    accent-color: var(--ink);
+    scrollbar-color: var(--rule) var(--paper-dim);
 }}
+
+*, *::before, *::after {{ box-sizing: border-box; }}
+::selection {{ background: var(--accent); color: var(--ink); }}
+:focus-visible {{ outline: 2px solid var(--ink); outline-offset: 3px; }}
 
 body {{
-    display: flex;
-    min-height: 100vh;
     margin: 0;
-}}
-
-.app-sidebar {{
-    width: 16rem;
-    flex-shrink: 0;
-    padding: 2rem 1.5rem;
-    border-right: 1px solid var(--pico-muted-border-color);
-}}
-
-.app-brand {{
+    min-height: 100vh;
     display: flex;
-    align-items: center;
-    gap: .875rem;
-    margin-bottom: 2rem;
+    background: var(--paper-dim);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    line-height: 1.5;
 }}
 
-.app-brand-text {{
-    font-weight: 700;
-    line-height: 1.2;
+.stub {{
+    width: 15rem;
+    flex-shrink: 0;
+    position: relative;
+    padding: 2rem 1.5rem;
+    background: var(--paper);
 }}
 
-.app-brand-tagline {{
-    font-size: .8125rem;
-    color: var(--pico-muted-color);
+.stub::after {{
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -5px;
+    bottom: 0;
+    width: 10px;
+    background: radial-gradient(circle at 5px 8px, var(--paper-dim) 3px, transparent 3.5px) 0 0 / 10px 16px repeat-y;
 }}
 
-.app-sidebar nav ul {{
-    margin-bottom: 0;
+.brand {{ display: flex; align-items: center; gap: .875rem; margin-bottom: 2.5rem; }}
+
+.stamp {{
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    position: relative;
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    transform: rotate(-6deg);
+    font: 700 1.05rem/1 var(--display);
+    letter-spacing: .02em;
 }}
 
-.app-main {{
-    flex: 1;
-    min-width: 0;
-    overflow: auto;
+.stamp::before {{
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border: 1px dashed var(--ink);
+    border-radius: 50%;
+    opacity: .45;
 }}
 
-.app-main > .container {{
-    padding-block: 2.5rem;
+.brand-name {{ font: 700 1rem/1.15 var(--display); text-transform: uppercase; letter-spacing: .02em; }}
+
+.footnote, .brand-tagline {{
+    font: 400 .6875rem/1.5 var(--display);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
 }}
 
-.app-footnote {{
-    font-size: .75rem;
-    color: var(--pico-muted-color);
-    margin-top: 2rem;
+.stub ul {{ list-style: none; margin: 0; padding: 0; }}
+
+.stub a {{
+    display: block;
+    padding: .65rem .5rem;
+    border-bottom: 1px dashed var(--rule);
+    color: var(--ink);
+    text-decoration: none;
+    font: 500 .875rem/1.2 var(--display);
+    text-transform: uppercase;
+    letter-spacing: .015em;
+    transition: background-color .15s ease-out;
+}}
+
+.stub a:hover {{ background: var(--paper-dim); }}
+.stub a[aria-current] {{ background: var(--accent); font-weight: 700; }}
+
+.footnote {{ margin-top: 2.5rem; }}
+
+main {{ flex: 1; min-width: 0; padding: 2.5rem 2rem 4rem; }}
+.well {{ max-width: 56rem; margin: 0 auto; }}
+
+h1 {{
+    margin: 0 0 2.5rem;
+    font: 700 clamp(1.5rem, 4vw, 2rem)/1.1 var(--display);
+    text-transform: uppercase;
+    letter-spacing: .01em;
+    text-wrap: balance;
+}}
+
+h1::after {{
+    content: '';
+    display: block;
+    width: 3.5rem;
+    height: 4px;
+    margin-top: .75rem;
+    background: var(--accent);
+}}
+
+.sheet {{ margin-bottom: 2rem; filter: drop-shadow(var(--lift)); }}
+
+.card {{
+    position: relative;
+    padding: 0 1.5rem 1.75rem;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
+}}
+
+.card::before {{
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 18px;
+    height: 18px;
+    background: linear-gradient(to top right, transparent calc(50% - 2px), var(--ink) calc(50% - 2px) calc(50% + 1px), transparent calc(50% + 1px));
+}}
+
+.perf {{
+    height: 8px;
+    margin: 1.25rem -1.5rem 1.5rem;
+    background:
+        radial-gradient(circle at 6px 4px, var(--paper-dim) 2px, transparent 2.5px) 0 0 / 12px 8px repeat-x,
+        var(--accent);
+}}
+
+.missing {{ margin: 0; color: var(--muted); }}
+
+.baserow-embed {{
+    --baserow-border: var(--ink) !important;
+    --baserow-muted: var(--muted) !important;
+    --baserow-accent: var(--accent) !important;
+    --baserow-accent-fg: var(--ink) !important;
+    --baserow-radius: 0 !important;
+}}
+
+@media (max-width: 800px) {{
+    body {{ flex-direction: column; }}
+    .stub {{ width: auto; }}
+    .stub::after {{ display: none; }}
+    .brand {{ margin-bottom: 1.5rem; }}
+    .footnote {{ display: none; }}
+    main {{ padding: 1.5rem 1.25rem 3rem; }}
+}}
+
+@media (prefers-reduced-motion: reduce) {{
+    .stub a {{ transition: none; }}
 }}
 </style>
 </head><body>
-<aside class='app-sidebar'>
-    <div class='app-brand'>
-        {spec['logo_svg']}
+<nav class='stub' aria-label='{spec['heading']}'>
+    <div class='brand'>
+        <span class='stamp' aria-hidden='true'>{spec['stamp']}</span>
         <div>
-            <div class='app-brand-text'>{spec['heading']}</div>
-            <div class='app-brand-tagline'>{spec['tagline']}</div>
+            <div class='brand-name'>{spec['heading']}</div>
+            <div class='brand-tagline'>{spec['tagline']}</div>
         </div>
     </div>
-    <nav><ul>{nav_items}</ul></nav>
-    <p class='app-footnote'>{hostname}<br>Mock site for embed testing</p>
-</aside>
-<main class='app-main'>
-<div class='container'>
-<hgroup>
-    <h1>{page['title']}</h1>
-    <p>{spec['heading']}</p>
-</hgroup>
+    <ul>{nav_items}</ul>
+    <p class='footnote'>{hostname}<br>Mock site for embed testing</p>
+</nav>
+<main><div class='well'>
+<h1>{page['title']}</h1>
 {''.join(blocks)}
-</div>
-</main>
+</div></main>
 </body></html>"""
 
 

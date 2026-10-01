@@ -72,7 +72,8 @@ public static class ApiLinks
             var ids = records.Select(r => Reference(data[r.Id], relation.Field.Name)).OfType<string>().Distinct().ToList();
             if (ids.Count == 0) continue;
 
-            var targets = await ReadableAsync(db, relation, ids, caller, token);
+            var targets = await RecordAccess.RedactAsync(db, relation.Target, relation.TargetFields, AccessCaller.Of(caller),
+                await ReadableAsync(db, relation, ids, caller, token), token);
             var visible = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
             foreach (var target in targets) visible[target.Id] = ApiDtos.RecordDto(target, relation.TargetFields);
             embedded[relation.Field.Name] = visible;
@@ -111,7 +112,7 @@ public static class ApiLinks
         var args = new List<object> { relation.Target.Id };
         var where = "r.\"TableId\" = {0}";
 
-        if (RecordAccess.ListClause(relation.Target, relation.TargetFields, "r", caller.Id, caller.Role, args) is { } clause)
+        if (RecordAccess.ListClause(relation.Target, relation.TargetFields, "r", AccessCaller.Of(caller), args) is { } clause)
             where += $" AND ({clause})";
 
         var slots = new List<string>();

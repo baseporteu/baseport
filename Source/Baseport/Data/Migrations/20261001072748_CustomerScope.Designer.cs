@@ -3,6 +3,7 @@ using System;
 using Baseport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Baseport.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261001072748_CustomerScope")]
+    partial class CustomerScope
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
@@ -452,10 +455,6 @@ namespace Baseport.Data.Migrations
                     b.Property<int>("Position")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("ReadRule")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.Property<int?>("Scale")
                         .HasColumnType("INTEGER");
 
@@ -468,10 +467,6 @@ namespace Baseport.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ValidationMessage")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("WriteRule")
                         .IsRequired()
                         .HasColumnType("TEXT");
 

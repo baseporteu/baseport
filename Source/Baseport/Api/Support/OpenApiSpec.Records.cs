@@ -138,10 +138,11 @@ public static partial class OpenApiSpec
             {
                 var type = FieldTypes.Of(f);
                 var ps = FieldSchema(f);
-                if (type.Computed) ps["readOnly"] = true;
+                var stamped = f.Name == t.ScopeField;
+                if (type.Computed || stamped) ps["readOnly"] = true;
                 if (type.Secret) ps["writeOnly"] = true;
                 props[f.Name] = ps;
-                if (f.IsRequired && !f.IsHidden && !type.Computed) required.Add(f.Name);
+                if (f.IsRequired && !f.IsHidden && !type.Computed && !stamped) required.Add(f.Name);
             }
             schemas[SchemaName(t)] = new JsonObject
             {

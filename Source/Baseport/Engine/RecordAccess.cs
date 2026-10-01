@@ -6,6 +6,12 @@ namespace Baseport;
 
 public enum Permission { Create, Read, Update, Delete }
 
+public readonly record struct AccessCaller(string? Id, string? Role, string? Scope)
+{
+    public static AccessCaller Of(UserAccount account) =>
+        new(account.Id, account.Role, account.Scope.Length == 0 ? null : account.Scope);
+}
+
 public static partial class RecordAccess
 {
     public static string RuleFor(TableDefinition table, Permission permission) => permission switch
@@ -19,6 +25,23 @@ public static partial class RecordAccess
 
     public static bool HasRule(TableDefinition table, Permission permission) =>
         !string.IsNullOrWhiteSpace(RuleFor(table, permission));
+
+    internal static string EffectiveRule(string rule, string scopeField, Permission permission)
+    {
+        if (string.IsNullOrEmpty(scopeField)) return rule;
+        var scope = $"{(permission == Permission.Create ? "_REQ_" : "_ROW_")}.\"{scopeField}\" = _USER_.scope";
+        return string.IsNullOrWhiteSpace(rule) ? scope : $"({rule}) AND {scope}";
+    }
+
+    public static string? ScopeProblem(string scopeField, IReadOnlyList<FieldDefinition> fields)
+    {
+        if (scopeField.Length == 0) return null;
+        var field = fields.FirstOrDefault(f => f.Name == scopeField);
+        if (field is null) return $"The scope field '{scopeField}' does not name a field on this table.";
+        return FieldValidation.NormalizeType(field.DataType) is "text" or "select" or "reference"
+            ? null
+            : "The scope field must be a text, select or reference field.";
+    }
 
     public static readonly (string Key, Permission Permission)[] RuleKeys =
     [
@@ -47,7 +70,7 @@ public static partial class RecordAccess
         if (string.IsNullOrWhiteSpace(rule)) return null;
 
         var args = new List<object?>();
-        var expression = Rewrite(rule, fields, "r", null, null, null, args);
+        var expression = Rewrite(rule, fields, "r", default, null, null, args);
         var sql = $"""
             SELECT COALESCE(CAST(({expression}) AS INTEGER), 0) AS "Value"
             FROM "_records" r WHERE r."TableId" = {Slot(args, table.Id)} LIMIT 1
@@ -80,8 +103,8 @@ public static partial class RecordAccess
 
             if (alias == "_USER_")
             {
-                if (name is not ("id" or "role"))
-                    return $"_USER_ has no '{name}'. Only _USER_.id and _USER_.role are available.";
+                if (name is not ("id" or "role" or "scope"))
+                    return $"_USER_ has no '{name}'. Only _USER_.id, _USER_.role and _USER_.scope are available.";
                 continue;
             }
             if (fields.All(f => f.Name != name))
@@ -123,7 +146,7 @@ public static partial class RecordAccess
         return depth == 0 ? null : "An access rule has a '(' that is never closed.";
     }
 
-    internal static string Rewrite(string rule, IReadOnlyList<FieldDefinition> fields, string? rowAlias, string? userId, JsonObject? request, JsonObject? row, List<object?> args, string? callerRole = null)
+    internal static string Rewrite(string rule, IReadOnlyList<FieldDefinition> fields, string? rowAlias, AccessCaller caller, JsonObject? request, JsonObject? row, List<object?> args)
     {
         return AliasReference().Replace(rule, match => $"({Substitute(match)})");
 
@@ -133,7 +156,7 @@ public static partial class RecordAccess
             var name = match.Groups["quoted"].Success ? match.Groups["quoted"].Value : match.Groups["bare"].Value;
 
             if (alias == "_USER_")
-                return Slot(args, name == "role" ? callerRole : userId);
+                return Slot(args, name switch { "role" => caller.Role, "scope" => caller.Scope, _ => caller.Id });
             if (alias == "_REQ_")
                 return Slot(args, Value(request, name));
 
@@ -152,18 +175,22 @@ public static partial class RecordAccess
         TableDefinition table,
         IReadOnlyList<FieldDefinition> fields,
         Permission permission,
-        string? userId,
+        AccessCaller caller,
         string? recordId = null,
         JsonObject? request = null,
-        JsonObject? row = null,
-        string? callerRole = null)
+        JsonObject? row = null)
     {
-        var rule = RuleFor(table, permission);
-        if (string.IsNullOrWhiteSpace(rule)) return true;
+        var rule = EffectiveRule(RuleFor(table, permission), table.ScopeField, permission);
+        return string.IsNullOrWhiteSpace(rule) || await EvaluateAsync(db, table, fields, rule, caller, recordId, request, row);
+    }
 
+    private static async Task<bool> EvaluateAsync(
+        AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> fields, string rule, AccessCaller caller,
+        string? recordId, JsonObject? request, JsonObject? row)
+    {
         var args = new List<object?>();
         var fromRow = recordId is not null;
-        var expression = Rewrite(rule, fields, fromRow ? "r" : null, userId, request, row, args, callerRole);
+        var expression = Rewrite(rule, fields, fromRow ? "r" : null, caller, request, row, args);
 
         string sql;
         if (fromRow)
@@ -184,24 +211,89 @@ public static partial class RecordAccess
         return results.Count > 0 && results[0] != 0;
     }
 
-    public static string? ListClause(TableDefinition table, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId, string? callerRole, List<object> args)
+    public static async Task<string?> FieldRuleProblemAsync(AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> fields, FieldDefinition field)
     {
-        if (!HasRule(table, Permission.Read)) return null;
+        if (!string.IsNullOrWhiteSpace(field.ReadRule) && AliasReference().Matches(field.ReadRule).Any(m => m.Groups["alias"].Value == "_REQ_"))
+            return $"The read rule of '{field.Name}' cannot refer to _REQ_: a read has no request body.";
+        foreach (var (kind, rule) in new[] { ("read", field.ReadRule), ("write", field.WriteRule) })
+            if (await RuleProblemAsync(db, table, fields, rule.Trim()) is { } problem)
+                return $"The {kind} rule of '{field.Name}': {problem}";
+        return null;
+    }
+
+    public static async Task<IReadOnlyList<Record>> RedactAsync(
+        AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> fields, AccessCaller caller, IReadOnlyList<Record> records,
+        CancellationToken token = default)
+    {
+        var guarded = fields.Where(f => !string.IsNullOrWhiteSpace(f.ReadRule)).ToList();
+        if (guarded.Count == 0 || records.Count == 0) return records;
+
+        var hidden = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var field in guarded)
+        {
+            var args = new List<object?>();
+            var expression = Rewrite(field.ReadRule, fields, "r", caller, null, null, args);
+            var ids = string.Join(", ", records.Select(r => Slot(args, r.Id)));
+            var sql = $"""
+                SELECT r."Id" AS "Value" FROM "_records" r
+                WHERE r."TableId" = {Slot(args, table.Id)} AND r."Id" IN ({ids}) AND COALESCE(CAST(({expression}) AS INTEGER), 0) = 0
+                """;
+            foreach (var id in await db.Database.SqlQueryRaw<string>(sql, args.Select(a => a ?? DBNull.Value).ToArray()).ToListAsync(token))
+            {
+                if (!hidden.TryGetValue(id, out var names)) hidden[id] = names = [];
+                names.Add(field.Name);
+            }
+        }
+        return records.Select(r => hidden.TryGetValue(r.Id, out var names) ? Without(r, names) : r).ToList();
+    }
+
+    public static async Task<JsonObject> RedactRowAsync(
+        AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> fields, AccessCaller caller, JsonObject row)
+    {
+        foreach (var field in fields.Where(f => !string.IsNullOrWhiteSpace(f.ReadRule)))
+            if (!await EvaluateAsync(db, table, fields, field.ReadRule, caller, null, null, row))
+                row.Remove(field.Name);
+        return row;
+    }
+
+    public static async Task<string?> WriteRefusalAsync(
+        AppDbContext db, TableDefinition table, IReadOnlyList<FieldDefinition> fields, AccessCaller caller, JsonObject request,
+        string? recordId = null, bool replace = false)
+    {
+        foreach (var field in fields.Where(f => !string.IsNullOrWhiteSpace(f.WriteRule)))
+            if ((replace || request.ContainsKey(field.Name))
+                && !await EvaluateAsync(db, table, fields, field.WriteRule, caller, recordId, request, null))
+                return $"You may not set '{field.Name}'.";
+        return null;
+    }
+
+    private static Record Without(Record record, List<string> names)
+    {
+        var data = JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject ?? new JsonObject();
+        foreach (var name in names) data.Remove(name);
+        return new Record { Id = record.Id, TableId = record.TableId, JsonData = data.ToJsonString(), CreatedAt = record.CreatedAt, UpdatedAt = record.UpdatedAt };
+    }
+
+    public static string? ListClause(TableDefinition table, IReadOnlyList<FieldDefinition> fields, string rowAlias, AccessCaller caller, List<object> args)
+    {
+        var rule = EffectiveRule(table.ReadRule, table.ScopeField, Permission.Read);
+        if (string.IsNullOrWhiteSpace(rule)) return null;
 
         var collected = new List<object?>();
-        var expression = Rewrite(table.ReadRule, fields, rowAlias, userId, null, null, collected, callerRole);
+        var expression = Rewrite(rule, fields, rowAlias, caller, null, null, collected);
 
         var offset = args.Count;
         args.AddRange(collected.Select(a => a ?? (object)DBNull.Value));
         return SlotToken().Replace(expression, m => $"{{{int.Parse(m.Groups["n"].Value) + offset}}}");
     }
 
-    public static string? ReadClauseLiteral(string readRule, IReadOnlyList<FieldDefinition> fields, string rowAlias, string? userId, string? callerRole)
+    public static string? ReadClauseLiteral(string readRule, string scopeField, IReadOnlyList<FieldDefinition> fields, string rowAlias, AccessCaller caller)
     {
-        if (string.IsNullOrWhiteSpace(readRule)) return null;
+        var rule = EffectiveRule(readRule, scopeField, Permission.Read);
+        if (string.IsNullOrWhiteSpace(rule)) return null;
 
         var args = new List<object?>();
-        var expression = Rewrite(readRule, fields, rowAlias, userId, null, null, args, callerRole);
+        var expression = Rewrite(rule, fields, rowAlias, caller, null, null, args);
         return SlotToken().Replace(expression, m =>
         {
             var value = args[int.Parse(m.Groups["n"].Value)];

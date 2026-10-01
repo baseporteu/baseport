@@ -9,8 +9,8 @@ public enum WireDialect { Postgres, Tds }
 public static class WireCatalog
 {
 
-    private sealed record CatalogColumn(string Name, string DataType, bool Required, string? RefTableId = null);
-    private sealed record CatalogTable(string Id, string Name, int Oid, long Rows, List<CatalogColumn> Columns, string ReadRule);
+    private sealed record CatalogColumn(string Name, string DataType, bool Required, string? RefTableId = null, string ReadRule = "");
+    private sealed record CatalogTable(string Id, string Name, int Oid, long Rows, List<CatalogColumn> Columns, string ReadRule, string ScopeField);
 
     private sealed record CatalogLink(CatalogTable Table, CatalogColumn Column, CatalogTable Target)
     {
@@ -22,13 +22,13 @@ public static class WireCatalog
         var tables = caller is null || ApiMethods.Parse(caller.ApiTokenMethods).Contains("GET")
             ? Read(conn, publishedOnly: true)
             : [];
-        CreateRowViews(conn, tables, caller?.Id, caller?.Role, readRules: true);
+        CreateRowViews(conn, tables, caller is null ? default : AccessCaller.Of(caller), readRules: true);
 
         if (dialect == WireDialect.Postgres) BuildPostgres(conn, tables);
         else BuildTds(conn, tables);
     }
 
-    public static void Views(SqliteConnection conn) => CreateRowViews(conn, Read(conn, publishedOnly: false), null, null, readRules: false);
+    public static void Views(SqliteConnection conn) => CreateRowViews(conn, Read(conn, publishedOnly: false), default, readRules: false);
 
     private static readonly delegate_authorizer WireAuthorizer = (_, action, _, _, dbName, viaObject) =>
         action == raw.SQLITE_PRAGMA
@@ -47,7 +47,7 @@ public static class WireCatalog
             while (reader.Read()) counts[reader.GetString(0)] = reader.GetInt64(1);
 
         var columns = new Dictionary<string, List<CatalogColumn>>(StringComparer.Ordinal);
-        using (var reader = Query(conn, "SELECT TableId, Name, DataType, IsRequired, OptionsJson FROM _fields ORDER BY TableId, Position, Id"))
+        using (var reader = Query(conn, "SELECT TableId, Name, DataType, IsRequired, OptionsJson, ReadRule FROM _fields ORDER BY TableId, Position, Id"))
             while (reader.Read())
             {
                 var name = reader.GetString(1);
@@ -59,13 +59,13 @@ public static class WireCatalog
                     ? FieldValidation.RefTableId(reader.GetString(4))
                     : null;
                 if (!columns.TryGetValue(reader.GetString(0), out var list)) columns[reader.GetString(0)] = list = new List<CatalogColumn>();
-                list.Add(new CatalogColumn(name, dataType, !reader.IsDBNull(3) && reader.GetInt64(3) != 0, refTableId));
+                list.Add(new CatalogColumn(name, dataType, !reader.IsDBNull(3) && reader.GetInt64(3) != 0, refTableId, reader.IsDBNull(5) ? "" : reader.GetString(5)));
             }
 
         var tables = new List<CatalogTable>();
         var oid = 16384;
 
-        using (var reader = Query(conn, $"SELECT Id, Name, ReadRule, ApiMethods FROM _tables WHERE IsProxy = 0{(publishedOnly ? " AND ApiEnabled = 1" : "")} ORDER BY Name"))
+        using (var reader = Query(conn, $"SELECT Id, Name, ReadRule, ApiMethods, ScopeField FROM _tables WHERE IsProxy = 0{(publishedOnly ? " AND ApiEnabled = 1" : "")} ORDER BY Name"))
             while (reader.Read())
             {
                 var id = reader.GetString(0);
@@ -74,7 +74,9 @@ public static class WireCatalog
                 if (!IsPlainIdentifier(name) || name[0] == '_' || name.StartsWith("sqlite_", StringComparison.OrdinalIgnoreCase)) continue;
                 if (publishedOnly && !ApiMethods.Parse(reader.GetString(3)).Contains("GET")) continue;
                 var readRule = reader.IsDBNull(2) ? "" : reader.GetString(2);
-                tables.Add(new CatalogTable(id, name, oid, counts.GetValueOrDefault(id), columns.GetValueOrDefault(id) ?? new List<CatalogColumn>(), readRule));
+                var scopeField = reader.IsDBNull(4) ? "" : reader.GetString(4);
+                var rows = scopeField.Length == 0 ? counts.GetValueOrDefault(id) : 0;
+                tables.Add(new CatalogTable(id, name, oid, rows, columns.GetValueOrDefault(id) ?? new List<CatalogColumn>(), readRule, scopeField));
                 oid += 16;
             }
         return tables;
@@ -89,7 +91,7 @@ public static class WireCatalog
                 select new CatalogLink(table, column, byId[column.RefTableId!])).ToList();
     }
 
-    private static void CreateRowViews(SqliteConnection conn, List<CatalogTable> tables, string? userId, string? callerRole, bool readRules)
+    private static void CreateRowViews(SqliteConnection conn, List<CatalogTable> tables, AccessCaller caller, bool readRules)
     {
         var stale = new List<string>();
         using (var reader = Query(conn, "SELECT name FROM temp.sqlite_master WHERE type = 'view'"))
@@ -100,12 +102,17 @@ public static class WireCatalog
         {
             var projection = new StringBuilder(
                 $"SELECT r.Id AS {Quote("id")}, r.CreatedAt AS {Quote("created_at")}, r.UpdatedAt AS {Quote("updated_at")}");
+            var fields = table.Columns.Select(c => new FieldDefinition { Name = c.Name }).ToList();
             foreach (var column in table.Columns)
-                projection.Append($", json_extract(r.JsonData, '$.{column.Name}') AS {Quote(column.Name)}");
+            {
+                var value = $"json_extract(r.JsonData, '$.{column.Name}')";
+                if (readRules && RecordAccess.ReadClauseLiteral(column.ReadRule, "", fields, "r", caller) is { } shown)
+                    value = $"CASE WHEN COALESCE(({shown}), 0) THEN {value} END";
+                projection.Append($", {value} AS {Quote(column.Name)}");
+            }
             projection.Append($" FROM main._records r WHERE r.TableId = {Literal(table.Id)}");
 
-            var fields = table.Columns.Select(c => new FieldDefinition { Name = c.Name }).ToList();
-            if (readRules && RecordAccess.ReadClauseLiteral(table.ReadRule, fields, "r", userId, callerRole) is { } clause)
+            if (readRules && RecordAccess.ReadClauseLiteral(table.ReadRule, table.ScopeField, fields, "r", caller) is { } clause)
                 projection.Append($" AND COALESCE(({clause}), 0)");
 
             Exec(conn, $"DROP VIEW IF EXISTS temp.{Quote(table.Name)}");

@@ -47,6 +47,8 @@ public static class PublicApiEndpoints
 
             var (parsedFilters, filterError) = ParseFilterParams(fields, filter);
             if (filterError is { } badFilter) return ApiError(ctx, ApiProblem.BadRequest, badFilter);
+            if (parsedFilters.Select(f => f.Field).Append(sortField).FirstOrDefault(f => f is not null && !string.IsNullOrWhiteSpace(f.ReadRule)) is { } guarded)
+                return ApiError(ctx, ApiProblem.BadRequest, $"'{guarded.Name}' has a read rule, so it cannot be filtered or sorted on.");
 
             var relations = await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted);
             var (expand, expandError) = ApiLinks.ParseExpand(ctx.Request.Query[ApiLinks.ExpandParameter], relations);
@@ -62,11 +64,12 @@ public static class PublicApiEndpoints
             }
 
             var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50,
-                filters: parsedFilters, accessFields: fields, accessUserId: caller.Id, accessRole: caller.Role, cursor: from);
-            var extras = await ApiLinks.ForRecordsAsync(db, apiName, result.Records, relations, expand, caller, ctx.RequestAborted);
+                filters: parsedFilters, accessFields: fields, access: AccessCaller.Of(caller), cursor: from);
+            var visible = await RecordAccess.RedactAsync(db, table, fields, AccessCaller.Of(caller), result.Records, ctx.RequestAborted);
+            var extras = await ApiLinks.ForRecordsAsync(db, apiName, visible, relations, expand, caller, ctx.RequestAborted);
             return Results.Ok(new
             {
-                rows = result.Records.Select(r => ApiDtos.RecordDto(r, fields, extras[r.Id].Links, extras[r.Id].Expanded)),
+                rows = visible.Select(r => ApiDtos.RecordDto(r, fields, extras[r.Id].Links, extras[r.Id].Expanded)),
                 result.Page,
                 result.PageSize,
                 result.Total,
@@ -93,7 +96,7 @@ public static class PublicApiEndpoints
 
             var (channel, refusal) = OpenSubscription(ctx);
             if (channel is null) return refusal!;
-            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, null, caller.Id, caller.Role, ctx.RequestAborted), OpenApiSpec.StreamEvent);
+            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, null, AccessCaller.Of(caller), ctx.RequestAborted), OpenApiSpec.StreamEvent);
         });
 
         app.MapGet("/api/v1/{apiName}/subscribe/{rid}", async (IServiceScopeFactory scopes, HttpContext ctx, string apiName, string rid) =>
@@ -110,12 +113,12 @@ public static class PublicApiEndpoints
 
             if (!await db.Records.AnyAsync(r => r.TableId == table.Id && r.Id == rid)) return ApiError(ctx, ApiProblem.NotFound, "Record not found.");
             var fields = await db.Fields.Where(f => f.TableId == table.Id).ToListAsync();
-            if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, caller.Id, rid, callerRole: caller.Role))
+            if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, AccessCaller.Of(caller), rid))
                 return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to read.");
 
             var (channel, refusal) = OpenSubscription(ctx);
             if (channel is null) return refusal!;
-            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, rid, caller.Id, caller.Role, ctx.RequestAborted), OpenApiSpec.StreamEvent);
+            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, rid, AccessCaller.Of(caller), ctx.RequestAborted), OpenApiSpec.StreamEvent);
         });
 
         app.MapGet("/api/v1/{apiName}/records/{rid}", async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
@@ -128,7 +131,7 @@ public static class PublicApiEndpoints
             var record = await db.Records.FirstOrDefaultAsync(r => r.TableId == table.Id && r.Id == rid);
             if (record == null) return ApiError(ctx, ApiProblem.NotFound, "Record not found.");
             var readFields = table.Fields.OrderBy(f => f.Position).ThenBy(f => f.Id).ToList();
-            if (!await RecordAccess.AllowsAsync(db, table, readFields, Permission.Read, caller.Id, rid, callerRole: caller.Role))
+            if (!await RecordAccess.AllowsAsync(db, table, readFields, Permission.Read, AccessCaller.Of(caller), rid))
                 return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to read.");
 
             var readRelations = await ApiLinks.RelationsAsync(db, readFields, ctx.RequestAborted);
@@ -138,8 +141,9 @@ public static class PublicApiEndpoints
             ApiConditional.SetETag(ctx, record);
             if (ApiConditional.NotModified(ctx, record)) return Results.StatusCode(StatusCodes.Status304NotModified);
 
-            var read = await ApiLinks.ForRecordAsync(db, apiName, record, readRelations, readExpand, caller, ctx.RequestAborted);
-            return Results.Ok(ApiDtos.RecordDto(record, readFields, read.Links, read.Expanded));
+            var shown = (await RecordAccess.RedactAsync(db, table, readFields, AccessCaller.Of(caller), [record], ctx.RequestAborted))[0];
+            var read = await ApiLinks.ForRecordAsync(db, apiName, shown, readRelations, readExpand, caller, ctx.RequestAborted);
+            return Results.Ok(ApiDtos.RecordDto(shown, readFields, read.Links, read.Expanded));
         });
 
         app.MapPost("/api/v1/{apiName}/records", async (AppDbContext db, HttpContext ctx, string apiName) =>
@@ -153,11 +157,13 @@ public static class PublicApiEndpoints
             var fields = table.Fields.ToList();
             var (obj, formErrors) = await MultipartRecord.FromRequestAsync(ctx, fields);
             if (formErrors.Count > 0) return ApiProblems.Write(ctx, BodyProblem(ctx), formErrors);
-            var outcome = await RecordEngine.PrepareAsync(db, table, fields, obj);
+            if (await RecordAccess.WriteRefusalAsync(db, table, fields, AccessCaller.Of(caller), obj) is { } createRefusal)
+                return ApiError(ctx, ApiProblem.Forbidden, createRefusal);
+            var outcome = await RecordEngine.PrepareAsync(db, table, fields, obj, scope: AccessCaller.Of(caller).Scope);
             if (outcome.HasErrors) return ApiProblems.FromOutcome(ctx, outcome);
             if (table.IsProxy)
                 return ApiError(ctx, ApiProblem.BadRequest, "Proxy tables forward to a remote API and cannot be written via the REST API.");
-            if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, caller.Id, request: obj, callerRole: caller.Role))
+            if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Create, AccessCaller.Of(caller), request: obj))
                 return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to create.");
             await MultipartRecord.SaveFilesAsync(ctx, obj);
             var record = new Record
@@ -169,9 +175,10 @@ public static class PublicApiEndpoints
             };
             db.Records.Add(record);
             await db.SaveChangesAsync();
-            var created = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller, ctx.RequestAborted);
+            var createdShown = (await RecordAccess.RedactAsync(db, table, fields, AccessCaller.Of(caller), [record], ctx.RequestAborted))[0];
+            var created = await ApiLinks.ForRecordAsync(db, apiName, createdShown, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller, ctx.RequestAborted);
             ApiConditional.SetETag(ctx, record);
-            return Results.Created(ApiLinks.Self(apiName, record.Id), ApiDtos.RecordDto(record, fields, created.Links));
+            return Results.Created(ApiLinks.Self(apiName, record.Id), ApiDtos.RecordDto(createdShown, fields, created.Links));
         });
 
         app.MapMethods("/api/v1/{apiName}/records/{rid}", new[] { "PATCH", "PUT" },
@@ -196,10 +203,12 @@ public static class PublicApiEndpoints
             if (formErrors.Count > 0) return ApiProblems.Write(ctx, BodyProblem(ctx), formErrors);
             var replace = HttpMethods.IsPut(ctx.Request.Method);
 
-            if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Update, caller.Id, rid, request: obj, callerRole: caller.Role))
+            if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Update, AccessCaller.Of(caller), rid, request: obj))
                 return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to change.");
+            if (await RecordAccess.WriteRefusalAsync(db, table, fields, AccessCaller.Of(caller), obj, rid, replace) is { } updateRefusal)
+                return ApiError(ctx, ApiProblem.Forbidden, updateRefusal);
 
-            var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, obj, replace);
+            var (merged, outcome) = await RecordEngine.ApplyUpdateAsync(db, table, fields, record, obj, replace, AccessCaller.Of(caller).Scope);
             if (outcome.HasErrors) return ApiProblems.FromOutcome(ctx, outcome);
             await MultipartRecord.SaveFilesAsync(ctx, merged);
 
@@ -209,9 +218,10 @@ public static class PublicApiEndpoints
             {
                 return ApiError(ctx, ApiProblem.Conflict, "Another write reached this record first. Re-read it and apply your change to the current one.");
             }
-            var written = await ApiLinks.ForRecordAsync(db, apiName, record, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller, ctx.RequestAborted);
+            var writtenShown = (await RecordAccess.RedactAsync(db, table, fields, AccessCaller.Of(caller), [record], ctx.RequestAborted))[0];
+            var written = await ApiLinks.ForRecordAsync(db, apiName, writtenShown, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller, ctx.RequestAborted);
             ApiConditional.SetETag(ctx, record);
-            return Results.Ok(ApiDtos.RecordDto(record, fields, written.Links));
+            return Results.Ok(ApiDtos.RecordDto(writtenShown, fields, written.Links));
         });
 
         app.MapDelete("/api/v1/{apiName}/records/{rid}", async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
@@ -225,7 +235,7 @@ public static class PublicApiEndpoints
             if (record == null) return ApiError(ctx, ApiProblem.NotFound, "Record not found.");
             if (!ApiConditional.Matches(ctx, record))
                 return ApiError(ctx, ApiProblem.PreconditionFailed, "The record changed since the version you hold. Re-read it before deleting.");
-            if (!await RecordAccess.AllowsAsync(db, table, await db.Fields.Where(f => f.TableId == table.Id).ToListAsync(), Permission.Delete, caller.Id, rid, callerRole: caller.Role))
+            if (!await RecordAccess.AllowsAsync(db, table, await db.Fields.Where(f => f.TableId == table.Id).ToListAsync(), Permission.Delete, AccessCaller.Of(caller), rid))
                 return ApiError(ctx, ApiProblem.Forbidden, "This record is not yours to delete.");
             db.Records.Remove(record);
             try { await db.SaveChangesAsync(); }
@@ -254,20 +264,22 @@ public static class PublicApiEndpoints
     }
 
     private static async IAsyncEnumerable<RecordChangeDto> Stream(
-        Channel<RecordEvent> channel, IServiceScopeFactory scopes, string tableId, string? recordId, string userId, string callerRole,
+        Channel<RecordEvent> channel, IServiceScopeFactory scopes, string tableId, string? recordId, AccessCaller caller,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
     {
         await foreach (var e in channel.Reader.ReadAllAsync(token))
         {
             if (e.TableId != tableId) continue;
             if (recordId is not null && e.RecordId != recordId) continue;
-            if (await AllowedFieldsAsync(scopes, tableId, userId, callerRole, e, token) is not { } fields) continue;
-            yield return new RecordChangeDto(e.Action, e.RecordId, EventRecord(e.Json, fields));
+            if (await VisibleEventAsync(scopes, tableId, caller, e, token) is not { } data) continue;
+            yield return new RecordChangeDto(e.Action, e.RecordId, data.Record);
         }
     }
 
-    private static async Task<List<FieldDefinition>?> AllowedFieldsAsync(
-        IServiceScopeFactory scopes, string tableId, string userId, string callerRole, RecordEvent e, CancellationToken token)
+    private sealed record VisibleEvent(JsonNode? Record);
+
+    private static async Task<VisibleEvent?> VisibleEventAsync(
+        IServiceScopeFactory scopes, string tableId, AccessCaller caller, RecordEvent e, CancellationToken token)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -276,9 +288,10 @@ public static class PublicApiEndpoints
         if (table is null) return null;
 
         var fields = await db.Fields.Where(f => f.TableId == tableId).ToListAsync(token);
-        if (!RecordAccess.HasRule(table, Permission.Read)) return fields;
-        return await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, userId,
-            row: e.Json is null ? null : JsonNode.Parse(e.Json) as JsonObject, callerRole: callerRole) ? fields : null;
+        var row = e.Json is null ? null : JsonNode.Parse(e.Json) as JsonObject;
+        if (!await RecordAccess.AllowsAsync(db, table, fields, Permission.Read, caller, row: row)) return null;
+        if (row is null) return new VisibleEvent(null);
+        return new VisibleEvent(ApiDtos.WithoutSecrets(await RecordAccess.RedactRowAsync(db, table, fields, caller, row), fields));
     }
 
     internal static JsonNode? EventRecord(string? json, IEnumerable<FieldDefinition> fields) =>

@@ -36,11 +36,12 @@ public static class RecordEngine
         catch (JsonException) { return null; }
     }
 
-    public static async Task<ValidationOutcome> PrepareAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, JsonObject obj, string? excludeRecordId = null, JsonObject? stored = null)
+    public static async Task<ValidationOutcome> PrepareAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, JsonObject obj, string? excludeRecordId = null, JsonObject? stored = null, string? scope = null)
     {
 
         foreach (var kv in obj.ToList())
             if (fields.All(f => f.Name != kv.Key)) obj.Remove(kv.Key);
+        if (scope is not null && fields.Any(f => f.Name == table.ScopeField)) obj[table.ScopeField] = scope;
 
         ApplyDefaults(fields, obj);
         DeriveSlugs(fields, obj);
@@ -255,7 +256,7 @@ public static class RecordEngine
     }
 
     public static async Task<(JsonObject Merged, ValidationOutcome Outcome)> ApplyUpdateAsync(
-        AppDbContext db, TableDefinition table, List<FieldDefinition> fields, Record record, JsonObject patch, bool replace)
+        AppDbContext db, TableDefinition table, List<FieldDefinition> fields, Record record, JsonObject patch, bool replace, string? scope = null)
     {
         JsonObject merged;
         if (replace)
@@ -279,7 +280,7 @@ public static class RecordEngine
             .Where(f => FieldValidation.NormalizeType(f.DataType) == "systemid")
             .ToDictionary(f => f.Name, f => stored.TryGetPropertyValue(f.Name, out var v) ? v?.DeepClone() : null);
 
-        var outcome = await PrepareAsync(db, table, fields, merged, record.Id, stored);
+        var outcome = await PrepareAsync(db, table, fields, merged, record.Id, stored, scope);
         if (outcome.HasErrors) return (merged, outcome);
 
         foreach (var (name, value) in systemIds)

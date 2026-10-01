@@ -15,6 +15,13 @@ public static class AccountValidation
     public const int PasswordMin = 10;
     public const int PasswordMax = 128;
 
+    public const int ScopeMax = 64;
+
+    public static string? ScopeProblem(string scope) =>
+        scope.Length > ScopeMax ? $"Scope must be at most {ScopeMax} characters."
+        : scope.Any(char.IsControl) ? "Scope cannot contain control characters."
+        : null;
+
     public static string? PasswordProblem(string password) => password.Length switch
     {
         < PasswordMin => $"The new password must be at least {PasswordMin} characters.",

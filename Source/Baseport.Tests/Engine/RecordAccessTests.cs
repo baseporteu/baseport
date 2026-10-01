@@ -60,8 +60,8 @@ public class RecordAccessTests : IDisposable
     {
         var (table, fields) = await NotesAsync(createRule: "_USER_.role = 'consumer'");
 
-        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, "acct-1", callerRole: "consumer"));
-        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, "acct-2", callerRole: "user"));
+        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, new AccessCaller("acct-1", "consumer", null)));
+        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, new AccessCaller("acct-2", "user", null)));
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class RecordAccessTests : IDisposable
         var (table, fields) = await NotesAsync();
         var id = await RecordAsync(table, "alice", "hello");
 
-        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, "bob", id));
+        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, new AccessCaller("bob", null, null), id));
     }
 
     [Fact]
@@ -91,8 +91,8 @@ public class RecordAccessTests : IDisposable
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
         var id = await RecordAsync(table, "alice", "hello");
 
-        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, "alice", id));
-        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, "bob", id));
+        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, new AccessCaller("alice", null, null), id));
+        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, new AccessCaller("bob", null, null), id));
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public class RecordAccessTests : IDisposable
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
         var id = await RecordAsync(table, "alice", "hello");
 
-        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, null, id));
+        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, default, id));
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class RecordAccessTests : IDisposable
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
 
-        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, "alice", "nosuchrecord"));
+        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, new AccessCaller("alice", null, null), "nosuchrecord"));
     }
 
     [Fact]
@@ -117,9 +117,9 @@ public class RecordAccessTests : IDisposable
     {
         var (table, fields) = await NotesAsync(createRule: "_REQ_.owner = _USER_.id");
 
-        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, "alice",
+        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, new AccessCaller("alice", null, null),
             request: new JsonObject { ["owner"] = "alice" }));
-        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, "alice",
+        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, new AccessCaller("alice", null, null),
             request: new JsonObject { ["owner"] = "bob" }));
     }
 
@@ -128,7 +128,7 @@ public class RecordAccessTests : IDisposable
     {
         var (table, fields) = await NotesAsync(createRule: "_ROW_.owner IS NULL");
 
-        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, "alice",
+        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Create, new AccessCaller("alice", null, null),
             request: new JsonObject { ["owner"] = "alice" }));
     }
 
@@ -137,9 +137,9 @@ public class RecordAccessTests : IDisposable
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
 
-        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, "alice",
+        Assert.True(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, new AccessCaller("alice", null, null),
             row: new JsonObject { ["owner"] = "alice" }));
-        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, "bob",
+        Assert.False(await RecordAccess.AllowsAsync(_db, table, fields, Permission.Read, new AccessCaller("bob", null, null),
             row: new JsonObject { ["owner"] = "alice" }));
     }
 
@@ -152,11 +152,11 @@ public class RecordAccessTests : IDisposable
         await RecordAsync(table, "alice", "third");
 
         var mine = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
-            accessFields: fields, accessUserId: "alice");
+            accessFields: fields, access: new AccessCaller("alice", null, null));
         Assert.Equal(2, mine.Records.Count);
 
         var nobody = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
-            accessFields: fields, accessUserId: "carol");
+            accessFields: fields, access: new AccessCaller("carol", null, null));
         Assert.Empty(nobody.Records);
     }
 
@@ -168,9 +168,9 @@ public class RecordAccessTests : IDisposable
         await RecordAsync(table, "bob", "second");
 
         var service = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
-            accessFields: fields, accessUserId: "svc", accessRole: AccountRoles.Consumer);
+            accessFields: fields, access: new AccessCaller("svc", AccountRoles.Consumer, null));
         var endUser = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
-            accessFields: fields, accessUserId: "alice", accessRole: AccountRoles.User);
+            accessFields: fields, access: new AccessCaller("alice", AccountRoles.User, null));
 
         Assert.Equal(2, service.Records.Count);
         Assert.Empty(endUser.Records);
@@ -200,7 +200,7 @@ public class RecordAccessTests : IDisposable
         await RecordAsync(table, "bob", "second");
 
         var mine = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
-            accessFields: fields, accessUserId: "alice");
+            accessFields: fields, access: new AccessCaller("alice", null, null));
         Assert.Equal(1, mine.Total);
     }
 
@@ -212,7 +212,7 @@ public class RecordAccessTests : IDisposable
         await RecordAsync(table, "bob", "secret");
 
         var found = await QueryEngine.ListAsync(_db, table, [], null, true, "secret", 1, 50,
-            accessFields: fields, accessUserId: "alice");
+            accessFields: fields, access: new AccessCaller("alice", null, null));
         Assert.Single(found.Records);
     }
 

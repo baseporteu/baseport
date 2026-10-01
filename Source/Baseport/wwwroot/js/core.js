@@ -86,6 +86,8 @@ function cloneField(f) {
         isHidden: !!f.isHidden,
         isUnique: !!f.isUnique,
         isIdentifier: !!f.isIdentifier,
+        readRule: f.readRule || '',
+        writeRule: f.writeRule || '',
     };
 }
 

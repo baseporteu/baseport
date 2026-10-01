@@ -13,10 +13,11 @@ public partial class AccessRuleFuzzTests : IDisposable
     private const int Cases = 5000;
     private const string UserId = "o'user\"1";
     private const string Role = "role') OR ('1";
+    private static readonly AccessCaller Caller = new(UserId, Role, "scope') OR ('1");
 
     private static readonly string[] Tokens =
     [
-        "_USER_.id", "_USER_.role", "_ROW_.status", "_ROW_.\"owner\"", "_ROW_.amount", "_REQ_.amount", "_REQ_.status",
+        "_USER_.id", "_USER_.role", "_USER_.scope", "_ROW_.status", "_ROW_.\"owner\"", "_ROW_.amount", "_REQ_.amount", "_REQ_.status",
         "'", "''", "'x'", "'a''b'", "\"", "\"status\"", "[", "]", "`", "(", ")", "(", ")", ";", "--", "/*", "*/",
         "=", "<>", "<", "||", "+", ",", "AND", "OR", "NOT", "IS", "NULL", "IN", "LIKE", "CASE", "WHEN", "THEN", "ELSE", "END",
         "1", "0", "42", "-1", "AS", "UPDATE", "ATTACH", "SELECT", "FROM", "WHERE", "_users", "_records", "EXISTS",
@@ -119,12 +120,12 @@ public partial class AccessRuleFuzzTests : IDisposable
         try
         {
             var args = new List<object?>();
-            var expression = RecordAccess.Rewrite(rule, Fields, "r", UserId,
-                new JsonObject { ["amount"] = "1') OR ('1", ["status"] = "x" }, null, args, Role);
+            var expression = RecordAccess.Rewrite(rule, Fields, "r", Caller,
+                new JsonObject { ["amount"] = "1') OR ('1", ["status"] = "x" }, null, args);
             var bound = Rows($"SELECT 1 FROM _records r WHERE 0 AND ({expression}) UNION ALL SELECT 2", args);
             if (bound is not ["2"]) return $"the bound rule escaped its parentheses: {string.Join(",", bound)}";
 
-            var clause = RecordAccess.ReadClauseLiteral(rule, Fields, "r", UserId, Role);
+            var clause = RecordAccess.ReadClauseLiteral(rule, "status", Fields, "r", Caller);
             Exec($"CREATE TEMP VIEW fuzz AS SELECT 1 AS v FROM _records r WHERE 0 AND COALESCE(({clause}), 0) UNION ALL SELECT 2");
             try
             {

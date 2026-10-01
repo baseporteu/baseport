@@ -19,6 +19,7 @@ _ROW_.owner = _USER_.id
 | --- | --- |
 | `_USER_.id` | Id of the calling account. |
 | `_USER_.role` | Role of the calling account: `admin`, `consumer` or `user`. |
+| `_USER_.scope` | Customer the calling account is limited to. `NULL` when the account has none. |
 | `_ROW_.<field>` | A field on the stored record. `NULL` on create. |
 | `_REQ_.<field>` | A field in the request body. |
 
@@ -47,6 +48,33 @@ The last example refuses end-user JWTs and allows service tokens.
 | Live updates (SSE) | Event not delivered |
 
 A rule that refers to a deleted record evaluates as a refusal. Live updates re-read the rule for every event; a changed rule applies to open streams. The role reaches every evaluation: single-record checks, list filters, relation expansion, transactions, SSE and the wire views.
+
+## Per-customer scope
+
+To limit each account to one customer's rows, set the account's **Scope** (for example `ACME`) and choose a **Scope by** field on the endpoint. The field must be a text, select or reference field.
+
+On a scoped endpoint:
+
+- lists, gets, live updates and the wire views show only rows whose field equals the caller's scope;
+- a create stores the caller's scope in the field, whatever the request sent;
+- an update cannot change the field, and update or delete of another customer's row is `403`;
+- an account without a scope sees no rows and cannot create.
+
+The scope is applied on top of the four rules above and cannot be removed by editing them. The field is marked read-only in the OpenAPI document. Forms are not scoped.
+
+## Field rules
+
+A field can carry its own **read rule** and **write rule**, set in the field editor. They use the same references and syntax as the table rules.
+
+- A read rule that is `false` for a record removes the field from that record in lists, gets, write responses, expansions and live updates. On the wire views the column reads `NULL`. A read rule cannot use `_REQ_`.
+- A write rule is checked when a request sets the field. `false` answers `403`. A `PUT` replaces every field, so it is checked against every field that has a write rule.
+- A field with a read rule cannot be used in `filter` or `sort`, and search skips it.
+
+```sql
+_USER_.role = 'consumer'
+```
+
+A calculated or derived field computed from a guarded field shows the result to everyone; give it the same read rule.
 
 ## Validation
 

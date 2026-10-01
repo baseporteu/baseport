@@ -43,6 +43,7 @@ public sealed class TableDefinition
     public string ReadRule { get; set; } = "";
     public string UpdateRule { get; set; } = "";
     public string DeleteRule { get; set; } = "";
+    public string ScopeField { get; set; } = "";
 
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -73,6 +74,8 @@ public sealed class FieldDefinition
     public bool IsHidden { get; set; } = false;
     public bool IsIdentifier { get; set; } = false;
     public bool IsReadOnly { get; set; } = false;
+    public string ReadRule { get; set; } = "";
+    public string WriteRule { get; set; } = "";
 }
 
 public static class FormKinds
@@ -236,6 +239,7 @@ public sealed class UserAccount
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public string Role { get; set; } = AccountRoles.Consumer;
+    public string Scope { get; set; } = "";
 
     public bool IsDisabled { get; set; } = false;
 

@@ -30,6 +30,7 @@ public static class AdminEndpoints
                 a.Username,
                 a.Email,
                 a.Role,
+                a.Scope,
                 a.IsDisabled,
                 a.CreatedAt,
                 a.UpdatedAt,
@@ -55,6 +56,9 @@ public static class AdminEndpoints
                 return Results.BadRequest(new { errors = new[] { "That email is already on another account." }, invalid = new[] { "email" } });
             var role = body["role"] is JsonValue av && av.TryGetValue<string>(out var r) ? AccountRoles.Normalize(r) : AccountRoles.Consumer;
             if (role is null) return Results.BadRequest(new { errors = new[] { "Role must be admin, consumer or user." } });
+            var scope = body["scope"] is JsonValue sv && sv.TryGetValue<string>(out var sc) ? sc.Trim() : "";
+            if (AccountValidation.ScopeProblem(scope) is { } scopeProblem)
+                return Results.BadRequest(new { errors = new[] { scopeProblem }, invalid = new[] { "scope" } });
             var now = DateTime.UtcNow;
             var account = new UserAccount
             {
@@ -64,6 +68,7 @@ public static class AdminEndpoints
                 CreatedAt = now,
                 UpdatedAt = now,
                 Role = role,
+                Scope = scope,
                 ApiTokenHash = "",
                 ApiEnabled = false
             };
@@ -75,6 +80,7 @@ public static class AdminEndpoints
                 account.Username,
                 account.Email,
                 account.Role,
+                account.Scope,
                 account.IsDisabled,
                 account.CreatedAt,
                 account.UpdatedAt,
@@ -114,6 +120,14 @@ public static class AdminEndpoints
                 if (role == AccountRoles.Admin || locked)
                     return Results.BadRequest(new { errors = new[] { AdminOnlyByCli } });
                 account.Role = role;
+            }
+
+            if (body["scope"] is JsonValue sv && sv.TryGetValue<string>(out var rawScope) && rawScope.Trim() != account.Scope)
+            {
+                if (locked) return Results.BadRequest(new { errors = new[] { AdminOnlyByCli } });
+                if (AccountValidation.ScopeProblem(rawScope.Trim()) is { } scopeProblem)
+                    return Results.BadRequest(new { errors = new[] { scopeProblem }, invalid = new[] { "scope" } });
+                account.Scope = rawScope.Trim();
             }
 
             if (body["password"] is JsonValue pv && pv.TryGetValue<string>(out var newPassword) && !string.IsNullOrEmpty(newPassword))
@@ -183,6 +197,7 @@ public static class AdminEndpoints
                 account.Username,
                 account.Email,
                 account.Role,
+                account.Scope,
                 account.IsDisabled,
                 account.CreatedAt,
                 account.UpdatedAt,

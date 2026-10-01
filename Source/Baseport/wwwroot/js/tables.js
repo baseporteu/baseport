@@ -119,6 +119,8 @@ function settingSwitch(id, checked, label, desc) {
     return row;
 }
 
+const SCOPE_FIELD_TYPES = ['text', 'select', 'reference'];
+
 function openEndpointSheet(id) {
     const table = currentTables.find((t) => t.id === (id || currentTablePublicId));
     if (!table) return;
@@ -185,10 +187,20 @@ function openEndpointSheet(id) {
         placeholder: 'What this endpoint is for, and how to use it.',
     });
 
+    const scopeField = ui.field('Scope by', {
+        type: 'select',
+        value: table.scopeField || '',
+        options: [['', 'Not scoped']].concat((table.fields || [])
+            .filter((f) => SCOPE_FIELD_TYPES.includes(f.dataType))
+            .map((f) => [f.name, f.label || f.name])),
+        help: "Limits each account to rows whose field matches the account's scope.",
+    });
+    scopeField.ctrl.disabled = Boolean(table.isProxy);
+
     const methods = ui.methodSwitches(['GET', 'POST', 'PATCH', 'PUT', 'DELETE'], table.apiMethods,
         'When a method is turned off, it is removed from the documentation and rejected by the API.');
 
-    body.append(exposed, apiName, docsEnabled, displayName, namespace, documentation, methods);
+    body.append(exposed, apiName, docsEnabled, displayName, namespace, documentation, scopeField, methods);
 
     const actions = ui.el('div', 'form-actions');
     const saveBtn = ui.button('Save', () =>
@@ -203,6 +215,7 @@ function openEndpointSheet(id) {
                     apiNamespace: namespace.ctrl.value,
                     apiDocumentation: documentation.ctrl.value,
                     apiMethods: methods.selected(),
+                    scopeField: scopeField.ctrl.value,
                 },
                 success: 'Endpoint updated.',
             });
@@ -783,6 +796,8 @@ function openFieldEditor(fieldId) {
     });
     wrap.appendChild(identifierRow);
     wrap.appendChild(settingSwitch('feHidden', f.isHidden, 'Hidden', 'Not rendered in forms; value set via API or server only.'));
+    wrap.appendChild(fieldInputRow('Read rule', 'feReadRule', f.readRule, "_USER_.role = 'consumer'", true));
+    wrap.appendChild(fieldInputRow('Write rule', 'feWriteRule', f.writeRule, '_ROW_.owner = _USER_.id', true));
 
     const valPanel = document.createElement('div');
     valPanel.id = 'feValidation';
@@ -1203,6 +1218,8 @@ async function saveFieldChanges() {
 
     const newValidationExpr = document.getElementById('feValidationExpr').value.trim();
     const newValidationMessage = document.getElementById('feValidationMessage').value.trim();
+    const newReadRule = document.getElementById('feReadRule').value.trim();
+    const newWriteRule = document.getElementById('feWriteRule').value.trim();
     if (!newValidationExpr && newValidationMessage) {
         ui.toast('A validation message needs a validation rule.', 'error');
         return;
@@ -1278,6 +1295,8 @@ async function saveFieldChanges() {
     draft.pattern = newPattern;
     draft.validationExpr = newValidationExpr;
     draft.validationMessage = newValidationMessage;
+    draft.readRule = newReadRule;
+    draft.writeRule = newWriteRule;
     if (cfg && (newType === 'calculated' || newType === 'derived')) draft.expression = cfg.value.trim();
     else if (cfg && (newType === 'select' || newType === 'multiselect'))
         draft.optionsJson = JSON.stringify(splitOptions(cfg.value));
@@ -1319,6 +1338,8 @@ function fieldPayload(f) {
         isHidden: f.isHidden,
         isUnique: f.isUnique,
         isIdentifier: f.isIdentifier,
+        readRule: f.readRule,
+        writeRule: f.writeRule,
     };
 }
 
