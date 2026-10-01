@@ -110,10 +110,9 @@ public static class Jobs
 
     private static async Task<string> FileDeletionsAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)
     {
-        var stored = FileStore.AllStoredNames()
-            .Where(name => string.IsNullOrEmpty(Path.GetDirectoryName(name)))
-            .ToList();
-        if (stored.Count == 0) return "No uploads on disk.";
+        var partials = FileStore.DeleteStalePartials(DateTime.UtcNow);
+        var stored = FileStore.SweepCandidates(DateTime.UtcNow);
+        if (stored.Count == 0) return partials == 0 ? "No uploads old enough to check." : $"Removed {partials} unfinished upload(s).";
 
         var referenced = await ReferencedUploadsAsync(db, ct);
 

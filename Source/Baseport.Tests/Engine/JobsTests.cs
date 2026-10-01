@@ -182,7 +182,7 @@ public class JobsTests : IDisposable
     public async Task The_file_deletions_job_is_a_noop_until_uploads_exist()
     {
         var result = await Jobs.Find("file-deletions")!.Run(_db, Log, TestContext.Current.CancellationToken);
-        Assert.Contains("No uploads on disk", result);
+        Assert.Contains("No uploads", result);
     }
 
     [Fact]

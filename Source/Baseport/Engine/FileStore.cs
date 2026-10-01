@@ -32,9 +32,7 @@ public static class FileStore
     public static void Configure(AppSettings settings) => CapBytes = settings.UploadsMaxMegabytes * 1024L * 1024;
 
     public static void Recount() =>
-        Interlocked.Exchange(ref _usedBytes, System.IO.Directory.Exists(Directory)
-            ? System.IO.Directory.EnumerateFiles(Directory, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length)
-            : 0);
+        Interlocked.Exchange(ref _usedBytes, Files().Where(f => !IsPartial(f)).Sum(f => new FileInfo(f).Length));
 
     private static readonly System.Text.RegularExpressions.Regex BucketPattern =
         new("^[a-z0-9][a-z0-9-]{0,31}$", System.Text.RegularExpressions.RegexOptions.Compiled);
@@ -85,8 +83,18 @@ public static class FileStore
     {
         var path = Resolve(storedName) ?? throw new ArgumentException("Not a stored file name.", nameof(storedName));
         System.IO.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await using (var stream = File.Create(path))
-            await file.CopyToAsync(stream, ct);
+        var partial = path + PartialSuffix;
+        try
+        {
+            await using (var stream = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                await file.CopyToAsync(stream, ct);
+            File.Move(partial, path, overwrite: false);
+        }
+        catch
+        {
+            File.Delete(partial);
+            throw;
+        }
         Interlocked.Add(ref _usedBytes, file.Length);
     }
 
@@ -98,9 +106,13 @@ public static class FileStore
         Interlocked.Add(ref _usedBytes, -length);
     }
 
+    public const string PartialSuffix = ".partial";
+
+    public static readonly TimeSpan Grace = TimeSpan.FromHours(1);
+
     public static string? Resolve(string storedName)
     {
-        if (string.IsNullOrWhiteSpace(storedName)) return null;
+        if (string.IsNullOrWhiteSpace(storedName) || storedName.EndsWith(PartialSuffix, StringComparison.OrdinalIgnoreCase)) return null;
 
         var parts = storedName.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 1) return Path.Combine(Directory, Path.GetFileName(parts[0]));
@@ -109,8 +121,31 @@ public static class FileStore
     }
 
     public static IEnumerable<string> AllStoredNames() =>
+        Files().Where(f => !IsPartial(f)).Select(f => Path.GetRelativePath(Directory, f).Replace(Path.DirectorySeparatorChar, '/'));
+
+    public static IReadOnlyList<string> SweepCandidates(DateTime nowUtc) =>
+        System.IO.Directory.Exists(Directory)
+            ? System.IO.Directory.EnumerateFiles(Directory)
+                .Where(f => !IsPartial(f) && File.GetLastWriteTimeUtc(f) <= nowUtc - Grace)
+                .Select(f => Path.GetFileName(f))
+                .ToList()
+            : [];
+
+    public static int DeleteStalePartials(DateTime nowUtc)
+    {
+        var deleted = 0;
+        foreach (var path in Files().Where(f => IsPartial(f) && File.GetLastWriteTimeUtc(f) <= nowUtc - Grace))
+        {
+            File.Delete(path);
+            deleted++;
+        }
+        return deleted;
+    }
+
+    private static bool IsPartial(string path) => path.EndsWith(PartialSuffix, StringComparison.OrdinalIgnoreCase);
+
+    private static IEnumerable<string> Files() =>
         System.IO.Directory.Exists(Directory)
             ? System.IO.Directory.EnumerateFiles(Directory, "*", SearchOption.AllDirectories)
-                .Select(f => Path.GetRelativePath(Directory, f).Replace(Path.DirectorySeparatorChar, '/'))
-            : Enumerable.Empty<string>();
+            : [];
 }

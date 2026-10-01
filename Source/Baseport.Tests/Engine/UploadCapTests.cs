@@ -80,4 +80,52 @@ public class UploadCapTests : IDisposable
         FileStore.MinFreeBytes = long.MaxValue / 2;
         Assert.Contains("low on disk space", FileStore.Problem(File(1)));
     }
+
+    [Fact]
+    public async Task CancelledUploadLeavesNoFile()
+    {
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        var name = FileStore.Reserve(File(10), "docs");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => FileStore.WriteAsync(File(10), name, cancelled.Token));
+
+        Assert.Empty(System.IO.Directory.EnumerateFiles(FileStore.Directory, "*", SearchOption.AllDirectories));
+        Assert.Equal(0, FileStore.UsedBytes);
+    }
+
+    [Fact]
+    public void PartialFilesAreNeverServed()
+    {
+        Assert.Null(FileStore.Resolve("abc.txt" + FileStore.PartialSuffix));
+        Assert.Null(FileStore.Resolve("docs/abc.txt" + FileStore.PartialSuffix));
+        Assert.False(new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider().TryGetContentType("abc.txt" + FileStore.PartialSuffix, out _));
+    }
+
+    [Fact]
+    public async Task SweepSkipsYoungFiles()
+    {
+        var name = FileStore.Reserve(File(5));
+        await FileStore.WriteAsync(File(5), name, TestContext.Current.CancellationToken);
+
+        Assert.Empty(FileStore.SweepCandidates(DateTime.UtcNow));
+        Assert.Equal([name], FileStore.SweepCandidates(DateTime.UtcNow + FileStore.Grace + TimeSpan.FromMinutes(1)));
+    }
+
+    [Fact]
+    public void SweepRemovesStalePartials()
+    {
+        var bucket = Path.Combine(FileStore.Directory, "docs");
+        System.IO.Directory.CreateDirectory(bucket);
+        var stale = Path.Combine(bucket, "old.txt" + FileStore.PartialSuffix);
+        var young = Path.Combine(FileStore.Directory, "new.txt" + FileStore.PartialSuffix);
+        System.IO.File.WriteAllText(stale, "x");
+        System.IO.File.WriteAllText(young, "x");
+        System.IO.File.SetLastWriteTimeUtc(stale, DateTime.UtcNow - FileStore.Grace - TimeSpan.FromMinutes(1));
+
+        Assert.Equal(1, FileStore.DeleteStalePartials(DateTime.UtcNow));
+        Assert.False(System.IO.File.Exists(stale));
+        Assert.True(System.IO.File.Exists(young));
+        Assert.Empty(FileStore.AllStoredNames());
+    }
 }

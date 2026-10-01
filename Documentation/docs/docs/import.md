@@ -55,7 +55,7 @@ Proxy tables cannot receive imports.
 
 ## Secrets
 
-**Settings > Secrets** holds credentials for outbound requests. A value is encrypted at rest and never returned: the console shows only the name, when it changed and when it was last used. A secret used by a connection cannot be deleted.
+**Settings > Secrets** holds credentials for outbound requests. A value is encrypted at rest and never returned: the console lists its name, last change and last use. A secret used by a connection cannot be deleted.
 
 Values are encrypted with the key ring in `keys/`. A backup restored without `keys/` cannot read them; enter them again.
 
