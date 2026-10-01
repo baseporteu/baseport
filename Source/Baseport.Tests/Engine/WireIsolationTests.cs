@@ -33,10 +33,10 @@ public class WireIsolationTests : IDisposable
     [Fact]
     public async Task WireCannotReadAdminView()
     {
-        var admin = await SqlEngine.ReadAsync(_db, "SELECT COUNT(*) FROM \"Payroll\"", WireCatalog.Views, restrict: false);
+        var admin = await SqlEngine.ReadAsync(_db, "SELECT COUNT(*) FROM \"Payroll\"", WireCatalog.Views, restrict: false, ct: TestContext.Current.CancellationToken);
         Assert.Null(admin.Error);
 
-        var wire = await SqlEngine.ReadAsync(_db, "SELECT * FROM temp.\"Payroll\"", conn => WireCatalog.Apply(conn, WireDialect.Postgres, null));
+        var wire = await SqlEngine.ReadAsync(_db, "SELECT * FROM temp.\"Payroll\"", conn => WireCatalog.Apply(conn, WireDialect.Postgres, null), ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(wire.Error);
         Assert.Empty(wire.Rows);

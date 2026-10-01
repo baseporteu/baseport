@@ -371,7 +371,7 @@ public static class AdminEndpoints
             catch (BackupBusyException ex) { return Results.Conflict(new { errors = new[] { ex.Message } }); }
             catch (BackupIntegrityException ex) { return Results.Json(new { errors = new[] { ex.Message } }, statusCode: StatusCodes.Status500InternalServerError); }
             return Results.Ok(new { created, backups = BackupStore.List(BackupStore.Dir(db)) });
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapGet("/api/_admin/backups/{name}", (AppDbContext db, string name) =>
         {
@@ -379,7 +379,7 @@ public static class AdminEndpoints
             return path is null
                 ? Results.NotFound(new { errors = new[] { "No such backup." } })
                 : Results.File(path, path.EndsWith(".zip", StringComparison.Ordinal) ? "application/zip" : "application/vnd.sqlite3", name);
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapDelete("/api/_admin/backups/{name}", (AppDbContext db, string name) =>
         {
@@ -651,13 +651,13 @@ public static class AdminEndpoints
             return Results.Ok(new { rotated = true });
         });
 
-        app.MapPost("/api/_admin/sql", async (AppDbContext db, JsonObject body) =>
+        app.MapPost("/api/_admin/sql", async (AppDbContext db, JsonObject body, CancellationToken ct) =>
         {
             var sql = body["sql"] is JsonValue sv && sv.TryGetValue<string>(out var s) ? s.Trim() : "";
             var validationError = SqlEngine.Validate(sql);
             if (validationError != null)
                 return Results.BadRequest(new { errors = new[] { validationError } });
-            var run = await SqlEngine.ReadAsync(db, sql, WireCatalog.Views, restrict: false);
+            var run = await SqlEngine.ReadAsync(db, sql, WireCatalog.Views, restrict: false, ct);
             return run.Error is not null
                 ? Results.BadRequest(new { errors = new[] { run.Error } })
                 : Results.Ok(new { columns = run.Columns, rows = run.Rows, truncated = run.Truncated, rowCount = run.Rows.Count });
@@ -714,14 +714,14 @@ public static class AdminEndpoints
             return Results.Ok(new { ok = true });
         });
 
-        app.MapPost("/api/_admin/queries/{pid}/execute", async (AppDbContext db, string pid) =>
+        app.MapPost("/api/_admin/queries/{pid}/execute", async (AppDbContext db, string pid, CancellationToken ct) =>
         {
             var query = await db.SavedQueries.FirstOrDefaultAsync(q => q.Id == pid);
             if (query == null) return Results.NotFound();
             var validationError = SqlEngine.Validate(query.Sql);
             if (validationError != null)
                 return Results.BadRequest(new { errors = new[] { validationError } });
-            var run = await SqlEngine.ReadAsync(db, query.Sql, WireCatalog.Views, restrict: false);
+            var run = await SqlEngine.ReadAsync(db, query.Sql, WireCatalog.Views, restrict: false, ct);
             if (run.Error is not null) return Results.BadRequest(new { errors = new[] { run.Error } });
 
             query.LastExecutedAt = DateTime.UtcNow;

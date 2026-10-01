@@ -64,7 +64,7 @@ public static class PublicApiEndpoints
             }
 
             var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50,
-                filters: parsedFilters, accessFields: fields, access: AccessCaller.Of(caller), cursor: from);
+                filters: parsedFilters, accessFields: fields, access: AccessCaller.Of(caller), cursor: from, ct: ctx.RequestAborted);
             var visible = await RecordAccess.RedactAsync(db, table, fields, AccessCaller.Of(caller), result.Records, ctx.RequestAborted);
             var extras = await ApiLinks.ForRecordsAsync(db, apiName, visible, relations, expand, caller, ctx.RequestAborted);
             return Results.Ok(new
@@ -96,8 +96,8 @@ public static class PublicApiEndpoints
 
             var (channel, refusal) = OpenSubscription(ctx);
             if (channel is null) return refusal!;
-            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, null, AccessCaller.Of(caller), ctx.RequestAborted), OpenApiSpec.StreamEvent);
-        });
+            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, null, AccessCaller.Of(caller), Stopping(ctx), ctx.RequestAborted), OpenApiSpec.StreamEvent);
+        }).DisableRequestTimeout();
 
         app.MapGet("/api/v1/{apiName}/subscribe/{rid}", async (IServiceScopeFactory scopes, HttpContext ctx, string apiName, string rid) =>
         {
@@ -118,8 +118,8 @@ public static class PublicApiEndpoints
 
             var (channel, refusal) = OpenSubscription(ctx);
             if (channel is null) return refusal!;
-            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, rid, AccessCaller.Of(caller), ctx.RequestAborted), OpenApiSpec.StreamEvent);
-        });
+            return TypedResults.ServerSentEvents(Stream(channel, scopes, table.Id, rid, AccessCaller.Of(caller), Stopping(ctx), ctx.RequestAborted), OpenApiSpec.StreamEvent);
+        }).DisableRequestTimeout();
 
         app.MapGet("/api/v1/{apiName}/records/{rid}", async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
         {
@@ -179,7 +179,7 @@ public static class PublicApiEndpoints
             var created = await ApiLinks.ForRecordAsync(db, apiName, createdShown, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller, ctx.RequestAborted);
             ApiConditional.SetETag(ctx, record);
             return Results.Created(ApiLinks.Self(apiName, record.Id), ApiDtos.RecordDto(createdShown, fields, created.Links));
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapMethods("/api/v1/{apiName}/records/{rid}", new[] { "PATCH", "PUT" },
             async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
@@ -222,7 +222,7 @@ public static class PublicApiEndpoints
             var written = await ApiLinks.ForRecordAsync(db, apiName, writtenShown, await ApiLinks.RelationsAsync(db, fields, ctx.RequestAborted), Array.Empty<ApiLinks.Relation>(), caller, ctx.RequestAborted);
             ApiConditional.SetETag(ctx, record);
             return Results.Ok(ApiDtos.RecordDto(writtenShown, fields, written.Links));
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapDelete("/api/v1/{apiName}/records/{rid}", async (AppDbContext db, HttpContext ctx, string apiName, string rid) =>
         {
@@ -263,16 +263,35 @@ public static class PublicApiEndpoints
         return (channel, null);
     }
 
-    private static async IAsyncEnumerable<RecordChangeDto> Stream(
+    private static CancellationToken Stopping(HttpContext ctx) =>
+        ctx.RequestServices.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping;
+
+    internal static async IAsyncEnumerable<RecordChangeDto> Stream(
         Channel<RecordEvent> channel, IServiceScopeFactory scopes, string tableId, string? recordId, AccessCaller caller,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
+        CancellationToken stopping, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
     {
-        await foreach (var e in channel.Reader.ReadAllAsync(token))
+        while (await WaitAsync(channel, stopping, token))
         {
-            if (e.TableId != tableId) continue;
-            if (recordId is not null && e.RecordId != recordId) continue;
-            if (await VisibleEventAsync(scopes, tableId, caller, e, token) is not { } data) continue;
-            yield return new RecordChangeDto(e.Action, e.RecordId, data.Record);
+            while (channel.Reader.TryRead(out var e))
+            {
+                if (e.TableId != tableId) continue;
+                if (recordId is not null && e.RecordId != recordId) continue;
+                if (await VisibleEventAsync(scopes, tableId, caller, e, token) is not { } data) continue;
+                yield return new RecordChangeDto(e.Action, e.RecordId, data.Record);
+            }
+        }
+    }
+
+    private static async Task<bool> WaitAsync(Channel<RecordEvent> channel, CancellationToken stopping, CancellationToken token)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(stopping, token);
+        try
+        {
+            return await channel.Reader.WaitToReadAsync(linked.Token);
+        }
+        catch (OperationCanceledException) when (stopping.IsCancellationRequested && !token.IsCancellationRequested)
+        {
+            return false;
         }
     }
 

@@ -152,11 +152,11 @@ public class RecordAccessTests : IDisposable
         await RecordAsync(table, "alice", "third");
 
         var mine = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
-            accessFields: fields, access: new AccessCaller("alice", null, null));
+            accessFields: fields, access: new AccessCaller("alice", null, null), ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, mine.Records.Count);
 
         var nobody = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
-            accessFields: fields, access: new AccessCaller("carol", null, null));
+            accessFields: fields, access: new AccessCaller("carol", null, null), ct: TestContext.Current.CancellationToken);
         Assert.Empty(nobody.Records);
     }
 
@@ -168,9 +168,9 @@ public class RecordAccessTests : IDisposable
         await RecordAsync(table, "bob", "second");
 
         var service = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
-            accessFields: fields, access: new AccessCaller("svc", AccountRoles.Consumer, null));
+            accessFields: fields, access: new AccessCaller("svc", AccountRoles.Consumer, null), ct: TestContext.Current.CancellationToken);
         var endUser = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
-            accessFields: fields, access: new AccessCaller("alice", AccountRoles.User, null));
+            accessFields: fields, access: new AccessCaller("alice", AccountRoles.User, null), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, service.Records.Count);
         Assert.Empty(endUser.Records);
@@ -186,7 +186,7 @@ public class RecordAccessTests : IDisposable
         await RecordAsync(table, "bob", "second");
 
         var result = await SqlEngine.ReadAsync(_db, "SELECT count(*) FROM \"Notes\"",
-            conn => WireCatalog.Apply(conn, WireDialect.Postgres, new UserAccount { Id = "caller", Role = role }));
+            conn => WireCatalog.Apply(conn, WireDialect.Postgres, new UserAccount { Id = "caller", Role = role }), ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result.Error);
         Assert.Equal(expected, Assert.Single(result.Rows)[0]);
@@ -200,7 +200,7 @@ public class RecordAccessTests : IDisposable
         await RecordAsync(table, "bob", "second");
 
         var mine = await QueryEngine.ListAsync(_db, table, [], null, true, null, 1, 50,
-            accessFields: fields, access: new AccessCaller("alice", null, null));
+            accessFields: fields, access: new AccessCaller("alice", null, null), ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, mine.Total);
     }
 
@@ -212,7 +212,7 @@ public class RecordAccessTests : IDisposable
         await RecordAsync(table, "bob", "secret");
 
         var found = await QueryEngine.ListAsync(_db, table, [], null, true, "secret", 1, 50,
-            accessFields: fields, access: new AccessCaller("alice", null, null));
+            accessFields: fields, access: new AccessCaller("alice", null, null), ct: TestContext.Current.CancellationToken);
         Assert.Single(found.Records);
     }
 

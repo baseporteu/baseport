@@ -76,7 +76,7 @@ public static class FragmentEndpoints
             var descending = !string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase);
 
             var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 25,
-                systemSort: systemSort);
+                systemSort: systemSort, ct: ctx.RequestAborted);
 
             var html = new StringBuilder();
             foreach (var record in result.Records)
@@ -248,7 +248,7 @@ public static class FragmentEndpoints
             var invalid = SqlEngine.Validate(sql);
             if (invalid is not null) return Results.BadRequest(new { errors = new[] { invalid } });
 
-            var result = await SqlEngine.ReadAsync(db, sql, WireCatalog.Views, restrict: false);
+            var result = await SqlEngine.ReadAsync(db, sql, WireCatalog.Views, restrict: false, ctx.RequestAborted);
             if (result.Error is not null) return Results.BadRequest(new { errors = new[] { result.Error } });
 
             if (saved is not null)

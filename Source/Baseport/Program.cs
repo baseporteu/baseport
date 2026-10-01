@@ -100,7 +100,13 @@ try
         WebRootPath = Directory.Exists(bundledWebRoot) ? bundledWebRoot : null
     });
     builder.Host.UseSerilog();
-    builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
+    builder.WebHost.ConfigureKestrel(o =>
+    {
+        o.AddServerHeader = false;
+        var connections = builder.Configuration.GetValue("Baseport:MaxConnections", 1000L);
+        o.Limits.MaxConcurrentConnections = connections;
+        o.Limits.MaxConcurrentUpgradedConnections = connections;
+    });
 
     builder.Configuration.Sources.Insert(0, BundledSettings.Source(AppContext.BaseDirectory));
     EnvFile.InsertBeforeEnvironment(builder.Configuration.Sources, EnvFile.Source(EnvFile.InstallDirectory()));
@@ -141,8 +147,10 @@ try
     builder.Services.AddResponseCompression();
 
     builder.Services.AddBaseportRateLimiter();
+    builder.Services.AddBaseportTimeouts();
     builder.Services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
 
+    builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(30));
     builder.Services.AddHostedService<JobScheduler>();
 
     builder.Services.AddSingleton<AuditLogWriter>();
@@ -155,6 +163,7 @@ try
     builder.Services.AddHostedService<TdsServer>();
 
     var app = builder.Build();
+    BaseportMetrics.Initialize(Path.Combine(Path.GetDirectoryName(dbFile)!, "backups"), () => app.Services.GetRequiredService<AuditLogWriter>().QueueLength);
     Ids.StartedAt = DateTime.UtcNow;
 
     if (trustForwardedHeaders)
@@ -208,6 +217,7 @@ try
         RequestPath = "/uploads",
         ServeUnknownFileTypes = false
     });
+    app.UseRequestTimeouts();
     app.UseSameOriginWrites();
     app.UseAdminSurface();
     app.UseAuditLog();

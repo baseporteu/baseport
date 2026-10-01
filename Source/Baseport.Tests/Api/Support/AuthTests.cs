@@ -40,6 +40,9 @@ public class AuthTests
     [InlineData("/api/_admin/proxy/create", false)]
     [InlineData("/api/_admin/fragments/tables", false)]
 
+    [InlineData("/api/healthz", true)]
+    [InlineData("/api/readyz", true)]
+    [InlineData("/api/healthz/x", false)]
     [InlineData("/api/something-new", false)]
     public void PublicPrefixesMatchRoutes(string path, bool anonymous) =>
         Assert.Equal(anonymous, AdminAuthMiddleware.IsPublicPath(path));

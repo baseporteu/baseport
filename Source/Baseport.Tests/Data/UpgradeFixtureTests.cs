@@ -60,7 +60,7 @@ public sealed class UpgradeFixtureTests
                 foreach (var (name, id) in expected.Records)
                 {
                     var table = await db.Tables.Include(t => t.Fields).SingleAsync(t => t.Name == name, ct);
-                    var page = await QueryEngine.ListAsync(db, table, [.. table.Fields], null, false, null, 1, 500);
+                    var page = await QueryEngine.ListAsync(db, table, [.. table.Fields], null, false, null, 1, 500, ct: TestContext.Current.CancellationToken);
                     Assert.Contains(page.Records, r => r.Id == id);
                 }
 

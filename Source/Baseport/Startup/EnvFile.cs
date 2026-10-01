@@ -15,6 +15,7 @@ public static partial class EnvFile
         ["BASEPORT_ADMIN_ADDRESS"] = "Baseport:AdminAddress",
         ["BASEPORT_ALLOW_INSECURE_SIGNIN"] = "Baseport:AllowInsecureSignIn",
         ["BASEPORT_ALLOW_REMOTE_PROVIDERS"] = "Baseport:AllowRemoteProviders",
+        ["BASEPORT_MAX_CONNECTIONS"] = "Baseport:MaxConnections",
         ["BASEPORT_URLS"] = "urls"
     }.ToFrozenDictionary(StringComparer.Ordinal);
 

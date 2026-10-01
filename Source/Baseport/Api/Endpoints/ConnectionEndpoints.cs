@@ -62,7 +62,7 @@ public static class ConnectionEndpoints
                 fields = rows.SelectMany(r => r.Select(p => p.Key)).Distinct().Take(200),
                 sample = rows.Take(3)
             });
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapGet("/api/_admin/connections/{id}/tables", async (AppDbContext db, IHttpClientFactory clients, HttpContext ctx, string id) =>
         {
@@ -79,7 +79,7 @@ public static class ConnectionEndpoints
             {
                 return Results.BadRequest(new { errors = new[] { ex.Message } });
             }
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapDelete("/api/_admin/connections/{id}", async (AppDbContext db, string id) =>
         {

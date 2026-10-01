@@ -16,6 +16,8 @@ public sealed class AuditLogWriter : BackgroundService
 
     public AuditLogWriter(IServiceScopeFactory scopes) => _scopes = scopes;
 
+    public int QueueLength => _queue.Reader.Count;
+
     public void Enqueue(AuditLog entry)
     {
         if (_queue.Writer.TryWrite(entry)) return;

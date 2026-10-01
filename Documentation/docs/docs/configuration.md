@@ -20,6 +20,7 @@ Runtime settings (currency, time zone, authentication, jobs, sites, uploads, lis
 | `AdminAddress` | unset | Second listener for the console. Console and console-auth routes return `404` on the public port |
 | `AllowInsecureSignIn` | `false` | Allow sign-in over plain HTTP off localhost; session cookies lose `Secure`. Logs a warning on start and fails `baseport doctor` |
 | `AllowRemoteProviders` | `false` | Allow the Postgres and TDS listeners to bind a non-loopback address |
+| `MaxConnections` | `1000` | Concurrent HTTP connections, upgraded ones included; the next connection is refused |
 
 `TrustForwardedHeaders` accepts forwarded headers from a loopback proxy only (the ASP.NET Core default). A proxy on another host is not trusted; its clients share one rate-limit budget and sign-in sees plain HTTP. There is no setting for other proxy addresses yet.
 
@@ -42,6 +43,7 @@ The installer creates `.env` in the install directory with every setting comment
 | `BASEPORT_ADMIN_ADDRESS` | `Baseport:AdminAddress` |
 | `BASEPORT_ALLOW_INSECURE_SIGNIN` | `Baseport:AllowInsecureSignIn` |
 | `BASEPORT_ALLOW_REMOTE_PROVIDERS` | `Baseport:AllowRemoteProviders` |
+| `BASEPORT_MAX_CONNECTIONS` | `Baseport:MaxConnections` |
 | `BASEPORT_TAG` | Image tag, Docker only |
 | `BASEPORT_PORT` | Published host port, Docker only |
 

@@ -30,4 +30,6 @@ WORKDIR /data
 EXPOSE 5000
 VOLUME ["/data"]
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD wget -q -O /dev/null http://127.0.0.1:5000/api/readyz || exit 1
+
 ENTRYPOINT ["/app/Baseport"]

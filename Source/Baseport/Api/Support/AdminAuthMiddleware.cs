@@ -50,6 +50,8 @@ public static class AdminAuthMiddleware
 
         || path.StartsWith("/api/forms/", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/api/openapi.json", StringComparison.OrdinalIgnoreCase)
+        || path.Equals(HealthEndpoints.Live, StringComparison.OrdinalIgnoreCase)
+        || path.Equals(HealthEndpoints.Ready, StringComparison.OrdinalIgnoreCase)
 
         || path.Equals(ClientErrorEndpoints.Route, StringComparison.OrdinalIgnoreCase);
 }

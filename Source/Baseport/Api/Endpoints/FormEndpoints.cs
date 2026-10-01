@@ -184,7 +184,7 @@ $$"""
             return Results.Ok(new { rows = await ReferenceRowsAsync(db, targetId, q) });
         }).RequireRateLimiting(RateLimit.Schema);
 
-        app.MapPost("/api/forms/{fpid}/form", SubmitAsync).RequireRateLimiting(RateLimit.Submit);
+        app.MapPost("/api/forms/{fpid}/form", SubmitAsync).WithRequestTimeout(Timeouts.Long).RequireRateLimiting(RateLimit.Submit);
 
         static async Task<IResult> SubmitAsync(AppDbContext db, HttpClient http, HttpContext ctx, string fpid)
         {
@@ -263,7 +263,7 @@ $$"""
             db.Records.Add(record);
             await db.SaveChangesAsync();
             return Results.Ok(new { success = true, recordId = record.Id });
-        }).RequireRateLimiting(RateLimit.Submit);
+        }).WithRequestTimeout(Timeouts.Long).RequireRateLimiting(RateLimit.Submit);
 
         app.MapGet("/api/forms/{fpid}/form", LookupAsync).RequireRateLimiting(RateLimit.Lookup);
 
@@ -322,7 +322,7 @@ $$"""
             if (form.Description.Length > 0) body.Append($"<p>{Html.Text(form.Description)}</p>");
 
             if (form.Kind == FormKinds.List && !table.IsProxy)
-                body.Append(await ListTableAsync(db, form, table, fields, q, page));
+                body.Append(await ListTableAsync(db, form, table, fields, q, page, ctx.RequestAborted));
 
             var origin = ctx.Request.Host.HasValue ? $"{ctx.Request.Scheme}://{ctx.Request.Host}" : "";
             ctx.Response.Headers.CacheControl = "no-store";
@@ -344,7 +344,7 @@ $$"""
 """, "text/html; charset=utf-8");
         }
 
-        static async Task<string> ListTableAsync(AppDbContext db, FormConfig form, TableDefinition table, List<FieldDefinition> fields, string? q, int? page)
+        static async Task<string> ListTableAsync(AppDbContext db, FormConfig form, TableDefinition table, List<FieldDefinition> fields, string? q, int? page, CancellationToken ct)
         {
             var config = QueryEngine.ParseConfig(form.ConfigJson);
             var columns = ListColumns(form, fields);
@@ -357,7 +357,7 @@ $$"""
             var configured = (int?)(config["pageSize"] as JsonValue)?.GetValue<double?>() ?? 25;
             var effective = configured > 0 ? configured : QueryEngine.MaxPageSize;
 
-            var result = await QueryEngine.ListAsync(db, table, searchFields, sortField, descending, q, page ?? 1, effective, filters, literal: true);
+            var result = await QueryEngine.ListAsync(db, table, searchFields, sortField, descending, q, page ?? 1, effective, filters, literal: true, ct: ct);
 
             var head = Html.Row([.. columns.Select(c => $"<th>{Html.Text(string.IsNullOrWhiteSpace(c.Label) ? c.Name : c.Label)}</th>")]);
             var rows = result.Records
@@ -432,7 +432,7 @@ $$"""
                 });
             }
 
-            var result = await QueryEngine.ListAsync(db, table, searchFields, sortField, descending, q, page ?? 1, effective, filters, literal: true);
+            var result = await QueryEngine.ListAsync(db, table, searchFields, sortField, descending, q, page ?? 1, effective, filters, literal: true, ct: ctx.RequestAborted);
             return Results.Ok(new
             {
                 columns = columnDtos,

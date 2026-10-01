@@ -4,6 +4,7 @@ public static class BaseportEndpoints
 {
     public static void MapBaseportEndpoints(this WebApplication app)
     {
+        app.MapHealthEndpoints();
         app.MapAuthEndpoints();
         app.MapUserAuthEndpoints();
         app.MapOidcEndpoints();

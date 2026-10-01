@@ -30,7 +30,7 @@ public class SqlEngineTests : IDisposable
         _db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = "Orders" });
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var result = await SqlEngine.ReadAsync(_db, "SELECT Name FROM _tables");
+        var result = await SqlEngine.ReadAsync(_db, "SELECT Name FROM _tables", ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result.Error);
         Assert.Equal(new[] { "Name" }, result.Columns);
@@ -48,12 +48,12 @@ public class SqlEngineTests : IDisposable
         _db.Records.Add(new Record { Id = Ids.NewShortId(12), TableId = tableId, JsonData = """{"Total":32}""" });
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var result = await SqlEngine.ReadAsync(_db, "SELECT SUM(Total) AS Revenue FROM Orders", WireCatalog.Views, restrict: false);
+        var result = await SqlEngine.ReadAsync(_db, "SELECT SUM(Total) AS Revenue FROM Orders", WireCatalog.Views, restrict: false, ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result.Error);
         Assert.Equal("42", Assert.Single(result.Rows)[0]);
 
-        var storage = await SqlEngine.ReadAsync(_db, "SELECT COUNT(*) FROM _records", WireCatalog.Views, restrict: false);
+        var storage = await SqlEngine.ReadAsync(_db, "SELECT COUNT(*) FROM _records", WireCatalog.Views, restrict: false, ct: TestContext.Current.CancellationToken);
         Assert.Null(storage.Error);
         Assert.Equal("2", Assert.Single(storage.Rows)[0]);
     }
@@ -69,7 +69,7 @@ public class SqlEngineTests : IDisposable
         _db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = "SQLite_Sequence" });
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var result = await SqlEngine.ReadAsync(_db, "SELECT SUM(Total) AS Revenue FROM Orders", WireCatalog.Views, restrict: false);
+        var result = await SqlEngine.ReadAsync(_db, "SELECT SUM(Total) AS Revenue FROM Orders", WireCatalog.Views, restrict: false, ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result.Error);
         Assert.Equal("10", Assert.Single(result.Rows)[0]);
@@ -78,7 +78,7 @@ public class SqlEngineTests : IDisposable
     [Fact]
     public async Task BrokenQueryReportsError()
     {
-        var result = await SqlEngine.ReadAsync(_db, "SELECT NoSuchColumn FROM _tables");
+        var result = await SqlEngine.ReadAsync(_db, "SELECT NoSuchColumn FROM _tables", ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.Error);
         Assert.Empty(result.Rows);
@@ -87,7 +87,7 @@ public class SqlEngineTests : IDisposable
     [Fact]
     public async Task NullReadsAsNull()
     {
-        var result = await SqlEngine.ReadAsync(_db, "SELECT NULL AS Empty");
+        var result = await SqlEngine.ReadAsync(_db, "SELECT NULL AS Empty", ct: TestContext.Current.CancellationToken);
 
         Assert.Null(Assert.Single(result.Rows)[0]);
     }
@@ -99,7 +99,7 @@ public class SqlEngineTests : IDisposable
             _db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = $"T{i}" });
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var result = await SqlEngine.ReadAsync(_db, "SELECT Name FROM _tables");
+        var result = await SqlEngine.ReadAsync(_db, "SELECT Name FROM _tables", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(SqlEngine.MaxRows, result.Rows.Count);
         Assert.True(result.Truncated);
@@ -117,11 +117,11 @@ public class SqlEngineTests : IDisposable
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
             Assert.Null(SqlEngine.Validate("WITH x AS (SELECT 1) DELETE FROM _tables"));
-            Assert.NotNull((await SqlEngine.ReadAsync(db, "WITH x AS (SELECT 1) DELETE FROM _tables")).Error);
+            Assert.NotNull((await SqlEngine.ReadAsync(db, "WITH x AS (SELECT 1) DELETE FROM _tables", ct: TestContext.Current.CancellationToken)).Error);
             Assert.Null(SqlEngine.Validate("PRAGMA user_version = 42"));
-            Assert.NotNull((await SqlEngine.ReadAsync(db, "PRAGMA user_version = 42")).Error);
+            Assert.NotNull((await SqlEngine.ReadAsync(db, "PRAGMA user_version = 42", ct: TestContext.Current.CancellationToken)).Error);
 
-            var survived = await SqlEngine.ReadAsync(db, "SELECT Name FROM _tables");
+            var survived = await SqlEngine.ReadAsync(db, "SELECT Name FROM _tables", ct: TestContext.Current.CancellationToken);
             Assert.Equal("Orders", Assert.Single(survived.Rows)[0]);
         }
         finally

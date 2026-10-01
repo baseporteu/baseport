@@ -89,7 +89,28 @@ The `backup` job writes an archive to `backups/` daily at 03:00 and keeps the fi
 
 Each snapshot passes `PRAGMA integrity_check` before it is archived. A failed check keeps the older archives and fails the job. Retention prunes only after a good archive exists, and one backup runs at a time.
 
-`backups/` is on the same disk as the database; copy it off the host, or enable **Export to S3**. The S3 copy leaves out `baseport.key`: whoever holds that key can sign tokens for any account. Restoring an S3 archive therefore ends every session.
+`backups/` is on the same disk as the database; copy it off the host, or enable **Export to S3** (**Settings > Backups**: bucket, region, optional endpoint for S3-compatible storage, prefix, access key and secret). Keep the bucket private: an archive holds password hashes, encrypted proxy tokens and the `keys/` ring that decrypts them. The S3 copy leaves out `baseport.key`: whoever holds that key can sign tokens for any account. Restoring an S3 archive therefore ends every session.
+
+Restore an archive into a scratch directory once a quarter, start Baseport on it and sign in. An archive that was never restored is not a verified backup.
+
+### Recovery point
+
+Daily archives can lose up to 24 hours of changes. For a shorter recovery point, run [Litestream](https://litestream.io) beside Baseport. It streams `baseport.db` to object storage or a file path within seconds of each write:
+
+```yaml
+# /etc/litestream.yml
+dbs:
+  - path: /opt/baseport/baseport.db
+    replica:
+      url: s3://my-bucket/baseport
+```
+
+```bash
+litestream replicate                                   # runs beside the service
+litestream restore -o /opt/baseport/baseport.db /opt/baseport/baseport.db
+```
+
+Litestream replicates the database only. Uploads, `keys/` and `baseport.key` still come from the archives: restore the newest archive first, then the Litestream copy of `baseport.db` over it, with Baseport stopped. Baseport issues no checkpoints of its own, which Litestream requires. On SELinux hosts, a containerised Litestream needs its volumes mounted with `:z`.
 
 ### Restore
 
@@ -112,6 +133,43 @@ Every start runs `PRAGMA quick_check`. A damaged database stops startup with one
 ### One instance per database
 
 A server holds an exclusive lock on `baseport.lock` beside the database for its lifetime. A second server on the same database exits with one line. The lock is advisory: network file systems such as NFS do not honour it, and `DOTNET_SYSTEM_IO_DISABLEFILELOCKING` turns it off (`doctor` warns when set).
+
+## Health and limits
+
+| Route | Answer |
+| --- | --- |
+| `GET /api/healthz` | `200` while the process runs |
+| `GET /api/readyz` | `200` when the database answers and no migration is pending, otherwise `503` |
+
+Both are anonymous, answer on the public and the admin listener, and are limited to 120 requests per minute per client. The container image runs `/api/readyz` as its `HEALTHCHECK`; `baseport doctor` calls it too.
+
+| Limit | Value |
+| --- | --- |
+| Request time | 30 s, then `504` |
+| Uploads, record writes with files, imports, backups, proxy import | 10 min |
+| Realtime streams (`/subscribe`) | none |
+| Concurrent HTTP connections | 1000, `Baseport:MaxConnections` |
+| Shutdown | 30 s: realtime streams close at once, a running job finishes within the window |
+
+Statements on the SQL page, the wire listeners and scheduled queries keep their own 10 s limit.
+
+## Metrics
+
+Baseport publishes a `Baseport` meter. Read it on the host with [dotnet-counters](https://learn.microsoft.com/dotnet/core/diagnostics/dotnet-counters):
+
+```bash
+dotnet-counters monitor -n Baseport --counters Baseport,Microsoft.AspNetCore.Hosting
+```
+
+| Instrument | Unit | Meaning |
+| --- | --- | --- |
+| `baseport.sse.subscribers` | | Open realtime subscriptions |
+| `baseport.backup.age` | s | Age of the newest archive |
+| `baseport.record.write.duration` | ms | Time to save a change to records |
+| `baseport.audit.queue` | | Audit entries waiting to be written |
+| `baseport.job.failures` | | Failed job runs, tagged by `job` |
+
+A histogram or counter appears after its first measurement.
 
 ## Jobs
 

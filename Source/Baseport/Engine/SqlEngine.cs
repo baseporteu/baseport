@@ -56,7 +56,7 @@ public static class SqlEngine
         cmd.ExecuteNonQuery();
     }
 
-    public static async Task<Result> ReadAsync(AppDbContext db, string sql, Action<SqliteConnection>? configure = null, bool restrict = true)
+    public static async Task<Result> ReadAsync(AppDbContext db, string sql, Action<SqliteConnection>? configure = null, bool restrict = true, CancellationToken ct = default)
     {
         var owned = db.Database.GetDbConnection();
         var source = new SqliteConnectionStringBuilder(owned.ConnectionString);
@@ -90,15 +90,15 @@ public static class SqlEngine
 
             var clock = System.Diagnostics.Stopwatch.StartNew();
             var deadline = StatementDeadline;
-            SQLitePCL.raw.sqlite3_progress_handler(((SqliteConnection)conn).Handle, 1000, _ => clock.Elapsed > deadline ? 1 : 0, null);
+            SQLitePCL.raw.sqlite3_progress_handler(((SqliteConnection)conn).Handle, 1000, _ => clock.Elapsed > deadline || ct.IsCancellationRequested ? 1 : 0, null);
 
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql.TrimEnd().TrimEnd(';');
-            using var reader = await cmd.ExecuteReaderAsync();
+            using var reader = await cmd.ExecuteReaderAsync(ct);
             var columns = new List<string>();
             for (var i = 0; i < reader.FieldCount; i++) columns.Add(reader.GetName(i));
             var rows = new List<List<string?>>();
-            while (await reader.ReadAsync() && rows.Count < MaxRows)
+            while (await reader.ReadAsync(ct) && rows.Count < MaxRows)
             {
                 var row = new List<string?>();
                 for (var i = 0; i < reader.FieldCount; i++)
@@ -106,6 +106,10 @@ public static class SqlEngine
                 rows.Add(row);
             }
             return new Result(columns, rows, rows.Count == MaxRows, null);
+        }
+        catch (Exception) when (ct.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(ct);
         }
         catch (SqliteException interrupted) when (interrupted.SqliteErrorCode == 9)
         {

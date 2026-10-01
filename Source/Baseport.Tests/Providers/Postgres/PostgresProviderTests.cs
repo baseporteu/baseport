@@ -92,7 +92,7 @@ public class PostgresProviderTests : IAsyncLifetime
 
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Postgres, new UserAccount { Id = _accountId }));
+        var direct = await SqlEngine.ReadAsync(db, sql, conn => WireCatalog.Apply(conn, WireDialect.Postgres, new UserAccount { Id = _accountId }), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(direct.Columns, columns);
         Assert.Equal(direct.Rows, rows);

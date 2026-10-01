@@ -207,7 +207,7 @@ public class CustomerScopeTests : IDisposable
         await OrderAsync(table, "GLOBEX", "g1");
 
         var result = await SqlEngine.ReadAsync(_db, "SELECT count(*) FROM \"Orders\"",
-            conn => WireCatalog.Apply(conn, WireDialect.Postgres, Account("ACME")));
+            conn => WireCatalog.Apply(conn, WireDialect.Postgres, Account("ACME")), ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result.Error);
         Assert.Equal("1", Assert.Single(result.Rows)[0]);

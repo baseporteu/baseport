@@ -281,7 +281,7 @@ public static class TableEndpoints
             var (ops, serverUrl, err) = await OpenApiProxy.FetchOperationsAsync(http, specUrl);
             if (err != null) return Results.BadRequest(new { errors = new[] { err } });
             return Results.Ok(new { serverUrl, operations = ops });
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapPost("/api/_admin/proxy/create", async (AppDbContext db, HttpClient http, JsonObject body) =>
         {
@@ -356,7 +356,7 @@ public static class TableEndpoints
                 InferredFromSample = inferredFromSample,
                 FieldCount = table.Fields.Count
             });
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapPost("/api/_admin/tables/import", async (AppDbContext db, HttpContext ctx) =>
         {
@@ -419,7 +419,7 @@ public static class TableEndpoints
             await db.SaveChangesAsync();
             await RecordIndexes.SyncAsync(db, table);
             return Results.Ok(new { Table = ApiDtos.TableDto(table), FieldCount = table.Fields.Count, RecordCount = records.Count });
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapPost("/api/_admin/tables/{publicId}/records/import", async (AppDbContext db, HttpContext ctx, string publicId) =>
         {
@@ -457,7 +457,7 @@ public static class TableEndpoints
             }));
             await db.SaveChangesAsync();
             return Results.Ok(new { Imported = prepared.Count, Fields = matched });
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapPost("/api/_admin/validate-expression", async (AppDbContext db, JsonObject body) =>
         {
@@ -536,7 +536,7 @@ public static class TableEndpoints
             return Results.Ok(new { valid = true, errors = Array.Empty<string>(), dataType = field.DataType, referencedFields = referenced });
         });
 
-        app.MapGet("/api/_admin/tables/{publicId}/records", async (AppDbContext db, string publicId, string? q, string? sort, string? order, int? page, int? pageSize) =>
+        app.MapGet("/api/_admin/tables/{publicId}/records", async (AppDbContext db, string publicId, string? q, string? sort, string? order, int? page, int? pageSize, CancellationToken ct) =>
         {
             var table = await db.Tables.Include(t => t.Fields).FirstOrDefaultAsync(t => t.Id == publicId);
             if (table == null) return Results.NotFound();
@@ -545,7 +545,7 @@ public static class TableEndpoints
             var sortField = fields.FirstOrDefault(f => f.Name == sort);
             var descending = !string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase);
 
-            var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50);
+            var result = await QueryEngine.ListAsync(db, table, Array.Empty<FieldDefinition>(), sortField, descending, q, page ?? 1, pageSize ?? 50, ct: ct);
             return Results.Ok(new
             {
                 rows = result.Records.Select(r => ApiDtos.RecordDto(r, fields)),
@@ -581,7 +581,7 @@ public static class TableEndpoints
             db.Records.Add(record);
             await db.SaveChangesAsync();
             return Results.Created($"/api/_admin/tables/{publicId}/records/{record.Id}", ApiDtos.RecordDto(record, fields));
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapPatch("/api/_admin/tables/{publicId}/records/{rid}", async (AppDbContext db, HttpContext ctx, string publicId, string rid) =>
         {
@@ -602,7 +602,7 @@ public static class TableEndpoints
             record.JsonData = merged.ToJsonString();
             await db.SaveChangesAsync();
             return Results.Ok(ApiDtos.RecordDto(record, fields));
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapDelete("/api/_admin/tables/{publicId}/records/{rid}", async (AppDbContext db, string publicId, string rid) =>
         {

@@ -25,7 +25,7 @@ public static class ImportEndpoints
                 Sample = rows.Take(5).Select(r => DefinitionImport.MapRow(r, table.Fields.ToList())),
                 Errors = FieldValidation.ValidateTable(table, existing)
             });
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapPost("/api/_admin/imports", async (AppDbContext db, IHttpClientFactory clients, ImportRunner runner, HttpContext ctx, JsonObject body) =>
         {
@@ -61,7 +61,7 @@ public static class ImportEndpoints
             await db.SaveChangesAsync();
             runner.Enqueue(run.Id);
             return Results.Ok(new { Table = ApiDtos.TableDto(table), Run = ImportRuns.Dto(run) });
-        });
+        }).WithRequestTimeout(Timeouts.Long);
 
         app.MapGet("/api/_admin/imports/{id}", async (AppDbContext db, string id) =>
             await db.ImportRuns.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id) is { } run ? Results.Ok(ImportRuns.Dto(run)) : Results.NotFound());

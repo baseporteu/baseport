@@ -163,8 +163,8 @@ public class FieldRuleTests : IDisposable
         await PersonAsync(table, "Ann", "staff", 5432);
         await RecordIndexes.SyncAsync(_db, table);
 
-        var hidden = await QueryEngine.ListAsync(_db, table, [], null, false, "5432", 1, 25, accessFields: fields, access: Visitor);
-        var named = await QueryEngine.ListAsync(_db, table, [], null, false, "Ann", 1, 25, accessFields: fields, access: Visitor);
+        var hidden = await QueryEngine.ListAsync(_db, table, [], null, false, "5432", 1, 25, accessFields: fields, access: Visitor, ct: TestContext.Current.CancellationToken);
+        var named = await QueryEngine.ListAsync(_db, table, [], null, false, "Ann", 1, 25, accessFields: fields, access: Visitor, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, hidden.Total);
         Assert.Equal(1, named.Total);
@@ -177,7 +177,7 @@ public class FieldRuleTests : IDisposable
         await PersonAsync(table, "Ann", "staff", 5000);
 
         var result = await SqlEngine.ReadAsync(_db, "SELECT name, salary FROM \"People\" WHERE salary > 1",
-            conn => WireCatalog.Apply(conn, WireDialect.Postgres, new UserAccount { Id = "visitor", Role = AccountRoles.User }));
+            conn => WireCatalog.Apply(conn, WireDialect.Postgres, new UserAccount { Id = "visitor", Role = AccountRoles.User }), ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result.Error);
         Assert.Empty(result.Rows);

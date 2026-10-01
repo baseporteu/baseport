@@ -33,7 +33,7 @@ public static class StorageEndpoints
             var name = stored[(declared.Name.Length + 1)..];
             return Results.Created($"/api/v1/files/{declared.Name}/{name}", new StoredFileDto(
                 stored, declared.Name, name, $"{ctx.Request.Scheme}://{ctx.Request.Host}/uploads/{stored}", file.Length, type));
-        }).RequireRateLimiting(RateLimit.Upload);
+        }).WithRequestTimeout(Timeouts.Long).RequireRateLimiting(RateLimit.Upload);
 
         app.MapGet("/api/v1/files/{bucket}/{name}", async (AppDbContext db, HttpContext ctx, string bucket, string name) =>
         {

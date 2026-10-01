@@ -97,7 +97,8 @@ public static class QueryEngine
         AccessCaller access = default,
         Cursor? cursor = null,
         string? systemSort = null,
-        bool literal = false)
+        bool literal = false,
+        CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize <= 0 ? 25 : pageSize, 1, MaxPageSize);
@@ -172,7 +173,7 @@ public static class QueryEngine
                 SELECT 1 FROM "_records" r WHERE {where}{search} LIMIT {CountCeiling}
             )
             """;
-        var total = await db.Database.SqlQueryRaw<int>(countSql, args.ToArray()).SingleAsync();
+        var total = await db.Database.SqlQueryRaw<int>(countSql, args.ToArray()).SingleAsync(ct);
 
         var ranked = rankJoin is not null && sortField is null;
         var order = ranked
@@ -199,7 +200,7 @@ public static class QueryEngine
             ORDER BY {{order}} {{direction}}, r."Id" DESC
             LIMIT {{pageSize + 1}} OFFSET {{(keyset.Length > 0 ? 0 : (page - 1) * pageSize)}}
             """;
-        var records = await db.Records.FromSqlRaw(pageSql, args.ToArray()).AsNoTracking().ToListAsync();
+        var records = await db.Records.FromSqlRaw(pageSql, args.ToArray()).AsNoTracking().ToListAsync(ct);
 
         var hasMore = records.Count > pageSize;
         if (hasMore) records.RemoveAt(records.Count - 1);

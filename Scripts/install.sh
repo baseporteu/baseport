@@ -85,6 +85,7 @@ if [ ! -e "$DIR/.env" ]; then
 # BASEPORT_CONNECTION_STRING=Data Source=baseport.db
 # BASEPORT_ALLOW_INSECURE_SIGNIN=false
 # BASEPORT_ALLOW_REMOTE_PROVIDERS=false
+# BASEPORT_MAX_CONNECTIONS=1000
 ENVFILE
   chmod 600 "$DIR/.env"
   if [ "$(id -u)" = "0" ] && id baseport >/dev/null 2>&1 && [ "$(stat -c %U "$DIR")" = "baseport" ]; then
@@ -354,7 +355,7 @@ doctor)
   fi
 
   URL=$(service_url)
-  if curl -fsS -o /dev/null --max-time 3 "$URL" 2>/dev/null; then
+  if curl -fsS -o /dev/null --max-time 3 "$URL/api/readyz" 2>/dev/null; then
     ok "answering on $URL, console at $URL/_/admin"
   else
     warn "nothing answered on $URL."

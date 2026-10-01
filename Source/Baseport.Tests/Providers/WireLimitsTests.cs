@@ -166,7 +166,7 @@ public class WireLimitsTests : IAsyncLifetime
             var watch = System.Diagnostics.Stopwatch.StartNew();
 
             var result = await SqlEngine.ReadAsync(db,
-                "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c");
+                "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c", ct: TestContext.Current.CancellationToken);
 
             Assert.Contains("longer than", result.Error);
             Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5));
@@ -183,7 +183,7 @@ public class WireLimitsTests : IAsyncLifetime
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var result = await SqlEngine.ReadAsync(db, "SELECT 1 AS one");
+        var result = await SqlEngine.ReadAsync(db, "SELECT 1 AS one", ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result.Error);
         Assert.Equal("1", Assert.Single(result.Rows)[0]);

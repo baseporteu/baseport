@@ -15,10 +15,11 @@ public static class RateLimit
     public const string ClientError = "client-error";
     public const string Upload = "upload";
     public const string Docs = "docs";
+    public const string Health = "health";
 
     private static readonly (string Name, int PerMinute)[] Policies =
     {
-        (Submit, 20), (Lookup, 10), (List, 60), (Schema, 60), (Auth, 10), (Oidc, 20), (ClientError, 10), (Upload, 30), (Docs, 60)
+        (Submit, 20), (Lookup, 10), (List, 60), (Schema, 60), (Auth, 10), (Oidc, 20), (ClientError, 10), (Upload, 30), (Docs, 60), (Health, 120)
     };
 
     public static string ClientKey(HttpContext ctx) =>

@@ -16,6 +16,8 @@ public partial class ApiContractTests
     private static readonly Dictionary<string, string> Excluded = new(StringComparer.Ordinal)
     {
         ["/api/openapi.json"] = "the document itself",
+        ["/api/healthz"] = "liveness probe for load balancers and Docker",
+        ["/api/readyz"] = "readiness probe for load balancers and Docker",
         ["/api/client-errors"] = "browser error beacon for the console and embed",
         ["/api/auth/login"] = "console sign-in, cookie session",
         ["/api/auth/otp"] = "console one-time code, cookie session",
@@ -42,7 +44,7 @@ public partial class ApiContractTests
         return root;
     }
 
-    private static List<(string Pattern, string Method)> Routes()
+    internal static IReadOnlyList<RouteEndpoint> Endpoints()
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -59,9 +61,12 @@ public partial class ApiContractTests
         var app = builder.Build();
         app.MapBaseportEndpoints();
 
-        return ((IEndpointRouteBuilder)app).DataSources
-            .SelectMany(d => d.Endpoints)
-            .OfType<RouteEndpoint>()
+        return [.. ((IEndpointRouteBuilder)app).DataSources.SelectMany(d => d.Endpoints).OfType<RouteEndpoint>()];
+    }
+
+    private static List<(string Pattern, string Method)> Routes()
+    {
+        return Endpoints()
             .Select(e => (Pattern: "/" + e.RoutePattern.RawText!.TrimStart('/'), Methods: e.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? []))
             .Where(e => e.Pattern.StartsWith("/api/", StringComparison.Ordinal))
             .SelectMany(e => e.Methods.Select(m => (Normalize(e.Pattern), m.ToUpperInvariant())))

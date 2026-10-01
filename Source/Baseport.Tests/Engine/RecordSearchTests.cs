@@ -130,7 +130,7 @@ public class RecordSearchTests : IDisposable
         var record = Add("Acme Industrial", "quiet");
         await RecordSearch.EnsureAsync(_db);
 
-        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, false, "acme\" OR \"", 1, 50);
+        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, false, "acme\" OR \"", 1, 50, ct: TestContext.Current.CancellationToken);
 
         Assert.Empty(page.Records);
         Assert.Equal(new[] { record.Id }, await SearchAsync("acme"));
@@ -175,7 +175,7 @@ public class RecordSearchTests : IDisposable
         var tight = Add("Acme", "acme");
         await RecordSearch.EnsureAsync(_db);
 
-        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, false, "acme", 1, 50);
+        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, false, "acme", 1, 50, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, page.Records.Count);
         Assert.Equal(tight.Id, page.Records[0].Id);
@@ -190,7 +190,7 @@ public class RecordSearchTests : IDisposable
 
         await RecordIndexes.SyncAsync(_db, _table);
 
-        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), _fields[0], true, "acme", 1, 50);
+        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), _fields[0], true, "acme", 1, 50, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { second.Id, first.Id }, page.Records.Select(r => r.Id).ToArray());
     }

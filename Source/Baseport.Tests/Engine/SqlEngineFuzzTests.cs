@@ -97,9 +97,9 @@ public class SqlEngineFuzzTests : IDisposable
             try
             {
                 if (wire)
-                    await SqlEngine.ReadAsync(_db, sql, conn => WireCatalog.Apply(conn, WireDialect.Postgres, _caller));
+                    await SqlEngine.ReadAsync(_db, sql, conn => WireCatalog.Apply(conn, WireDialect.Postgres, _caller), ct: TestContext.Current.CancellationToken);
                 else
-                    await SqlEngine.ReadAsync(_db, sql, WireCatalog.Views, restrict: false);
+                    await SqlEngine.ReadAsync(_db, sql, WireCatalog.Views, restrict: false, ct: TestContext.Current.CancellationToken);
             }
             catch (Exception ex)
             {
@@ -134,7 +134,7 @@ public class SqlEngineFuzzTests : IDisposable
         var mode = JournalMode();
         var watch = System.Diagnostics.Stopwatch.StartNew();
 
-        var result = await SqlEngine.ReadAsync(_db, sql, WireCatalog.Views, restrict: false);
+        var result = await SqlEngine.ReadAsync(_db, sql, WireCatalog.Views, restrict: false, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result.Error);
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), $"took {watch.Elapsed}");
@@ -147,5 +147,5 @@ public class SqlEngineFuzzTests : IDisposable
     [InlineData("PRAGMA journal_mode")]
     [InlineData("SELECT * FROM pragma_table_info('_records')")]
     public async Task ReadingPragmaWorks(string sql) =>
-        Assert.Null((await SqlEngine.ReadAsync(_db, sql, WireCatalog.Views, restrict: false)).Error);
+        Assert.Null((await SqlEngine.ReadAsync(_db, sql, WireCatalog.Views, restrict: false, ct: TestContext.Current.CancellationToken)).Error);
 }

@@ -47,6 +47,8 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor, IDbTransac
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<DbContext, List<RecordEvent>> _pending = new();
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<DbContext, long> _started = new();
+
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
         Collect(eventData);
@@ -62,6 +64,7 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor, IDbTransac
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
     {
+        Measure(eventData.Context);
         Flush(eventData.Context);
         return result;
     }
@@ -69,6 +72,7 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor, IDbTransac
     public override async ValueTask<int> SavedChangesAsync(
         SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
     {
+        Measure(eventData.Context);
         var pending = Flush(eventData.Context);
         if (pending.Count > 0 && eventData.Context is AppDbContext db)
             await ActionEngine.EnqueueTriggeredRunsAsync(db, pending, cancellationToken);
@@ -81,6 +85,11 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor, IDbTransac
     {
         Discard(eventData.Context);
         return Task.CompletedTask;
+    }
+
+    private void Measure(DbContext? context)
+    {
+        if (context is not null && _started.TryRemove(context, out var started)) BaseportMetrics.RecordWrite(started);
     }
 
     private void Collect(DbContextEventData eventData)
@@ -109,7 +118,11 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor, IDbTransac
                 action == "delete" ? null : entry.Entity.JsonData));
         }
 
-        if (pending.Count > 0) _pending[eventData.Context] = pending;
+        if (pending.Count > 0)
+        {
+            _pending[eventData.Context] = pending;
+            _started[eventData.Context] = System.Diagnostics.Stopwatch.GetTimestamp();
+        }
         else Discard(eventData.Context);
 
         if (SchemaEntriesChanged(eventData.Context.ChangeTracker)) OpenApiCache.Invalidate();
@@ -181,6 +194,8 @@ public sealed class RecordChangeInterceptor : SaveChangesInterceptor, IDbTransac
 
     private void Discard(DbContext? context)
     {
-        if (context is not null) _pending.TryRemove(context, out _);
+        if (context is null) return;
+        _started.TryRemove(context, out _);
+        _pending.TryRemove(context, out _);
     }
 }

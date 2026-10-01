@@ -193,7 +193,7 @@ switch ($verb) {
     else { Warn "no Baseport process is running." }
 
     try {
-        Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 $url | Out-Null
+        Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "$url/api/readyz" | Out-Null
         Ok "answering on $url, console at $url/_/admin"
     } catch { Warn "nothing answered on $url." }
 

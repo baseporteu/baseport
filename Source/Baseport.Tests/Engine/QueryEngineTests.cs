@@ -58,8 +58,8 @@ public class QueryEngineTests : IDisposable
         _connection.CreateFunction<string?, string?, bool>("regexp", SqlitePragmas.Regexp);
         var customer = _fields.Where(f => f.Name == "Customer").ToList();
 
-        var pattern = await QueryEngine.ListAsync(_db, _table, customer, null, false, "/Customer 7/", 1, 50);
-        var literal = await QueryEngine.ListAsync(_db, _table, customer, null, false, "/Customer 7/", 1, 50, literal: true);
+        var pattern = await QueryEngine.ListAsync(_db, _table, customer, null, false, "/Customer 7/", 1, 50, ct: TestContext.Current.CancellationToken);
+        var literal = await QueryEngine.ListAsync(_db, _table, customer, null, false, "/Customer 7/", 1, 50, literal: true, ct: TestContext.Current.CancellationToken);
 
         Assert.Single(pattern.Records);
         Assert.Empty(literal.Records);
@@ -96,7 +96,7 @@ public class QueryEngineTests : IDisposable
     [Fact]
     public async Task ListPages()
     {
-        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 2, 10);
+        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 2, 10, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(30, page.Total);
         Assert.Equal(3, page.TotalPages);
@@ -106,7 +106,7 @@ public class QueryEngineTests : IDisposable
     [Fact]
     public async Task SearchNarrowsTotal()
     {
-        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, "Customer 1", 1, 50);
+        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, "Customer 1", 1, 50, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(11, page.Total);
     }
@@ -116,8 +116,8 @@ public class QueryEngineTests : IDisposable
     {
         var onlyOrderNo = _fields.Where(f => f.Name == "OrderNo").ToList();
 
-        var wide = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, "Customer 5", 1, 50);
-        var narrow = await QueryEngine.ListAsync(_db, _table, onlyOrderNo, null, true, "Customer 5", 1, 50);
+        var wide = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, "Customer 5", 1, 50, ct: TestContext.Current.CancellationToken);
+        var narrow = await QueryEngine.ListAsync(_db, _table, onlyOrderNo, null, true, "Customer 5", 1, 50, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, wide.Total);
         Assert.Equal(0, narrow.Total);
@@ -128,8 +128,8 @@ public class QueryEngineTests : IDisposable
     {
         var total = _fields.First(f => f.Name == "Total");
 
-        var asc = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), total, false, null, 1, 1);
-        var desc = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), total, true, null, 1, 1);
+        var asc = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), total, false, null, 1, 1, ct: TestContext.Current.CancellationToken);
+        var desc = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), total, true, null, 1, 1, ct: TestContext.Current.CancellationToken);
 
         Assert.Contains("\"Total\":10", asc.Records[0].JsonData);
         Assert.Contains("\"Total\":300", desc.Records[0].JsonData);
@@ -138,7 +138,7 @@ public class QueryEngineTests : IDisposable
     [Fact]
     public async Task PageSizeIsClamped()
     {
-        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 100_000);
+        var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 100_000, ct: TestContext.Current.CancellationToken);
         Assert.Equal(QueryEngine.MaxPageSize, page.PageSize);
     }
 
@@ -208,7 +208,7 @@ public class QueryEngineTests : IDisposable
     [Fact]
     public async Task CursorNoRepeatAfterInsert()
     {
-        var first = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 5);
+        var first = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 5, ct: TestContext.Current.CancellationToken);
         Assert.NotNull(first.NextCursor);
 
         _db.Records.Add(new Record
@@ -221,7 +221,7 @@ public class QueryEngineTests : IDisposable
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var second = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 5,
-            cursor: QueryEngine.Cursor.Decode(first.NextCursor));
+            cursor: QueryEngine.Cursor.Decode(first.NextCursor), ct: TestContext.Current.CancellationToken);
 
         Assert.Empty(second.Records.Select(r => r.Id).Intersect(first.Records.Select(r => r.Id), StringComparer.Ordinal));
     }
@@ -243,7 +243,7 @@ public class QueryEngineTests : IDisposable
     [Fact]
     public async Task SortedListHasNoCursor()
     {
-        var sorted = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), _fields[0], true, null, 1, 5);
+        var sorted = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), _fields[0], true, null, 1, 5, ct: TestContext.Current.CancellationToken);
         Assert.True(sorted.HasMore);
         Assert.Null(sorted.NextCursor);
     }
@@ -254,7 +254,7 @@ public class QueryEngineTests : IDisposable
         var customer = _fields.First(f => f.Name == "Customer");
         var filters = new[] { new QueryEngine.Filter(customer, "eq", "Customer 7") };
 
-        var result = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 25, filters: filters);
+        var result = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 25, filters: filters, ct: TestContext.Current.CancellationToken);
 
         var record = Assert.Single(result.Records);
         Assert.Contains("Customer 7\"", record.JsonData);
@@ -266,7 +266,7 @@ public class QueryEngineTests : IDisposable
         var customer = _fields.First(f => f.Name == "Customer");
         var filters = new[] { new QueryEngine.Filter(customer, "eq", "No Such Customer") };
 
-        var result = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 25, filters: filters);
+        var result = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 25, filters: filters, ct: TestContext.Current.CancellationToken);
 
         Assert.Empty(result.Records);
     }

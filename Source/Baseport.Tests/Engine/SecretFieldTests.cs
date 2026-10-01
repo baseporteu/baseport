@@ -87,7 +87,7 @@ public class SecretFieldTests : IDisposable
     [Fact]
     public async Task WireHasNoPasswordColumn()
     {
-        var result = await SqlEngine.ReadAsync(_db, "SELECT * FROM \"Members\"", conn => WireCatalog.Apply(conn, WireDialect.Postgres, null));
+        var result = await SqlEngine.ReadAsync(_db, "SELECT * FROM \"Members\"", conn => WireCatalog.Apply(conn, WireDialect.Postgres, null), ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result.Error);
         Assert.Contains("Name", result.Columns);
@@ -111,9 +111,9 @@ public class SecretFieldTests : IDisposable
     {
         if (fullText) await RecordSearch.EnsureAsync(_db);
 
-        var hit = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, false, "alice", 1, 10);
-        var hash = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, false, "pbkdf2", 1, 10);
-        var named = await QueryEngine.ListAsync(_db, _table, _fields, null, false, "pbkdf2", 1, 10);
+        var hit = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, false, "alice", 1, 10, ct: TestContext.Current.CancellationToken);
+        var hash = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, false, "pbkdf2", 1, 10, ct: TestContext.Current.CancellationToken);
+        var named = await QueryEngine.ListAsync(_db, _table, _fields, null, false, "pbkdf2", 1, 10, ct: TestContext.Current.CancellationToken);
 
         Assert.Single(hit.Records);
         Assert.Empty(hash.Records);

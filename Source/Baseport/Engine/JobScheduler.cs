@@ -6,18 +6,46 @@ public sealed class JobScheduler : BackgroundService
 {
     private readonly IServiceScopeFactory _scopes;
     private readonly Serilog.ILogger _log = Serilog.Log.ForContext<JobScheduler>();
+    private readonly Func<CancellationToken, CancellationToken, Task> _tick;
+    private readonly TimeSpan _interval;
+    private readonly CancellationTokenSource _hardStop = new();
 
-    public JobScheduler(IServiceScopeFactory scopes) => _scopes = scopes;
+    public JobScheduler(IServiceScopeFactory scopes)
+    {
+        _scopes = scopes;
+        _tick = TickAsync;
+        _interval = TimeSpan.FromSeconds(30);
+    }
+
+    internal JobScheduler(Func<CancellationToken, CancellationToken, Task> tick, TimeSpan interval)
+    {
+        _scopes = null!;
+        _tick = tick;
+        _interval = interval;
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await using (cancellationToken.Register(_hardStop.Cancel))
+            await base.StopAsync(cancellationToken);
+        if (cancellationToken.IsCancellationRequested) await _hardStop.CancelAsync();
+    }
+
+    public override void Dispose()
+    {
+        _hardStop.Dispose();
+        base.Dispose();
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        using var timer = new PeriodicTimer(_interval);
         try
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                try { await TickAsync(stoppingToken); }
-                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+                try { await _tick(stoppingToken, _hardStop.Token); }
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     _log.Error(ex, "Job scheduler tick failed");
                 }
@@ -29,7 +57,7 @@ public sealed class JobScheduler : BackgroundService
         }
     }
 
-    private async Task TickAsync(CancellationToken ct)
+    private async Task TickAsync(CancellationToken stopping, CancellationToken ct)
     {
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -40,6 +68,7 @@ public sealed class JobScheduler : BackgroundService
 
         foreach (var job in due)
         {
+            if (stopping.IsCancellationRequested) return;
             var def = Jobs.Find(job.Key);
             if (def is null) continue;
             job.LastRunAt = now;
@@ -53,11 +82,13 @@ public sealed class JobScheduler : BackgroundService
             catch (Exception ex)
             {
                 job.LastResult = $"Failed: {ex.Message}";
+                BaseportMetrics.JobFailed(job.Key);
                 _log.Error(ex, "Job {Key} failed", job.Key);
             }
             await db.SaveChangesAsync(ct);
         }
 
+        if (stopping.IsCancellationRequested) return;
         var runner = scope.ServiceProvider.GetRequiredService<ImportRunner>();
         foreach (var runId in await Clones.QueueDueAsync(db, now, ct)) runner.Enqueue(runId);
 
