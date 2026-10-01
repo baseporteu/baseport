@@ -30,6 +30,7 @@ public static class RemoteFetch
         public string Strategy { get; internal set; } = "none";
         public string? Ceiling { get; internal set; }
         public string? Stopped { get; internal set; }
+        public bool Inconsistent { get; internal set; }
     }
 
     public sealed class FetchException(string message) : Exception(message);

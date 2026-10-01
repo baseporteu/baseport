@@ -8,12 +8,13 @@ public static class Clones
 
     public sealed record CloneDto(
         string Id, string Name, string ConnectionId, string Path, string Paging, string RecordsPointer, string TableId,
-        string Mode, string KeyField, string Schedule, bool Enabled, bool AllowLargeDeletes, DateTime? NextRunAt,
-        DateTime? LastRunAt, string LastRunId, DateTime CreatedAt, DateTime UpdatedAt);
+        string Mode, string KeyField, string Schedule, bool Enabled, bool AllowLargeDeletes, bool AllowInconsistentSource,
+        IReadOnlyList<SqlSource.ColumnSetting> Columns, DateTime? NextRunAt, DateTime? LastRunAt, string LastRunId, DateTime CreatedAt, DateTime UpdatedAt);
 
     public static CloneDto Dto(Clone c) => new(
         c.Id, c.Name, c.ConnectionId, c.Path, c.Paging, c.RecordsPointer, c.TableId, c.Mode, c.KeyField, c.Schedule,
-        c.Enabled, c.AllowLargeDeletes, c.NextRunAt, c.LastRunAt, c.LastRunId, c.CreatedAt, c.UpdatedAt);
+        c.Enabled, c.AllowLargeDeletes, c.AllowInconsistentSource, SqlSource.Settings(c.ColumnsJson), c.NextRunAt, c.LastRunAt, c.LastRunId,
+        c.CreatedAt, c.UpdatedAt);
 
     public static async Task<IReadOnlyList<string>> ProblemsAsync(AppDbContext db, Clone c, CancellationToken ct = default)
     {
@@ -28,6 +29,9 @@ public static class Clones
 
         if (!await db.Connections.AnyAsync(x => x.Id == c.ConnectionId, ct)) errors.Add("Choose a connection.");
         if (!RemoteFetch.Strategies.Contains(c.Paging)) errors.Add("Unknown paging strategy.");
+        if (SqlSource.SettingsProblem(System.Text.Json.Nodes.JsonNode.Parse(string.IsNullOrWhiteSpace(c.ColumnsJson) ? "[]" : c.ColumnsJson), out var columns) is { } columnProblem)
+            errors.Add(columnProblem);
+        else c.ColumnsJson = columns;
         if (!CloneModes.All.Contains(c.Mode)) errors.Add("Mode must be append, upsert or mirror.");
         if (Jobs.Validate(c.Schedule) is { } scheduleProblem) errors.Add(scheduleProblem);
 
@@ -58,6 +62,7 @@ public static class Clones
             Path = clone.Path,
             Paging = clone.Paging,
             RecordsPointer = clone.RecordsPointer,
+            ColumnsJson = clone.ColumnsJson,
             TableId = clone.TableId,
             CreatedAt = now
         };

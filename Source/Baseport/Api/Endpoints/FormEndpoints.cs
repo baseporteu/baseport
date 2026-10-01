@@ -161,7 +161,7 @@ $$"""
                     child.Id,
                     child.Name,
                     RefField = block.RefField.Name,
-                    Columns = visibleChild.Select(f => new { f.Name, f.Label, f.DataType })
+                    Columns = visibleChild.Select(f => new { f.Name, f.Label, f.DataType, f.Currency })
                 });
             }
 
@@ -222,16 +222,18 @@ $$"""
         app.MapGet("/api/forms/{fpid}/child/{childTable}", async (AppDbContext db, string fpid, string childTable, string? refId) =>
         {
             var (form, table, _) = await LoadAsync(db, fpid);
-            if (form is null || table is null) return Results.NotFound();
+            if (form is null || table is null || form.Kind != FormKinds.Form) return Results.NotFound();
             if (string.IsNullOrWhiteSpace(refId)) return Results.BadRequest(new { errors = new[] { "refId is required." } });
 
             var (child, childFields, block) = await ChildTableBlockAsync(db, form, table, childTable);
             if (child is null || block is null)
                 return Results.BadRequest(new { errors = new[] { "This child table is not configured on this form." } });
+            if (!await db.Records.AnyAsync(r => r.TableId == table.Id && r.Id == refId))
+                return Results.NotFound();
 
             var visible = VisibleChildColumns(childFields, block);
 
-            var page = await QueryEngine.ListAsync(db, child, Array.Empty<FieldDefinition>(), null, false, null, 1, QueryEngine.MaxPageSize,
+            var page = await QueryEngine.ListAsync(db, child, Array.Empty<FieldDefinition>(), visible.FirstOrDefault(), false, null, 1, QueryEngine.MaxPageSize,
                 filters: new[] { new QueryEngine.Filter(block.RefField, "eq", refId) });
             return Results.Ok(new { rows = page.Records.Select(r => { var d = QueryEngine.Project(r, visible); d["id"] = r.Id; return d; }) });
         }).RequireRateLimiting(RateLimit.List);

@@ -143,6 +143,18 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
+    public void ProjectOmitsSecrets()
+    {
+        var record = new Record { Id = "r1", JsonData = "{\"Name\":\"ann\",\"Pin\":\"pbkdf2$hash\"}" };
+        FieldDefinition[] visible = [new() { Name = "Name", DataType = "text" }, new() { Name = "Pin", DataType = "password" }];
+
+        var projected = QueryEngine.Project(record, visible);
+
+        Assert.Equal("ann", projected["Name"]!.GetValue<string>());
+        Assert.False(projected.ContainsKey("Pin"));
+    }
+
+    [Fact]
     public void ProjectKeepsListedFields()
     {
         var record = _db.Records.First();

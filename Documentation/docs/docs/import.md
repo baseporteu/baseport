@@ -9,8 +9,8 @@ description: "Create a table from a file or an API, import records, and keep a t
 | --- | --- | --- |
 | New table from a file | **Tables > Import** | `POST /api/_admin/tables/import` |
 | Records into an existing table | Table menu > **Import records** | `POST /api/_admin/tables/{id}/records/import` |
-| New or existing table from an API | **Tables > Import from API** | `POST /api/_admin/imports` |
-| Scheduled copy of an API | **Settings > Jobs > Clones** | `/api/_admin/clones` |
+| New or existing table from an API or a SQL database | **Tables > Import from API** | `POST /api/_admin/imports` |
+| Scheduled copy of an API or a SQL table | **Settings > Jobs > Clones** | `/api/_admin/clones` |
 
 ## File formats
 
@@ -66,11 +66,31 @@ Values are encrypted with the key ring in `keys/`. A backup restored without `ke
 | Setting | Values |
 | --- | --- |
 | Base URL | `http` or `https`, no credentials in the URL. Private addresses need **Allow private targets** |
-| Protocol | `rest`, `odata`, or `baseport` for another Baseport instance |
+| Protocol | `rest`, `odata`, `baseport` for another Baseport instance, or `sqlite`, `sqlserver`, `postgres` for a database |
 | Authentication | None, bearer token, basic, or a named header; the credential is a secret |
 | Headers | Up to 20, one per line. `{{name}}` sends a secret |
 
-**Test** reads the first page. For a Baseport connection it lists the published tables instead.
+**Test** reads the first page. For a Baseport or SQL connection it lists the tables instead.
+
+## From a SQL database
+
+A SQL connection holds only a secret: the connection string. SQLite takes an absolute file path (`Data Source=/srv/erp.db`) and never Baseport's own database. A SQL Server or PostgreSQL host follows the same private-address rule as a base URL.
+
+The table is chosen from the database's catalog (`schema.table` for SQL Server and PostgreSQL); no SQL is written by hand. Every read is read-only: SQLite opens with `Mode=ReadOnly`, SQL Server with `ApplicationIntent=ReadOnly`, PostgreSQL in a `READ ONLY` transaction. Rows are read in pages of 500 ordered by the primary key, so a table needs a single-column primary key.
+
+| Source type | Field type |
+| --- | --- |
+| Integers, decimals, floats | `number` |
+| `money` | `currency` |
+| `bit`, `boolean` | `boolean` |
+| `date` | `date` |
+| `datetime`, `datetime2`, `timestamp`, `timestamptz` | `datetime` |
+| `char`, `varchar`, `nvarchar`, `uuid`, `time` | `text` |
+| `text`, `nvarchar(max)`, `xml` | `longtext` |
+
+Other columns (binary, `json`/`jsonb`, arrays, spatial) are listed on the preview and need a choice: **Store as text** or **Skip**. An import or clone does not run until each has one.
+
+A run reads one consistent snapshot: PostgreSQL in a `REPEATABLE READ` transaction, SQLite in one read transaction, SQL Server under `SNAPSHOT` isolation when the database allows it (`ALLOW_SNAPSHOT_ISOLATION ON`). Without it SQL Server reads under `READ COMMITTED`, and a mirror refuses that run unless the clone has **Allow an inconsistent source** on. Row, page and time limits are those of an API import.
 
 ## From an API
 
@@ -100,7 +120,7 @@ A next page on another origin stops the run before any credential is sent there.
 
 ## Clones
 
-A clone repeats an import on a schedule, into an existing table.
+A clone repeats an import on a schedule, into an existing table. For a SQL connection, **Columns** lists the columns that need a choice.
 
 | Mode | Effect |
 | --- | --- |

@@ -12,17 +12,29 @@ public static class ImportEndpoints
             var (connection, run, problem) = await ReadAsync(db, body);
             if (problem is not null) return problem;
 
-            var (rows, error) = await FirstPageAsync(db, clients.CreateClient(), connection!, run!, ctx.RequestAborted);
+            var (source, sourceError) = await DescribeAsync(db, connection!, run!, ctx.RequestAborted);
+            if (sourceError is not null) return Results.BadRequest(new { errors = new[] { sourceError } });
+
+            var (rows, error) = await FirstPageAsync(db, clients.CreateClient(), connection!, run!, ctx.RequestAborted, source?.Columns);
             if (error is not null) return Results.BadRequest(new { errors = new[] { error } });
 
-            var table = TableFrom(Text(body, "tableName") ?? connection!.Name, rows);
+            var table = TableFrom(Text(body, "tableName") ?? (source is null ? connection!.Name : source.Value.Table.Name), rows, source, run!);
             var existing = await db.Tables.Select(t => t.Name).ToListAsync();
+            var settings = SqlSource.Settings(run!.ColumnsJson);
             return Results.Ok(new
             {
                 table.Name,
                 FirstPageRows = rows.Count,
                 Fields = table.Fields.OrderBy(f => f.Position).Select(f => new { f.Name, f.Label, f.DataType, f.IsRequired }),
                 Sample = rows.Take(5).Select(r => DefinitionImport.MapRow(r, table.Fields.ToList())),
+                Columns = source?.Columns.Select(c => new
+                {
+                    c.Name,
+                    c.SourceType,
+                    c.FieldType,
+                    c.IsKey,
+                    Choice = settings.FirstOrDefault(s => s.Column == c.Name)?.Choice
+                }),
                 Errors = FieldValidation.ValidateTable(table, existing)
             });
         }).WithRequestTimeout(Timeouts.Long);
@@ -32,7 +44,12 @@ public static class ImportEndpoints
             var (connection, run, problem) = await ReadAsync(db, body);
             if (problem is not null) return problem;
 
-            var (rows, error) = await FirstPageAsync(db, clients.CreateClient(), connection!, run!, ctx.RequestAborted);
+            var (source, sourceError) = await DescribeAsync(db, connection!, run!, ctx.RequestAborted);
+            if (sourceError is not null) return Results.BadRequest(new { errors = new[] { sourceError } });
+            if (source is { } described && SqlSource.UnchosenColumns(described.Columns, SqlSource.Settings(run!.ColumnsJson)) is { Count: > 0 } open)
+                return Results.BadRequest(new { errors = new[] { $"Choose text or skip for the columns Baseport cannot map: {string.Join(", ", open)}." } });
+
+            var (rows, error) = await FirstPageAsync(db, clients.CreateClient(), connection!, run!, ctx.RequestAborted, source?.Columns);
             if (error is not null) return Results.BadRequest(new { errors = new[] { error } });
 
             TableDefinition table;
@@ -42,13 +59,14 @@ public static class ImportEndpoints
                 if (target is null) return Results.NotFound();
                 if (target.IsProxy) return Results.BadRequest(new { errors = new[] { "A proxy table stores nothing and cannot be filled." } });
                 var writable = target.Fields.Where(f => !FieldTypes.Of(f).Computed).ToList();
-                if (DefinitionImport.ColumnMap.For(rows, writable).MatchedFields.Count == 0)
+                var probe = source is { } s ? [new JsonObject(s.Columns.Select(c => KeyValuePair.Create<string, JsonNode?>(c.Name, "")))] : rows;
+                if (DefinitionImport.ColumnMap.For(probe, writable).MatchedFields.Count == 0)
                     return Results.BadRequest(new { errors = new[] { $"None of the API's fields ({string.Join(", ", rows.SelectMany(r => r.Select(p => p.Key)).Distinct().Take(8))}) match a field on this table." } });
                 table = target;
             }
             else
             {
-                table = TableFrom(Text(body, "tableName") ?? connection!.Name, rows);
+                table = TableFrom(Text(body, "tableName") ?? (source is null ? connection!.Name : source.Value.Table.Name), rows, source, run!);
                 var existing = await db.Tables.Select(t => t.Name).ToListAsync();
                 if (FieldValidation.ValidateTable(table, existing) is { Count: > 0 } tableErrors) return Results.BadRequest(new { errors = tableErrors });
                 db.Tables.Add(table);
@@ -82,9 +100,13 @@ public static class ImportEndpoints
         var paging = Text(body, "paging") ?? "auto";
         if (!RemoteFetch.Strategies.Contains(paging)) return (null, null, Results.BadRequest(new { errors = new[] { "Unknown paging strategy." } }));
 
+        if (SqlSource.SettingsProblem(body["columns"], out var columns) is { } columnProblem)
+            return (null, null, Results.BadRequest(new { errors = new[] { columnProblem } }));
+
         var run = new ImportRun
         {
             Id = Ids.NewShortId(12),
+            ColumnsJson = columns,
             ConnectionId = connection.Id,
             Path = (Text(body, "path") ?? "").Trim(),
             Paging = paging,
@@ -94,25 +116,53 @@ public static class ImportEndpoints
         return (connection, run, null);
     }
 
-    internal static async Task<(List<JsonObject> Rows, string? Error)> FirstPageAsync(AppDbContext db, HttpClient http, Connection connection, ImportRun run, CancellationToken ct)
+    internal static async Task<(List<JsonObject> Rows, string? Error)> FirstPageAsync(
+        AppDbContext db, HttpClient http, Connection connection, ImportRun run, CancellationToken ct,
+        IReadOnlyList<SqlSource.SourceColumn>? columns = null)
     {
         var rows = new List<JsonObject>();
+        var fieldsKnown = columns is not null;
+        var settings = SqlSource.Settings(run.ColumnsJson);
+        var probe = columns is null ? run : new ImportRun
+        {
+            ConnectionId = run.ConnectionId,
+            Path = run.Path,
+            ColumnsJson = System.Text.Json.JsonSerializer.Serialize<IReadOnlyList<SqlSource.ColumnSetting>>(
+                [.. settings, .. SqlSource.UnchosenColumns(columns, settings).Select(c => new SqlSource.ColumnSetting(c, ColumnChoice.Skip))],
+                SqlSource.JsonOptions)
+        };
         try
         {
-            await foreach (var page in RemoteFetch.PagesAsync(db, http, connection, ImportRuns.Options(run) with { MaxPages = 1 }, new RemoteFetch.Report(), ct))
+            await foreach (var page in ImportRuns.Pages(db, http, connection, probe, new RemoteFetch.Report(), ct, maxPages: 1))
                 rows.AddRange(page.Records);
         }
         catch (RemoteFetch.FetchException ex)
         {
             return (rows, ex.Message);
         }
-        return rows.Count == 0 ? (rows, "The first page has no records to learn fields from.") : (rows, null);
+        return rows.Count == 0 && !fieldsKnown ? (rows, "The first page has no records to learn fields from.") : (rows, null);
     }
 
-    private static TableDefinition TableFrom(string name, IReadOnlyList<JsonObject> rows)
+    private static async Task<((SqlSource.SourceTable Table, IReadOnlyList<SqlSource.SourceColumn> Columns)? Source, string? Error)> DescribeAsync(
+        AppDbContext db, Connection connection, ImportRun run, CancellationToken ct)
+    {
+        if (!ConnectionProtocols.IsSql(connection.Protocol)) return (null, null);
+        try
+        {
+            return (await SqlSource.DescribeAsync(db, connection, run.Path, ct), null);
+        }
+        catch (RemoteFetch.FetchException ex)
+        {
+            return (null, ex.Message);
+        }
+    }
+
+    private static TableDefinition TableFrom(string name, IReadOnlyList<JsonObject> rows,
+        (SqlSource.SourceTable Table, IReadOnlyList<SqlSource.SourceColumn> Columns)? source, ImportRun run)
     {
         var table = new TableDefinition { Id = Ids.NewShortId(12), Name = name.Trim(), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
-        foreach (var field in DefinitionImport.ToFields(DefinitionImport.InferFields(rows)))
+        var fields = source is { } s ? SqlSource.Fields(s.Columns, SqlSource.Settings(run.ColumnsJson)) : DefinitionImport.ToFields(DefinitionImport.InferFields(rows));
+        foreach (var field in fields)
         {
             field.Id = Ids.NewShortId(12);
             field.TableId = table.Id;

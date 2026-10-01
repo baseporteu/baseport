@@ -70,6 +70,8 @@
             .baserow-table tbody tr:last-child td { border-bottom: none; }
             .baserow-table tbody tr:hover { background: color-mix(in srgb, var(--baserow-border) 35%, transparent); }
             .baserow-empty { padding: 1.25rem; text-align: center; color: var(--baserow-muted); font-size: .875rem; }
+            .baserow-child-rows { margin-top: var(--baserow-gap); }
+            .baserow-embed .baserow-subhead { margin: 0 0 .5rem; font-size: .9375rem; font-weight: 600; }
             .baserow-pager { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; margin-top: var(--baserow-gap); font-size: .875rem; }
             .baserow-pager-status { color: var(--baserow-muted); }
             .baserow-embed .baserow-search {
@@ -448,6 +450,7 @@
                     }
                     result.innerHTML = '';
                     result.appendChild(renderRecordTable(table.fields, body.data));
+                    if (!body.proxy && body.id) renderChildRows(table, body.id, result);
                 })
                 .catch(() => {
                     btn.removeAttribute('aria-busy');
@@ -469,6 +472,62 @@
         if (qs) runLookup(qs);
     }
 
+    function cellText(f, raw) {
+        if (raw === null || raw === undefined || raw === '') return displayValue(raw);
+        if (f.dataType === 'currency') return fmtCurrency(raw, f.currency);
+        if (f.dataType === 'boolean') return raw ? 'Yes' : 'No';
+        return displayValue(raw);
+    }
+
+    function renderChildRows(table, headerId, parent) {
+        ((table && table.childTables) || []).forEach((child) => {
+            if (!child.columns.length) return;
+            fetch(`${apiBase}/api/forms/${formId}/child/${encodeURIComponent(child.id)}?refId=${encodeURIComponent(headerId)}`)
+                .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+                .then((body) => parent.appendChild(childRowsTable(child, body.rows || [])))
+                .catch(() => toast(`Could not load ${child.name}.`, 'error'));
+        });
+    }
+
+    function childRowsTable(child, rows) {
+        const section = document.createElement('div');
+        section.className = 'baserow-child-rows';
+        const caption = document.createElement('h4');
+        caption.className = 'baserow-subhead';
+        caption.innerText = child.name;
+        section.appendChild(caption);
+        if (!rows.length) {
+            section.appendChild(emptyNote('No rows yet.'));
+            return section;
+        }
+        const wrap = document.createElement('div');
+        wrap.className = 'baserow-table-wrap';
+        const table = document.createElement('table');
+        table.className = 'baserow-table';
+        const head = document.createElement('tr');
+        child.columns.forEach((c) => {
+            const th = document.createElement('th');
+            th.scope = 'col';
+            th.innerText = c.label || c.name;
+            head.appendChild(th);
+        });
+        table.appendChild(document.createElement('thead')).appendChild(head);
+        const tbody = document.createElement('tbody');
+        rows.forEach((row) => {
+            const tr = document.createElement('tr');
+            child.columns.forEach((c) => {
+                const td = document.createElement('td');
+                td.innerText = cellText(c, row[c.name]);
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        wrap.appendChild(table);
+        section.appendChild(wrap);
+        return section;
+    }
+
     function renderRecordTable(fields, data) {
         const table = document.createElement('table');
         table.className = 'baserow-record';
@@ -479,10 +538,7 @@
             th.scope = 'row';
             th.innerText = fieldLabel(f);
             const td = document.createElement('td');
-            const raw = data ? data[f.name] : null;
-            td.innerText = f.dataType === 'currency' && raw !== null && raw !== undefined && raw !== '' ?
-                fmtCurrency(raw, f.currency) :
-                displayValue(raw);
+            td.innerText = cellText(f, data ? data[f.name] : null);
             tr.appendChild(th);
             tr.appendChild(td);
             tbody.appendChild(tr);

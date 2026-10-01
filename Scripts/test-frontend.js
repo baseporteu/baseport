@@ -412,6 +412,18 @@ test('ScopePickerMatchesServer', () => {
     assert.deepStrictEqual(list(js), list(cs), 'console and server disagree on which fields may scope an endpoint');
 });
 
+test('SqlProtocolsMatchServer', () => {
+    const js = read('js/remote.js').match(/const SQL_PROTOCOLS = \[([^\]]*)\]/)[1];
+    const models = readSource('Data', 'Models.cs');
+    const cs = models.match(/IsSql\(string protocol\) => protocol is ([^;]*);/)[1]
+        .split(' or ').map((name) => models.match(new RegExp(`const string ${name.trim()} = "([a-z]+)"`))[1]);
+    const choices = read('js/remote.js').match(/const COLUMN_CHOICES = \[([^;]*)\];/)[1];
+    const list = (s) => [...s.matchAll(/'([a-z]+)'/g)].map((m) => m[1]).sort();
+    assert.deepStrictEqual(list(js), cs.sort(), 'console and server disagree on which protocols are SQL sources');
+    const enumNames = [...readSource('Engine', 'SqlSource.cs').matchAll(/JsonStringEnumMemberName\("([a-z]+)"\)\] (Text|Skip)/g)].map((m) => m[1]).sort();
+    assert.deepStrictEqual(list(choices).filter((c) => c !== 'choose'), enumNames, 'column choices offered do not match the server names');
+});
+
 function loadApiNameGuard() {
     const tables = read('js/tables.js');
     const slice = tables.slice(tables.indexOf('const API_NAME_PATTERN'),
@@ -1459,6 +1471,17 @@ test('EmbedRendersChildTable', () => {
     assert.ok(embed.includes('pendingChildTables.push('), 'renderChildTable does not stage its rows for the post-submit flush');
     assert.ok(/api\/forms\/\$\{formId\}\/child\/\$\{entry\.table\}\?refId=/.test(embed),
         'flushChildTables does not post to the per-form child-table route with the new header id');
+});
+
+test('LookupShowsChildRows', () => {
+    const embed = read('embed.js');
+    assert.ok(/if \(!body\.proxy && body\.id\) renderChildRows\(table, body\.id, result\)/.test(embed),
+        'a found lookup no longer lists the rows of its child tables');
+    const rows = embed.slice(embed.indexOf('function renderChildRows('), embed.indexOf('function renderRecordTable('));
+    assert.ok(/\/child\/\$\{encodeURIComponent\(child\.id\)\}\?refId=\$\{encodeURIComponent\(headerId\)\}/.test(rows),
+        'the read view does not ask the per-form child route for the found record');
+    assert.ok(!rows.includes('innerHTML'), 'child row values must be written as text, never as markup');
+    assert.ok(rows.includes('cellText(c, row[c.name])'), 'child cells skip the shared value formatting');
 });
 
 test('EmbedLoadsPreact', () => {

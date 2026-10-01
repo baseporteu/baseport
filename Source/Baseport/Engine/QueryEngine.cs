@@ -218,7 +218,7 @@ public static class QueryEngine
     {
         var source = JsonNode.Parse(string.IsNullOrWhiteSpace(record.JsonData) ? "{}" : record.JsonData) as JsonObject ?? new JsonObject();
         var result = new JsonObject();
-        foreach (var f in visible)
+        foreach (var f in visible.Where(f => !FieldTypes.Of(f).Secret))
             result[f.Name] = source.TryGetPropertyValue(f.Name, out var v) ? v?.DeepClone() : null;
         return result;
     }

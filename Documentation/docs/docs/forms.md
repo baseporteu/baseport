@@ -24,6 +24,17 @@ A form has one of two kinds, fixed at creation:
 
 **Read only** renders values instead of inputs and refuses writes. An unpublished form returns `404`.
 
+## Child tables
+
+A **Child table** block lists rows of another table whose reference field points at this form's table, such as the lines of an order. The block names the child table, the reference field and the columns to show.
+
+| Action | Behavior |
+| --- | --- |
+| Submit | Rows entered in the block are saved after the record, each with the reference set to the new record |
+| Lookup | The found record's existing rows are listed below it, ordered by the block's first column, read-only |
+
+Rows come from `/api/forms/{formId}/child/{tableId}?refId={recordId}`, which answers only for a record that exists in the form's table. Password fields are never returned.
+
 ## The hosted page
 
 Every form also has a server-rendered page at `/f/{formId}`, for links and search engines:

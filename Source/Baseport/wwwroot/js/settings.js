@@ -82,7 +82,7 @@ function applySettingsPage(page) {
         providers: 'Native database wire-protocol listeners.',
         sites: 'Where published forms may be embedded.',
         secrets: 'Credentials for outbound requests. Encrypted at rest, never shown again.',
-        connections: 'Remote APIs and Baseport instances to import from.',
+        connections: 'Remote APIs, Baseport instances and SQL databases to import from.',
         jobs: 'Scheduled clones and background maintenance.',
         backups: 'Archives of the database, uploads and keys.',
     };

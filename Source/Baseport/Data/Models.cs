@@ -275,6 +275,8 @@ public sealed class Clone
     public string Schedule { get; set; } = "0 0 * * * *";
     public bool Enabled { get; set; } = true;
     public bool AllowLargeDeletes { get; set; }
+    public bool AllowInconsistentSource { get; set; }
+    public string ColumnsJson { get; set; } = "[]";
     public DateTime? NextRunAt { get; set; }
     public DateTime? LastRunAt { get; set; }
     public string LastRunId { get; set; } = "";
@@ -299,6 +301,7 @@ public sealed class ImportRun
     public string Path { get; set; } = "";
     public string Paging { get; set; } = "auto";
     public string RecordsPointer { get; set; } = "";
+    public string ColumnsJson { get; set; } = "[]";
     public string TableId { get; set; } = "";
     public string Status { get; set; } = ImportRunStatus.Queued;
     public int Pages { get; set; }
@@ -349,7 +352,12 @@ public static class ConnectionProtocols
     public const string Rest = "rest";
     public const string OData = "odata";
     public const string Baseport = "baseport";
-    public static readonly string[] All = [Rest, OData, Baseport];
+    public const string Sqlite = "sqlite";
+    public const string SqlServer = "sqlserver";
+    public const string Postgres = "postgres";
+    public static readonly string[] All = [Rest, OData, Baseport, Sqlite, SqlServer, Postgres];
+
+    public static bool IsSql(string protocol) => protocol is Sqlite or SqlServer or Postgres;
 }
 
 public static class ConnectionAuth

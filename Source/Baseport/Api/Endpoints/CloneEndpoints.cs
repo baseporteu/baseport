@@ -78,6 +78,8 @@ public static class CloneEndpoints
         if (Text(body, "schedule") is { } schedule) c.Schedule = schedule;
         if (body["enabled"] is JsonValue ev && ev.TryGetValue<bool>(out var enabled)) c.Enabled = enabled;
         if (body["allowLargeDeletes"] is JsonValue dv && dv.TryGetValue<bool>(out var large)) c.AllowLargeDeletes = large;
+        if (body["allowInconsistentSource"] is JsonValue iv && iv.TryGetValue<bool>(out var inconsistent)) c.AllowInconsistentSource = inconsistent;
+        if (body["columns"] is JsonNode columns) c.ColumnsJson = columns.ToJsonString();
     }
 
     private static string? Text(JsonObject body, string name) =>

@@ -18,6 +18,12 @@ public static class ImportRuns
         r.Id, r.Kind, r.CloneId, r.ConnectionId, r.Path, r.TableId, r.Status, r.Pages, r.Rows, r.Inserted, r.Updated, r.Deleted,
         r.Rejected, r.Strategy, r.Message, JsonSerializer.Deserialize<List<string>>(r.ErrorsJson) ?? [], r.CreatedAt, r.StartedAt, r.FinishedAt);
 
+    public static IAsyncEnumerable<RemoteFetch.Page> Pages(AppDbContext db, HttpClient http, Connection connection, ImportRun run,
+        RemoteFetch.Report report, CancellationToken ct, int maxPages = RemoteFetch.MaxPages) =>
+        ConnectionProtocols.IsSql(connection.Protocol)
+            ? SqlSource.PagesAsync(db, connection, run.Path, SqlSource.Settings(run.ColumnsJson), report, maxPages: maxPages, ct: ct)
+            : RemoteFetch.PagesAsync(db, http, connection, Options(run) with { MaxPages = maxPages }, report, ct);
+
     public static RemoteFetch.Options Options(ImportRun run) =>
         new(run.Path, run.Paging, string.IsNullOrWhiteSpace(run.RecordsPointer) ? null : run.RecordsPointer);
 
@@ -43,14 +49,14 @@ public static class ImportRuns
             var mode = clone?.Mode ?? CloneModes.Append;
 
             var report = new RemoteFetch.Report();
-            var pages = RemoteFetch.PagesAsync(db, http, connection, Options(run), report, ct);
+            var pages = Pages(db, http, connection, run, report, ct);
             if (mode == CloneModes.Append) await AppendAsync(db, table, fields, run, pages, report, errors, ct);
             else
             {
                 var key = fields.FirstOrDefault(f => f.Name == clone!.KeyField)
                     ?? throw new RemoteFetch.FetchException($"The key field '{clone!.KeyField}' no longer exists.");
                 if (mode == CloneModes.Upsert) await UpsertAsync(db, table, fields, key, run, pages, report, errors, ct);
-                else await MirrorAsync(db, table, fields, key, clone!.AllowLargeDeletes, run, pages, report, errors, ct);
+                else await MirrorAsync(db, table, fields, key, clone!, run, pages, report, errors, ct);
             }
 
             run.Message = report.Ceiling ?? report.Stopped ?? "";
@@ -193,13 +199,15 @@ public static class ImportRuns
         }
     }
 
-    private static async Task MirrorAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, FieldDefinition key, bool allowLargeDeletes,
+    private static async Task MirrorAsync(AppDbContext db, TableDefinition table, List<FieldDefinition> fields, FieldDefinition key, Clone clone,
         ImportRun run, IAsyncEnumerable<RemoteFetch.Page> pages, RemoteFetch.Report report, List<string> errors, CancellationToken ct)
     {
         var rows = new List<JsonObject>();
         await foreach (var page in pages.WithCancellation(ct)) rows.AddRange(page.Records);
         if (report.Ceiling is not null || report.Stopped is not null)
             throw new RemoteFetch.FetchException($"The fetch was incomplete ({report.Ceiling ?? report.Stopped}); a mirror only applies a complete copy, so nothing changed.");
+        if (report.Inconsistent && !clone.AllowInconsistentSource)
+            throw new RemoteFetch.FetchException("The source could not be read as one snapshot (SQL Server without snapshot isolation); a mirror refuses it, so nothing changed. Turn on \"Allow an inconsistent source\" to accept it.");
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var byKey = await ByKeyAsync(db, table, key, ct);
@@ -211,7 +219,7 @@ public static class ImportRuns
         var doomed = db.Records.Local
             .Where(r => r.TableId == table.Id && db.Entry(r).State != EntityState.Added && !keep.Contains(r.Id))
             .ToList();
-        if (existing > 0 && doomed.Count > existing * Clones.MaxDeleteShare && !allowLargeDeletes)
+        if (existing > 0 && doomed.Count > existing * Clones.MaxDeleteShare && !clone.AllowLargeDeletes)
             throw new RemoteFetch.FetchException($"The mirror would delete {doomed.Count} of {existing} records. Nothing changed; turn on \"Allow large deletes\" if that is intended.");
 
         db.Records.RemoveRange(doomed);
@@ -246,17 +254,23 @@ public sealed class ImportRunner(IServiceScopeFactory scopes, IHttpClientFactory
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var runId in _queue.Reader.ReadAllAsync(stoppingToken))
+        try
         {
-            try
+            await foreach (var runId in _queue.Reader.ReadAllAsync(stoppingToken))
             {
-                using var scope = scopes.CreateScope();
-                await ImportRuns.ExecuteAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), clients.CreateClient(), runId, stoppingToken);
+                try
+                {
+                    using var scope = scopes.CreateScope();
+                    await ImportRuns.ExecuteAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), clients.CreateClient(), runId, stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _log.Error(ex, "Import run {RunId} failed unexpectedly", runId);
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _log.Error(ex, "Import run {RunId} failed unexpectedly", runId);
-            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
         }
     }
 }

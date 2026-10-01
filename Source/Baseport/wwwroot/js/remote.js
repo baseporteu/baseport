@@ -1,4 +1,15 @@
-const PROTOCOLS = [['rest', 'REST'], ['odata', 'OData'], ['baseport', 'Baseport']];
+const PROTOCOLS = [['rest', 'REST'], ['odata', 'OData'], ['baseport', 'Baseport'],
+    ['sqlite', 'SQLite'], ['sqlserver', 'SQL Server'], ['postgres', 'PostgreSQL']];
+const SQL_PROTOCOLS = ['sqlite', 'sqlserver', 'postgres'];
+const COLUMN_CHOICES = [['', 'Choose'], ['text', 'Store as text'], ['skip', 'Skip']];
+
+function isSql(protocol) {
+    return SQL_PROTOCOLS.includes(protocol);
+}
+
+function connectionById(id) {
+    return connectionData.find((x) => x.id === id);
+}
 const AUTH_KINDS = [['none', 'None'], ['bearer', 'Bearer token'], ['basic', 'Basic'], ['header', 'Header']];
 const PAGING = [['auto', 'Detect'], ['odata', 'OData next link'], ['link', 'Link header'], ['next', 'Next URL in body'],
     ['cursor', 'Cursor'], ['page', 'Page number'], ['offset', 'Offset'], ['none', 'Single page']];
@@ -25,7 +36,7 @@ async function loadConnections() {
         tr.onclick = () => openConnectionSheet(c.id);
         tr.append(
             ui.el('td', 'mono', { textContent: c.name }),
-            ui.el('td', 'muted mono', { textContent: c.baseUrl }),
+            ui.el('td', 'muted mono', { textContent: isSql(c.protocol) ? 'Connection string in a secret' : c.baseUrl }),
             ui.el('td', null, { textContent: label(PROTOCOLS, c.protocol) }),
             ui.el('td', 'muted', { textContent: label(AUTH_KINDS, c.authKind) }),
             ui.el('td'));
@@ -100,13 +111,22 @@ async function openConnectionSheet(id) {
         help: 'One per line. {{name}} sends a secret.'
     });
 
+    const secretHelp = secret.querySelector('.field-help') || secret.appendChild(ui.el('span', 'field-help'));
     const sync = () => {
-        const kind = authKind.ctrl.value;
+        const sql = isSql(protocol.ctrl.value);
+        const kind = sql ? 'none' : authKind.ctrl.value;
+        baseUrl.hidden = sql;
+        authKind.hidden = sql;
+        headers.hidden = sql;
         headerName.hidden = kind !== 'header';
         username.hidden = kind !== 'basic';
-        secret.hidden = kind === 'none';
+        secret.hidden = !sql && kind === 'none';
+        secretHelp.textContent = sql
+            ? 'Holds the connection string. SQLite: Data Source=/path/to/file.db.'
+            : (secrets.length ? '' : 'Add one under Settings › Secrets first.');
     };
     authKind.ctrl.addEventListener('change', sync);
+    protocol.ctrl.addEventListener('change', sync);
     sync();
     body.append(name, baseUrl, protocol, authKind, headerName, username, secret, headers);
 
@@ -116,16 +136,17 @@ async function openConnectionSheet(id) {
             ui.toast(parsed.error, 'error');
             return null;
         }
-        const kind = authKind.ctrl.value;
+        const sql = isSql(protocol.ctrl.value);
+        const kind = sql ? 'none' : authKind.ctrl.value;
         return {
             name: name.ctrl.value.trim(),
-            baseUrl: baseUrl.ctrl.value.trim(),
+            baseUrl: sql ? '' : baseUrl.ctrl.value.trim(),
             protocol: protocol.ctrl.value,
             authKind: kind,
             authHeaderName: kind === 'header' ? headerName.ctrl.value.trim() : '',
             basicUsername: kind === 'basic' ? username.ctrl.value.trim() : '',
-            authSecretId: kind === 'none' ? '' : secret.ctrl.value,
-            headers: parsed.headers
+            authSecretId: sql || kind !== 'none' ? secret.ctrl.value : '',
+            headers: sql ? [] : parsed.headers
         };
     };
 
@@ -171,12 +192,12 @@ async function openConnectionSheet(id) {
 }
 
 async function testConnection(c) {
-    if (c.protocol === 'baseport') {
+    if (c.protocol === 'baseport' || isSql(c.protocol)) {
         const tables = await ui.send(`/api/_admin/connections/${c.id}/tables`, {
             method: 'GET',
             failure: 'The connection did not answer.'
         });
-        if (tables) ui.toast(`Connected. ${tables.length} published table(s).`, 'success');
+        if (tables) ui.toast(`Connected. ${tables.length} ${c.protocol === 'baseport' ? 'published ' : ''}table(s).`, 'success');
         return;
     }
     const result = await ui.send(`/api/_admin/connections/${c.id}/test`, {
@@ -187,18 +208,22 @@ async function testConnection(c) {
     if (result) ui.toast(`Connected. ${result.rows} record(s) on the first page.`, 'success');
 }
 
-async function pathField(connectionSelect) {
+async function pathField(connectionSelect, apiOnly) {
     const path = ui.field('Path', { placeholder: 'orders', mono: true, help: 'Relative to the base URL.' });
     const list = ui.el('datalist', null, { id: 'remotePathOptions' });
     path.ctrl.setAttribute('list', list.id);
     path.append(list);
     const refresh = async () => {
         list.innerHTML = '';
-        const c = connectionData.find((x) => x.id === connectionSelect.value);
-        if (!c || c.protocol !== 'baseport') return;
+        const c = connectionById(connectionSelect.value);
+        const sql = Boolean(c) && isSql(c.protocol);
+        path.querySelector('.field-label-text').textContent = sql ? 'Table' : 'Path';
+        path.querySelector('.field-help').textContent = sql ? 'From the database catalog.' : 'Relative to the base URL.';
+        apiOnly.forEach((f) => { f.hidden = sql; });
+        if (!c || (c.protocol !== 'baseport' && !sql)) return;
         const tables = await ui.send(`/api/_admin/connections/${c.id}/tables`, {
             method: 'GET',
-            failure: 'Could not list the tables on that instance.'
+            failure: 'Could not list the tables.'
         });
         (tables || []).forEach((t) => list.append(ui.el('option', null, { value: t.apiName, textContent: t.title || t.apiName })));
     };
@@ -219,9 +244,10 @@ async function openRemoteImport() {
         options: connectionData.map((c) => [c.id, c.name]),
         value: connectionData[0].id
     });
-    const path = await pathField(connection.ctrl);
     const paging = ui.field('Paging', { type: 'select', options: PAGING, value: 'auto' });
     const pointer = ui.field('Records at', { placeholder: 'Detected', mono: true, help: 'Property holding the list, such as data/items.' });
+    const path = await pathField(connection.ctrl, [paging, pointer]);
+    const choices = columnChoices([]);
     const target = ui.field('Into', {
         type: 'select',
         options: [['', 'A new table'], ...currentTables.filter((t) => !t.isProxy).map((t) => [t.id, t.name])]
@@ -229,13 +255,14 @@ async function openRemoteImport() {
     const tableName = ui.field('Table name', { placeholder: 'Taken from the connection' });
     target.ctrl.addEventListener('change', () => { tableName.hidden = !!target.ctrl.value; });
     const preview = ui.el('div');
-    body.append(connection, path, paging, pointer, target, tableName, preview);
+    body.append(connection, path, paging, pointer, target, tableName, choices.el, preview);
 
     const payload = () => ({
         connectionId: connection.ctrl.value,
         path: path.ctrl.value.trim(),
         paging: paging.ctrl.value,
         recordsPointer: pointer.ctrl.value.trim(),
+        columns: choices.value(),
         ...(target.ctrl.value ? { tableId: target.ctrl.value } : { tableName: tableName.ctrl.value.trim() || undefined })
     });
 
@@ -248,6 +275,7 @@ async function openRemoteImport() {
             failure: 'The API could not be read.'
         });
         if (!data) return;
+        choices.show(data.columns || []);
         renderImportPreview(preview, { ...data, rowCount: data.firstPageRows });
         if (!tableName.ctrl.value.trim()) tableName.ctrl.value = data.name || '';
     }), { variant: 'btn-outline' });
@@ -351,10 +379,28 @@ async function openCloneSheet(id) {
         options: connectionData.map((x) => [x.id, x.name]),
         value: c ? c.connectionId : connectionData[0].id
     });
-    const path = await pathField(connection.ctrl);
-    path.ctrl.value = c ? c.path : '';
     const paging = ui.field('Paging', { type: 'select', options: PAGING, value: c ? c.paging : 'auto' });
     const pointer = ui.field('Records at', { value: c ? c.recordsPointer : '', placeholder: 'Detected', mono: true });
+    const inconsistent = ui.switchRow('Allow an inconsistent source (SQL Server without snapshot isolation)', { checked: c ? c.allowInconsistentSource : false });
+    const path = await pathField(connection.ctrl, [paging, pointer]);
+    path.ctrl.value = c ? c.path : '';
+    const choices = columnChoices(c ? c.columns : []);
+    const columnsButton = ui.button('Columns', () => ui.busy(columnsButton, async () => {
+        const data = await ui.send('/api/_admin/imports/preview', {
+            method: 'POST',
+            body: { connectionId: connection.ctrl.value, path: path.ctrl.value.trim(), columns: choices.value() },
+            failure: 'The table could not be read.'
+        });
+        if (data) choices.show(data.columns || []);
+    }), { variant: 'btn-outline', size: 'btn-sm' });
+    const syncSql = () => {
+        const x = connectionById(connection.ctrl.value);
+        const sql = Boolean(x) && isSql(x.protocol);
+        columnsButton.hidden = !sql;
+        inconsistent.hidden = !(x && x.protocol === 'sqlserver');
+    };
+    connection.ctrl.addEventListener('change', syncSql);
+    syncSql();
     const table = ui.field('Table', {
         type: 'select',
         options: [['', 'Choose a table'], ...tables.map((t) => [t.id, t.name])],
@@ -382,7 +428,7 @@ async function openCloneSheet(id) {
     const schedule = ui.field('Schedule', { value: c ? c.schedule : '0 0 * * * *', mono: true, help: 'Cron with seconds.' });
     const enabled = ui.switchRow('Enabled', { checked: c ? c.enabled : true });
     const large = ui.switchRow('Allow a mirror to delete more than half the table', { checked: c ? c.allowLargeDeletes : false });
-    body.append(name, connection, path, paging, pointer, table, mode, key, schedule, enabled, large);
+    body.append(name, connection, path, columnsButton, choices.el, paging, pointer, table, mode, key, schedule, enabled, large, inconsistent);
     if (c) body.append(await cloneRuns(c));
 
     const actions = ui.el('div', 'form-actions');
@@ -420,7 +466,9 @@ async function openCloneSheet(id) {
                 keyField: mode.ctrl.value === 'append' ? '' : key.ctrl.value,
                 schedule: schedule.ctrl.value.trim(),
                 enabled: enabled.ctrl.checked,
-                allowLargeDeletes: large.ctrl.checked
+                allowLargeDeletes: large.ctrl.checked,
+                allowInconsistentSource: inconsistent.ctrl.checked,
+                columns: choices.value()
             },
             success: c ? 'Clone saved.' : 'Clone added.',
             failure: 'Could not save the clone.',
@@ -460,4 +508,25 @@ async function cloneRuns(c) {
     scroll.append(table);
     wrap.append(scroll);
     return wrap;
+}
+
+function columnChoices(initial) {
+    const el = ui.el('div', 'field');
+    const picked = new Map((initial || []).map((s) => [s.column, s.choice]));
+    const show = (columns) => {
+        el.innerHTML = '';
+        const open = columns.filter((col) => !col.fieldType);
+        if (!open.length) return;
+        el.append(ui.el('span', 'field-label-text', { textContent: 'Columns Baseport cannot map' }));
+        open.forEach((col) => {
+            const f = ui.field(`${col.name} (${col.sourceType})`, { type: 'select', options: COLUMN_CHOICES, value: picked.get(col.name) || '' });
+            f.ctrl.addEventListener('change', () => picked.set(col.name, f.ctrl.value));
+            el.append(f);
+        });
+    };
+    return {
+        el,
+        show,
+        value: () => [...picked].filter(([, choice]) => choice).map(([column, choice]) => ({ column, choice }))
+    };
 }

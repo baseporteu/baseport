@@ -40,6 +40,19 @@ public static class ConnectionEndpoints
             var connection = await db.Connections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
             if (connection is null) return Results.NotFound();
 
+            if (ConnectionProtocols.IsSql(connection.Protocol))
+            {
+                try
+                {
+                    var tables = await SqlSource.TablesAsync(db, connection, ctx.RequestAborted);
+                    return Results.Ok(new { tables = tables.Count });
+                }
+                catch (RemoteFetch.FetchException ex)
+                {
+                    return Results.BadRequest(new { errors = new[] { ex.Message } });
+                }
+            }
+
             var options = new RemoteFetch.Options(Text(body, "path") ?? "", Text(body, "paging") ?? "auto", Text(body, "recordsPointer"), MaxPages: 1);
             if (!RemoteFetch.Strategies.Contains(options.Paging)) return Results.BadRequest(new { errors = new[] { "Unknown paging strategy." } });
 
@@ -68,11 +81,14 @@ public static class ConnectionEndpoints
         {
             var connection = await db.Connections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
             if (connection is null) return Results.NotFound();
-            if (connection.Protocol != ConnectionProtocols.Baseport)
-                return Results.BadRequest(new { errors = new[] { "Only a Baseport connection can list its tables." } });
+            if (connection.Protocol != ConnectionProtocols.Baseport && !ConnectionProtocols.IsSql(connection.Protocol))
+                return Results.BadRequest(new { errors = new[] { "Only a Baseport or SQL connection can list its tables." } });
 
             try
             {
+                if (ConnectionProtocols.IsSql(connection.Protocol))
+                    return Results.Ok((await SqlSource.TablesAsync(db, connection, ctx.RequestAborted))
+                        .Select(t => new BaseportSource.RemoteTable(t.Display, t.Display)));
                 return Results.Ok(await BaseportSource.TablesAsync(db, clients.CreateClient(), connection, ctx.RequestAborted));
             }
             catch (RemoteFetch.FetchException ex)

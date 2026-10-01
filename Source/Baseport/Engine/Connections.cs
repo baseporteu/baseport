@@ -51,11 +51,17 @@ public static partial class Connections
         if (c.Name.Length is 0 or > 80) errors.Add("A connection needs a name of at most 80 characters.");
         else if (await db.Connections.AnyAsync(x => x.Id != c.Id && x.Name == c.Name, ct)) errors.Add($"A connection named '{c.Name}' already exists.");
 
+        if (!ConnectionProtocols.All.Contains(c.Protocol))
+        {
+            errors.Add("Protocol must be rest, odata, baseport, sqlite, sqlserver or postgres.");
+            return errors;
+        }
+        if (ConnectionProtocols.IsSql(c.Protocol)) return await SqlProblemsAsync(db, c, errors, ct);
+
         if (ProxyTarget.Problem(c.BaseUrl) is { } urlProblem) errors.Add(urlProblem);
         else if (Uri.TryCreate(c.BaseUrl, UriKind.Absolute, out var uri) && (uri.UserInfo.Length > 0 || uri.Fragment.Length > 0))
             errors.Add("The base URL cannot carry credentials or a fragment. Put credentials in a secret.");
 
-        if (!ConnectionProtocols.All.Contains(c.Protocol)) errors.Add("Protocol must be rest, odata or baseport.");
         if (!ConnectionAuth.All.Contains(c.AuthKind)) errors.Add("Authentication must be none, bearer, basic or header.");
 
         if (c.AuthKind == ConnectionAuth.None)
@@ -102,6 +108,20 @@ public static partial class Connections
                 errors.Add($"'{name}' names a secret that does not exist.");
         }
         c.HeadersJson = SerializeHeaders(headers.Select(h => h with { Name = (h.Name ?? "").Trim() }));
+        return errors;
+    }
+
+    private static async Task<IReadOnlyList<string>> SqlProblemsAsync(AppDbContext db, Connection c, List<string> errors, CancellationToken ct)
+    {
+        c.BaseUrl = "";
+        c.AuthKind = ConnectionAuth.None;
+        c.AuthHeaderName = "";
+        c.BasicUsername = "";
+        c.HeadersJson = "[]";
+        if (await db.Secrets.AsNoTracking().FirstOrDefaultAsync(s => s.Id == c.AuthSecretId, ct) is not { } secret)
+            errors.Add("Choose the secret that holds the connection string.");
+        else if (SqlSource.ConnectionStringProblem(SqlSource.Kind(c), Secrets.Unprotect(secret.ValueProtected), db.Database.GetDbConnection().DataSource) is { } problem)
+            errors.Add(problem);
         return errors;
     }
 

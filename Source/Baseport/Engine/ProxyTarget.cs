@@ -50,14 +50,20 @@ public static class ProxyTarget
         if (!Uri.TryCreate((url ?? "").Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             return "The URL must be an absolute http:// or https:// address.";
 
-        if (_allowPrivate) return null;
+        return HostProblem(uri.IdnHost);
+    }
+
+    internal static readonly AsyncLocal<bool?> AllowPrivateHere = new();
+
+    public static string? HostProblem(string host)
+    {
+        if (AllowPrivateHere.Value ?? _allowPrivate) return null;
 
         IPAddress[] addresses;
-        if (IPAddress.TryParse(uri.IdnHost, out var literal)) addresses = [literal];
+        if (IPAddress.TryParse(host, out var literal)) addresses = [literal];
         else
         {
-
-            try { addresses = Dns.GetHostAddresses(uri.IdnHost); }
+            try { addresses = Dns.GetHostAddresses(host); }
             catch (SocketException) { return "The host could not be resolved."; }
             catch (ArgumentException) { return "The host could not be resolved."; }
         }
