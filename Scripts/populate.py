@@ -24,7 +24,7 @@ Execution:
   Deterministic run via a seeded RNG. Execute via `POPULATE.sh` to supply the
   required environment.
 """
-"""
+
 import argparse
 import glob
 import json
