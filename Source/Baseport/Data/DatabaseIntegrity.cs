@@ -45,13 +45,36 @@ public static class DatabaseIntegrity
         return await CheckAsync(conn, full, ct);
     }
 
+    public static bool UncleanShutdown(string databaseFile) =>
+        databaseFile.Length == 0 || databaseFile.Contains(":memory:", StringComparison.Ordinal)
+        || new FileInfo(databaseFile + "-wal") is { Exists: true, Length: > 0 };
+
+    // a clean exit natively removes the -wal file; residual means the last process did not safely close
     public static async Task EnsureHealthyAsync(AppDbContext db)
     {
+        var source = db.Database.GetDbConnection().DataSource;
+        if (!UncleanShutdown(source)) return;
+
         var clock = Stopwatch.StartNew();
         var result = await CheckAsync(db.Database.GetDbConnection());
         if (clock.Elapsed > TimeSpan.FromSeconds(10))
-            Serilog.Log.Information("Database quick_check took {Seconds:F0} s", clock.Elapsed.TotalSeconds);
-        if (!result.Ok) throw new DatabaseCorruptException(db.Database.GetDbConnection().DataSource, result.Detail);
+            Serilog.Log.Information("Database quick_check after an unclean shutdown took {Seconds:F0} s", clock.Elapsed.TotalSeconds);
+        if (!result.Ok) throw new DatabaseCorruptException(source, result.Detail);
+    }
+
+    public static async Task WatchAsync(string databaseFile, Action stop, CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await CheckFileAsync(databaseFile, ct: ct);
+            if (result.Ok) return;
+            Serilog.Log.Fatal("Baseport is stopping. {Reason}", StartupFailure.Describe(new DatabaseCorruptException(databaseFile, result.Detail)));
+            stop();
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or SqliteException)
+        {
+            Serilog.Log.Warning(ex, "The background database check did not finish");
+        }
     }
 
     public static async Task<int> RunCliAsync(string connectionString, TextWriter output)

@@ -69,6 +69,7 @@ public sealed class DatabaseIntegrityTests : IDisposable
     {
         Fill();
         Damage();
+        await File.WriteAllBytesAsync(Db + "-wal", new byte[32], Ct);
         using var db = TestDb.Open($"Data Source={Db};Pooling=False");
 
         var ex = await Assert.ThrowsAsync<DatabaseCorruptException>(() => SchemaBootstrap.ApplyAsync(db));
@@ -77,6 +78,52 @@ public sealed class DatabaseIntegrityTests : IDisposable
         Assert.NotNull(line);
         Assert.Contains("baseport restore", line);
         Assert.DoesNotContain("\n", line);
+    }
+
+    [Fact]
+    public async Task CleanStartDoesNotWait()
+    {
+        Fill();
+        Damage();
+        using var db = TestDb.Open($"Data Source={Db};Pooling=False");
+
+        Assert.False(DatabaseIntegrity.UncleanShutdown(Db));
+        await DatabaseIntegrity.EnsureHealthyAsync(db);
+    }
+
+    [Fact]
+    public async Task LeftoverWalMeansUnclean()
+    {
+        Fill();
+        Assert.False(DatabaseIntegrity.UncleanShutdown(Db));
+
+        await File.WriteAllBytesAsync(Db + "-wal", new byte[32], Ct);
+
+        Assert.True(DatabaseIntegrity.UncleanShutdown(Db));
+        Assert.True(DatabaseIntegrity.UncleanShutdown(":memory:"));
+    }
+
+    [Fact]
+    public async Task BackgroundCheckStopsHost()
+    {
+        Fill();
+        Damage();
+        var stopped = false;
+
+        await DatabaseIntegrity.WatchAsync(Db, () => stopped = true, Ct);
+
+        Assert.True(stopped);
+    }
+
+    [Fact]
+    public async Task BackgroundCheckKeepsHealthyHost()
+    {
+        Fill();
+        var stopped = false;
+
+        await DatabaseIntegrity.WatchAsync(Db, () => stopped = true, Ct);
+
+        Assert.False(stopped);
     }
 
     [Fact]

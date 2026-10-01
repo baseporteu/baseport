@@ -128,7 +128,7 @@ The current `baseport.db`, `uploads/`, `keys/` and `baseport.key` move to `resto
 
 ### Integrity
 
-Every start runs `PRAGMA quick_check`. A damaged database stops startup with one line that names the file. `baseport check` runs the same check on demand and exits 1 on damage; `baseport doctor` reports it.
+Every start runs `PRAGMA quick_check`. After a crash or power loss (a `baseport.db-wal` file left behind), the check runs before the server listens, and a damaged database stops startup with one line that names the file. After a clean shutdown the server listens at once and the check runs in the background; damage stops the server with the same line. The check reads the whole file: about 11 seconds for a 700 MB database on disk. `baseport check` runs it on demand and exits 1 on damage; `baseport doctor` reports it.
 
 ### One instance per database
 

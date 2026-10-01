@@ -240,6 +240,9 @@ try
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {
+        if (dbSource != ":memory:" && File.Exists(dbFile))
+            _ = Task.Run(() => DatabaseIntegrity.WatchAsync(dbFile, app.Lifetime.StopApplication, app.Lifetime.ApplicationStopping));
+
         foreach (var console in AdminSurface.ConsoleUrls(app.Urls, AdminSurface.Port))
             Log.Information("Console {Url}", console);
 
