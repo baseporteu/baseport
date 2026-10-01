@@ -14,7 +14,7 @@ public static class SecretEndpoints
         {
             var name = Text(body, "name").Trim();
             var value = Text(body, "value");
-            var errors = SecretStore.NameProblems(name);
+            List<string> errors = [.. SecretStore.NameProblems(name)];
             if (SecretStore.ValueProblem(value) is { } problem) errors.Add(problem);
             if (errors.Count == 0 && await db.Secrets.AnyAsync(s => s.Name == name))
                 errors.Add($"A secret named '{name}' already exists.");

@@ -79,7 +79,7 @@ public static class TableEndpoints
             }
 
             var others = await db.Tables.Where(t => t.Id != publicId).Select(t => t.Name).ToListAsync();
-            var errs = FieldValidation.ValidateTable(table, others);
+            List<string> errs = [.. FieldValidation.ValidateTable(table, others)];
 
             if (!string.IsNullOrWhiteSpace(table.ApiName) &&
                 await db.Tables.AnyAsync(t => t.Id != publicId && t.ApiName == table.ApiName))
@@ -358,7 +358,7 @@ public static class TableEndpoints
             }
 
             var existing = await db.Tables.Select(t => t.Name).ToListAsync();
-            var tableErrors = FieldValidation.ValidateTable(table, existing);
+            List<string> tableErrors = [.. FieldValidation.ValidateTable(table, existing)];
             tableErrors.AddRange(FieldErrors(db, table));
 
             if (form["preview"].ToString() is "true" or "1")
@@ -593,7 +593,7 @@ public static class TableEndpoints
     internal static async Task<List<string>> CreateProblemsAsync(AppDbContext db, TableDefinition table)
     {
         var names = await db.Tables.Select(t => t.Name).ToListAsync();
-        var errs = FieldValidation.ValidateTable(table, names);
+        List<string> errs = [.. FieldValidation.ValidateTable(table, names)];
         errs.AddRange(FieldErrors(db, table));
         if (errs.Count > 0) return errs;
 
@@ -618,16 +618,16 @@ public static class TableEndpoints
         return errs;
     }
 
-    private static async Task<(List<System.Text.Json.Nodes.JsonObject> Rows, string? Error)> ReadUploadAsync(IFormFile file, CancellationToken ct)
+    private static async Task<(IReadOnlyList<System.Text.Json.Nodes.JsonObject> Rows, string? Error)> ReadUploadAsync(IFormFile file, CancellationToken ct)
     {
         if (file.Length > DefinitionImport.MaxBytes)
-            return (new(), $"The file is larger than {DefinitionImport.MaxBytes / (1024 * 1024)} MB. Split it and import the parts.");
+            return ([], $"The file is larger than {DefinitionImport.MaxBytes / (1024 * 1024)} MB. Split it and import the parts.");
         using var buffer = new MemoryStream();
         await using (var stream = file.OpenReadStream()) await stream.CopyToAsync(buffer, ct);
         return DefinitionImport.Parse(buffer.ToArray(), file.FileName);
     }
 
-    private static List<string> RowErrorText(List<DefinitionImport.RowError> rowErrors)
+    private static List<string> RowErrorText(IReadOnlyList<DefinitionImport.RowError> rowErrors)
     {
         var lines = new List<string> { $"{rowErrors.Count} row(s) could not be imported, nothing was written." };
         lines.AddRange(rowErrors.Select(e => $"Row {e.Row}: {string.Join(" ", e.Errors)}"));

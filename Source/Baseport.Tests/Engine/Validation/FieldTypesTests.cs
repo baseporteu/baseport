@@ -11,7 +11,7 @@ public class FieldValidationNewTypesTests
     private static FieldDefinition Field(string type, double? min = null, double? max = null, string optionsJson = "{}") =>
         new() { Id = Ids.NewShortId(12), Name = "F", DataType = type, Min = min, Max = max, OptionsJson = optionsJson };
 
-    private static List<string> Validate(FieldDefinition f, JsonNode? value) =>
+    private static IReadOnlyList<string> Validate(FieldDefinition f, JsonNode? value) =>
         FieldValidation.ValidateFieldValue(f, value, (_, _) => true);
 
     [Theory]

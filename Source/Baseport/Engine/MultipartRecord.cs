@@ -24,7 +24,7 @@ public static class MultipartRecord
                 await FileStore.WriteAsync(file, name, ctx.RequestAborted);
     }
 
-    public static async Task<(JsonObject Obj, List<string> Errors)> FromRequestAsync(HttpContext ctx, List<FieldDefinition> fields)
+    public static async Task<(JsonObject Obj, IReadOnlyList<string> Errors)> FromRequestAsync(HttpContext ctx, List<FieldDefinition> fields)
     {
         if (!ctx.Request.HasFormContentType)
         {

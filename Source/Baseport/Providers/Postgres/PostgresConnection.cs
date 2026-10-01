@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Buffers.Binary;
 using System.Net.Sockets;
 using System.Text;
@@ -134,7 +135,7 @@ public static class PostgresConnection
 
     private static readonly Regex ShowStatement = new(@"^\s*SHOW\s+(?<name>[A-Za-z_][A-Za-z0-9_\s]*?)\s*;?\s*$", RegexOptions.IgnoreCase);
 
-    private static readonly Dictionary<string, (string Column, string Value)> Settings = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenDictionary<string, (string Column, string Value)> Settings = new Dictionary<string, (string Column, string Value)>(StringComparer.OrdinalIgnoreCase)
     {
         ["search_path"] = ("search_path", "public"),
         ["transaction isolation level"] = ("transaction_isolation", "read committed"),
@@ -145,7 +146,7 @@ public static class PostgresConnection
         ["datestyle"] = ("DateStyle", "ISO, MDY"),
         ["timezone"] = ("TimeZone", "UTC"),
         ["integer_datetimes"] = ("integer_datetimes", "on"),
-    };
+    }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     private static SqlEngine.Result? ShowResult(string sql)
     {
@@ -391,7 +392,7 @@ public static class PostgresConnection
         return output.ToString();
     }
 
-    private static readonly HashSet<string> TwoWordTypes = new(StringComparer.OrdinalIgnoreCase) { "varying", "precision" };
+    private static readonly FrozenSet<string> TwoWordTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "varying", "precision" }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private static async Task HandleDescribeAsync(NetworkStream stream, byte[] payload, IServiceScopeFactory scopes, Dictionary<string, Portal> portals, UserAccount caller, CancellationToken ct)
     {
@@ -601,7 +602,7 @@ public static class PostgresConnection
         return WriteMessageAsync(stream, (byte)'E', ms.ToArray(), ct);
     }
 
-    private static Task WriteRowDescriptionAsync(NetworkStream stream, List<string> columns, CancellationToken ct)
+    private static Task WriteRowDescriptionAsync(NetworkStream stream, IReadOnlyList<string> columns, CancellationToken ct)
     {
         using var ms = new MemoryStream();
         WriteI16(ms, (short)columns.Count);
@@ -618,7 +619,7 @@ public static class PostgresConnection
         return WriteMessageAsync(stream, (byte)'T', ms.ToArray(), ct);
     }
 
-    private static Task WriteDataRowAsync(NetworkStream stream, List<string?> row, CancellationToken ct)
+    private static Task WriteDataRowAsync(NetworkStream stream, IReadOnlyList<string?> row, CancellationToken ct)
     {
         using var ms = new MemoryStream();
         WriteI16(ms, (short)row.Count);

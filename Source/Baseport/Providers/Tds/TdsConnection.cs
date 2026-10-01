@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Buffers.Binary;
 using System.Net.Sockets;
 using System.Text;
@@ -83,7 +84,7 @@ public static class TdsConnection
 
     private static readonly Regex TopClause = new(@"^\s*SELECT\s+TOP\s*\(?\s*(?<n>\d+)\s*\)?\s+", RegexOptions.IgnoreCase);
 
-    private static readonly Dictionary<string, string> ServerVariables = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenDictionary<string, string> ServerVariables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["version"] = "'Microsoft SQL Server 2019 - 15.0.0 (Baseport)'",
         ["servername"] = "'baseport'",
@@ -98,7 +99,7 @@ public static class TdsConnection
         ["nestlevel"] = "0",
         ["fetch_status"] = "0",
         ["identity"] = "NULL",
-    };
+    }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     private static string RewriteServerVariables(string sql) =>
         sql.Contains("@@", StringComparison.Ordinal)
@@ -379,7 +380,7 @@ public static class TdsConnection
         WriteU64LE(ms, rowCount);
     }
 
-    private static void WriteColMetadata(MemoryStream ms, List<string> columns)
+    private static void WriteColMetadata(MemoryStream ms, IReadOnlyList<string> columns)
     {
         ms.WriteByte(0x81);
         if (columns.Count == 0) { WriteU16LE(ms, 0xFFFF); return; }
@@ -399,7 +400,7 @@ public static class TdsConnection
         }
     }
 
-    private static void WriteRow(MemoryStream ms, List<string?> row)
+    private static void WriteRow(MemoryStream ms, IReadOnlyList<string?> row)
     {
         ms.WriteByte(0xD1);
         foreach (var value in row)

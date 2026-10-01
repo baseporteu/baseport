@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -24,8 +25,8 @@ public static class JsExpr
     private sealed class TernaryN : Node { public Node C = null!; public Node T = null!; public Node E = null!; }
     private sealed class MethodVal { public object Target = null!; public string Name = ""; }
 
-    private static readonly HashSet<string> Builtins = new()
-        { "round", "abs", "floor", "ceil", "sqrt", "pow", "min", "max", "sign", "trunc", "Number", "String", "GETDATE", "encodeURIComponent", "SUM" };
+    private static readonly FrozenSet<string> Builtins = new HashSet<string>()
+        { "round", "abs", "floor", "ceil", "sqrt", "pow", "min", "max", "sign", "trunc", "Number", "String", "GETDATE", "encodeURIComponent", "SUM" }.ToFrozenSet();
 
     public sealed class ValidationResult
     {

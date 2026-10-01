@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
@@ -21,18 +22,18 @@ public static class SqlEngine
 
     public const int MaxRows = 200;
 
-    private static readonly HashSet<string> IntrospectionPragmas = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenSet<string> IntrospectionPragmas = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "table_info", "table_xinfo", "table_list", "index_list", "index_info", "index_xinfo",
         "foreign_key_list", "foreign_key_check", "integrity_check", "quick_check"
-    };
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly HashSet<string> ReadablePragmas = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenSet<string> ReadablePragmas = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "user_version", "schema_version", "application_id", "page_count", "page_size", "freelist_count",
         "journal_mode", "encoding", "database_list", "collation_list", "function_list", "pragma_list",
         "module_list", "compile_options", "data_version", "foreign_keys"
-    };
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     // console pragmas may only read
     private static readonly SQLitePCL.delegate_authorizer ReadOnlyPragmas = (_, action, name, argument, _, _) =>
@@ -46,7 +47,7 @@ public static class SqlEngine
 
     internal static TimeSpan StatementDeadline = TimeSpan.FromSeconds(10);
 
-    public sealed record Result(List<string> Columns, List<List<string?>> Rows, bool Truncated, string? Error);
+    public sealed record Result(IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<string?>> Rows, bool Truncated, string? Error);
 
     private static void Pragma(System.Data.Common.DbConnection conn, string pragma)
     {

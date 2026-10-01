@@ -10,7 +10,7 @@ public static class ApiLinks
 {
     public const string ExpandParameter = "expand";
 
-    public sealed record Relation(FieldDefinition Field, TableDefinition Target, List<FieldDefinition> TargetFields);
+    public sealed record Relation(FieldDefinition Field, TableDefinition Target, IReadOnlyList<FieldDefinition> TargetFields);
 
     public sealed record RecordExtras(JsonObject Links, JsonObject? Expanded);
 
@@ -18,7 +18,7 @@ public static class ApiLinks
 
     public static string Self(string apiName, string recordId) => $"/api/v1/{apiName}/records/{recordId}";
 
-    public static async Task<List<Relation>> RelationsAsync(AppDbContext db, IEnumerable<FieldDefinition> fields, CancellationToken token = default)
+    public static async Task<IReadOnlyList<Relation>> RelationsAsync(AppDbContext db, IEnumerable<FieldDefinition> fields, CancellationToken token = default)
     {
         var references = fields
             .Where(f => FieldValidation.NormalizeType(f.DataType) == "reference")
@@ -42,7 +42,7 @@ public static class ApiLinks
         return relations;
     }
 
-    public static (List<Relation> Expand, string? Error) ParseExpand(string? expand, IReadOnlyList<Relation> relations)
+    public static (IReadOnlyList<Relation> Expand, string? Error) ParseExpand(string? expand, IReadOnlyList<Relation> relations)
     {
         var chosen = new List<Relation>();
         foreach (var name in (expand ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.Ordinal))

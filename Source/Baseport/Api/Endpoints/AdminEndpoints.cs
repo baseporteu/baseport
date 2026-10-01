@@ -794,7 +794,7 @@ public static class AdminEndpoints
         return null;
     }
 
-    private static List<string> InvalidAccountFields(List<string> errors)
+    private static List<string> InvalidAccountFields(IReadOnlyList<string> errors)
     {
         var invalid = new List<string>();
         if (errors.Any(e => e.StartsWith("Username", StringComparison.Ordinal))) invalid.Add("username");

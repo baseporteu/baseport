@@ -7,7 +7,7 @@ namespace Baseport.Tests;
 
 public class DefinitionImportTests
 {
-    private static (List<JsonObject> Rows, string? Error) Parse(string text, string name) =>
+    private static (IReadOnlyList<JsonObject> Rows, string? Error) Parse(string text, string name) =>
         DefinitionImport.Parse(Encoding.UTF8.GetBytes(text), name);
 
     private static string TypeOf(IEnumerable<OpenApiProxy.FieldProp> props, string name) =>

@@ -285,8 +285,8 @@ public static class OidcEndpoints
 
     private static string Door(bool console) => console ? "Console" : "End-user";
 
-    public static Task<List<OidcButton>> OfferedAsync(AppDbContext db, bool console) =>
-        db.OidcProviders
+    public static async Task<IReadOnlyList<OidcButton>> OfferedAsync(AppDbContext db, bool console) =>
+        await db.OidcProviders
             .Where(p => p.IsEnabled && (console ? p.ConsoleEnabled : p.PublicEnabled))
             .OrderBy(p => p.Position).ThenBy(p => p.Name)
             .Select(p => new OidcButton(p.Slug, p.Name))

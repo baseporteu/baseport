@@ -7,9 +7,9 @@ namespace Baseport;
 
 public static class OpenApiProxy
 {
-    public record OpInfo(string Path, string Method, string Summary, string OperationId, List<PathParam> PathParams, List<FieldProp> Props, List<string> QueryParams);
-    public record PathParam(string Name, bool Required, string Type, string? EnumValue, string Default);
-    public record FieldProp(string Name, string Type, string Format, List<string> EnumValues, bool Required);
+    public sealed record OpInfo(string Path, string Method, string Summary, string OperationId, IReadOnlyList<PathParam> PathParams, IReadOnlyList<FieldProp> Props, IReadOnlyList<string> QueryParams);
+    public sealed record PathParam(string Name, bool Required, string Type, string? EnumValue, string Default);
+    public sealed record FieldProp(string Name, string Type, string Format, IReadOnlyList<string> EnumValues, bool Required);
 
     private static string BaseUrl(string specUrl, string? specJson)
     {
@@ -28,9 +28,9 @@ public static class OpenApiProxy
     private static string SpecOrigin(string specUrl) =>
         Uri.TryCreate(specUrl, UriKind.Absolute, out var uri) ? $"{uri.Scheme}://{uri.Authority}" : "";
 
-    public static async Task<(List<OpInfo> Ops, string BaseUrl, string? Error)> FetchOperationsAsync(HttpClient http, string specUrl)
+    public static async Task<(IReadOnlyList<OpInfo> Ops, string BaseUrl, string? Error)> FetchOperationsAsync(HttpClient http, string specUrl)
     {
-        if (ProxyTarget.Problem(specUrl) is { } blocked) return (new(), "", blocked);
+        if (ProxyTarget.Problem(specUrl) is { } blocked) return ([], "", blocked);
 
         string? json;
         try
@@ -38,16 +38,16 @@ public static class OpenApiProxy
             using var req = new HttpRequestMessage(HttpMethod.Get, specUrl);
             req.Headers.Accept.ParseAdd("application/json");
             using var resp = await http.SendAsync(req);
-            if (!resp.IsSuccessStatusCode) return (new(), "", $"Could not fetch spec ({resp.StatusCode}).");
+            if (!resp.IsSuccessStatusCode) return ([], "", $"Could not fetch spec ({resp.StatusCode}).");
             json = await resp.Content.ReadAsStringAsync();
         }
-        catch (Exception ex) { return (new(), "", $"Could not fetch spec: {ex.Message}"); }
+        catch (Exception ex) { return ([], "", $"Could not fetch spec: {ex.Message}"); }
 
         JsonNode? root;
         try { root = JsonNode.Parse(json!); }
-        catch (Exception ex) { return (new(), "", $"Spec is not valid JSON: {ex.Message}"); }
+        catch (Exception ex) { return ([], "", $"Spec is not valid JSON: {ex.Message}"); }
         if (root is not JsonObject rootObj || (rootObj["openapi"] is null && rootObj["swagger"] is null))
-            return (new(), "", "Not an OpenAPI/Swagger document.");
+            return ([], "", "Not an OpenAPI/Swagger document.");
 
         var ops = new List<OpInfo>();
         if (rootObj["paths"] is JsonObject paths)
@@ -126,9 +126,9 @@ public static class OpenApiProxy
         return props;
     }
 
-    public static async Task<(List<FieldProp> Props, string? Error)> SampleFieldsAsync(HttpClient http, string url, string token, int limit = 20)
+    public static async Task<(IReadOnlyList<FieldProp> Props, string? Error)> SampleFieldsAsync(HttpClient http, string url, string token, int limit = 20)
     {
-        if (ProxyTarget.Problem(url) is { } blocked) return (new(), blocked);
+        if (ProxyTarget.Problem(url) is { } blocked) return ([], blocked);
 
         var probe = url;
         if (!probe.Contains('?')) probe += "?$top=" + limit;
@@ -144,14 +144,14 @@ public static class OpenApiProxy
             var raw = await resp.Content.ReadAsStringAsync();
             Serilog.Log.Information("Proxy sample GET {Url} -> {Status}", ProxyLog.Redact(probe), (int)resp.StatusCode);
             if (!resp.IsSuccessStatusCode)
-                return (new(), $"Could not read a sample record ({(int)resp.StatusCode}). {TryParseError(raw) ?? ""}".Trim());
+                return ([], $"Could not read a sample record ({(int)resp.StatusCode}). {TryParseError(raw) ?? ""}".Trim());
             body = TryParseJson(raw);
         }
-        catch (HttpRequestException ex) { return (new(), $"Could not reach the endpoint: {ex.Message}"); }
-        catch (TaskCanceledException) { return (new(), "The endpoint timed out."); }
+        catch (HttpRequestException ex) { return ([], $"Could not reach the endpoint: {ex.Message}"); }
+        catch (TaskCanceledException) { return ([], "The endpoint timed out."); }
 
         var sampled = Records(body);
-        if (sampled.Count == 0) return (new(), "The endpoint returned no records to infer fields from.");
+        if (sampled.Count == 0) return ([], "The endpoint returned no records to infer fields from.");
         return (DefinitionImport.InferFields(sampled, detectChoices: false), null);
     }
 
@@ -167,7 +167,7 @@ public static class OpenApiProxy
         return obj.Any(kv => kv.Value is JsonValue) ? obj : null;
     }
 
-    public static List<JsonObject> Records(JsonNode? body)
+    public static IReadOnlyList<JsonObject> Records(JsonNode? body)
     {
         if (body is JsonArray top) return top.OfType<JsonObject>().ToList();
         if (body is not JsonObject obj) return new List<JsonObject>();

@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.Json;
 using Cronos;
 using Microsoft.Data.Sqlite;
@@ -43,7 +44,7 @@ public static class Jobs
             FileDeletionsAsync),
     };
 
-    private static readonly Dictionary<string, JobDef> ByKey = All.ToDictionary(j => j.Key);
+    private static readonly FrozenDictionary<string, JobDef> ByKey = All.ToFrozenDictionary(j => j.Key);
 
     public static JobDef? Find(string key) => ByKey.GetValueOrDefault(key);
 

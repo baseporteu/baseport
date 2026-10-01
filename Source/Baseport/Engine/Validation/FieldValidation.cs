@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -75,7 +76,7 @@ public static class FieldValidation
         return false;
     }
 
-    public static List<string> ParseOptions(string optionsJson)
+    public static IReadOnlyList<string> ParseOptions(string optionsJson)
     {
         try
         {
@@ -120,7 +121,7 @@ public static class FieldValidation
         catch (JsonException) { return []; }
     }
 
-    public static List<string> ValidateFieldValue(FieldDefinition f, JsonNode? v, Func<FieldDefinition, string, bool> recordExists) =>
+    public static IReadOnlyList<string> ValidateFieldValue(FieldDefinition f, JsonNode? v, Func<FieldDefinition, string, bool> recordExists) =>
         ValidateFieldValue(f, v, recordExists, 0);
 
     private static List<string> ValidateFieldValue(FieldDefinition f, JsonNode? v, Func<FieldDefinition, string, bool> recordExists, int depth)
@@ -311,7 +312,7 @@ public static class FieldValidation
         return errs;
     }
 
-    public static List<string> ValidateFieldDefinition(FieldDefinition f, IReadOnlyCollection<string> otherNames, IReadOnlyCollection<string> allNames, Func<string, bool> tableExists) =>
+    public static IReadOnlyList<string> ValidateFieldDefinition(FieldDefinition f, IReadOnlyCollection<string> otherNames, IReadOnlyCollection<string> allNames, Func<string, bool> tableExists) =>
         ValidateFieldDefinition(f, otherNames, allNames, tableExists, 0);
 
     private static List<string> ValidateFieldDefinition(FieldDefinition f, IReadOnlyCollection<string> otherNames, IReadOnlyCollection<string> allNames, Func<string, bool> tableExists, int depth)
@@ -501,7 +502,7 @@ public static class FieldValidation
         }
     }
 
-    public static List<string> ValidateActionDef(ActionDef action, IReadOnlyCollection<FieldDefinition> fields)
+    public static IReadOnlyList<string> ValidateActionDef(ActionDef action, IReadOnlyCollection<FieldDefinition> fields)
     {
         var errs = new List<string>();
         if (string.IsNullOrWhiteSpace(action.Name)) errs.Add("Action name is required.");
@@ -579,7 +580,7 @@ public static class FieldValidation
         return errs;
     }
 
-    public static List<string> ValidateLayout(FormConfig form, IReadOnlyCollection<FieldDefinition> fields)
+    public static IReadOnlyList<string> ValidateLayout(FormConfig form, IReadOnlyCollection<FieldDefinition> fields)
     {
         var errs = new List<string>();
         if (string.IsNullOrWhiteSpace(form.Title)) errs.Add("Form title is required.");
@@ -700,7 +701,7 @@ public static class FieldValidation
         return errs;
     }
 
-    public static List<string> ValidateTable(TableDefinition table, IReadOnlyCollection<string> existingNames)
+    public static IReadOnlyList<string> ValidateTable(TableDefinition table, IReadOnlyCollection<string> existingNames)
     {
         var errs = new List<string>();
         if (string.IsNullOrWhiteSpace(table.Name)) errs.Add("Table name is required.");
@@ -749,15 +750,15 @@ public static class FieldValidation
 
     public static bool IsApiName(string value) => ApiNamePattern.IsMatch(value);
 
-    private static readonly HashSet<string> ReservedApiNames =
-        new(StringComparer.OrdinalIgnoreCase) { "api", "v1", "openapi", "openapi.json", "tables", "forms", "auth", "admin" };
+    private static readonly FrozenSet<string> ReservedApiNames =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "api", "v1", "openapi", "openapi.json", "tables", "forms", "auth", "admin" }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private static bool IsHttpUrl(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == "http" || uri.Scheme == "https");
 
     public static string DisplayName(FieldDefinition f) => string.IsNullOrWhiteSpace(f.Label) ? f.Name : f.Label;
 
-    public static List<string> ValidateForm(FormConfig form, IReadOnlyCollection<FieldDefinition> fields)
+    public static IReadOnlyList<string> ValidateForm(FormConfig form, IReadOnlyCollection<FieldDefinition> fields)
     {
         var errs = new List<string>();
         if (string.IsNullOrWhiteSpace(form.Title)) errs.Add("Form title is required.");

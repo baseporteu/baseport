@@ -14,7 +14,7 @@ public static partial class SecretStore
 
     public static SecretDto Dto(Secret s) => new(s.Id, s.Name, s.CreatedAt, s.UpdatedAt, s.LastUsedAt);
 
-    public static List<string> NameProblems(string name)
+    public static IReadOnlyList<string> NameProblems(string name)
     {
         var errors = new List<string>();
         if (!NamePattern().IsMatch(name)) errors.Add("A secret name is 2 to 63 characters of lower-case letters, digits and hyphens, starting with a letter.");

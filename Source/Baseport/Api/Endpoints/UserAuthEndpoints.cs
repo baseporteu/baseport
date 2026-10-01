@@ -52,7 +52,7 @@ public static class UserAuthEndpoints
 
             if (username.Length == 0) username = DeriveUsername(email);
 
-            var errors = AccountValidation.Validate(username, email);
+            List<string> errors = [.. AccountValidation.Validate(username, email)];
             if (AccountValidation.PasswordProblem(password) is { } problem) errors.Add(problem);
             if (errors.Count > 0) return ApiProblems.Write(ctx, ApiProblem.Unprocessable, errors);
 

@@ -1,9 +1,11 @@
+using System.Collections.Frozen;
+
 namespace Baseport;
 
 public static class FileStore
 {
-    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
-        { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf", ".txt", ".csv", ".json", ".zip" };
+    private static readonly FrozenSet<string> AllowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf", ".txt", ".csv", ".json", ".zip" }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     public const long MaxBytes = 25 * 1024 * 1024;
 

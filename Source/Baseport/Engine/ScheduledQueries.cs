@@ -8,7 +8,7 @@ public static class ScheduledQueries
 
     public static string? WebhookProblem(string url) => url.Length == 0 ? null : ProxyTarget.Problem(url);
 
-    public static async Task<List<SavedQuery>> DueAsync(AppDbContext db, DateTime now, CancellationToken ct) =>
+    public static async Task<IReadOnlyList<SavedQuery>> DueAsync(AppDbContext db, DateTime now, CancellationToken ct) =>
         await db.SavedQueries
             .Where(q => q.ScheduleEnabled && q.Schedule != "" && q.NextRunAt != null && q.NextRunAt <= now)
             .ToListAsync(ct);

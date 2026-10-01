@@ -40,7 +40,7 @@ public static partial class Connections
     public static ConnectionDto Dto(Connection c) =>
         new(c.Id, c.Name, c.BaseUrl, c.Protocol, c.AuthKind, c.AuthHeaderName, c.BasicUsername, c.AuthSecretId, Headers(c), c.CreatedAt, c.UpdatedAt);
 
-    public static async Task<List<string>> ProblemsAsync(AppDbContext db, Connection c, CancellationToken ct = default)
+    public static async Task<IReadOnlyList<string>> ProblemsAsync(AppDbContext db, Connection c, CancellationToken ct = default)
     {
         var errors = new List<string>();
         c.Name = c.Name.Trim();

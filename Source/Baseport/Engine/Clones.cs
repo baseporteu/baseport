@@ -15,7 +15,7 @@ public static class Clones
         c.Id, c.Name, c.ConnectionId, c.Path, c.Paging, c.RecordsPointer, c.TableId, c.Mode, c.KeyField, c.Schedule,
         c.Enabled, c.AllowLargeDeletes, c.NextRunAt, c.LastRunAt, c.LastRunId, c.CreatedAt, c.UpdatedAt);
 
-    public static async Task<List<string>> ProblemsAsync(AppDbContext db, Clone c, CancellationToken ct = default)
+    public static async Task<IReadOnlyList<string>> ProblemsAsync(AppDbContext db, Clone c, CancellationToken ct = default)
     {
         var errors = new List<string>();
         c.Name = c.Name.Trim();

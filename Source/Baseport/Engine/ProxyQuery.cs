@@ -13,7 +13,7 @@ public readonly record struct ProxyFailure(ApiProblem Problem, string Detail)
 
 public static class ProxyQuery
 {
-    public sealed record Page(List<JsonObject> Records, int Total, bool Remote);
+    public sealed record Page(IReadOnlyList<JsonObject> Records, int Total, bool Remote);
 
     public static bool CanRead(TableDefinition table) => !string.IsNullOrWhiteSpace(table.ProxyReadUrl);
 
@@ -144,7 +144,7 @@ public static class ProxyQuery
         }
     }
 
-    internal static List<JsonObject> Sorted(List<JsonObject> records, FieldDefinition? sortField, bool descending)
+    internal static IReadOnlyList<JsonObject> Sorted(IReadOnlyList<JsonObject> records, FieldDefinition? sortField, bool descending)
     {
         if (sortField is null) return records;
         var key = (JsonObject r) => Text(r[sortField.Name]);

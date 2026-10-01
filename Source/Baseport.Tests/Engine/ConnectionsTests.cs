@@ -44,7 +44,7 @@ public class ConnectionsTests : IDisposable
 
     private static string Headers(params Connections.HeaderSpec[] headers) => Connections.SerializeHeaders(headers);
 
-    private Task<List<string>> Problems(Connection c) => Connections.ProblemsAsync(_db, c, TestContext.Current.CancellationToken);
+    private Task<IReadOnlyList<string>> Problems(Connection c) => Connections.ProblemsAsync(_db, c, TestContext.Current.CancellationToken);
 
     [Fact]
     public async Task PlainConnectionIsValid()

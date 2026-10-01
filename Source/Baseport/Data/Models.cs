@@ -13,7 +13,7 @@ public static class Ids
     public static string NewShortId(int length = 10) => RandomNumberGenerator.GetString(Alphabet, length);
 }
 
-public class TableDefinition
+public sealed class TableDefinition
 {
 
     public string Id { get; set; } = "";
@@ -49,7 +49,7 @@ public class TableDefinition
     public List<FieldDefinition> Fields { get; set; } = new();
 }
 
-public class FieldDefinition
+public sealed class FieldDefinition
 {
     public string Id { get; set; } = "";
     public string TableId { get; set; } = "";
@@ -94,7 +94,7 @@ public static class FormActions
 
     public static readonly string[] All = { Submit, Lookup };
 
-    public static List<string> Parse(string? stored)
+    public static IReadOnlyList<string> Parse(string? stored)
     {
         var parsed = (stored ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -112,7 +112,7 @@ public static class ApiMethods
 {
     public static readonly string[] All = { "GET", "POST", "PATCH", "PUT", "DELETE" };
 
-    public static List<string> Parse(string? stored) =>
+    public static IReadOnlyList<string> Parse(string? stored) =>
         (stored ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(m => m.ToUpperInvariant())
@@ -151,7 +151,7 @@ public static class AccountRoles
     }
 }
 
-public class FormConfig
+public sealed class FormConfig
 {
     public string Id { get; set; } = "";
     public string TableId { get; set; } = "";
@@ -167,7 +167,7 @@ public class FormConfig
     public DateTime UpdatedAt { get; set; }
 }
 
-public class ActionDef
+public sealed class ActionDef
 {
     public string Id { get; set; } = "";
     public string TableId { get; set; } = "";
@@ -196,7 +196,7 @@ public static class ActionTriggers
     };
 }
 
-public class PendingActionRun
+public sealed class PendingActionRun
 {
     public string Id { get; set; } = "";
     public string ActionDefId { get; set; } = "";
@@ -219,7 +219,7 @@ public static class ActionRunStatus
     public const string Failed = "failed";
 }
 
-public class Record
+public sealed class Record
 {
     public string Id { get; set; } = "";
     public string TableId { get; set; } = "";
@@ -228,7 +228,7 @@ public class Record
     public DateTime UpdatedAt { get; set; }
 }
 
-public class UserAccount
+public sealed class UserAccount
 {
     public string Id { get; set; } = "";
     public string Username { get; set; } = "";
@@ -257,7 +257,7 @@ public class UserAccount
     public long TotpLastStep { get; set; }
 }
 
-public class Clone
+public sealed class Clone
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
@@ -286,7 +286,7 @@ public static class CloneModes
     public static readonly string[] All = [Append, Upsert, Mirror];
 }
 
-public class ImportRun
+public sealed class ImportRun
 {
     public string Id { get; set; } = "";
     public string Kind { get; set; } = ImportRunKinds.Import;
@@ -325,7 +325,7 @@ public static class ImportRunStatus
     public const string Failed = "failed";
 }
 
-public class Connection
+public sealed class Connection
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
@@ -357,7 +357,7 @@ public static class ConnectionAuth
     public static readonly string[] All = [None, Bearer, Basic, Header];
 }
 
-public class Secret
+public sealed class Secret
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
@@ -367,7 +367,7 @@ public class Secret
     public DateTime? LastUsedAt { get; set; }
 }
 
-public class Bucket
+public sealed class Bucket
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
@@ -387,7 +387,7 @@ public static class BucketMethods
 
     public const string Default = "GET,POST,DELETE";
 
-    public static List<string> Parse(string? stored) =>
+    public static IReadOnlyList<string> Parse(string? stored) =>
         (stored ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(m => m.ToUpperInvariant())
@@ -403,7 +403,7 @@ public static class BucketMethods
         return Parse(bucket.ApiMethods).Contains(m) && ApiMethods.Parse(caller.ApiTokenMethods).Contains(m);
     }
 
-    public static List<string> ContentTypes(Bucket bucket) =>
+    public static IReadOnlyList<string> ContentTypes(Bucket bucket) =>
         bucket.ContentTypes
             .Split([',', ' ', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(t => t.ToLowerInvariant())
@@ -419,7 +419,7 @@ public static class BucketMethods
     }
 }
 
-public class OidcProvider
+public sealed class OidcProvider
 {
     public string Id { get; set; } = "";
 
@@ -444,7 +444,7 @@ public class OidcProvider
     public DateTime UpdatedAt { get; set; }
 }
 
-public class UserSession
+public sealed class UserSession
 {
     public string Id { get; set; } = "";
     public string UserId { get; set; } = "";
@@ -453,7 +453,7 @@ public class UserSession
     public DateTime ExpiresAt { get; set; }
 }
 
-public class SavedQuery
+public sealed class SavedQuery
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
@@ -472,7 +472,7 @@ public class SavedQuery
     public string LastResult { get; set; } = "";
 }
 
-public class AppSettings
+public sealed class AppSettings
 {
     public int Id { get; set; } = 1;
     public string AppName { get; set; } = "Baseport";
@@ -530,7 +530,7 @@ public class AppSettings
     public string TdsBindAddress { get; set; } = "127.0.0.1";
 }
 
-public class AuditLog
+public sealed class AuditLog
 {
     public string Id { get; set; } = "";
     public DateTime CreatedAt { get; set; }
@@ -544,7 +544,7 @@ public class AuditLog
     public string ClientIp { get; set; } = "";
 }
 
-public class JobConfig
+public sealed class JobConfig
 {
     public string Key { get; set; } = "";
     public string Name { get; set; } = "";

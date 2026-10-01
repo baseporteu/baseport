@@ -22,7 +22,7 @@ public static class AccountValidation
         _ => null
     };
 
-    public static List<string> Validate(string username, string email)
+    public static IReadOnlyList<string> Validate(string username, string email)
     {
         var errors = new List<string>();
 

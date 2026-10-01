@@ -15,7 +15,7 @@ public static class QueryEngine
 
     public static readonly string[] FilterOperators = { "eq", "ne", "gt", "lt", "contains" };
 
-    public static List<Filter> ParseFilters(IReadOnlyList<FieldDefinition> fields, JsonNode? node)
+    public static IReadOnlyList<Filter> ParseFilters(IReadOnlyList<FieldDefinition> fields, JsonNode? node)
     {
         var result = new List<Filter>();
         if (node is not JsonArray arr) return result;
@@ -235,7 +235,7 @@ public static class QueryEngine
     private static string EscapeLike(string term) =>
         term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
-    public static List<FieldDefinition> Resolve(IReadOnlyList<FieldDefinition> fields, JsonNode? names)
+    public static IReadOnlyList<FieldDefinition> Resolve(IReadOnlyList<FieldDefinition> fields, JsonNode? names)
     {
         if (names is not JsonArray arr) return new List<FieldDefinition>();
         var wanted = arr.Select(n => n?.GetValue<string>() ?? "").Where(s => s.Length > 0).ToList();

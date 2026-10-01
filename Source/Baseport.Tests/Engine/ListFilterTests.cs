@@ -54,7 +54,7 @@ public class ListFilterTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private List<QueryEngine.Filter> Filters(string json) =>
+    private IReadOnlyList<QueryEngine.Filter> Filters(string json) =>
         QueryEngine.ParseFilters(_fields, JsonNode.Parse(json));
 
     private Task<QueryEngine.ListPage> List(string? search, IReadOnlyList<QueryEngine.Filter> filters) =>

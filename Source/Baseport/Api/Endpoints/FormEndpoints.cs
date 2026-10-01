@@ -135,7 +135,7 @@ $$"""
             var (form, table, fields) = await LoadAsync(db, fpid);
             if (form is null || table is null) return Results.NotFound();
 
-            List<FieldDefinition> visible;
+            IReadOnlyList<FieldDefinition> visible;
             if (form.Kind == FormKinds.List)
             {
                 visible = ListColumns(form, fields);
@@ -143,11 +143,12 @@ $$"""
             else
             {
                 var actions = FormActions.Parse(form.Actions);
-                visible = new List<FieldDefinition>();
+                var shown = new List<FieldDefinition>();
                 if (actions.Contains(FormActions.Submit))
-                    visible.AddRange(fields.Where(f => !f.IsHidden && FieldValidation.NormalizeType(f.DataType) != "derived"));
+                    shown.AddRange(fields.Where(f => !f.IsHidden && FieldValidation.NormalizeType(f.DataType) != "derived"));
                 if (actions.Contains(FormActions.Lookup))
-                    visible.AddRange(LookupResultFields(form, fields).Where(f => !visible.Contains(f)));
+                    shown.AddRange(LookupResultFields(form, fields).Where(f => !shown.Contains(f)));
+                visible = shown;
             }
             var childTables = new List<object>();
             foreach (var childId in ChildTableIdsInLayout(form.LayoutJson))
@@ -549,13 +550,13 @@ $$"""
         return (form, table, fields);
     }
 
-    private static List<FieldDefinition> LookupResultFields(FormConfig form, List<FieldDefinition> fields)
+    private static IReadOnlyList<FieldDefinition> LookupResultFields(FormConfig form, List<FieldDefinition> fields)
     {
         var chosen = QueryEngine.Resolve(fields, QueryEngine.ParseConfig(form.ConfigJson)["resultFields"]);
         return chosen.Count > 0 ? chosen : fields.Where(f => !f.IsHidden).ToList();
     }
 
-    private static List<FieldDefinition> ListColumns(FormConfig form, List<FieldDefinition> fields)
+    private static IReadOnlyList<FieldDefinition> ListColumns(FormConfig form, List<FieldDefinition> fields)
     {
         var chosen = QueryEngine.Resolve(fields, QueryEngine.ParseConfig(form.ConfigJson)["columns"]);
         return chosen.Count > 0 ? chosen : fields.Where(f => !f.IsHidden).Take(6).ToList();
@@ -605,7 +606,7 @@ $$"""
         return Results.Ok(new { success = true, proxy = true, status = (int)resp.StatusCode });
     }
 
-    private static List<string> ActionsFrom(JsonObject body)
+    private static IReadOnlyList<string> ActionsFrom(JsonObject body)
     {
         if (body["actions"] is JsonArray arr)
             return FormActions.Parse(string.Join(",", arr.Select(a => a?.GetValue<string>() ?? "")));

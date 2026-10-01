@@ -11,7 +11,7 @@ public static partial class OpenApiSpec
     private const string TransactionResultSchema = "Transaction.Result";
     private const string TransactionErrorSchema = "Transaction.Error";
 
-    public static List<TableDefinition> Writable(IReadOnlyList<TableDefinition> tables) =>
+    public static IReadOnlyList<TableDefinition> Writable(IReadOnlyList<TableDefinition> tables) =>
         tables.Where(t => !t.IsProxy && ApiMethods.Parse(t.ApiMethods).Intersect(["POST", "PATCH", "DELETE"]).Any()).ToList();
 
     private static JsonObject TransactionTagNode() => new()

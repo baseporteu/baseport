@@ -38,7 +38,7 @@ public class DefinitionImportRowsTests : IDisposable
         return table;
     }
 
-    private static List<JsonObject> Rows(string csv) =>
+    private static IReadOnlyList<JsonObject> Rows(string csv) =>
         DefinitionImport.Parse(Encoding.UTF8.GetBytes(csv), "in.csv").Rows;
 
     [Fact]

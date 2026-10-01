@@ -11,7 +11,7 @@ public static class RecordEngine
 
     private static readonly HtmlSanitizer Sanitizer = new();
 
-    public sealed record ValidationOutcome(List<string> Errors, List<string> InvalidFields, ValidationFailure Failure = ValidationFailure.None)
+    public sealed record ValidationOutcome(IReadOnlyList<string> Errors, IReadOnlyList<string> InvalidFields, ValidationFailure Failure = ValidationFailure.None)
     {
         public bool HasErrors => Errors.Count > 0;
     }
@@ -212,7 +212,7 @@ public static class RecordEngine
 
     private const int MaxReportedValues = 5;
 
-    public static async Task<List<string>> ConstraintErrorsAsync(AppDbContext db, TableDefinition table, FieldDefinition field, string? storedUnder = null)
+    public static async Task<IReadOnlyList<string>> ConstraintErrorsAsync(AppDbContext db, TableDefinition table, FieldDefinition field, string? storedUnder = null)
     {
         var errors = new List<string>();
         if (table.IsProxy || (!field.IsUnique && !field.IsIdentifier)) return errors;
@@ -319,7 +319,7 @@ public static class RecordEngine
         await db.SaveChangesAsync(token);
 
         await tx.CommitAsync(token);
-        return (new CompositeSaveOutcome(headerRecord, lineRecords), new ValidationOutcome(new(), new()));
+        return (new CompositeSaveOutcome(headerRecord, lineRecords), new ValidationOutcome([], []));
     }
 
     public static async Task<int> RenameFieldDataAsync(AppDbContext db, TableDefinition table, string from, string to)

@@ -94,7 +94,7 @@ public static class BackupStore
         return name;
     }
 
-    public static List<BackupInfo> List(string dir)
+    public static IReadOnlyList<BackupInfo> List(string dir)
     {
         if (!Directory.Exists(dir)) return new List<BackupInfo>();
         return Directory.GetFiles(dir, "baseport-*.db")

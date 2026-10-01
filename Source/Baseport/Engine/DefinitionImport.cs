@@ -21,10 +21,10 @@ public static class DefinitionImport
     private static readonly Regex Email = new(@"^[^@\s]+@[^@\s.]+\.[^@\s]+$", RegexOptions.Compiled);
     private static readonly char[] Delimiters = { ',', ';', '\t', '|' };
 
-    public static (List<JsonObject> Rows, string? Error) Parse(byte[] bytes, string fileName)
+    public static (IReadOnlyList<JsonObject> Rows, string? Error) Parse(byte[] bytes, string fileName)
     {
-        if (bytes.Length == 0) return (new(), "The file is empty.");
-        if (bytes.Length > MaxBytes) return (new(), $"The file is larger than {MaxBytes / (1024 * 1024)} MB. Split it and import the parts.");
+        if (bytes.Length == 0) return ([], "The file is empty.");
+        if (bytes.Length > MaxBytes) return ([], $"The file is larger than {MaxBytes / (1024 * 1024)} MB. Split it and import the parts.");
 
         var text = new UTF8Encoding(false).GetString(bytes).TrimStart('\ufeff');
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
@@ -36,21 +36,21 @@ public static class DefinitionImport
             ".xml" => ParseXml(text, out error),
             _ => ParseDelimited(text, out error)
         };
-        if (error != null) return (new(), error);
-        if (rows.Count == 0) return (new(), "The file stores no rows to import.");
-        if (rows.Count > MaxRows) return (new(), $"The file stores {rows.Count} rows; the limit is {MaxRows} per import.");
+        if (error != null) return ([], error);
+        if (rows.Count == 0) return ([], "The file stores no rows to import.");
+        if (rows.Count > MaxRows) return ([], $"The file stores {rows.Count} rows; the limit is {MaxRows} per import.");
         return (rows, null);
     }
 
-    private static List<JsonObject> ParseJson(string text, out string? error)
+    private static IReadOnlyList<JsonObject> ParseJson(string text, out string? error)
     {
         error = null;
         JsonNode? node;
         try { node = JsonNode.Parse(text); }
-        catch (Exception ex) { error = $"The file is not valid JSON: {ex.Message}"; return new(); }
+        catch (Exception ex) { error = $"The file is not valid JSON: {ex.Message}"; return []; }
 
         var records = OpenApiProxy.Records(node);
-        if (records.Count == 0) { error = "The JSON stores no array of objects to import."; return new(); }
+        if (records.Count == 0) { error = "The JSON stores no array of objects to import."; return []; }
         return records;
     }
 
@@ -226,7 +226,7 @@ public static class DefinitionImport
         return rows;
     }
 
-    public static List<OpenApiProxy.FieldProp> InferFields(IReadOnlyList<JsonObject> rows, bool detectChoices = true)
+    public static IReadOnlyList<OpenApiProxy.FieldProp> InferFields(IReadOnlyList<JsonObject> rows, bool detectChoices = true)
     {
         var props = new List<OpenApiProxy.FieldProp>();
         var columns = new List<string>();
@@ -356,9 +356,9 @@ public static class DefinitionImport
     public static JsonObject MapRow(JsonObject row, IReadOnlyList<FieldDefinition> fields) =>
         ColumnMap.For(new[] { row }, fields).Apply(row);
 
-    public sealed record RowError(int Row, List<string> Errors);
+    public sealed record RowError(int Row, IReadOnlyList<string> Errors);
 
-    public static async Task<(List<JsonObject> Prepared, List<RowError> Errors)> PrepareRowsAsync(
+    public static async Task<(IReadOnlyList<JsonObject> Prepared, IReadOnlyList<RowError> Errors)> PrepareRowsAsync(
         AppDbContext db, TableDefinition table, List<FieldDefinition> fields, IReadOnlyList<JsonObject> rows, int maxErrors = 20)
     {
         var prepared = new List<JsonObject>();
@@ -391,7 +391,7 @@ public static class DefinitionImport
         return (prepared, errors);
     }
 
-    public static List<FieldDefinition> ToFields(IReadOnlyList<OpenApiProxy.FieldProp> props)
+    public static IReadOnlyList<FieldDefinition> ToFields(IReadOnlyList<OpenApiProxy.FieldProp> props)
     {
         var fields = new List<FieldDefinition>();
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

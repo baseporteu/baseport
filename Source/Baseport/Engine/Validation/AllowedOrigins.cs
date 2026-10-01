@@ -12,7 +12,7 @@ public static class EmbedOrigins
 public static class AllowedOrigins
 {
 
-    public static List<string> Parse(string? stored) =>
+    public static IReadOnlyList<string> Parse(string? stored) =>
         (stored ?? "")
             .Split(new[] { '\n', '\r', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(Normalize)
