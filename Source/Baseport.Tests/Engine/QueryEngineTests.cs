@@ -53,7 +53,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task A_literal_search_treats_slashes_as_text_not_a_pattern()
+    public async Task SearchTreatsSlashesAsText()
     {
         _connection.CreateFunction<string?, string?, bool>("regexp", SqlitePragmas.Regexp);
         var customer = _fields.Where(f => f.Name == "Customer").ToList();
@@ -66,7 +66,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task Lookup_matches_an_identifier_exactly()
+    public async Task LookupIsExact()
     {
         var match = _fields.Where(f => f.Name == "OrderNo").ToList();
 
@@ -79,14 +79,14 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task Lookup_never_returns_a_record_for_an_empty_term()
+    public async Task LookupEmptyTermFindsNothing()
     {
         var match = _fields.Where(f => f.Name == "OrderNo").ToList();
         Assert.Null(await QueryEngine.LookupAsync(_db, _table, match, "   "));
     }
 
     [Fact]
-    public async Task Lookup_does_not_treat_wildcards_in_the_term_as_a_pattern()
+    public async Task LookupIgnoresWildcards()
     {
         var match = _fields.Where(f => f.Name == "OrderNo").ToList();
 
@@ -94,7 +94,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task List_pages_without_loading_everything()
+    public async Task ListPages()
     {
         var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 2, 10);
 
@@ -104,7 +104,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task List_search_narrows_the_result_and_the_total()
+    public async Task SearchNarrowsTotal()
     {
         var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, "Customer 1", 1, 50);
 
@@ -112,7 +112,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task List_restricted_search_only_matches_the_chosen_columns()
+    public async Task RestrictedSearchUsesColumns()
     {
         var onlyOrderNo = _fields.Where(f => f.Name == "OrderNo").ToList();
 
@@ -124,7 +124,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task List_sorts_on_a_chosen_field()
+    public async Task ListSorts()
     {
         var total = _fields.First(f => f.Name == "Total");
 
@@ -136,14 +136,14 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task Page_size_is_clamped_so_a_crafted_request_cannot_export_the_table()
+    public async Task PageSizeIsClamped()
     {
         var page = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 100_000);
         Assert.Equal(QueryEngine.MaxPageSize, page.PageSize);
     }
 
     [Fact]
-    public void Project_reveals_only_the_listed_fields()
+    public void ProjectKeepsListedFields()
     {
         var record = _db.Records.First();
         var visible = _fields.Where(f => f.Name == "OrderNo").ToList();
@@ -156,7 +156,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public void Resolve_drops_names_that_are_no_longer_fields()
+    public void ResolveDropsStaleNames()
     {
         var names = JsonNode.Parse("""["OrderNo", "Deleted", "Total"]""");
 
@@ -181,7 +181,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task A_cursor_walk_sees_every_record_exactly_once()
+    public async Task CursorSeesEachOnce()
     {
         var all = await _db.Records.Where(r => r.TableId == _table.Id).Select(r => r.Id).ToListAsync(TestContext.Current.CancellationToken);
         var seen = await WalkAsync(7);
@@ -191,7 +191,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task A_cursor_walk_is_stable_when_every_record_shares_one_timestamp()
+    public async Task CursorStableOnSharedTimestamp()
     {
         var stamped = DateTime.UtcNow;
         foreach (var record in await _db.Records.Where(r => r.TableId == _table.Id).ToListAsync(TestContext.Current.CancellationToken))
@@ -206,7 +206,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task A_row_inserted_mid_walk_never_repeats_a_row_already_read()
+    public async Task CursorNoRepeatAfterInsert()
     {
         var first = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, null, 1, 5);
         Assert.NotNull(first.NextCursor);
@@ -227,7 +227,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public void A_cursor_round_trips_and_a_forged_one_is_refused()
+    public void ForgedCursorRefused()
     {
         var cursor = new QueryEngine.Cursor(new DateTime(2026, 8, 22, 10, 30, 0, DateTimeKind.Utc), "abc123");
         var back = QueryEngine.Cursor.Decode(cursor.Encode());
@@ -241,7 +241,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task A_sorted_listing_issues_no_cursor()
+    public async Task SortedListHasNoCursor()
     {
         var sorted = await QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), _fields[0], true, null, 1, 5);
         Assert.True(sorted.HasMore);
@@ -249,7 +249,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task An_eq_filter_narrows_the_list_to_matching_rows()
+    public async Task EqFilterNarrows()
     {
         var customer = _fields.First(f => f.Name == "Customer");
         var filters = new[] { new QueryEngine.Filter(customer, "eq", "Customer 7") };
@@ -261,7 +261,7 @@ public class QueryEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task An_eq_filter_matching_nothing_returns_an_empty_page()
+    public async Task EqFilterCanBeEmpty()
     {
         var customer = _fields.First(f => f.Name == "Customer");
         var filters = new[] { new QueryEngine.Filter(customer, "eq", "No Such Customer") };

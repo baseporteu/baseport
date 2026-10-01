@@ -69,7 +69,7 @@ public class MigrationTests
     }
 
     [Fact]
-    public async Task ADatabaseFromBeforeMigrationsIsRefusedWithAnActionableMessage()
+    public async Task PreMigrationDatabaseRefused()
     {
         using var conn = new SqliteConnection("Filename=:memory:");
         conn.Open();

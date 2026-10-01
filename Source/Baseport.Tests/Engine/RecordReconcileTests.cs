@@ -55,7 +55,7 @@ public class RecordReconcileTests : IDisposable
             .ToList();
 
     [Fact]
-    public async Task A_system_id_added_to_a_table_that_already_holds_rows_reaches_every_row()
+    public async Task SystemIdBackfillsRows()
     {
         var table = Seed("""{"qty":1}""", """{"qty":2}""", """{"qty":3}""");
         AddField(table, new FieldDefinition { Name = "ref", DataType = "systemid" });
@@ -69,7 +69,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task An_existing_system_id_is_never_replaced()
+    public async Task SystemIdNotReplaced()
     {
         var table = Seed("""{"qty":1,"ref":"KEEPTHISONE"}""", """{"qty":2}""");
         AddField(table, new FieldDefinition { Name = "ref", DataType = "systemid" });
@@ -81,7 +81,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task Reconciling_twice_changes_nothing_the_second_time()
+    public async Task ReconcileIsIdempotent()
     {
         var table = Seed("""{"qty":1}""", """{"qty":2}""");
         AddField(table, new FieldDefinition { Name = "ref", DataType = "systemid" });
@@ -91,7 +91,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_calculated_field_added_later_is_computed_for_the_rows_already_there()
+    public async Task CalculatedBackfillsRows()
     {
         var table = Seed("""{"qty":2}""", """{"qty":5}""");
         AddField(table, new FieldDefinition { Name = "doubled", DataType = "calculated", Expression = "data.qty * 2" });
@@ -102,7 +102,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task Editing_an_expression_recomputes_the_rows_already_stored()
+    public async Task ExpressionEditRecomputes()
     {
         var table = Seed("""{"qty":2}""", """{"qty":5}""");
         var field = AddField(table, new FieldDefinition { Name = "doubled", DataType = "calculated", Expression = "data.qty * 2" });
@@ -117,7 +117,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_reconciled_row_holds_what_the_write_path_would_have_stored()
+    public async Task ReconcileMatchesWritePath()
     {
         var table = Seed("""{"qty":7}""");
         AddField(table, new FieldDefinition { Name = "doubled", DataType = "calculated", Expression = "data.qty * 2" });
@@ -135,7 +135,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_row_the_expression_cannot_compute_leaves_the_other_rows_reconciled()
+    public async Task BadRowLeavesOthers()
     {
         var table = Seed("""{"qty":2}""", """{}""");
         AddField(table, new FieldDefinition { Name = "doubled", DataType = "calculated", Expression = "data.qty * 2" });
@@ -147,7 +147,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_table_with_no_computed_fields_is_left_entirely_alone()
+    public async Task NoComputedFieldsUntouched()
     {
         var table = Seed("""{"qty":1}""");
         Assert.Equal(0, await RecordEngine.ReconcileComputedAsync(_db, table));
@@ -155,7 +155,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task An_ordinary_field_added_later_is_not_backfilled_from_its_default()
+    public async Task DefaultNotBackfilled()
     {
         var table = Seed("""{"qty":1}""");
         AddField(table, new FieldDefinition { Name = "status", DataType = "text", DefaultValue = "open" });
@@ -170,7 +170,7 @@ public class RecordReconcileTests : IDisposable
     [InlineData(7L)]
     [InlineData(7.0)]
     [InlineData(7.5)]
-    public void A_number_reads_the_same_whatever_backs_the_node(object boxed)
+    public void NumberReadsAlike(object boxed)
     {
         JsonNode node = boxed switch
         {
@@ -189,7 +189,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public void A_parsed_number_and_a_constructed_one_read_alike()
+    public void ParsedAndBuiltNumbersMatch()
     {
         var parsed = JsonNode.Parse("""{"qty":7}""")!["qty"];
         var constructed = JsonValue.Create(7);
@@ -200,7 +200,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task Retyping_a_column_into_a_system_id_replaces_what_the_old_type_left_behind()
+    public async Task RetypeToSystemIdReplaces()
     {
         var table = Seed("""{"qty":1,"flag":"Y"}""", """{"qty":2,"flag":"Y"}""", """{"qty":3,"flag":"N"}""");
         var flag = AddField(table, new FieldDefinition { Name = "flag", DataType = "text" });
@@ -216,7 +216,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_new_system_id_reusing_an_old_field_name_does_not_inherit_its_values()
+    public async Task NewSystemIdIgnoresOldValues()
     {
         var table = Seed("""{"qty":1,"code":"LEFTOVER"}""");
         AddField(table, new FieldDefinition { Name = "code", DataType = "systemid" });
@@ -227,7 +227,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_reconcile_that_names_nothing_stale_still_keeps_every_system_id()
+    public async Task ReconcileKeepsSystemIds()
     {
         var table = Seed("""{"qty":1}""", """{"qty":2}""");
         AddField(table, new FieldDefinition { Name = "ref", DataType = "systemid" });
@@ -240,7 +240,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task Renaming_a_field_carries_its_values_over()
+    public async Task RenameCarriesValues()
     {
         var table = Seed("""{"qty":1,"sku":"A1"}""", """{"qty":2,"sku":"A2"}""");
         AddField(table, new FieldDefinition { Name = "sku", DataType = "text" });
@@ -256,7 +256,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task Renaming_a_system_id_keeps_the_identity_it_already_issued()
+    public async Task RenameKeepsSystemId()
     {
         var table = Seed("""{"qty":1}""");
         AddField(table, new FieldDefinition { Name = "ref", DataType = "systemid" });
@@ -270,7 +270,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_rename_onto_an_orphaned_key_keeps_the_field_own_value()
+    public async Task RenameOntoOrphanKeepsValue()
     {
         var table = Seed("""{"qty":1,"sku":"MINE","article":"ORPHAN"}""");
         await RecordEngine.RenameFieldDataAsync(_db, table, "sku", "article");
@@ -278,7 +278,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task Deleting_a_field_really_removes_its_values()
+    public async Task DeleteRemovesValues()
     {
         var table = Seed("""{"qty":1,"secret":"shh"}""", """{"qty":2,"secret":"quiet"}""");
 
@@ -291,7 +291,7 @@ public class RecordReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task Dropping_leaves_every_other_value_untouched()
+    public async Task DropKeepsOtherValues()
     {
         var table = Seed("""{"qty":1,"keep":"yes","secret":"shh"}""");
         await RecordEngine.DropFieldDataAsync(_db, table, "secret");

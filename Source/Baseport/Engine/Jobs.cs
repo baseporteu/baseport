@@ -19,7 +19,7 @@ public static class Jobs
     public static readonly JobDef[] All =
     {
         new("backup", "Database backup", "0 0 3 * * *", true,
-            "Snapshot the SQLite store into the local backups directory.",
+            "Archive the database, uploads and keys into the local backups directory.",
             BackupAsync),
         new("heartbeat", "Heartbeat", "0 */5 * * * *", true,
             "Mark the scheduler alive by recording its last run.",
@@ -74,8 +74,14 @@ public static class Jobs
     private static async Task<string> BackupAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)
     {
         var settings = await db.AppSettings.FirstOrDefaultAsync(ct) ?? new AppSettings();
-        var created = await BackupStore.CreateAndExportAsync(BackupStore.Dir(db), db, settings, ct);
-        return $"Created {created}.";
+        try
+        {
+            return $"Created {await BackupStore.CreateAndExportAsync(BackupStore.Dir(db), db, settings, ct)}.";
+        }
+        catch (BackupBusyException)
+        {
+            return "Skipped: a backup is running.";
+        }
     }
 
     private static async Task<string> SessionCleanupAsync(AppDbContext db, Serilog.ILogger log, CancellationToken ct)

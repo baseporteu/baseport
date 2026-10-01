@@ -6,6 +6,8 @@
     <RootNamespace>Baseport</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
     <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <RuntimeIdentifiers>linux-x64;win-x64;linux-musl-x64;linux-musl-arm64</RuntimeIdentifiers>
+    <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
   </PropertyGroup>
 
   <ItemGroup>

@@ -48,7 +48,7 @@ public class AccountsCliTests : IDisposable
     }
 
     [Fact]
-    public async Task Promotion_grants_console_access()
+    public async Task PromoteGrantsConsole()
     {
         await SeedAsync("jane", AccountRoles.Consumer);
 
@@ -57,7 +57,7 @@ public class AccountsCliTests : IDisposable
     }
 
     [Fact]
-    public async Task Demotion_removes_console_access_and_the_sessions_that_carried_it()
+    public async Task DemoteRevokesSessions()
     {
 
         await SeedAsync("root", AccountRoles.Admin);
@@ -78,7 +78,7 @@ public class AccountsCliTests : IDisposable
     }
 
     [Fact]
-    public async Task The_last_enabled_admin_cannot_be_demoted()
+    public async Task LastAdminNotDemoted()
     {
         await SeedAsync("root", AccountRoles.Admin);
         await SeedAsync("jane", AccountRoles.Consumer);
@@ -88,7 +88,7 @@ public class AccountsCliTests : IDisposable
     }
 
     [Fact]
-    public async Task A_password_set_from_the_shell_is_one_time_and_revokes_every_session()
+    public async Task ShellPasswordIsOneTime()
     {
         var jane = await SeedAsync("jane", AccountRoles.Admin);
         using (var db = Open())
@@ -108,7 +108,7 @@ public class AccountsCliTests : IDisposable
     }
 
     [Fact]
-    public async Task The_cli_reset_clears_totp()
+    public async Task TotpResetClears()
     {
         var jane = await SeedAsync("jane", AccountRoles.Admin);
         using (var db = Open())
@@ -129,7 +129,7 @@ public class AccountsCliTests : IDisposable
     }
 
     [Fact]
-    public async Task A_password_that_fails_the_policy_is_refused()
+    public async Task WeakPasswordRefused()
     {
         await SeedAsync("jane", AccountRoles.Admin);
 
@@ -138,7 +138,7 @@ public class AccountsCliTests : IDisposable
     }
 
     [Fact]
-    public async Task An_unknown_account_is_reported_rather_than_created()
+    public async Task UnknownAccountReported()
     {
         await SeedAsync("jane", AccountRoles.Consumer);
 
@@ -148,14 +148,14 @@ public class AccountsCliTests : IDisposable
     }
 
     [Fact]
-    public async Task An_unknown_command_reports_usage_and_fails()
+    public async Task UnknownCommandFails()
     {
         await SeedAsync("jane", AccountRoles.Consumer);
         Assert.Equal(1, await RunAsync("frobnicate", "jane"));
     }
 
     [Fact]
-    public async Task ReadOnlyDatabaseExplainsInsteadOfCrashing()
+    public async Task ReadOnlyDatabaseExplained()
     {
         if (OperatingSystem.IsWindows()) return;
         await SeedAsync("ro-user", AccountRoles.Consumer);

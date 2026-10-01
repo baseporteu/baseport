@@ -4,7 +4,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Baseport;
 
-public sealed record BackupInfo(string Name, long Size, DateTime CreatedAt);
+public sealed record BackupInfo(string Name, long Size, DateTime CreatedAt, bool DatabaseOnly);
+
+public sealed class BackupBusyException() : Exception("A backup is already running.");
+
+public sealed class BackupIntegrityException(string detail) : Exception($"Backup failed integrity check: {detail}");
 
 public static class BackupStore
 {
@@ -23,6 +27,16 @@ public static class BackupStore
         var total = new FileInfo(source).Length;
         var wal = new FileInfo(source + "-wal");
         return wal.Exists ? total + wal.Length : total;
+    }
+
+    public static long UploadBytes(AppDbContext db)
+    {
+        var source = db.Database.GetDbConnection().DataSource;
+        if (source == ":memory:") return 0;
+        var uploads = DataPaths.For(source).Uploads;
+        return Directory.Exists(uploads)
+            ? Directory.EnumerateFiles(uploads, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length)
+            : 0;
     }
 
     public static long? FreeBytes(string dir)
@@ -47,7 +61,7 @@ public static class BackupStore
         var free = freeBytes ?? FreeBytes(dir);
         if (free is null) return null;
 
-        var needed = (long)(StoreBytes(db) * 1.1);
+        var needed = (long)((StoreBytes(db) * 2 + UploadBytes(db)) * 1.1);
         return free >= needed
             ? null
             : $"Not enough free disk space for a snapshot: about {Human(needed)} is needed and {Human(free.Value)} is free.";
@@ -61,52 +75,110 @@ public static class BackupStore
         _ => $"{bytes / 1024.0 / 1024 / 1024:0.##} GB"
     };
 
-    public static async Task<string> CreateAsync(string dir, AppDbContext db, int retention, CancellationToken ct = default)
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> Gates = new(StringComparer.Ordinal);
+
+    internal static Action<string>? AfterSnapshot;
+
+    public static async Task<string> CreateAsync(string dir, AppDbContext db, int retention, CancellationToken ct = default) =>
+        (await SnapshotAsync(dir, db, retention, s3: null, ct)).Name;
+
+    public static async Task<string> CreateAndExportAsync(string dir, AppDbContext db, AppSettings settings, CancellationToken ct = default, IBackupUploader? uploader = null)
+    {
+        var gate = Gates.GetOrAdd(Path.GetFullPath(dir), _ => new SemaphoreSlim(1, 1));
+        if (!await gate.WaitAsync(0, ct)) throw new BackupBusyException();
+        try
+        {
+            var s3 = BackupExport.IsConfigured(settings) ? uploader ?? new S3BackupUploader(settings) : null;
+            return (await SnapshotAsync(dir, db, settings.BackupRetention, s3 is null ? null : (s3, settings), ct)).Name;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private static async Task<(string Name, BackupManifest Manifest)> SnapshotAsync(
+        string dir, AppDbContext db, int retention, (IBackupUploader Uploader, AppSettings Settings)? s3, CancellationToken ct)
     {
         Directory.CreateDirectory(dir);
         if (SpaceProblem(dir, db) is { } problem) throw new IOException(problem);
 
         var source = db.Database.GetDbConnection().DataSource;
-
-        var target = Path.Combine(dir, $"baseport-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Ids.NewShortId(4)}.db");
-        await using (var conn = new SqliteConnection($"Data Source={source}"))
+        var data = DataPaths.For(source);
+        var name = $"baseport-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Ids.NewShortId(4)}.zip";
+        var snapshot = Path.Combine(dir, name + ".db" + FileStore.PartialSuffix);
+        var archive = Path.Combine(dir, name + FileStore.PartialSuffix);
+        var export = Path.Combine(dir, name + ".s3" + FileStore.PartialSuffix);
+        try
         {
-            await conn.OpenAsync(ct);
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"VACUUM INTO '{target.Replace("'", "''")}'";
-            await cmd.ExecuteNonQueryAsync(ct);
-        }
-        Prune(dir, retention);
-        return Path.GetFileName(target);
-    }
-
-    public static async Task<string> CreateAndExportAsync(string dir, AppDbContext db, AppSettings settings, CancellationToken ct = default)
-    {
-        var name = await CreateAsync(dir, db, settings.BackupRetention, ct);
-        if (BackupExport.IsConfigured(settings))
-        {
-            try { await BackupExport.UploadAsync(new S3BackupUploader(settings), Path.Combine(dir, name), settings, ct); }
-            catch (Exception ex) when (ex is AmazonServiceException or HttpRequestException)
+            await using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = source, Pooling = false }.ToString()))
             {
-                Serilog.Log.Warning(ex, "Backup {Name} was created locally but export to S3 failed", name);
+                await conn.OpenAsync(ct);
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"VACUUM INTO '{snapshot.Replace("'", "''")}'";
+                await cmd.ExecuteNonQueryAsync(ct);
             }
+            AfterSnapshot?.Invoke(snapshot);
+
+            var integrity = await DatabaseIntegrity.CheckFileAsync(snapshot, full: true, ct);
+            if (!integrity.Ok)
+            {
+                Serilog.Log.Error("Backup {Name} failed its integrity check: {Detail}", name, integrity.Detail);
+                throw new BackupIntegrityException(integrity.Detail);
+            }
+
+            var manifest = await BackupArchive.WriteAsync(archive, snapshot, data, includeSigningKey: true, ct);
+            File.Move(archive, Path.Combine(dir, name), overwrite: false);
+
+            if (s3 is var (uploader, settings))
+            {
+                await BackupArchive.WriteAsync(export, snapshot, data, includeSigningKey: false, ct);
+                await ExportAsync(uploader, export, name, settings, ct);
+            }
+
+            Prune(dir, retention);
+            return (name, manifest);
         }
-        return name;
+        finally
+        {
+            foreach (var leftover in new[] { snapshot, archive, export })
+                File.Delete(leftover);
+        }
     }
 
-    public static IReadOnlyList<BackupInfo> List(string dir)
+    private static async Task ExportAsync(IBackupUploader uploader, string file, string name, AppSettings settings, CancellationToken ct)
     {
-        if (!Directory.Exists(dir)) return new List<BackupInfo>();
-        return Directory.GetFiles(dir, "baseport-*.db")
+        try
+        {
+            await using var stream = File.OpenRead(file);
+            await uploader.PutAsync(settings.S3Bucket, BackupExport.ObjectKey(settings, name), stream, ct);
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            Serilog.Log.Warning("S3 export skipped: the stored secret cannot be decrypted; enter it again in Settings");
+        }
+        catch (Exception ex) when (ex is AmazonServiceException or HttpRequestException)
+        {
+            Serilog.Log.Warning(ex, "Backup {Name} was created locally but export to S3 failed", name);
+        }
+    }
+
+    private static IEnumerable<string> Snapshots(string dir) =>
+        Directory.Exists(dir)
+            ? Directory.EnumerateFiles(dir, "baseport-*.zip").Concat(Directory.EnumerateFiles(dir, "baseport-*.db"))
+            : [];
+
+    public static IReadOnlyList<BackupInfo> List(string dir) =>
+        Snapshots(dir)
             .Select(p => new FileInfo(p))
             .OrderByDescending(f => f.LastWriteTimeUtc)
-            .Select(f => new BackupInfo(f.Name, f.Length, f.LastWriteTimeUtc))
+            .Select(f => new BackupInfo(f.Name, f.Length, f.LastWriteTimeUtc, f.Extension == ".db"))
             .ToList();
-    }
 
     public static string? Resolve(string dir, string name)
     {
-        if (string.IsNullOrEmpty(name) || name != Path.GetFileName(name)) return null;
+        if (string.IsNullOrEmpty(name) || name != Path.GetFileName(name) || !name.StartsWith("baseport-", StringComparison.Ordinal)
+            || !(name.EndsWith(".zip", StringComparison.Ordinal) || name.EndsWith(".db", StringComparison.Ordinal))) return null;
         var path = Path.Combine(dir, name);
         return File.Exists(path) ? path : null;
     }
@@ -123,12 +195,13 @@ public static class BackupStore
     {
         if (!Directory.Exists(dir)) return 0;
         if (retention < 1) retention = 1;
-        var keep = Directory.GetFiles(dir, "baseport-*.db")
+        var all = Snapshots(dir).ToList();
+        var keep = all
             .OrderByDescending(File.GetLastWriteTimeUtc)
             .Take(retention)
             .ToHashSet();
         var removed = 0;
-        foreach (var file in Directory.GetFiles(dir, "baseport-*.db"))
+        foreach (var file in all)
         {
             if (keep.Contains(file)) continue;
             try { File.Delete(file); removed++; }

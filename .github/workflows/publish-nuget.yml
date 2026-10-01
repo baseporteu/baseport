@@ -33,7 +33,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Restore
-        run: dotnet restore ${{ env.SOLUTION_PATH }}
+        run: dotnet restore ${{ env.SOLUTION_PATH }} --locked-mode
 
       - name: Build
         run: dotnet build ${{ env.SOLUTION_PATH }} -c Release --no-restore

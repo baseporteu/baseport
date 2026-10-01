@@ -16,7 +16,7 @@ public class OneTimeCodesTests
     public OneTimeCodesTests() => OneTimeCodes.Reset();
 
     [Fact]
-    public void A_just_issued_code_signs_in_once()
+    public void FreshCodeSignsIn()
     {
         var code = Fresh("admin");
         Assert.NotNull(code);
@@ -24,7 +24,7 @@ public class OneTimeCodesTests
     }
 
     [Fact]
-    public void A_code_is_spent_after_one_sign_in()
+    public void CodeIsSingleUse()
     {
         var code = Fresh("admin");
         Assert.True(OneTimeCodes.Consume("admin", code));
@@ -32,7 +32,7 @@ public class OneTimeCodesTests
     }
 
     [Fact]
-    public void A_wrong_code_is_rejected_and_leaves_the_real_one_usable()
+    public void WrongCodeKeepsRealCode()
     {
         var code = Fresh("admin");
         Assert.False(OneTimeCodes.Consume("admin", "0123456789"));
@@ -40,13 +40,13 @@ public class OneTimeCodesTests
     }
 
     [Fact]
-    public void A_user_that_never_asked_for_a_code_has_nothing_to_consume()
+    public void NoCodeNothingToConsume()
     {
         Assert.False(OneTimeCodes.Consume("nobody", "AAAAAAAAAA"));
     }
 
     [Fact]
-    public void A_mutated_code_is_rejected_and_surrounding_space_is_trimmed()
+    public void MutatedCodeRejected()
     {
         var code = Fresh("admin");
 
@@ -57,7 +57,7 @@ public class OneTimeCodesTests
     }
 
     [Fact]
-    public void A_new_code_is_refused_while_the_first_is_still_live()
+    public void LiveCodeBlocksNew()
     {
         var (_, retryAfter) = OneTimeCodes.Issue("admin");
         Assert.Equal(TimeSpan.Zero, retryAfter);
@@ -69,13 +69,13 @@ public class OneTimeCodesTests
     }
 
     [Fact]
-    public void Lifetime_is_sixty_seconds()
+    public void LifetimeIsSixtySeconds()
     {
         Assert.Equal(TimeSpan.FromSeconds(60), OneTimeCodes.CodeLifetime);
     }
 
     [Fact]
-    public void A_live_code_is_never_replaced()
+    public void LiveCodeNotReplaced()
     {
 
         var now = DateTime.UtcNow;
@@ -90,7 +90,7 @@ public class OneTimeCodesTests
     }
 
     [Fact]
-    public void An_expired_code_can_be_replaced()
+    public void ExpiredCodeReplaceable()
     {
         var now = DateTime.UtcNow;
         var (_, _) = OneTimeCodes.IssueAt("admin", now);
@@ -100,7 +100,7 @@ public class OneTimeCodesTests
     }
 
     [Fact]
-    public void Pruning_drops_expired_codes_and_keeps_live_ones()
+    public void PruneKeepsLiveCodes()
     {
         var now = DateTime.UtcNow;
         OneTimeCodes.IssueAt("spent", now);

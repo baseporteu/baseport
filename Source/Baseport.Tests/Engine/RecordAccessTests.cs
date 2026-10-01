@@ -56,7 +56,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_rule_can_refer_to_the_callers_role_not_just_their_id()
+    public async Task RuleSeesRole()
     {
         var (table, fields) = await NotesAsync(createRule: "_USER_.role = 'consumer'");
 
@@ -65,19 +65,19 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public void A_rule_referencing_USER_role_is_accepted_by_validation()
+    public void UserRoleIsValid()
     {
         Assert.Null(RecordAccess.Problem("_USER_.role = 'admin'", new List<FieldDefinition>()));
     }
 
     [Fact]
-    public void A_rule_referencing_any_other_USER_field_is_still_refused()
+    public void OtherUserFieldRefused()
     {
         Assert.NotNull(RecordAccess.Problem("_USER_.email = 'x'", new List<FieldDefinition>()));
     }
 
     [Fact]
-    public async Task A_table_with_no_rule_is_open_to_every_caller_the_switches_let_through()
+    public async Task NoRuleIsOpen()
     {
         var (table, fields) = await NotesAsync();
         var id = await RecordAsync(table, "alice", "hello");
@@ -86,7 +86,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_read_rule_keeps_one_user_out_of_anothers_record()
+    public async Task ReadRuleIsolatesUsers()
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
         var id = await RecordAsync(table, "alice", "hello");
@@ -96,7 +96,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task An_anonymous_caller_fails_a_rule_that_names_a_user()
+    public async Task AnonymousFailsUserRule()
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
         var id = await RecordAsync(table, "alice", "hello");
@@ -105,7 +105,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_rule_over_a_record_that_is_gone_refuses()
+    public async Task MissingRecordRefuses()
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
 
@@ -113,7 +113,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_create_rule_reads_the_submitted_fields_through_REQ()
+    public async Task CreateRuleReadsRequest()
     {
         var (table, fields) = await NotesAsync(createRule: "_REQ_.owner = _USER_.id");
 
@@ -124,7 +124,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_create_rule_that_mentions_ROW_still_evaluates()
+    public async Task CreateRuleWithRowEvaluates()
     {
         var (table, fields) = await NotesAsync(createRule: "_ROW_.owner IS NULL");
 
@@ -133,7 +133,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_rule_can_be_evaluated_against_an_event_payload()
+    public async Task RuleEvaluatesEventPayload()
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
 
@@ -144,7 +144,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_read_rule_filters_a_listing_rather_than_refusing_it()
+    public async Task ReadRuleFiltersList()
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
         await RecordAsync(table, "alice", "first");
@@ -161,7 +161,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_role_read_rule_filters_a_rest_listing()
+    public async Task RoleRuleFiltersRest()
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.role = 'consumer'");
         await RecordAsync(table, "alice", "first");
@@ -179,7 +179,7 @@ public class RecordAccessTests : IDisposable
     [Theory]
     [InlineData(AccountRoles.Consumer, "2")]
     [InlineData(AccountRoles.User, "0")]
-    public async Task A_role_read_rule_filters_a_wire_view(string role, string expected)
+    public async Task RoleRuleFiltersWire(string role, string expected)
     {
         var (table, _) = await NotesAsync(readRule: "_USER_.role = 'consumer'");
         await RecordAsync(table, "alice", "first");
@@ -193,7 +193,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_filtered_listing_counts_only_what_it_returns()
+    public async Task FilteredCountMatches()
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
         await RecordAsync(table, "alice", "first");
@@ -205,7 +205,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_search_term_cannot_widen_what_the_rule_allows()
+    public async Task SearchCannotWidenRule()
     {
         var (table, fields) = await NotesAsync(readRule: "_USER_.id = _ROW_.owner");
         await RecordAsync(table, "alice", "secret");
@@ -221,14 +221,14 @@ public class RecordAccessTests : IDisposable
     [InlineData("_USER_.name = 'alice'", "Only _USER_.id")]
     [InlineData("1=1; DROP TABLE _records", "single expression")]
     [InlineData("_OTHER_.id = 1", "not one of")]
-    public async Task A_rule_that_could_not_work_is_refused_when_it_is_saved(string rule, string expected)
+    public async Task BrokenRuleRefused(string rule, string expected)
     {
         var (_, fields) = await NotesAsync();
         Assert.Contains(expected, RecordAccess.Problem(rule, fields));
     }
 
     [Fact]
-    public async Task A_rule_SQLite_cannot_parse_is_refused_when_it_is_saved()
+    public async Task UnparseableRuleRefused()
     {
         var (table, fields) = await NotesAsync();
         Assert.Null(await RecordAccess.SqlProblemAsync(_db, table, fields, "_USER_.id = _ROW_.owner"));
@@ -236,7 +236,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public void A_rule_may_quote_a_field_name()
+    public void RuleMayQuoteField()
     {
         var fields = new List<FieldDefinition> { new() { Name = "user id", DataType = "text" } };
         Assert.Null(RecordAccess.Problem("_ROW_.\"user id\" = _USER_.id", fields));
@@ -247,7 +247,7 @@ public class RecordAccessTests : IDisposable
     [InlineData("createRule", "_ROW_.missing = 1")]
     [InlineData("updateRule", "_USER_.id = ")]
     [InlineData("deleteRule", "_OTHER_.id = 1")]
-    public async Task Creating_a_table_validates_its_access_rules_like_patch_does(string key, string rule)
+    public async Task CreateValidatesRules(string key, string rule)
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var table = new TableDefinition
@@ -261,7 +261,7 @@ public class RecordAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task Creating_a_table_with_a_valid_rule_is_accepted()
+    public async Task CreateAcceptsValidRule()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var table = new TableDefinition
@@ -284,14 +284,14 @@ public class RecordAccessTests : IDisposable
 public class AdminSurfaceTests
 {
     [Fact]
-    public void An_unset_admin_address_leaves_one_port_and_no_filtering()
+    public void NoAdminAddressNoFiltering()
     {
         Assert.Null(AdminSurface.Configure(""));
         Assert.Null(AdminSurface.Port);
     }
 
     [Fact]
-    public void A_bare_host_and_port_is_read_as_an_http_address()
+    public void BareHostIsHttp()
     {
         Assert.Equal("http://127.0.0.1:5264", AdminSurface.Configure("127.0.0.1:5264"));
         Assert.Equal(5264, AdminSurface.Port);
@@ -326,14 +326,14 @@ public class AdminSurfaceTests
     }
 
     [Fact]
-    public void A_nonsense_admin_address_fails_the_start_rather_than_binding_nothing()
+    public void BadAdminAddressFailsStart()
     {
         Assert.Throws<InvalidOperationException>(() => AdminSurface.Configure("not an address"));
         AdminSurface.Configure("");
     }
 
     [Fact]
-    public void Every_bound_address_gets_its_own_console_link_and_wildcards_read_as_localhost()
+    public void ConsoleLinkPerAddress()
     {
         var urls = AdminSurface.ConsoleUrls(["http://0.0.0.0:5000", "http://[::]:5001", "http://127.0.0.1:5002"], null);
 
@@ -341,7 +341,7 @@ public class AdminSurfaceTests
     }
 
     [Fact]
-    public void With_an_admin_address_only_the_admin_port_is_offered_as_the_console()
+    public void AdminPortIsConsole()
     {
         var urls = AdminSurface.ConsoleUrls(["http://[::]:5000", "http://127.0.0.1:5264"], 5264);
 
@@ -361,7 +361,7 @@ public class AdminSurfaceTests
     [InlineData("/api/forms/abc/form", false)]
     [InlineData("/api/openapi.json", false)]
     [InlineData("/docs", false)]
-    public void The_operator_surface_is_the_part_that_moves(string path, bool isAdmin) =>
+    public void OperatorSurfaceMoves(string path, bool isAdmin) =>
         Assert.Equal(isAdmin, AdminSurface.IsAdminPath(path));
 }
 
@@ -378,7 +378,7 @@ public class PublicAccountGuardTests : IDisposable
     }
 
     [Fact]
-    public async Task The_last_enabled_admin_is_still_the_last_enabled_admin_on_the_public_surface()
+    public async Task LastAdminGuardOnPublicSurface()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var admin = await _db.UserAccounts.SingleAsync(TestContext.Current.CancellationToken);

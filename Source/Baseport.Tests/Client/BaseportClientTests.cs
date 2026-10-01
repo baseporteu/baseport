@@ -50,7 +50,7 @@ public class BaseportClientTests
         $$"""{"auth_token":"{{authToken}}","refresh_token":"{{refreshToken}}","expires_at":{{expiresAt}}}""";
 
     [Fact]
-    public async Task Signing_in_adopts_the_tokens_and_reads_the_user_out_of_the_claims()
+    public async Task SignInAdoptsTokens()
     {
         var (client, handler) = Build();
         var expires = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
@@ -66,7 +66,7 @@ public class BaseportClientTests
     }
 
     [Fact]
-    public async Task A_failed_call_transports_the_status_and_the_server_message()
+    public async Task FailedCallCarriesStatus()
     {
         var (client, handler) = Build();
         handler.Reply(HttpStatusCode.Unauthorized, """{"errors":["Incorrect credentials."]}""");
@@ -79,7 +79,7 @@ public class BaseportClientTests
     }
 
     [Fact]
-    public async Task An_expired_token_is_refreshed_before_the_call_that_needed_it()
+    public async Task ExpiredTokenRefreshed()
     {
         var (client, handler) = Build();
         var expired = DateTimeOffset.UtcNow.AddSeconds(-10).ToUnixTimeSeconds();
@@ -100,7 +100,7 @@ public class BaseportClientTests
     }
 
     [Fact]
-    public async Task Listing_pages_through_the_published_endpoint_name()
+    public async Task ListUsesApiName()
     {
         var (client, handler) = Build();
         client.UseApiToken("static-token");
@@ -119,7 +119,7 @@ public class BaseportClientTests
     }
 
     [Fact]
-    public async Task An_upload_posts_multipart_to_the_bucket_it_names()
+    public async Task UploadPostsMultipart()
     {
         var (client, handler) = Build();
         client.UseApiToken("static-token");
@@ -138,7 +138,7 @@ public class BaseportClientTests
     }
 
     [Fact]
-    public async Task Deleting_a_file_addresses_it_by_name_inside_its_bucket()
+    public async Task DeleteAddressesFileByName()
     {
         var (client, handler) = Build();
         client.UseApiToken("static-token");
@@ -150,7 +150,7 @@ public class BaseportClientTests
         Assert.Equal(HttpMethod.Delete, handler.Requests[0].Method);
     }
     [Fact]
-    public async Task A_filter_is_sent_as_one_field_value_pair_per_entry()
+    public async Task FilterSendsPairs()
     {
         var (client, handler) = Build();
         client.UseApiToken("static-token");
@@ -166,7 +166,7 @@ public class BaseportClientTests
     }
 
     [Fact]
-    public async Task A_transaction_posts_every_operation_and_returns_the_ids()
+    public async Task TransactionReturnsIds()
     {
         var (client, handler) = Build();
         client.UseApiToken("static-token");
@@ -191,7 +191,7 @@ public class BaseportClientTests
     }
 
     [Fact]
-    public async Task Changing_the_password_adopts_the_fresh_session()
+    public async Task PasswordChangeAdoptsSession()
     {
         var (client, handler) = Build();
         var expires = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
@@ -209,7 +209,7 @@ public class BaseportClientTests
     }
 
     [Fact]
-    public async Task Deleting_the_account_signs_the_client_out()
+    public async Task DeleteAccountSignsOut()
     {
         var (client, handler) = Build();
         var expires = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();

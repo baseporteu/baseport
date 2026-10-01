@@ -50,7 +50,7 @@ public sealed class OutboundHttpTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task A_redirect_is_not_followed()
+    public async Task RedirectNotFollowed()
     {
         using var http = new HttpClient(ProxyTarget.Handler(allowPrivate: true));
 
@@ -62,7 +62,7 @@ public sealed class OutboundHttpTests : IAsyncDisposable
     [Theory]
     [InlineData("127.0.0.1")]
     [InlineData("localhost")]
-    public async Task A_private_address_is_refused_at_connect_time(string host)
+    public async Task PrivateAddressRefused(string host)
     {
         using var http = new HttpClient(ProxyTarget.Handler(allowPrivate: false));
 
@@ -71,7 +71,7 @@ public sealed class OutboundHttpTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task The_default_client_is_guarded_and_the_oidc_client_is_not()
+    public async Task DefaultClientGuarded()
     {
         ProxyTarget.Configure(new AppSettings());
         using var services = new ServiceCollection().AddOutboundHttp().BuildServiceProvider();

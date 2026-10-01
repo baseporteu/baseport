@@ -23,6 +23,12 @@ try
     if (args.Length > 0 && args[0] == "accounts")
         return await AccountsCli.RunAsync(args, bundledSettings, localSettings);
 
+    if (args.Length > 0 && args[0] == "restore")
+        return await RestoreCli.RunAsync(args, bundledSettings, localSettings);
+
+    if (args.Length > 0 && args[0] == "check")
+        return await DatabaseIntegrity.RunCliAsync(ConfigCli.Build(bundledSettings, localSettings)["Baseport:ConnectionString"] ?? "Data Source=baseport.db", Console.Out);
+
     if (args.Length > 0 && args[0] == "config")
         return ConfigCli.Run(args, bundledSettings, localSettings);
 }
@@ -105,6 +111,7 @@ try
     var trustForwardedHeaders = config.GetValue("TrustForwardedHeaders", false);
     Baseport.Providers.WireBind.RemoteAllowed = config.GetValue("AllowRemoteProviders", false);
     AdminAuth.AllowInsecureSignIn = config.GetValue("AllowInsecureSignIn", false);
+    using var instanceLock = InstanceLock.ForConnection(connectionString);
     FileStore.Initialize(connectionString);
 
     var dbSource = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;

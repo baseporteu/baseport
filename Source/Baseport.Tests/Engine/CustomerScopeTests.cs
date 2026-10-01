@@ -85,7 +85,7 @@ public class CustomerScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task OtherCustomerRowRefusedForReadUpdateDelete()
+    public async Task OtherCustomerRowRefused()
     {
         var (table, fields) = await OrdersAsync();
         var globex = await OrderAsync(table, "GLOBEX", "g1");
@@ -168,7 +168,7 @@ public class CustomerScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task SubscriptionRowFromOtherCustomerIsRefused()
+    public async Task OtherCustomerEventRefused()
     {
         var (table, fields) = await OrdersAsync();
         var row = new JsonObject { ["client_id"] = "GLOBEX", ["body"] = "g1" };

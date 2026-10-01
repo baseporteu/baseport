@@ -121,7 +121,7 @@ public class RecordEventsTests : IDisposable
     }
 
     [Fact]
-    public async Task AContextOpenedByTheSharedFactoryStampsAndPublishes()
+    public async Task FactoryContextPublishes()
     {
         var file = Path.Combine(Path.GetTempPath(), $"bp-{Ids.NewShortId(8)}.db");
         try
@@ -165,7 +165,7 @@ public class RecordEventsTests : IDisposable
     }
 
     [Fact]
-    public void A_subscription_past_the_cap_is_refused_with_503()
+    public void SubscriptionOverCapRefused()
     {
         var saved = RecordEvents.MaxSubscribers;
         RecordEvents.MaxSubscribers = RecordEvents.SubscriberCount;
@@ -185,7 +185,7 @@ public class RecordEventsTests : IDisposable
     }
 
     [Fact]
-    public void A_closed_subscription_frees_a_slot()
+    public void ClosedSubscriptionFreesSlot()
     {
         var saved = RecordEvents.MaxSubscribers;
         RecordEvents.MaxSubscribers = RecordEvents.SubscriberCount + 1;

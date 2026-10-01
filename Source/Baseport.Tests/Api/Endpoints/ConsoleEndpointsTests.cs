@@ -43,7 +43,7 @@ public class ConsoleEndpointsTests : IDisposable
     [Theory]
     [InlineData(AccountRoles.User)]
     [InlineData(AccountRoles.Consumer)]
-    public async Task A_non_admin_gets_the_signed_out_bootstrap(string role)
+    public async Task NonAdminGetsSignedOutBootstrap(string role)
     {
         var payload = await ConsoleEndpoints.BootstrapAsync(_db, await SignedInAsync(role), authPage: false);
 
@@ -52,7 +52,7 @@ public class ConsoleEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task An_admin_gets_the_console_bootstrap()
+    public async Task AdminGetsConsoleBootstrap()
     {
         var payload = await ConsoleEndpoints.BootstrapAsync(_db, await SignedInAsync(AccountRoles.Admin), authPage: false);
 
@@ -60,7 +60,7 @@ public class ConsoleEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_non_admin_opening_the_console_is_sent_to_sign_in()
+    public async Task NonAdminRedirectedToSignIn()
     {
         var ctx = await SignedInAsync(AccountRoles.User);
 

@@ -33,7 +33,7 @@ public class UserAuthTests : IDisposable
     };
 
     [Fact]
-    public void A_minted_token_verifies_and_transports_its_claims()
+    public void MintedTokenVerifies()
     {
         var now = DateTime.UtcNow;
         var claims = UserTokens.Verify(UserTokens.Mint(Jane(), "session00001", now), now);
@@ -46,7 +46,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public void A_tampered_payload_is_refused()
+    public void TamperedPayloadRefused()
     {
         var now = DateTime.UtcNow;
         var parts = UserTokens.Mint(Jane(), "session00001", now).Split('.');
@@ -58,14 +58,14 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public void An_expired_token_is_refused()
+    public void ExpiredTokenRefused()
     {
         var issued = DateTime.UtcNow.AddDays(-1);
         Assert.Null(UserTokens.Verify(UserTokens.Mint(Jane(), "session00001", issued), DateTime.UtcNow));
     }
 
     [Fact]
-    public void Changing_the_issuer_rejects_tokens_minted_under_the_old_one()
+    public void IssuerChangeRejectsOldTokens()
     {
         var now = DateTime.UtcNow;
         var token = UserTokens.Mint(Jane(), "session00001", now);
@@ -78,7 +78,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public void Rotating_the_signing_key_rejects_tokens_minted_under_the_old_one()
+    public void KeyRotationRejectsOldTokens()
     {
         var now = DateTime.UtcNow;
         var token = UserTokens.Mint(Jane(), "session00001", now);
@@ -88,7 +88,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public void A_configured_lifetime_is_clamped_to_the_allowed_range()
+    public void LifetimeIsClamped()
     {
         UserTokens.Configure(new AppSettings { AuthTokenLifetimeSec = 5, AuthRefreshLifetimeDays = 5000 });
         Assert.Equal(UserTokens.MinTokenLifetimeSec, (int)UserTokens.AuthTokenLifetime.TotalSeconds);
@@ -97,7 +97,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public async Task A_refresh_token_survives_the_refresh_it_pays_for()
+    public async Task RefreshTokenNotRotated()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var user = Jane();
@@ -113,7 +113,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public async Task An_expired_session_row_cannot_reauth_and_is_pruned()
+    public async Task ExpiredSessionIsPruned()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var user = Jane();
@@ -128,7 +128,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public async Task A_disabled_account_cannot_refresh()
+    public async Task DisabledAccountCannotRefresh()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var user = Jane();
@@ -143,7 +143,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public async Task Revoking_a_users_sessions_kills_every_refresh_token()
+    public async Task RevokeAllKillsRefreshTokens()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var user = Jane();
@@ -159,7 +159,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public async Task Revoking_a_session_kills_the_access_token_it_issued()
+    public async Task RevokeKillsAccessToken()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var user = Jane();
@@ -177,7 +177,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public async Task An_access_token_without_a_session_claim_is_refused()
+    public async Task TokenWithoutSessionRefused()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var user = Jane();
@@ -189,7 +189,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public async Task An_operators_session_lives_in_the_same_store_as_an_end_users()
+    public async Task OperatorSessionsShareStore()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var admin = await _db.UserAccounts.FirstAsync(u => u.Role == AccountRoles.Admin, TestContext.Current.CancellationToken);
@@ -202,7 +202,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public async Task The_signing_key_lives_in_a_file_beside_the_database_and_not_in_a_row()
+    public async Task SigningKeyIsAFile()
     {
         var dir = Directory.CreateTempSubdirectory("baseport-keystore").FullName;
         try
@@ -247,7 +247,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public void An_in_memory_database_keeps_its_key_in_memory()
+    public void MemoryDatabaseKeepsKeyInMemory()
     {
         Assert.Equal("", KeyStore.PathFor(_db));
         Assert.Null(KeyStore.Read(_db));
@@ -273,11 +273,11 @@ public class UserAuthTests : IDisposable
     [InlineData("jane@example.com")]
     [InlineData("j@x.io")]
     [InlineData("a b c")]
-    public void A_derived_username_is_always_valid(string email) =>
+    public void DerivedUsernameIsValid(string email) =>
         Assert.Empty(AccountValidation.Validate(UserAuthEndpoints.DeriveUsername(email), ""));
 
     [Fact]
-    public void Public_auth_is_off_until_an_operator_turns_it_on()
+    public void PublicAuthOffByDefault()
     {
         var settings = new AppSettings();
         Assert.False(settings.PublicAuthEnabled);
@@ -291,11 +291,11 @@ public class UserAuthTests : IDisposable
     [InlineData("../etc", false)]
     [InlineData("a/b", false)]
     [InlineData("", false)]
-    public void A_bucket_name_is_a_single_safe_path_segment(string bucket, bool valid) =>
+    public void BucketNameIsOneSegment(string bucket, bool valid) =>
         Assert.Equal(valid, FileStore.IsBucket(bucket));
 
     [Fact]
-    public void The_sign_up_link_is_gone_from_the_page_when_sign_up_is_closed()
+    public void SignUpLinkHiddenWhenClosed()
     {
         const string page = "<form><!--__SIGNUP__--><p><a href='/auth/register'>Create one</a></p><!--__/SIGNUP__--></form>";
 
@@ -307,7 +307,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public void An_upload_name_is_a_capability_key_in_its_own_right()
+    public void UploadNameIsUnguessable()
     {
         Assert.True(FileStore.NameLength * 6 >= 128);
 
@@ -319,7 +319,7 @@ public class UserAuthTests : IDisposable
     [InlineData("../../etc/passwd")]
     [InlineData("avatars/../../secret.db")]
     [InlineData("a/b/c.png")]
-    public void A_stored_name_can_never_escape_the_uploads_directory(string name)
+    public void StoredNameCannotEscape(string name)
     {
         FileStore.Initialize("Data Source=baseport.db");
         var resolved = FileStore.Resolve(name);
@@ -327,7 +327,7 @@ public class UserAuthTests : IDisposable
     }
 
     [Fact]
-    public void Only_real_upload_urls_count_as_references()
+    public void OnlyUploadUrlsAreReferences()
     {
         var referenced = Jobs.ReferencedUploads(new[]
         {

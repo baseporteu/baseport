@@ -6,7 +6,7 @@ namespace Baseport.Tests;
 public class HtmlTests
 {
     [Fact]
-    public void A_delete_button_transports_the_identifier_alongside_the_id()
+    public void DeleteButtonCarriesIdentifier()
     {
         var html = Html.Button("Delete", "deleteRecord", "abc123", "ACME-001");
 
@@ -14,7 +14,7 @@ public class HtmlTests
     }
 
     [Fact]
-    public void An_identifier_cannot_break_out_of_the_onclick_it_sits_in()
+    public void IdentifierCannotEscapeOnclick()
     {
         var html = Html.Button("Delete", "deleteRecord", "abc123", "'); alert(1); //");
 
@@ -23,7 +23,7 @@ public class HtmlTests
     }
 
     [Fact]
-    public void A_long_identifier_is_cut_so_the_dialog_still_fits()
+    public void LongIdentifierIsCut()
     {
         Assert.Equal("short", Html.Shorten("short"));
         Assert.Equal(new string('x', 60), Html.Shorten(new string('x', 60)));

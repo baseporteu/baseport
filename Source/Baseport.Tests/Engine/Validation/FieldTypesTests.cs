@@ -18,7 +18,7 @@ public class FieldValidationNewTypesTests
     [InlineData("a@b.com", true)]
     [InlineData("not-an-email", false)]
     [InlineData("a@b", false)]
-    public void Email_validates_address_shape(string value, bool valid)
+    public void EmailShape(string value, bool valid)
     {
         var errs = Validate(Field("email"), JsonValue.Create(value));
         Assert.Equal(valid, errs.Count == 0);
@@ -28,7 +28,7 @@ public class FieldValidationNewTypesTests
     [InlineData("https://example.com", true)]
     [InlineData("ftp://example.com", false)]
     [InlineData("not a url", false)]
-    public void Url_requires_http_or_https(string value, bool valid)
+    public void UrlNeedsHttp(string value, bool valid)
     {
         var errs = Validate(Field("url"), JsonValue.Create(value));
         Assert.Equal(valid, errs.Count == 0);
@@ -38,7 +38,7 @@ public class FieldValidationNewTypesTests
     [InlineData("14:30:00", true)]
     [InlineData("14:30", true)]
     [InlineData("not a time", false)]
-    public void Time_parses_time_only(string value, bool valid)
+    public void TimeOnly(string value, bool valid)
     {
         var errs = Validate(Field("time"), JsonValue.Create(value));
         Assert.Equal(valid, errs.Count == 0);
@@ -48,14 +48,14 @@ public class FieldValidationNewTypesTests
     [InlineData("my-slug-123", true)]
     [InlineData("My Slug", false)]
     [InlineData("has_underscore", false)]
-    public void Slug_requires_lowercase_hyphenated_shape(string value, bool valid)
+    public void SlugShape(string value, bool valid)
     {
         var errs = Validate(Field("slug"), JsonValue.Create(value));
         Assert.Equal(valid, errs.Count == 0);
     }
 
     [Fact]
-    public void Slug_definition_rejects_a_source_field_that_does_not_exist()
+    public void SlugNeedsSourceField()
     {
         var f = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Slug", DataType = "slug", OptionsJson = """{"sourceField":"Ghost"}""" };
         var errs = FieldValidation.ValidateFieldDefinition(f, new List<string> { "Title" }, new List<string> { "Title", "Slug" }, _ => true);
@@ -63,7 +63,7 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Json_field_requires_an_object_not_an_array_or_scalar()
+    public void JsonNeedsObject()
     {
         var f = Field("json");
         Assert.Empty(Validate(f, JsonNode.Parse("""{"a":1}""")));
@@ -72,7 +72,7 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Array_field_accepts_only_scalar_items()
+    public void ArrayItemsAreScalar()
     {
         var f = Field("array");
         Assert.Empty(Validate(f, JsonNode.Parse("""["a", 1, true]""")));
@@ -81,14 +81,14 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Array_field_enforces_an_item_cap()
+    public void ArrayItemCap()
     {
         var f = Field("array", max: 2);
         Assert.Contains(Validate(f, JsonNode.Parse("[1,2,3]")), e => e.Contains("at most 2"));
     }
 
     [Fact]
-    public void Array_field_with_a_sub_schema_validates_line_item_rows()
+    public void ArraySubSchemaValidates()
     {
         var f = Field("array", optionsJson: """{"fields":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}""");
 
@@ -99,7 +99,7 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Password_field_validates_plaintext_length_but_not_a_stored_hash()
+    public void PasswordLengthNotHash()
     {
         var f = Field("password", min: 10);
         Assert.Contains(Validate(f, JsonValue.Create("short")), e => e.Contains("at least 10"));
@@ -115,7 +115,7 @@ public class FieldValidationNewTypesTests
     [InlineData("email")]
     [InlineData("number")]
     [InlineData("select")]
-    public void Nested_json_is_rejected_on_every_scalar_type_not_silently_swallowed(string type)
+    public void ScalarRejectsNestedJson(string type)
     {
         var f = Field(type, optionsJson: """["red","blue"]""");
         var errs = Validate(f, JsonNode.Parse("""{"injected":"object"}"""));
@@ -123,7 +123,7 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Object_members_are_validated_with_the_same_rules_as_top_level_fields()
+    public void ObjectMembersValidated()
     {
         var f = Field("json", optionsJson: """
             {"fields":[
@@ -140,7 +140,7 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Object_members_nest_further_and_stop_at_the_depth_cap()
+    public void ObjectDepthCap()
     {
         var deep = Field("json", optionsJson: """
             {"fields":[{"name":"A","dataType":"json","optionsJson":"{\"fields\":[{\"name\":\"B\",\"dataType\":\"json\",\"optionsJson\":\"{\\\"fields\\\":[{\\\"name\\\":\\\"C\\\",\\\"dataType\\\":\\\"number\\\"}]}\"}]}"}]}
@@ -151,13 +151,13 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void An_object_without_a_sub_schema_stays_free_form()
+    public void ObjectWithoutSchemaIsFree()
     {
         Assert.Empty(Validate(Field("json"), JsonNode.Parse("""{"anything":{"goes":[1,2]}}""")));
     }
 
     [Fact]
-    public void A_nested_member_cannot_be_a_type_that_is_computed_over_a_whole_record()
+    public void NestedMemberNotComputed()
     {
         var f = new FieldDefinition
         {
@@ -171,7 +171,7 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Multiselect_and_json_and_array_are_exempt_from_the_scalar_guard()
+    public void CollectionsSkipScalarGuard()
     {
 
         Assert.Empty(Validate(Field("multiselect", optionsJson: """["a","b"]"""), JsonNode.Parse("""["a"]""")));
@@ -183,7 +183,7 @@ public class FieldValidationNewTypesTests
     [InlineData("1.5", 2, true)]
     [InlineData("1.505", 2, false)]
     [InlineData("2", 0, true)]
-    public void Scale_caps_decimal_places(string value, int scale, bool valid)
+    public void ScaleCapsDecimals(string value, int scale, bool valid)
     {
         var f = Field("number");
         f.Scale = scale;
@@ -192,7 +192,7 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Scale_definition_rejects_a_non_numeric_type()
+    public void ScaleNeedsNumber()
     {
         var f = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Title", DataType = "text", Scale = 2 };
         var errs = FieldValidation.ValidateFieldDefinition(f, new List<string>(), new List<string> { "Title" }, _ => true);
@@ -200,7 +200,7 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Scale_definition_rejects_an_out_of_range_value()
+    public void ScaleRange()
     {
         var f = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Price", DataType = "currency", Scale = 20 };
         var errs = FieldValidation.ValidateFieldDefinition(f, new List<string>(), new List<string> { "Price" }, _ => true);
@@ -208,7 +208,7 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Validation_rule_definition_rejects_a_malformed_expression()
+    public void RuleRejectsMalformed()
     {
         var f = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number", ValidationExpr = "data.Qty >" };
         var errs = FieldValidation.ValidateFieldDefinition(f, new List<string>(), new List<string> { "Qty" }, _ => true);
@@ -216,7 +216,7 @@ public class FieldValidationNewTypesTests
     }
 
     [Fact]
-    public void Validation_message_without_a_rule_is_rejected()
+    public void MessageNeedsRule()
     {
         var f = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number", ValidationMessage = "Nope" };
         var errs = FieldValidation.ValidateFieldDefinition(f, new List<string>(), new List<string> { "Qty" }, _ => true);
@@ -256,7 +256,7 @@ public class RecordEngineNewTypesTests : IDisposable
     private static JsonObject Json(string raw) => (JsonObject)JsonNode.Parse(raw)!;
 
     [Fact]
-    public async Task Slug_is_derived_from_its_source_field_when_left_blank()
+    public async Task SlugDerived()
     {
         var table = Seed(
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Title", DataType = "text" },
@@ -270,7 +270,7 @@ public class RecordEngineNewTypesTests : IDisposable
     }
 
     [Fact]
-    public async Task Slug_supplied_by_the_caller_is_never_overwritten()
+    public async Task SlugKeepsSupplied()
     {
         var table = Seed(
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Title", DataType = "text" },
@@ -284,7 +284,7 @@ public class RecordEngineNewTypesTests : IDisposable
     }
 
     [Fact]
-    public async Task Richtext_is_sanitized_before_storage()
+    public async Task RichtextSanitized()
     {
         var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "Body", DataType = "richtext" });
         var obj = Json("""{ "Body": "<p>hi</p><script>alert(1)</script>" }""");
@@ -298,7 +298,7 @@ public class RecordEngineNewTypesTests : IDisposable
     }
 
     [Fact]
-    public async Task Password_is_hashed_on_write_and_the_hash_is_never_rehashed_on_resave()
+    public async Task PasswordHashedOnce()
     {
         var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "Password", DataType = "password" });
         var obj = Json("""{ "Password": "correct horse battery staple" }""");
@@ -319,7 +319,7 @@ public class RecordEngineNewTypesTests : IDisposable
     }
 
     [Fact]
-    public async Task Password_is_omitted_from_every_read_response()
+    public async Task PasswordNeverRead()
     {
         var table = Seed(
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Username", DataType = "text" },
@@ -339,7 +339,7 @@ public class RecordEngineNewTypesTests : IDisposable
     }
 
     [Fact]
-    public async Task Json_and_array_fields_round_trip_through_the_write_path()
+    public async Task JsonAndArrayRoundTrip()
     {
         var table = Seed(
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Meta", DataType = "json" },
@@ -354,7 +354,7 @@ public class RecordEngineNewTypesTests : IDisposable
     }
 
     [Fact]
-    public async Task Patching_one_member_of_an_object_field_keeps_the_others()
+    public async Task PatchKeepsOtherMembers()
     {
         var table = Seed(new FieldDefinition
         {
@@ -380,11 +380,13 @@ public class RecordEngineNewTypesTests : IDisposable
     }
 
     [Fact]
-    public async Task Replacing_a_record_still_replaces_the_whole_object()
+    public async Task ReplaceReplacesObject()
     {
         var table = Seed(new FieldDefinition
         {
-            Id = Ids.NewShortId(12), Name = "Address", DataType = "json",
+            Id = Ids.NewShortId(12),
+            Name = "Address",
+            DataType = "json",
             OptionsJson = """{"fields":[{"name":"Street","dataType":"text"},{"name":"City","dataType":"text"}]}"""
         });
 
@@ -401,14 +403,17 @@ public class RecordEngineNewTypesTests : IDisposable
     }
 
     [Fact]
-    public async Task A_validation_rule_blocks_the_write_with_its_own_message()
+    public async Task RuleBlocksWithMessage()
     {
         var table = Seed(
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number" },
             new FieldDefinition
             {
-                Id = Ids.NewShortId(12), Name = "Stock", DataType = "number",
-                ValidationExpr = "data.Qty <= data.Stock", ValidationMessage = "Not enough stock."
+                Id = Ids.NewShortId(12),
+                Name = "Stock",
+                DataType = "number",
+                ValidationExpr = "data.Qty <= data.Stock",
+                ValidationMessage = "Not enough stock."
             });
 
         var over = Json("""{ "Qty": 5, "Stock": 2 }""");

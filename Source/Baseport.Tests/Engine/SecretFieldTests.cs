@@ -29,7 +29,9 @@ public class SecretFieldTests : IDisposable
         _db.Tables.Add(_table);
         _db.Records.Add(new Record
         {
-            Id = Ids.NewShortId(12), TableId = _table.Id, CreatedAt = DateTime.UtcNow,
+            Id = Ids.NewShortId(12),
+            TableId = _table.Id,
+            CreatedAt = DateTime.UtcNow,
             JsonData = $$"""{"Name":"alice","Pw":"{{Hash}}"}"""
         });
         _db.SaveChanges();
@@ -46,7 +48,7 @@ public class SecretFieldTests : IDisposable
     private const string Chosen = "pbkdf2$1$c2FsdA$Y2hvc2Vu";
 
     [Fact]
-    public async Task A_client_supplied_pbkdf2_value_is_hashed_again_on_create()
+    public async Task Pbkdf2RehashedOnCreate()
     {
         var obj = new System.Text.Json.Nodes.JsonObject { ["Name"] = "mallory", ["Pw"] = Chosen };
 
@@ -59,7 +61,7 @@ public class SecretFieldTests : IDisposable
     }
 
     [Fact]
-    public async Task A_client_supplied_pbkdf2_value_is_hashed_again_on_patch()
+    public async Task Pbkdf2RehashedOnPatch()
     {
         var record = _db.Records.Single();
 
@@ -71,7 +73,7 @@ public class SecretFieldTests : IDisposable
     }
 
     [Fact]
-    public async Task An_unrelated_patch_keeps_the_stored_hash()
+    public async Task UnrelatedPatchKeepsHash()
     {
         var record = _db.Records.Single();
 
@@ -83,7 +85,7 @@ public class SecretFieldTests : IDisposable
     }
 
     [Fact]
-    public async Task Wire_sql_has_no_column_for_a_password_field()
+    public async Task WireHasNoPasswordColumn()
     {
         var result = await SqlEngine.ReadAsync(_db, "SELECT * FROM \"Members\"", conn => WireCatalog.Apply(conn, WireDialect.Postgres, null));
 
@@ -93,7 +95,7 @@ public class SecretFieldTests : IDisposable
     }
 
     [Fact]
-    public void A_streamed_change_carries_no_password_value()
+    public void StreamOmitsPassword()
     {
         var record = PublicApiEndpoints.EventRecord($$"""{"Name":"alice","Pw":"{{Hash}}"}""", _fields) as System.Text.Json.Nodes.JsonObject;
 
@@ -105,7 +107,7 @@ public class SecretFieldTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Search_never_matches_on_a_password_value(bool fullText)
+    public async Task SearchSkipsPassword(bool fullText)
     {
         if (fullText) await RecordSearch.EnsureAsync(_db);
 

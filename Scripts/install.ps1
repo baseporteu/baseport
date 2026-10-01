@@ -58,7 +58,7 @@ try {
 
     $shim = @"
 @echo off
-for %%V in (update logs status doctor uninstall stop) do if /I "%~1"=="%%V" goto :bptools
+for %%V in (update logs status doctor uninstall stop restore) do if /I "%~1"=="%%V" goto :bptools
 if /I "%~1"=="-h" goto :bphelp
 if /I "%~1"=="--help" goto :bphelp
 cd /d "%~dp0"
@@ -174,6 +174,15 @@ switch ($verb) {
     $db = Join-Path $dir 'baseport.db'
     if (Test-Path $db) { Ok ("database $db, " + [math]::Round((Get-Item $db).Length / 1MB, 1) + " MB") }
     else { Warn "no database yet, the first start creates one and prints a one-time admin login." }
+    if (Test-Path $db) {
+        Push-Location $dir
+        try { $check = (& $exe check 2>&1) -join ' '; $checked = $LASTEXITCODE } finally { Pop-Location }
+        if ($checked -eq 0) { Ok "database integrity: $check" }
+        else { Bad "database integrity: $check. Restore the latest backup: baseport restore <archive>" }
+    }
+    if ($env:DOTNET_SYSTEM_IO_DISABLEFILELOCKING) {
+        Warn "DOTNET_SYSTEM_IO_DISABLEFILELOCKING is set: a second Baseport on the same database is not refused."
+    }
 
     $settings = Join-Path $dir 'appsettings.json'
     if (((Test-Path $settings) -and (Select-String -Path $settings -Pattern '"AllowInsecureSignIn"\s*:\s*true' -Quiet)) -or $env:Baseport__AllowInsecureSignIn -eq 'true') {
@@ -235,6 +244,18 @@ switch ($verb) {
     $tail = if ($purge) { "rd /s /q `"$dir`"" } else { ($shimFiles | ForEach-Object { "del /q `"" + (Join-Path $dir $_) + "`"" }) -join ' & ' }
     Start-Process cmd -ArgumentList '/c', "timeout /t 2 >nul & $tail" -WindowStyle Hidden
     Write-Host "Removed the baseport command."
+}
+
+'restore' {
+    if ($rest.Count -lt 1) { Write-Error "Usage: baseport restore <archive> [--yes]"; exit 1 }
+    $archive = (Resolve-Path $rest[0]).Path
+    $task = Get-BaseportTask
+    $wasRunning = $task -and $task.State -eq 'Running'
+    & $PSCommandPath stop -Force
+    Push-Location $dir
+    try { & $exe restore $archive @($rest | Select-Object -Skip 1); $restored = $LASTEXITCODE } finally { Pop-Location }
+    if ($wasRunning) { Start-ScheduledTask -TaskName 'Baseport' }
+    exit $restored
 }
 
 default {

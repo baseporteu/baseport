@@ -12,7 +12,7 @@ public class ProxyTests
     [InlineData("""{"items":[{"sku":"P001"}]}""")]
     [InlineData("""{"results":[{"sku":"P001"}]}""")]
     [InlineData("""[{"sku":"P001"}]""")]
-    public void FirstRecord_unwraps_the_common_collection_envelopes(string json)
+    public void FirstRecordUnwrapsEnvelope(string json)
     {
         var record = OpenApiProxy.FirstRecord(JsonNode.Parse(json));
         Assert.NotNull(record);
@@ -20,7 +20,7 @@ public class ProxyTests
     }
 
     [Fact]
-    public void FirstRecord_treats_a_bare_object_as_the_record()
+    public void FirstRecordAcceptsObject()
     {
         var record = OpenApiProxy.FirstRecord(JsonNode.Parse("""{"sku":"P001","name":"Widget"}"""));
         Assert.NotNull(record);
@@ -28,14 +28,14 @@ public class ProxyTests
     }
 
     [Fact]
-    public void FirstRecord_returns_null_for_an_empty_collection()
+    public void FirstRecordNullWhenEmpty()
     {
         Assert.Null(OpenApiProxy.FirstRecord(JsonNode.Parse("""{"value":[]}""")));
         Assert.Null(OpenApiProxy.FirstRecord(JsonNode.Parse("[]")));
     }
 
     [Fact]
-    public void Records_returns_every_row_of_a_collection()
+    public void RecordsReturnsAllRows()
     {
         var rows = OpenApiProxy.Records(JsonNode.Parse("""{"value":[{"a":1},{"a":2},{"a":3}]}"""));
         Assert.Equal(3, rows.Count);
@@ -52,28 +52,28 @@ public class ProxyTests
     [InlineData("array", "", "array")]
     [InlineData("string", "email", "email")]
     [InlineData("string", "uri", "url")]
-    public void Sampled_json_types_map_to_field_types(string type, string format, string expected)
+    public void SampledTypesMapToFields(string type, string format, string expected)
     {
         var prop = new OpenApiProxy.FieldProp("X", type, format, new List<string>(), false);
         Assert.Equal(expected, OpenApiProxy.MapFieldType(prop));
     }
 
     [Fact]
-    public void An_enum_property_becomes_a_select_regardless_of_its_type()
+    public void EnumBecomesSelect()
     {
         var prop = new OpenApiProxy.FieldProp("Status", "string", "", new List<string> { "open", "closed" }, false);
         Assert.Equal("select", OpenApiProxy.MapFieldType(prop));
     }
 
     [Fact]
-    public void CanRead_is_false_until_a_read_endpoint_is_known()
+    public void CanReadNeedsEndpoint()
     {
         Assert.False(ProxyQuery.CanRead(new TableDefinition { IsProxy = true }));
         Assert.True(ProxyQuery.CanRead(new TableDefinition { IsProxy = true, ProxyReadUrl = "https://example.test/items" }));
     }
 
     [Fact]
-    public void Project_reveals_only_the_configured_fields_of_a_remote_record()
+    public void ProjectKeepsConfiguredFields()
     {
         var remote = (JsonObject)JsonNode.Parse("""{"sku":"P001","name":"Widget","costPrice":9.99}""")!;
         var visible = new List<FieldDefinition>
@@ -90,7 +90,7 @@ public class ProxyTests
     }
 
     [Fact]
-    public void Project_emits_a_null_for_a_field_the_remote_omitted()
+    public void ProjectNullsMissingFields()
     {
         var remote = (JsonObject)JsonNode.Parse("""{"sku":"P001"}""")!;
         var visible = new List<FieldDefinition> { new() { Name = "sku" }, new() { Name = "name" } };
@@ -102,7 +102,7 @@ public class ProxyTests
     }
 
     [Fact]
-    public void TryParseError_surfaces_the_remote_message()
+    public void TryParseErrorKeepsMessage()
     {
         Assert.Equal("Authentication required", OpenApiProxy.TryParseError("""{"error":"Authentication required"}"""));
         Assert.Equal("Bad request", OpenApiProxy.TryParseError("""{"title":"Bad request"}"""));
@@ -110,7 +110,7 @@ public class ProxyTests
     }
 
     [Fact]
-    public void A_proxied_list_is_sorted_the_form_configures_it_to_be()
+    public void ProxyListIsSorted()
     {
 
         var records = new List<JsonObject>
@@ -132,7 +132,7 @@ public class ProxyTests
     }
 
     [Fact]
-    public void An_unset_sort_field_leaves_a_proxied_list_in_its_remote_order()
+    public void ProxyListKeepsRemoteOrder()
     {
         var records = new List<JsonObject>
         {
@@ -153,21 +153,21 @@ public class ProxyTests
     [InlineData("file:///etc/passwd")]
     [InlineData("ftp://example.com/spec.json")]
     [InlineData("not a url")]
-    public void A_private_or_non_http_proxy_target_is_refused(string url)
+    public void PrivateTargetRefused(string url)
     {
         ProxyTarget.Configure(new AppSettings());
         Assert.NotNull(ProxyTarget.Problem(url));
     }
 
     [Fact]
-    public void A_public_proxy_target_is_allowed()
+    public void PublicTargetAllowed()
     {
         ProxyTarget.Configure(new AppSettings());
         Assert.Null(ProxyTarget.Problem("https://93.184.216.34/openapi.json"));
     }
 
     [Fact]
-    public void An_operator_can_open_private_targets()
+    public void OperatorCanAllowPrivate()
     {
         ProxyTarget.Configure(new AppSettings { ProxyPrivateTargetsEnabled = true });
         Assert.Null(ProxyTarget.Problem("http://127.0.0.1:5000/api/openapi.json"));
@@ -177,7 +177,7 @@ public class ProxyTests
     }
 
     [Fact]
-    public void Opening_private_targets_does_not_open_other_schemes()
+    public void PrivateDoesNotOpenSchemes()
     {
         ProxyTarget.Configure(new AppSettings { ProxyPrivateTargetsEnabled = true });
         Assert.NotNull(ProxyTarget.Problem("file:///etc/passwd"));

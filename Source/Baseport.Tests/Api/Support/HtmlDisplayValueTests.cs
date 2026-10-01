@@ -7,7 +7,7 @@ namespace Baseport.Tests;
 public class HtmlDisplayValueTests
 {
     [Fact]
-    public void An_object_cell_reads_as_typed_not_as_escape_sequences()
+    public void ObjectCellReadsAsTyped()
     {
         var node = JsonNode.Parse("""{"Phone":"+31 6 1234 5678","Note":"a & b"}""");
 
@@ -19,14 +19,14 @@ public class HtmlDisplayValueTests
     }
 
     [Fact]
-    public void A_list_of_objects_reads_the_same_way()
+    public void ObjectListReadsAsTyped()
     {
         var node = JsonNode.Parse("""[{"Phone":"+31 6 1234 5678"}]""");
         Assert.DoesNotContain("\\u", Html.DisplayValue(node));
     }
 
     [Fact]
-    public void A_cell_still_escapes_markup_in_the_value()
+    public void CellEscapesMarkup()
     {
         var node = JsonNode.Parse("""{"X":"<script>alert(1)</script>"}""");
 

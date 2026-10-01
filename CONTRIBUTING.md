@@ -40,6 +40,28 @@ dotnet publish Baseport/Baseport.csproj -c Release -r linux-x64 -o out
 
 Swap `-r linux-x64` for `-r win-x64` for the Windows build. Running it from a checkout does not need the publish step at all, see Setup above.
 
+## Dependencies
+
+Package versions live in `Source/Directory.Packages.props`, and every project commits a `packages.lock.json`. CI restores with `--locked-mode`, so a changed version without an updated lock file fails the build. After changing a version:
+
+```bash
+cd Source
+dotnet restore Baseport.slnx --force-evaluate
+```
+
+Commit the lock files with the version change.
+
+## Cutting a release
+
+1. Cut an upgrade fixture from the previous tag, so the new release is tested against a database that release created:
+
+   ```bash
+   Scripts/make-fixture.sh v0.0.1-alpha.24
+   ```
+
+   It writes `<tag>.db` and `<tag>.expected.json` to `Source/Baseport.Tests/Fixtures/upgrades/`; `UpgradeFixtureTests` runs every fixture there.
+2. Run the release workflow with the new tag.
+
 ## Documentation
 
 The docs site lives in `Documentation/` and is built by Bark. See [Documentation/README.md](Documentation/README.md) for how to run it locally and where each page goes.

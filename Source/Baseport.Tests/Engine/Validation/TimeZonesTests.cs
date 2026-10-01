@@ -10,7 +10,7 @@ public class TimeZonesTests
     [InlineData("Europe/Amsterdam")]
     [InlineData("America/Argentina/Buenos_Aires")]
     [InlineData("Etc/GMT+5")]
-    public void Real_zones_are_accepted(string zone) => Assert.True(TimeZones.IsValid(zone));
+    public void RealZonesAccepted(string zone) => Assert.True(TimeZones.IsValid(zone));
 
     [Theory]
     [InlineData("")]
@@ -18,10 +18,10 @@ public class TimeZonesTests
     [InlineData("Europe/Amsterdam; DROP TABLE _settings")]
     [InlineData("../../etc/passwd")]
     [InlineData("Europe/Amsterdam/Extra/Deep")]
-    public void Anything_that_is_not_a_zone_name_is_refused(string zone) => Assert.False(TimeZones.IsValid(zone));
+    public void NonZoneRefused(string zone) => Assert.False(TimeZones.IsValid(zone));
 
     [Fact]
-    public void The_host_zone_is_one_a_client_could_render_with()
+    public void HostZoneIsRenderable()
     {
 
         Assert.True(TimeZones.IsValid(TimeZones.HostDefault));
@@ -30,6 +30,6 @@ public class TimeZonesTests
     }
 
     [Fact]
-    public void A_zone_name_cannot_be_arbitrarily_long() =>
+    public void ZoneNameLengthCapped() =>
         Assert.False(TimeZones.IsValid("Europe/" + new string('a', 100)));
 }

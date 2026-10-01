@@ -13,6 +13,7 @@ publish/
 # file extensions (logs, dbs, cache, os)
 *.log
 *.db
+!Source/Baseport.Tests/Fixtures/upgrades/*.db
 *.db-shm
 *.db-wal
 *.sqlite

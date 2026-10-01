@@ -40,7 +40,7 @@ public class StartupGuardTests : IDisposable
     }
 
     [Fact]
-    public async Task TheSeededAdminPasswordIsRandomAndMustChange()
+    public async Task SeededAdminMustChangePassword()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         await AdminAuth.EnsureAdminPasswordAsync(_db);
@@ -61,7 +61,7 @@ public class StartupGuardTests : IDisposable
     }
 
     [Fact]
-    public async Task AConsumerAccountGetsASessionButNotTheConsole()
+    public async Task ConsumerGetsNoConsole()
     {
         var consumer = await AccountAsync("c1", AccountRoles.Consumer);
         var resolved = await AdminAuth.ResolveAsync(_db, await SignedInAsync(consumer));
@@ -80,7 +80,7 @@ public class StartupGuardTests : IDisposable
     }
 
     [Fact]
-    public async Task ADemotedOperatorsTokenNoLongerReachesTheConsole()
+    public async Task DemotedTokenLosesConsole()
     {
         var account = await AccountAsync("d1", AccountRoles.Admin);
         var ctx = await SignedInAsync(account);
@@ -117,7 +117,7 @@ public class StartupGuardTests : IDisposable
     }
 
     [Fact]
-    public async Task AStaleAuthCookieIsRemintedFromTheRefreshCookie()
+    public async Task StaleCookieRemintedFromRefresh()
     {
         var account = await AccountAsync("s1", AccountRoles.Admin);
         var tokens = await UserTokens.IssueAsync(_db, account, DateTime.UtcNow);
@@ -130,7 +130,7 @@ public class StartupGuardTests : IDisposable
     }
 
     [Fact]
-    public async Task AConsumerIsRefusedTheConsoleAndTheLastAdminCannotBeDemoted()
+    public async Task ConsumerRefusedLastAdminKept()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var admin = await _db.UserAccounts.SingleAsync(TestContext.Current.CancellationToken);
@@ -154,7 +154,7 @@ public class StartupGuardTests : IDisposable
     }
 
     [Fact]
-    public async Task ABearerTokenResolutionIsVisibleToUserIdForTheSameWayACookieSessionIs()
+    public async Task BearerResolutionSetsUserId()
     {
         var account = await AccountAsync("k1", AccountRoles.Consumer);
         account.ApiTokenHash = ApiAuth.HashToken("plain-token-k1");

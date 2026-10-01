@@ -23,7 +23,7 @@ public class SecurityHeadersTests
     [InlineData("/uploads/drawing.svg")]
     [InlineData("/uploads/avatars/drawing.svg")]
     [InlineData("/api/v1/files/avatars")]
-    public async Task An_uploaded_file_is_sandboxed_and_may_run_no_script(string path)
+    public async Task UploadIsSandboxed(string path)
     {
         var policy = await PolicyForAsync(path);
 
@@ -33,6 +33,6 @@ public class SecurityHeadersTests
     }
 
     [Fact]
-    public async Task The_console_keeps_its_own_policy() =>
+    public async Task ConsoleKeepsPolicy() =>
         Assert.Contains("script-src 'self'", await PolicyForAsync("/_/admin"));
 }

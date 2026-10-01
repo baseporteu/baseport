@@ -4,15 +4,14 @@ WORKDIR /src
 
 COPY global.json ./
 COPY Source/Directory.Build.props Source/Directory.Packages.props Source/
-COPY Source/Baseport/Baseport.csproj Source/Baseport/
+COPY Source/Baseport/Baseport.csproj Source/Baseport/packages.lock.json Source/Baseport/
 
-RUN RID="linux-musl-$(case "$TARGETARCH" in amd64) echo x64 ;; *) echo "$TARGETARCH" ;; esac)" \
-    && dotnet restore Source/Baseport/Baseport.csproj -r "$RID"
+RUN dotnet restore Source/Baseport/Baseport.csproj --locked-mode
 
 COPY Source/Baseport/ Source/Baseport/
 
 RUN RID="linux-musl-$(case "$TARGETARCH" in amd64) echo x64 ;; *) echo "$TARGETARCH" ;; esac)" \
-    && dotnet publish Source/Baseport/Baseport.csproj -c Release -r "$RID" -o /app/publish
+    && dotnet publish Source/Baseport/Baseport.csproj -c Release -r "$RID" -p:RestoreLockedMode=true -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:11.0-preview-alpine AS runtime
 WORKDIR /app

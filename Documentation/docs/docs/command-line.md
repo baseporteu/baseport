@@ -16,6 +16,8 @@ The installer adds a `baseport` wrapper to the PATH. It runs the binary from the
 | `baseport config [--check]` | Each setting and its source; `--check` prints only problems |
 | `baseport status` | Whether Baseport is running, and where |
 | `baseport doctor` | Check the install; each `warn` and `FAIL` line names its fix |
+| `baseport check` | `PRAGMA quick_check` on the database; exit 1 on damage |
+| `baseport restore <archive> [--yes]` | Replace the data with a backup; the current files move aside. See [Restore](/docs/going-to-production#restore) |
 | `baseport logs [lines]` | Follow the log files, default 200 lines back, with the first-start login printed above the tail |
 | `baseport update` | Stop, replace the binary with the latest release, restart the service |
 | `baseport service [--urls URL]` | Install the systemd service (Linux, root) |
@@ -25,9 +27,9 @@ The installer adds a `baseport` wrapper to the PATH. It runs the binary from the
 | `baseport accounts ...` | Account operations, below |
 | `baseport providers ...` | Wire listener control, below |
 
-`logs`, `update`, `service`, `start`, `stop`, `restart`, `status`, `doctor` and `uninstall` belong to the wrapper script; the binary answers them with a pointer to the wrapper. Under systemd, `journalctl -u baseport` carries the same log output.
+`logs`, `update`, `service`, `start`, `stop`, `restart`, `status`, `doctor` and `uninstall` belong to the wrapper script; the binary answers them with a pointer to the wrapper. `restore` exists in both: the wrapper stops and restarts the service around the binary's restore. Under systemd, `journalctl -u baseport` carries the same log output.
 
-`doctor` checks: version and install path, whether the wrapper on the PATH belongs to this install, whether the database exists, the service state, whether the unit runs from the updated directory, and whether the service address answers.
+`doctor` checks: version and install path, whether the wrapper on the PATH belongs to this install, whether the database exists and passes `baseport check`, the service state, whether the unit runs from the updated directory, and whether the service address answers.
 
 `update` stops the running instance first: a running process keeps serving the replaced file, and on Windows the copy fails. Data is not changed.
 

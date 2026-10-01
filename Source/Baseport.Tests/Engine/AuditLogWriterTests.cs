@@ -132,7 +132,7 @@ public class AuditLogWriterTests : IDisposable
     }
 
     [Fact]
-    public async Task AFloodIsDroppedRatherThanGrowingWithoutBound()
+    public async Task FloodIsDropped()
     {
         var writer = new AuditLogWriter(_services.GetRequiredService<IServiceScopeFactory>());
 
@@ -161,21 +161,21 @@ public class AuditPathTests
     [InlineData("/API/_admin/tables")]
     [InlineData("/Api/_Admin/tables")]
     [InlineData("/api/_admin/tables")]
-    public void An_admin_write_is_audited_whatever_the_case(string path) =>
+    public void AdminWriteAudited(string path) =>
         Assert.True(AuditLogMiddleware.ShouldLog(path, "POST", hasNote: false));
 
     [Theory]
     [InlineData("/API/_ADMIN/LOGS")]
     [InlineData("/api/_admin/logs")]
     [InlineData("/API/CLIENT-ERRORS")]
-    public void The_excluded_paths_stay_excluded_whatever_the_case(string path) =>
+    public void ExcludedPathsStayExcluded(string path) =>
         Assert.False(AuditLogMiddleware.ShouldLog(path, "POST", hasNote: false));
 
     [Fact]
-    public void An_upper_case_console_read_is_audited() =>
+    public void UpperCaseReadAudited() =>
         Assert.True(AuditLogMiddleware.ShouldLog("/API/_ADMIN/tables", "GET", hasNote: false));
 
     [Fact]
-    public void A_plain_read_outside_the_console_is_not_audited() =>
+    public void PlainReadNotAudited() =>
         Assert.False(AuditLogMiddleware.ShouldLog("/api/v1/orders/records", "GET", hasNote: false));
 }

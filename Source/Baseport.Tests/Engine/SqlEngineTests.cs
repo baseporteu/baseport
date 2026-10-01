@@ -25,7 +25,7 @@ public class SqlEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task A_select_returns_its_columns_and_rows()
+    public async Task SelectReturnsRows()
     {
         _db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = "Orders" });
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -39,7 +39,7 @@ public class SqlEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task The_console_selects_author_tables_by_name_without_touching_the_record_store()
+    public async Task SelectsTablesByName()
     {
         var tableId = Ids.NewShortId(12);
         _db.Tables.Add(new TableDefinition { Id = tableId, Name = "Orders" });
@@ -59,7 +59,7 @@ public class SqlEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task A_table_named_after_sqlites_own_prefix_does_not_break_the_console()
+    public async Task SqlitePrefixedTableWorks()
     {
         var tableId = Ids.NewShortId(12);
         _db.Tables.Add(new TableDefinition { Id = tableId, Name = "Orders" });
@@ -76,7 +76,7 @@ public class SqlEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task A_broken_query_reports_the_error_instead_of_throwing()
+    public async Task BrokenQueryReportsError()
     {
         var result = await SqlEngine.ReadAsync(_db, "SELECT NoSuchColumn FROM _tables");
 
@@ -85,7 +85,7 @@ public class SqlEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task A_null_reads_back_as_null_so_the_grid_can_mark_it()
+    public async Task NullReadsAsNull()
     {
         var result = await SqlEngine.ReadAsync(_db, "SELECT NULL AS Empty");
 
@@ -93,7 +93,7 @@ public class SqlEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task The_row_count_is_capped_and_the_cut_is_reported()
+    public async Task RowCountCapped()
     {
         for (var i = 0; i < SqlEngine.MaxRows + 5; i++)
             _db.Tables.Add(new TableDefinition { Id = Ids.NewShortId(12), Name = $"T{i}" });
@@ -106,7 +106,7 @@ public class SqlEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task A_write_wearing_a_read_only_keyword_is_refused_by_sqlite()
+    public async Task DisguisedWriteRefused()
     {
         var file = Path.Combine(Path.GetTempPath(), $"baseport-{Ids.NewShortId(12)}.db");
         try
@@ -132,7 +132,7 @@ public class SqlEngineTests : IDisposable
     }
 
     [Fact]
-    public void A_value_is_escaped_before_it_reaches_the_grid()
+    public void GridValuesEscaped()
     {
         var cell = Html.Cell("<script>alert(1)</script>");
 

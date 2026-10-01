@@ -29,7 +29,7 @@ public class OpenApiSpecTests
     private static JsonObject ErrorSchema() => (OpenApiSpec.BuildSchemas(new List<TableDefinition> { Table() })[OpenApiSpec.ProblemSchema] as JsonObject)!;
 
     [Fact]
-    public void A_records_data_field_points_at_its_own_table_schema_everywhere_it_appears()
+    public void DataFieldUsesTableSchema()
     {
         var t = Table();
         var list = Ops(t)["get"]!["responses"]!["200"]!["content"]!["application/json"]!["schema"]!;
@@ -51,7 +51,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void The_stream_is_published_and_describes_one_event_not_the_body()
+    public void StreamDescribesEvent()
     {
         var op = (Paths(Table())["/api/v1/orders/subscribe"] as JsonObject)?["get"] as JsonObject;
         Assert.NotNull(op);
@@ -72,7 +72,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void The_single_record_stream_is_published_beside_the_table_stream()
+    public void RecordStreamPublished()
     {
         var op = (Paths(Table())["/api/v1/orders/subscribe/{recordId}"] as JsonObject)?["get"] as JsonObject;
         Assert.NotNull(op);
@@ -81,7 +81,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void Both_streams_document_the_subscriber_cap()
+    public void StreamsDocumentCap()
     {
         foreach (var path in new[] { "/api/v1/orders/subscribe", "/api/v1/orders/subscribe/{recordId}" })
         {
@@ -91,7 +91,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void The_stream_follows_the_GET_switch()
+    public void StreamFollowsGet()
     {
         var t = Table();
         t.ApiMethods = "POST";
@@ -100,7 +100,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void A_proxy_table_publishes_no_stream()
+    public void ProxyHasNoStream()
     {
 
         var t = Table();
@@ -119,7 +119,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void Every_operation_documents_401_403_404_500_via_the_shared_error_schema()
+    public void OperationsDocumentErrors()
     {
         var t = Table();
         var paths = Paths(t);
@@ -139,7 +139,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void Only_the_operations_that_parse_caller_input_document_400()
+    public void OnlyParsingOperationsDocument400()
     {
         var t = Table();
         var paths = Paths(t);
@@ -161,7 +161,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void A_write_documents_the_conflict_and_validation_statuses_it_returns()
+    public void WriteDocumentsConflicts()
     {
         var paths = Paths(Table());
         var list = paths["/api/v1/orders/records"] as JsonObject;
@@ -187,7 +187,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void A_versioned_response_carries_an_ETag_and_the_write_takes_If_Match()
+    public void VersionedResponseHasETag()
     {
         var paths = Paths(Table());
         var item = paths["/api/v1/orders/records/{recordId}"] as JsonObject;
@@ -205,7 +205,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void The_listing_publishes_its_cursor_in_both_directions()
+    public void ListingPublishesCursor()
     {
         var list = (Paths(Table())["/api/v1/orders/records"] as JsonObject)!["get"]!;
         Assert.Contains((list["parameters"] as JsonArray)!, n => n!["name"]!.GetValue<string>() == "cursor");
@@ -214,7 +214,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void The_error_schema_is_a_problem_document_that_kept_its_extension_members()
+    public void ErrorSchemaIsProblemDocument()
     {
         var schema = ErrorSchema();
         foreach (var member in new[] { "type", "title", "status", "detail", "instance" })
@@ -226,7 +226,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void Error_schema_declares_a_required_string_array_and_optional_invalid_names()
+    public void ErrorSchemaShape()
     {
         var schema = ErrorSchema();
         Assert.Equal("object", schema!["type"]?.GetValue<string>());
@@ -256,7 +256,7 @@ public class OpenApiSpecTests
     };
 
     [Fact]
-    public void Only_the_published_name_reaches_the_document()
+    public void OnlyPublishedNameDocumented()
     {
 
         var t = Detailed();
@@ -274,7 +274,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void Every_documented_path_is_a_public_api_route()
+    public void DocumentedPathsArePublic()
     {
         var paths = OpenApiSpec.BuildPaths(new List<TableDefinition> { Detailed() });
 
@@ -325,7 +325,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void A_field_transports_its_label_help_text_and_constraints()
+    public void FieldCarriesMetadata()
     {
 
         var schema = (OpenApiSpec.BuildSchemas(new List<TableDefinition> { Detailed() })["SalesOrders"] as JsonObject)!;
@@ -340,7 +340,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void The_documented_record_shape_matches_what_the_api_returns()
+    public void RecordShapeMatchesApi()
     {
         var record = new Record { Id = Ids.NewShortId(12), TableId = "t", JsonData = "{}", CreatedAt = DateTime.UtcNow };
 
@@ -359,7 +359,7 @@ public class OpenApiSpecTests
         (operation!["security"] as JsonArray)!.SelectMany(s => s!.AsObject().Select(p => p.Key)).ToList();
 
     [Fact]
-    public void Every_operation_requires_a_bearer_token()
+    public void OperationsRequireBearer()
     {
         foreach (var (_, path) in OpenApiSpec.BuildPaths(new List<TableDefinition> { Detailed() }))
             foreach (var (_, operation) in path!.AsObject())
@@ -394,7 +394,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void No_query_parameter_carries_a_sigil()
+    public void QueryParametersHaveNoSigil()
     {
         var list = (OpenApiSpec.BuildPaths(new List<TableDefinition> { Detailed() })["/api/v1/sales-orders/records"]!["get"]!["parameters"] as JsonArray)!;
         foreach (var p in list)
@@ -406,7 +406,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void A_disabled_method_is_absent_from_the_document()
+    public void DisabledMethodNotDocumented()
     {
         var t = Detailed();
         t.ApiMethods = "GET,POST";
@@ -424,7 +424,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void A_path_left_with_no_operations_is_not_published_at_all()
+    public void EmptyPathNotPublished()
     {
 
         var t = Detailed();
@@ -438,7 +438,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void The_documentation_name_is_shown_and_the_route_name_still_identifies_the_tag()
+    public void DisplayNameKeepsTag()
     {
         var t = Detailed();
         t.ApiDisplayName = "Sales orders";
@@ -455,7 +455,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void Author_markdown_becomes_the_tag_description()
+    public void MarkdownBecomesTagDescription()
     {
         var t = Detailed();
         t.ApiDocumentation = "## Identifiers\n\nEvery order includes an `OrderNo`.";
@@ -466,7 +466,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void Without_documentation_the_description_falls_back_rather_than_going_blank()
+    public void DescriptionHasFallback()
     {
         var t = Detailed();
         t.ApiDocumentation = "";
@@ -505,7 +505,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void No_namespace_anywhere_means_no_grouping_at_all()
+    public void NoNamespaceNoGrouping()
     {
         var tags = Tags(Named("sales-orders", ""), Named("customers", "  "));
 
@@ -643,7 +643,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void A_nested_object_field_publishes_its_members_not_a_string()
+    public void ObjectFieldPublishesMembers()
     {
         var table = Table();
         table.Fields.Add(new FieldDefinition
@@ -666,7 +666,7 @@ public class OpenApiSpecTests
     }
 
     [Fact]
-    public void A_list_field_publishes_its_item_schema()
+    public void ListFieldPublishesItems()
     {
         var table = Table();
         table.Fields.Add(new FieldDefinition

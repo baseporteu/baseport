@@ -61,21 +61,21 @@ public class ListFilterTests : IDisposable
         QueryEngine.ListAsync(_db, _table, Array.Empty<FieldDefinition>(), null, true, search, 1, 50, filters);
 
     [Fact]
-    public async Task Equality_filter_scopes_the_list()
+    public async Task EqualityFilter()
     {
         var page = await List(null, Filters("""[{"field":"Status","op":"eq","value":"open"}]"""));
         Assert.Equal(2, page.Total);
     }
 
     [Fact]
-    public async Task Not_equal_filter_excludes()
+    public async Task NotEqualFilter()
     {
         var page = await List(null, Filters("""[{"field":"Status","op":"ne","value":"open"}]"""));
         Assert.Equal(2, page.Total);
     }
 
     [Fact]
-    public async Task Numeric_comparison_filters_compare_as_numbers_not_text()
+    public async Task NumericFilterComparesNumbers()
     {
 
         var page = await List(null, Filters("""[{"field":"Total","op":"gt","value":"100"}]"""));
@@ -83,21 +83,21 @@ public class ListFilterTests : IDisposable
     }
 
     [Fact]
-    public async Task Contains_filter_matches_a_substring()
+    public async Task ContainsFilter()
     {
         var page = await List(null, Filters("""[{"field":"OrderNo","op":"contains","value":"A-"}]"""));
         Assert.Equal(4, page.Total);
     }
 
     [Fact]
-    public async Task Filters_and_search_both_apply()
+    public async Task FiltersAndSearchCombine()
     {
         var page = await List("A-2", Filters("""[{"field":"Status","op":"eq","value":"open"}]"""));
         Assert.Equal(1, page.Total);
     }
 
     [Fact]
-    public async Task Search_still_works_with_no_filters()
+    public async Task SearchWithoutFilters()
     {
         var page = await List("closed", Array.Empty<QueryEngine.Filter>());
         Assert.Equal(1, page.Total);
@@ -109,7 +109,7 @@ public class ListFilterTests : IDisposable
     [InlineData("Total", "gt", "100", 1)]
     [InlineData("Total", "lt", "35", 2)]
     [InlineData("OrderNo", "contains", "A-", 4)]
-    public void A_proxy_list_applies_the_same_filters_as_a_local_one(string field, string op, string value, int expected)
+    public void ProxyListFilters(string field, string op, string value, int expected)
     {
 
         var records = new[]
@@ -128,7 +128,7 @@ public class ListFilterTests : IDisposable
     }
 
     [Fact]
-    public void A_filter_on_a_deleted_field_is_dropped_rather_than_reaching_sql()
+    public void DeletedFieldFilterDropped()
     {
         var parsed = Filters("""[{"field":"Ghost","op":"eq","value":"x"},{"field":"Status","op":"eq","value":"open"}]""");
         Assert.Single(parsed);
@@ -136,7 +136,7 @@ public class ListFilterTests : IDisposable
     }
 
     [Fact]
-    public void An_unknown_operator_falls_back_to_equality()
+    public void UnknownOperatorIsEquality()
     {
         var parsed = Filters("""[{"field":"Status","op":"; DROP TABLE","value":"open"}]""");
         Assert.Equal("eq", parsed[0].Operator);

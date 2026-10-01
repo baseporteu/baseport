@@ -368,6 +368,8 @@ public static class AdminEndpoints
 
             try { created = await BackupStore.CreateAndExportAsync(BackupStore.Dir(db), db, settings); }
             catch (IOException ex) { return Results.BadRequest(new { errors = new[] { ex.Message } }); }
+            catch (BackupBusyException ex) { return Results.Conflict(new { errors = new[] { ex.Message } }); }
+            catch (BackupIntegrityException ex) { return Results.Json(new { errors = new[] { ex.Message } }, statusCode: StatusCodes.Status500InternalServerError); }
             return Results.Ok(new { created, backups = BackupStore.List(BackupStore.Dir(db)) });
         });
 
@@ -376,7 +378,7 @@ public static class AdminEndpoints
             var path = BackupStore.Resolve(BackupStore.Dir(db), name);
             return path is null
                 ? Results.NotFound(new { errors = new[] { "No such backup." } })
-                : Results.File(path, "application/vnd.sqlite3", name);
+                : Results.File(path, path.EndsWith(".zip", StringComparison.Ordinal) ? "application/zip" : "application/vnd.sqlite3", name);
         });
 
         app.MapDelete("/api/_admin/backups/{name}", (AppDbContext db, string name) =>

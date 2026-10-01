@@ -49,7 +49,7 @@ public class RecordIndexesTests : IDisposable
     }
 
     [Fact]
-    public async Task TheGeneratedColumnDerivesItsValueFromTheJson()
+    public async Task GeneratedColumnReadsJson()
     {
         _db.Records.Add(new Record
         {
@@ -75,7 +75,7 @@ public class RecordIndexesTests : IDisposable
     }
 
     [Fact]
-    public async Task ThePlannerSeeksTheIndexForACaseInsensitiveUniquenessCheckToo()
+    public async Task UniqueCheckUsesIndex()
     {
         var plan = await ScalarAsync(
             $"""EXPLAIN QUERY PLAN SELECT 1 FROM "_records" r WHERE r."TableId" = 'x' AND r."g_{_reference.Id}" = 'A-1' COLLATE NOCASE""",
@@ -86,7 +86,7 @@ public class RecordIndexesTests : IDisposable
     }
 
     [Fact]
-    public async Task TurningOffUniqueDropsTheCaseInsensitiveIndex()
+    public async Task UniqueOffDropsIndex()
     {
         _reference.IsUnique = false;
         await RecordIndexes.SyncAsync(_db, _table);
@@ -99,7 +99,7 @@ public class RecordIndexesTests : IDisposable
     }
 
     [Fact]
-    public async Task ARenameMovesTheColumnRatherThanOrphaningIt()
+    public async Task RenameMovesColumn()
     {
         _reference.Name = "ref_no";
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);

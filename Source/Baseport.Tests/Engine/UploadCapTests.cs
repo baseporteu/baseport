@@ -32,7 +32,7 @@ public class UploadCapTests : IDisposable
         new(new MemoryStream(new byte[size]), 0, size, "file", "note.txt");
 
     [Fact]
-    public async Task An_upload_past_the_instance_cap_is_refused_and_nothing_is_written()
+    public async Task OverCapRefused()
     {
         FileStore.CapBytes = 100;
         var (first, firstError) = await FileStore.SaveAsync(File(60), "docs", TestContext.Current.CancellationToken);
@@ -46,14 +46,14 @@ public class UploadCapTests : IDisposable
     }
 
     [Fact]
-    public void A_form_upload_is_held_to_the_same_cap()
+    public void FormUploadCapped()
     {
         FileStore.CapBytes = 10;
         Assert.Contains("storage is full", FileStore.Problem(File(20)));
     }
 
     [Fact]
-    public async Task Deleting_a_file_frees_its_bytes()
+    public async Task DeleteFreesBytes()
     {
         FileStore.CapBytes = 100;
         var (stored, _) = await FileStore.SaveAsync(File(60), "docs", TestContext.Current.CancellationToken);
@@ -65,7 +65,7 @@ public class UploadCapTests : IDisposable
     }
 
     [Fact]
-    public async Task The_used_total_is_rebuilt_from_disk_on_start()
+    public async Task UsedTotalRecounted()
     {
         await FileStore.SaveAsync(File(42), "docs", TestContext.Current.CancellationToken);
 
@@ -75,7 +75,7 @@ public class UploadCapTests : IDisposable
     }
 
     [Fact]
-    public void An_upload_that_would_leave_too_little_free_disk_is_refused()
+    public void LowDiskRefused()
     {
         FileStore.MinFreeBytes = long.MaxValue / 2;
         Assert.Contains("low on disk space", FileStore.Problem(File(1)));

@@ -84,7 +84,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_query_over_the_wire_matches_SqlEngine_run_directly()
+    public async Task WireMatchesSqlEngine()
     {
         const string sql = "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'";
         using var client = await ConnectAsync();
@@ -104,7 +104,7 @@ public class PostgresProviderTests : IAsyncLifetime
     [InlineData("SELECT passwordhash FROM _users")]
     [InlineData("SELECT * FROM _records")]
     [InlineData("SELECT name FROM sqlite_master")]
-    public async Task A_read_of_a_system_table_is_refused(string sql)
+    public async Task SystemTableRefused(string sql)
     {
         using var client = await ConnectAsync();
         var stream = client.GetStream();
@@ -113,7 +113,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_wrong_token_is_refused_at_the_password_message()
+    public async Task WrongTokenRefused()
     {
         var client = new TcpClient();
         await client.ConnectAsync(IPAddress.Loopback, Port, TestContext.Current.CancellationToken);
@@ -129,7 +129,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_broken_query_reports_an_error_and_the_connection_stays_usable()
+    public async Task BrokenQueryKeepsConnection()
     {
         using var client = await ConnectAsync();
 
@@ -151,7 +151,7 @@ public class PostgresProviderTests : IAsyncLifetime
     [InlineData("RESET ALL")]
     [InlineData("begin")]
     [InlineData("commit")]
-    public async Task A_session_configuration_statement_is_a_no_op_not_an_error(string sql)
+    public async Task SessionStatementIsNoOp(string sql)
     {
         using var client = await ConnectAsync();
         var stream = client.GetStream();
@@ -166,7 +166,7 @@ public class PostgresProviderTests : IAsyncLifetime
     [InlineData("SELECT table_name FROM information_schema.tables")]
     [InlineData("SELECT relname FROM pg_catalog.pg_class WHERE relkind = 'r'")]
     [InlineData("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'")]
-    public async Task A_catalog_probe_finds_the_authors_table(string sql)
+    public async Task CatalogFindsTable(string sql)
     {
         using var client = await ConnectAsync();
         var (_, rows) = await RunQueryAsync(client, sql);
@@ -174,7 +174,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_column_probe_reports_the_tables_fields()
+    public async Task ColumnProbeReportsFields()
     {
         using var client = await ConnectAsync();
         var (_, rows) = await RunQueryAsync(client,
@@ -185,7 +185,7 @@ public class PostgresProviderTests : IAsyncLifetime
     [Theory]
     [InlineData("SELECT * FROM pg_stat_activity")]
     [InlineData("SELECT * FROM pg_catalog.pg_largeobject")]
-    public async Task An_unemulated_catalog_object_still_answers_empty(string sql)
+    public async Task UnknownCatalogIsEmpty(string sql)
     {
         using var client = await ConnectAsync();
         var (columns, rows) = await RunQueryAsync(client, sql);
@@ -197,7 +197,7 @@ public class PostgresProviderTests : IAsyncLifetime
     [InlineData("SELECT version()", "version", "PostgreSQL 15.0 (Baseport)")]
     [InlineData("SELECT current_schema()", "current_schema", "public")]
     [InlineData("SELECT current_database()", "current_database", "baseport")]
-    public async Task A_server_identity_function_answers_like_postgres(string sql, string column, string value)
+    public async Task IdentityAnswersLikePostgres(string sql, string column, string value)
     {
         using var client = await ConnectAsync();
         var (columns, rows) = await RunQueryAsync(client, sql);
@@ -209,7 +209,7 @@ public class PostgresProviderTests : IAsyncLifetime
     [InlineData("SHOW search_path", "search_path", "public")]
     [InlineData("SHOW TRANSACTION ISOLATION LEVEL", "transaction_isolation", "read committed")]
     [InlineData("SHOW nonsense_setting", "nonsense_setting", "")]
-    public async Task A_show_statement_answers_instead_of_erroring(string sql, string column, string value)
+    public async Task ShowStatementAnswers(string sql, string column, string value)
     {
         using var client = await ConnectAsync();
         var (columns, rows) = await RunQueryAsync(client, sql);
@@ -218,7 +218,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task An_unpublished_table_is_neither_listed_nor_selectable()
+    public async Task UnpublishedTableHidden()
     {
         await SeedTableAsync("Drafts", apiEnabled: false, readRule: "");
 
@@ -232,7 +232,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_read_rule_filters_the_rows_to_the_caller()
+    public async Task ReadRuleFiltersRows()
     {
         var tableId = await SeedTableAsync("Tickets", apiEnabled: true, readRule: "_ROW_.owner = _USER_.id", "owner", "subject");
         await SeedRecordAsync(tableId, $$"""{"owner":"{{_accountId}}","subject":"mine"}""");
@@ -244,7 +244,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_declared_length_over_the_cap_closes_the_connection_before_reading_it()
+    public async Task OversizedMessageCloses()
     {
         using var client = new TcpClient();
         await client.ConnectAsync(IPAddress.Loopback, Port, TestContext.Current.CancellationToken);
@@ -259,7 +259,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_revoked_token_is_refused_on_the_next_query()
+    public async Task RevokedTokenRefused()
     {
         using var client = await ConnectAsync();
         await UpdateAccountAsync(a => a.ApiEnabled = false);
@@ -270,7 +270,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_table_with_get_switched_off_is_not_published()
+    public async Task TableWithoutGetHidden()
     {
         var tableId = await SeedTableAsync("Inbox", apiEnabled: true, readRule: "");
         using (var scope = _services.CreateScope())
@@ -286,7 +286,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_key_without_get_sees_no_tables()
+    public async Task KeyWithoutGetSeesNothing()
     {
         await UpdateAccountAsync(a => a.ApiTokenMethods = "POST");
 
@@ -296,7 +296,7 @@ public class PostgresProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_pragma_from_a_wire_client_is_refused()
+    public async Task WirePragmaRefused()
     {
         using var client = await ConnectAsync();
         var stream = client.GetStream();

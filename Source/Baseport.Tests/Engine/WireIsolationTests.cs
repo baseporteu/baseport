@@ -31,7 +31,7 @@ public class WireIsolationTests : IDisposable
     }
 
     [Fact]
-    public async Task A_wire_session_cannot_read_a_view_left_by_an_admin_run()
+    public async Task WireCannotReadAdminView()
     {
         var admin = await SqlEngine.ReadAsync(_db, "SELECT COUNT(*) FROM \"Payroll\"", WireCatalog.Views, restrict: false);
         Assert.Null(admin.Error);

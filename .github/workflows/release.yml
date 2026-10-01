@@ -45,6 +45,10 @@ jobs:
     name: Build ${{ matrix.rid }}
     needs: tag
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -69,7 +73,7 @@ jobs:
 
       - name: Restore and build
         run: |
-          dotnet restore ${{ env.SOLUTION_PATH }}
+          dotnet restore ${{ env.SOLUTION_PATH }} --locked-mode
           dotnet build ${{ env.SOLUTION_PATH }} -c Release --no-restore
 
       - name: Test
@@ -111,6 +115,20 @@ jobs:
           cd ..
           sha256sum "${NAME}.${{ matrix.archive }}" > "${NAME}.${{ matrix.archive }}.sha256"
 
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: build-output
+          format: spdx-json
+          output-file: Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -118,6 +136,7 @@ jobs:
           path: |
             Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}
             Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.${{ matrix.archive }}.sha256
+            Baseport-${{ github.event.inputs.tag_name }}-${{ matrix.rid }}.spdx.json
           retention-days: 90
 
   release:

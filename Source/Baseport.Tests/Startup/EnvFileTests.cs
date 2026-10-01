@@ -88,7 +88,7 @@ public class EnvFileTests : IDisposable
     }
 
     [Fact]
-    public void InsertsBeforeTheUnprefixedEnvironmentSource()
+    public void InsertsBeforeEnvironment()
     {
         var sources = new List<IConfigurationSource>
         {

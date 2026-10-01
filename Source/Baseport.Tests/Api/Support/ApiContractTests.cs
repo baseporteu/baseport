@@ -167,7 +167,7 @@ public partial class ApiContractTests
     public void ClosedDocumentIsValidOpenApi32() => AssertValid(OpenApiSpec.BuildDocument(Closed()));
 
     [Fact]
-    public void DocumentWithEveryFieldTypeIsValidOpenApi32()
+    public void EveryFieldTypeIsValidOpenApi()
     {
         var table = Table("everything");
         table.ApiNamespace = "";

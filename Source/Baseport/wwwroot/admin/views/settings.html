@@ -364,7 +364,7 @@
                         </div>
                         <div class='settings-pane hidden' data-pane='backups'>
                             <div class='card'>
-                                <div class='card-header'><div><h2>Backup settings</h2><p class='muted'>Retention for the snapshots below.</p></div></div>
+                                <div class='card-header'><div><h2>Backup settings</h2><p class='muted'>Retention for the archives below.</p></div></div>
                                 <div class='settings-form'>
                                     <div class='settings-form-row'>
                                         <label for='settingsBackupRetention'>Retention window</label>
@@ -377,9 +377,9 @@
                                 </div>
                             </div>
                             <div class='card'>
-                                <div class='card-header'><div><h2>Export to S3</h2><p class='muted'>Push every snapshot to S3-compatible object storage too, once configured.</p></div></div>
+                                <div class='card-header'><div><h2>Export to S3</h2><p class='muted'>Push every archive to S3-compatible object storage, without the signing key.</p></div></div>
                                 <div class='settings-form'>
-                                    <label class='switch-row'><span class='switch'><input type='checkbox' id='settingsS3ExportEnabled'><span class='track'></span><span class='thumb'></span></span><span>Export snapshots to S3</span></label>
+                                    <label class='switch-row'><span class='switch'><input type='checkbox' id='settingsS3ExportEnabled'><span class='track'></span><span class='thumb'></span></span><span>Export archives to S3</span></label>
                                     <div class='settings-form-row'>
                                         <label for='settingsS3Bucket'>Bucket</label>
                                         <input type='text' class='input' id='settingsS3Bucket' placeholder='my-backups'>
@@ -416,7 +416,7 @@
                             </div>
                             <div class='card'>
                                 <div class='card-header'>
-                                    <div><h2>Snapshots</h2><p class='muted'>Stored database snapshots.</p></div>
+                                    <div><h2>Archives</h2><p class='muted'>Database, uploads and keys.</p></div>
                                     <button class='btn btn-outline' id='triggerBackupBtn' onclick='triggerBackup()'>Trigger backup</button>
                                 </div>
                                 <div class='table-wrap'>

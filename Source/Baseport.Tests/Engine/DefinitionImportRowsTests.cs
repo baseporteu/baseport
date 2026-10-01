@@ -42,7 +42,7 @@ public class DefinitionImportRowsTests : IDisposable
         DefinitionImport.Parse(Encoding.UTF8.GetBytes(csv), "in.csv").Rows;
 
     [Fact]
-    public async Task Every_good_row_is_prepared_and_the_bad_ones_are_reported_by_file_line()
+    public async Task BadRowsReportedByLine()
     {
         var table = Seed(new FieldDefinition { Name = "email", DataType = "email", IsRequired = true });
         var (prepared, errors) = await DefinitionImport.PrepareRowsAsync(
@@ -54,7 +54,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_value_repeated_inside_one_file_fails_the_unique_field()
+    public async Task DuplicateInFileFailsUnique()
     {
         var table = Seed(new FieldDefinition { Name = "code", DataType = "text", IsUnique = true });
         var (prepared, errors) = await DefinitionImport.PrepareRowsAsync(
@@ -65,7 +65,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_value_already_stored_fails_the_unique_field_too()
+    public async Task StoredValueFailsUnique()
     {
         var table = Seed(new FieldDefinition { Name = "code", DataType = "text", IsUnique = true });
         _db.Records.Add(new Record { TableId = table.Id, Id = Ids.NewShortId(12), JsonData = """{"code":"A1"}""" });
@@ -79,7 +79,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_header_the_field_name_could_not_have_been_lands_in_that_field_anyway()
+    public async Task SanitizedHeaderMapsToField()
     {
         var table = Seed(new FieldDefinition { Name = "First_Name", Label = "First Name", DataType = "text" });
         var (prepared, errors) = await DefinitionImport.PrepareRowsAsync(
@@ -90,7 +90,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_system_id_column_in_the_file_does_not_reach_the_stored_record()
+    public async Task SystemIdColumnIgnored()
     {
         var table = Seed(
             new FieldDefinition { Name = "ref", DataType = "systemid" },
@@ -102,7 +102,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public async Task Only_the_first_errors_are_reported_so_a_bad_file_is_not_a_wall_of_text()
+    public async Task ErrorsAreCapped()
     {
         var table = Seed(new FieldDefinition { Name = "email", DataType = "email", IsRequired = true });
         var csv = new StringBuilder("email\n");
@@ -114,7 +114,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public void An_inferred_column_keeps_its_original_header_as_the_label()
+    public void InferredColumnKeepsLabel()
     {
         var rows = Rows("First Name,qty\nAda,1\n");
         var fields = DefinitionImport.ToFields(DefinitionImport.InferFields(rows));
@@ -127,14 +127,14 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public void Headers_that_sanitize_alike_still_become_distinct_fields()
+    public void ClashingHeadersStayDistinct()
     {
         var fields = DefinitionImport.ToFields(DefinitionImport.InferFields(Rows("a b,a-b\n1,2\n")));
         Assert.Equal(2, fields.Select(f => f.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 
     [Fact]
-    public void An_inferred_table_passes_the_validator_that_will_be_asked_to_save_it()
+    public void InferredTablePassesValidator()
     {
         var rows = Rows("First Name,qty,status\nAda,1,open\nGrace,2,closed\nAda,3,open\nGrace,4,closed\n");
         var table = new TableDefinition { Id = Ids.NewShortId(12), Name = "Imported" };
@@ -148,7 +148,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_text_cell_is_stored_as_the_json_type_its_field_declares()
+    public async Task TextCellStoredAsFieldType()
     {
         var table = Seed(
             new FieldDefinition { Name = "qty", DataType = "number" },
@@ -166,7 +166,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_value_that_does_not_convert_is_refused_rather_than_guessed_at()
+    public async Task UnconvertibleValueRefused()
     {
         var table = Seed(new FieldDefinition { Name = "paid", DataType = "boolean" });
         var (prepared, errors) = await DefinitionImport.PrepareRowsAsync(
@@ -184,7 +184,7 @@ public class DefinitionImportRowsTests : IDisposable
     [InlineData("json", """{"a":1}""", JsonValueKind.Object)]
     [InlineData("text", "2", JsonValueKind.String)]
     [InlineData("number", "not a number", JsonValueKind.String)]
-    public void CoerceText_maps_a_form_value_onto_the_type_the_field_declares(string type, string text, JsonValueKind expected)
+    public void CoerceTextMapsType(string type, string text, JsonValueKind expected)
     {
         Assert.Equal(expected, RecordEngine.CoerceText(type, text)!.GetValueKind());
     }
@@ -193,7 +193,7 @@ public class DefinitionImportRowsTests : IDisposable
     [InlineData("1234,56")]
     [InlineData("1.234,56")]
     [InlineData("1,234.56")]
-    public void A_separator_this_code_cannot_read_is_refused_rather_than_read_as_another_number(string text)
+    public void UnknownSeparatorRefused(string text)
     {
         var coerced = RecordEngine.CoerceText("number", text);
         Assert.Equal(JsonValueKind.String, coerced!.GetValueKind());
@@ -204,7 +204,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public async Task An_imported_european_decimal_fails_the_row_instead_of_being_multiplied_by_a_hundred()
+    public async Task EuropeanDecimalFailsRow()
     {
         var table = Seed(new FieldDefinition { Name = "qty", DataType = "number" });
         var (prepared, errors) = await DefinitionImport.PrepareRowsAsync(
@@ -215,7 +215,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_file_is_never_refused_by_the_schema_inferred_from_it()
+    public async Task InferredSchemaAcceptsFile()
     {
         var json = """
         [{"id":1,"title":"Job","isRemote":false,"salary":130000,"status":"Open"},
@@ -240,7 +240,7 @@ public class DefinitionImportRowsTests : IDisposable
     }
 
     [Fact]
-    public void A_boolean_column_is_never_inferred_required_whichever_way_it_was_recognised()
+    public void BooleanNeverRequired()
     {
         var fromJson = DefinitionImport.InferFields(
             DefinitionImport.Parse(Encoding.UTF8.GetBytes("""[{"a":false},{"a":true}]"""), "x.json").Rows);

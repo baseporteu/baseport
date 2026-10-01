@@ -56,7 +56,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task Rows_written_before_the_index_are_backfilled_and_later_writes_ride_the_triggers()
+    public async Task IndexBackfillsAndTracks()
     {
         var before = Add("Acme Industrial", "delivered on time");
         await RecordSearch.EnsureAsync(_db);
@@ -70,7 +70,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task An_update_and_a_delete_both_reach_the_index()
+    public async Task UpdateAndDeleteReachIndex()
     {
         var record = Add("Acme Industrial", "first");
         await RecordSearch.EnsureAsync(_db);
@@ -88,7 +88,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task Several_terms_all_have_to_match_and_a_prefix_is_enough()
+    public async Task TermsMatchAllWithPrefix()
     {
         var both = Add("Acme Industrial", "urgent");
         Add("Acme Traders", "routine");
@@ -98,7 +98,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task A_term_fts5_cannot_tokenize_falls_back_to_the_scan_instead_of_finding_nothing()
+    public async Task UntokenizableFallsBack()
     {
         var record = Add("Acme Industrial", "ref !!!");
         await RecordSearch.EnsureAsync(_db);
@@ -111,7 +111,7 @@ public class RecordSearchTests : IDisposable
     [InlineData("a\0b", "ab")]
     [InlineData("one\0 two", "one")]
     [InlineData("bel\u0007here", "belhere")]
-    public void A_control_character_in_a_term_is_dropped_not_escaped(string query, string expected)
+    public void ControlCharacterDropped(string query, string expected)
     {
         var expression = RecordSearch.MatchExpression(_table.Id, query);
 
@@ -121,11 +121,11 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public void A_term_that_is_only_control_characters_falls_back_to_the_like_scan() =>
+    public void ControlOnlyFallsBack() =>
         Assert.Null(RecordSearch.MatchExpression(_table.Id, "\0\u0001\u0002"));
 
     [Fact]
-    public async Task A_quote_in_the_term_is_a_search_term_and_not_fts5_syntax()
+    public async Task QuoteIsSearchTerm()
     {
         var record = Add("Acme Industrial", "quiet");
         await RecordSearch.EnsureAsync(_db);
@@ -137,7 +137,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task Adding_and_dropping_a_generated_column_survives_the_triggers()
+    public async Task GeneratedColumnSurvivesTriggers()
     {
         var record = Add("Acme Industrial", "quiet");
         await RecordSearch.EnsureAsync(_db);
@@ -149,7 +149,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task A_search_stays_inside_its_own_table()
+    public async Task SearchStaysInTable()
     {
         var other = new TableDefinition { Id = Ids.NewShortId(12), Name = "Invoices" };
         _db.Tables.Add(other);
@@ -169,7 +169,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task The_best_match_comes_first_when_no_sort_was_asked_for()
+    public async Task BestMatchFirst()
     {
         Add("Acme Industrial Holdings International", "a much longer body of text that dilutes the term");
         var tight = Add("Acme", "acme");
@@ -182,7 +182,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task An_asked_for_sort_wins_over_relevance()
+    public async Task SortBeatsRelevance()
     {
         var first = Add("Acme", "acme acme acme");
         var second = Add("Acme Industrial Holdings International", "one mention only");
@@ -196,7 +196,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task Maintenance_rebuilds_an_index_that_drifted_and_optimizes_one_that_did_not()
+    public async Task MaintenanceRebuildsDrift()
     {
         var record = Add("Acme Industrial", "quiet");
         await RecordSearch.EnsureAsync(_db);
@@ -211,7 +211,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task An_index_from_an_older_definition_is_replaced_rather_than_reused()
+    public async Task OldIndexReplaced()
     {
         var record = Add("Acme Industrial", "quiet");
         await _db.Database.ExecuteSqlRawAsync("""CREATE VIRTUAL TABLE "_records_fts" USING fts5("Body")""", TestContext.Current.CancellationToken);
@@ -225,7 +225,7 @@ public class RecordSearchTests : IDisposable
     }
 
     [Fact]
-    public async Task Search_still_works_before_the_index_exists()
+    public async Task SearchWorksWithoutIndex()
     {
         var record = Add("Acme Industrial", "quiet");
 

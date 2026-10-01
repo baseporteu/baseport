@@ -85,7 +85,33 @@ A backup covers the whole working directory:
 | `uploads/` | Uploaded files, not stored in the database |
 | `appsettings.json` | Local configuration |
 
-The `backup` job copies the SQLite file into `backups/` daily at 03:00 and keeps the five most recent. `backups/` is on the same disk as the database; copy it off the host.
+The `backup` job writes an archive to `backups/` daily at 03:00 and keeps the five most recent; **Settings > Backups** triggers one on demand and sets the retention. An archive is a zip holding `baseport.db`, `uploads/`, `keys/`, `baseport.key` and a `manifest.json` with the database checksum. `appsettings.json` and `.env` are not included.
+
+Each snapshot passes `PRAGMA integrity_check` before it is archived. A failed check keeps the older archives and fails the job. Retention prunes only after a good archive exists, and one backup runs at a time.
+
+`backups/` is on the same disk as the database; copy it off the host, or enable **Export to S3**. The S3 copy leaves out `baseport.key`: whoever holds that key can sign tokens for any account. Restoring an S3 archive therefore ends every session.
+
+### Restore
+
+```bash
+baseport restore backups/baseport-20261001030000000-AbCd.zip
+```
+
+The wrapper stops the service, runs the restore and starts the service again. The binary refuses while a Baseport process holds the database, and refuses an archive that:
+
+- fails its checksum or `PRAGMA integrity_check`;
+- holds a file its manifest does not list, a path outside the data directory, or a file larger than listed;
+- carries a migration this version does not know (update Baseport first).
+
+The current `baseport.db`, `uploads/`, `keys/` and `baseport.key` move to `restore-previous-<time>/` beside them; nothing is deleted. `--yes` skips the confirmation. A `.db` snapshot from an older release restores the database only. Pending migrations run on the next start.
+
+### Integrity
+
+Every start runs `PRAGMA quick_check`. A damaged database stops startup with one line that names the file. `baseport check` runs the same check on demand and exits 1 on damage; `baseport doctor` reports it.
+
+### One instance per database
+
+A server holds an exclusive lock on `baseport.lock` beside the database for its lifetime. A second server on the same database exits with one line. The lock is advisory: network file systems such as NFS do not honour it, and `DOTNET_SYSTEM_IO_DISABLEFILELOCKING` turns it off (`doctor` warns when set).
 
 ## Jobs
 
@@ -93,18 +119,19 @@ The scheduler runs maintenance jobs; schedules and switches are under **Settings
 
 | Key | Default | Action |
 | --- | --- | --- |
-| `backup` | 03:00 daily | Copy the SQLite file into `backups/`, keep five |
+| `backup` | 03:00 daily | Archive the database, uploads and keys into `backups/`, keep five |
 | `heartbeat` | every 5 min | Record scheduler liveness |
 | `logs-cleanup` | 04:00 daily | Prune audit rows past the log retention setting |
 | `session-cleanup` | hourly | Remove expired sessions, sign-in codes and lockouts |
 | `anonymous-cleanup` | 04:15 daily | Delete abandoned anonymous accounts, see [Authentication](/docs/authentication) |
 | `query-optimizer` | 05:00 Sundays | `PRAGMA optimize` |
 
-Clones are listed above the jobs; see [Import](/docs/import#clones).
 | `search-index` | 05:30 Sundays | Optimize the full text index, rebuild on drift |
 | `file-deletions` | **off** | Delete uploads no record refers to, see [Files and uploads](/docs/files) |
 
-`file-deletions` is off by default: an upload not yet attached to a record is indistinguishable from an abandoned one.
+`file-deletions` is off by default: an upload not yet attached to a record is indistinguishable from an abandoned one. When on, it skips uploads younger than one hour and removes unfinished uploads older than that.
+
+Clones are listed above the jobs; see [Import](/docs/import#clones).
 
 Saved SQL queries can run on the same scheduler; see [SQL and scheduled queries](/docs/sql-and-queries).
 
@@ -153,3 +180,11 @@ docker compose pull && docker compose up -d
 :::
 
 Without the wrapper on the PATH, rerunning the installer has the same effect.
+
+## Verifying a release
+
+Each release archive carries a build provenance attestation and an SPDX SBOM (`Baseport-<tag>-<rid>.spdx.json`) on the release page. The container image carries both as registry attestations.
+
+```bash
+gh attestation verify Baseport-v0.1.0-linux-x64.tar.gz --repo baseporteu/baseport
+```

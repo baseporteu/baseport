@@ -89,7 +89,7 @@ public class ImportRunsTests : IDisposable
     }
 
     [Fact]
-    public async Task RejectedRowsAreCountedWithGlobalRowNumbers()
+    public async Task RejectedRowsUseGlobalNumbers()
     {
         var (table, run) = await SetupAsync();
 

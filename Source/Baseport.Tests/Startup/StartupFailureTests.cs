@@ -8,7 +8,7 @@ namespace Baseport.Tests;
 public class StartupFailureTests
 {
     [Fact]
-    public void Address_in_use_names_the_address_and_suggests_a_different_port()
+    public void AddressInUse()
     {
         var inner = new SocketException((int)SocketError.AddressAlreadyInUse);
         var outer = new IOException("Failed to bind to address http://127.0.0.1:5000: address already in use.", inner);
@@ -21,7 +21,7 @@ public class StartupFailureTests
     }
 
     [Fact]
-    public void Permission_denied_binding_names_the_address_and_the_port_rule()
+    public void PermissionDenied()
     {
         var inner = new SocketException((int)SocketError.AccessDenied);
         var outer = new IOException("Failed to bind to address http://0.0.0.0:80: access denied.", inner);
@@ -34,7 +34,7 @@ public class StartupFailureTests
     }
 
     [Fact]
-    public void Address_not_available_names_the_address()
+    public void AddressNotAvailable()
     {
         var inner = new SocketException((int)SocketError.AddressNotAvailable);
         var outer = new IOException("Failed to bind to address http://10.0.0.1:5000: address not available.", inner);
@@ -46,7 +46,7 @@ public class StartupFailureTests
     }
 
     [Fact]
-    public void Missing_database_file_message_passes_through_unchanged()
+    public void MissingDatabasePassesThrough()
     {
         var ex = new InvalidOperationException("Please delete the database file and restart.");
 
@@ -54,7 +54,7 @@ public class StartupFailureTests
     }
 
     [Fact]
-    public void Sqlite_cannot_open_reports_a_path_problem()
+    public void SqliteCannotOpen()
     {
         var ex = new SqliteException("unable to open database file", 14);
 
@@ -67,7 +67,7 @@ public class StartupFailureTests
     [Theory]
     [InlineData(5)]
     [InlineData(8)]
-    public void Sqlite_locked_or_readonly_reports_contention(int sqliteErrorCode)
+    public void SqliteLocked(int sqliteErrorCode)
     {
         var ex = new SqliteException("database is locked", sqliteErrorCode);
 
@@ -78,7 +78,7 @@ public class StartupFailureTests
     }
 
     [Fact]
-    public void Unauthorized_access_names_the_working_directory_requirement()
+    public void UnauthorizedAccess()
     {
         var ex = new UnauthorizedAccessException("Access to the path is denied.");
 
@@ -90,7 +90,7 @@ public class StartupFailureTests
     }
 
     [Fact]
-    public void Missing_json_config_file_names_the_file()
+    public void MissingConfigFile()
     {
         var ex = new FileNotFoundException("Could not find file.", "appsettings.json");
 
@@ -101,13 +101,13 @@ public class StartupFailureTests
     }
 
     [Fact]
-    public void An_unrecognized_exception_is_not_described()
+    public void UnknownExceptionNotDescribed()
     {
         Assert.Null(StartupFailure.Describe(new Exception("something else entirely")));
     }
 
     [Fact]
-    public void A_matching_cause_wrapped_deep_in_inner_exceptions_is_still_found()
+    public void NestedCauseFound()
     {
         var root = new SqliteException("database is locked", 5);
         var middle = new InvalidOperationException("wrapped once", root);

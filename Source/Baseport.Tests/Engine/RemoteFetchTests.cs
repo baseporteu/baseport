@@ -217,7 +217,7 @@ public class RemoteFetchTests : IDisposable
     }
 
     [Fact]
-    public async Task CrossOriginNextStopsBeforeSendingCredentials()
+    public async Task CrossOriginNextStops()
     {
         var id = Ids.NewShortId(12);
         _db.Secrets.Add(new Secret { Id = id, Name = "tok", ValueProtected = Secrets.Protect("bearer-plain"), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });

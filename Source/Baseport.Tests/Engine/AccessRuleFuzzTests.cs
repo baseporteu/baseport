@@ -146,7 +146,7 @@ public partial class AccessRuleFuzzTests : IDisposable
     }
 
     [Fact]
-    public async Task Accepted_rules_stay_one_expression_and_change_nothing()
+    public async Task AcceptedRulesStayOneExpression()
     {
         var seed = Random.Shared.Next();
         var rng = new Random(seed);
@@ -172,7 +172,7 @@ public partial class AccessRuleFuzzTests : IDisposable
     [InlineData("$x = 1")]
     [InlineData("_USER_.id = @p0")]
     [InlineData("'_USER_.id' = 1")]
-    public async Task A_rule_that_breaks_out_or_collides_with_a_slot_is_refused(string rule)
+    public async Task BreakoutRuleRefused(string rule)
     {
         Assert.Null(await ViolationAsync(rule));
         Assert.NotNull(await RecordAccess.RuleProblemAsync(_db, _table, Fields, rule));
@@ -182,14 +182,14 @@ public partial class AccessRuleFuzzTests : IDisposable
     [InlineData("_USER_.id\u200b")]
     [InlineData("_ROW_.\"owner\" <> + _REQ_.amount\u200b")]
     [InlineData("NOT_REQ_.amount")]
-    public async Task A_substituted_value_never_merges_with_the_next_token(string rule) =>
+    public async Task SubstitutionNeverMerges(string rule) =>
         Assert.Null(await ViolationAsync(rule));
 
     [Theory]
     [InlineData("_ROW_.owner = _USER_.id")]
     [InlineData("(_ROW_.status = 'a)b' OR _ROW_.\"owner\" = ')(')")]
     [InlineData("_USER_.role IN ('consumer', 'admin')")]
-    public async Task Ordinary_rules_with_brackets_in_strings_are_still_accepted(string rule) =>
+    public async Task BracketsInStringsAccepted(string rule) =>
         Assert.Null(await RecordAccess.RuleProblemAsync(_db, _table, Fields, rule));
 
     [GeneratedRegex(@"\{(\d+)\}")]

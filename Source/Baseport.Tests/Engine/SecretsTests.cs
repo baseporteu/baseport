@@ -9,7 +9,7 @@ public class SecretsTests
     public SecretsTests() => TestSecrets.Ensure();
 
     [Fact]
-    public void A_secret_round_trips_through_protect_and_unprotect()
+    public void SecretRoundTrips()
     {
         var ciphertext = Secrets.Protect("s3-secret-key-value");
         Assert.NotEqual("s3-secret-key-value", ciphertext);
@@ -17,7 +17,7 @@ public class SecretsTests
     }
 
     [Fact]
-    public void An_empty_or_missing_ciphertext_unprotects_to_empty_instead_of_throwing()
+    public void EmptyCiphertextIsEmpty()
     {
         Assert.Equal("", Secrets.Unprotect(""));
     }

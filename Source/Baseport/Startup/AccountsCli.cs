@@ -7,7 +7,8 @@ public static class AccountsCli
 
     public static string Invocation()
     {
-        var dll = System.Reflection.Assembly.GetEntryAssembly()?.Location ?? "";
+        var name = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
+        var dll = name is null ? "" : Path.Combine(AppContext.BaseDirectory, name + ".dll");
         var exe = Environment.ProcessPath;
 
         if (string.IsNullOrEmpty(exe)) return "baseport";

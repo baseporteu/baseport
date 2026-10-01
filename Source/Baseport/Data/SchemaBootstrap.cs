@@ -6,6 +6,7 @@ public static class SchemaBootstrap
 {
     public static async Task ApplyAsync(AppDbContext db)
     {
+        await DatabaseIntegrity.EnsureHealthyAsync(db);
         await MigrateAsync(db);
         await EnableWalAsync(db);
 

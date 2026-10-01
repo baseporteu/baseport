@@ -21,11 +21,11 @@ public class TotpVectorTests
     [InlineData(1234567890L, "005924")]
     [InlineData(2000000000L, "279037")]
     [InlineData(20000000000L, "353130")]
-    public void The_rfc_6238_sha1_vectors_hold(long unixSeconds, string expected) =>
+    public void Rfc6238Vectors(long unixSeconds, string expected) =>
         Assert.Equal(expected, Totp.Code(RfcKey, unixSeconds / 30));
 
     [Fact]
-    public void A_code_from_the_previous_or_next_step_is_accepted()
+    public void AdjacentStepAccepted()
     {
         var now = DateTimeOffset.FromUnixTimeSeconds(1111111111).UtcDateTime;
         var step = 1111111111L / 30;
@@ -37,7 +37,7 @@ public class TotpVectorTests
     }
 
     [Fact]
-    public void A_step_already_used_is_refused()
+    public void UsedStepRefused()
     {
         var now = DateTimeOffset.FromUnixTimeSeconds(1111111111).UtcDateTime;
         var code = Totp.Code(RfcKey, 1111111111L / 30);
@@ -51,15 +51,15 @@ public class TotpVectorTests
     [InlineData("12345")]
     [InlineData("abcdef")]
     [InlineData("0508471")]
-    public void A_malformed_code_is_refused(string code) =>
+    public void MalformedCodeRefused(string code) =>
         Assert.False(Totp.Verify(RfcKey, code, 0, DateTime.UtcNow, out _));
 
     [Fact]
-    public void The_key_is_shown_as_base32() =>
+    public void KeyIsBase32() =>
         Assert.Equal("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", Totp.Base32(RfcKey));
 
     [Fact]
-    public void The_uri_names_issuer_and_account()
+    public void UriNamesIssuerAndAccount()
     {
         var uri = Totp.Uri("baseport", "jane", RfcKey);
         Assert.Equal("otpauth://totp/baseport:jane?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=baseport", uri);
@@ -141,7 +141,7 @@ public class TotpDoorTests : IDisposable
         UserAuthEndpoints.LoginAsync(_db, Request(), new LoginRequest(username, Password, code));
 
     [Fact]
-    public async Task An_enrolled_admin_cannot_sign_in_at_either_door_without_a_code()
+    public async Task EnrolledAdminNeedsCode()
     {
         var (_, key) = await EnrolledAdminAsync("totp-doors");
 
@@ -157,14 +157,14 @@ public class TotpDoorTests : IDisposable
     }
 
     [Fact]
-    public async Task The_public_door_accepts_a_valid_code()
+    public async Task PublicDoorAcceptsCode()
     {
         var (_, key) = await EnrolledAdminAsync("totp-public");
         Assert.Equal(200, Status(await PublicAsync("totp-public", Now(key))));
     }
 
     [Fact]
-    public async Task A_wrong_password_never_reveals_the_code_prompt()
+    public async Task WrongPasswordHidesPrompt()
     {
         await EnrolledAdminAsync("totp-wrongpw");
         var result = await AuthEndpoints.LoginAsync(_db, Request(),
@@ -175,7 +175,7 @@ public class TotpDoorTests : IDisposable
     }
 
     [Fact]
-    public async Task A_wrong_code_counts_toward_the_lockout()
+    public async Task WrongCodeCountsToLockout()
     {
         var (_, key) = await EnrolledAdminAsync("totp-lockout");
 
@@ -186,7 +186,7 @@ public class TotpDoorTests : IDisposable
     }
 
     [Fact]
-    public async Task A_code_cannot_be_used_twice()
+    public async Task CodeNotReusable()
     {
         var (_, key) = await EnrolledAdminAsync("totp-replay");
         var code = Now(key);
@@ -196,7 +196,7 @@ public class TotpDoorTests : IDisposable
     }
 
     [Fact]
-    public async Task A_one_time_code_sign_in_is_not_asked_for_totp()
+    public async Task OneTimeCodeSkipsTotp()
     {
         await EnrolledAdminAsync("totp-otp");
         var (otp, _) = OneTimeCodes.Issue("totp-otp");
@@ -225,14 +225,14 @@ public class TotpDoorTests : IDisposable
     }
 
     [Fact]
-    public async Task Setup_is_refused_for_a_non_admin()
+    public async Task SetupNeedsAdmin()
     {
         var (_, cookie) = await SignedInAsync("totp-consumer", AccountRoles.Consumer);
         Assert.Equal(403, Status(await AuthEndpoints.TotpSetupAsync(_db, Request(cookie))));
     }
 
     [Fact]
-    public async Task Setup_is_self_only()
+    public async Task SetupIsSelfOnly()
     {
         var (admin, cookie) = await SignedInAsync("totp-self", AccountRoles.Admin);
         var (other, _) = await SignedInAsync("totp-other", AccountRoles.Admin);
@@ -245,7 +245,7 @@ public class TotpDoorTests : IDisposable
     }
 
     [Fact]
-    public async Task Confirm_enables_totp_and_revokes_other_sessions()
+    public async Task ConfirmRevokesOtherSessions()
     {
         var (admin, cookie) = await SignedInAsync("totp-confirm", AccountRoles.Admin);
         await UserTokens.IssueAsync(_db, admin, DateTime.UtcNow);
@@ -268,7 +268,7 @@ public class TotpDoorTests : IDisposable
     }
 
     [Fact]
-    public async Task Setup_is_refused_once_enabled()
+    public async Task SetupRefusedWhenEnabled()
     {
         var (admin, cookie) = await SignedInAsync("totp-twice", AccountRoles.Admin);
         admin.TotpSecretProtected = Secrets.Protect(Convert.ToBase64String(Totp.NewKey()));
@@ -279,7 +279,7 @@ public class TotpDoorTests : IDisposable
     }
 
     [Fact]
-    public async Task Turning_off_needs_both_password_and_code()
+    public async Task DisableNeedsPasswordAndCode()
     {
         var (admin, cookie) = await SignedInAsync("totp-off", AccountRoles.Admin);
         var key = Totp.NewKey();

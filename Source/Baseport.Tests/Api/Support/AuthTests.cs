@@ -41,7 +41,7 @@ public class AuthTests
     [InlineData("/api/_admin/fragments/tables", false)]
 
     [InlineData("/api/something-new", false)]
-    public void The_public_prefixes_match_the_routing_table(string path, bool anonymous) =>
+    public void PublicPrefixesMatchRoutes(string path, bool anonymous) =>
         Assert.Equal(anonymous, AdminAuthMiddleware.IsPublicPath(path));
 
     [Theory]
@@ -53,7 +53,7 @@ public class AuthTests
     [InlineData("Jane <jane@x.com>", false)]
     [InlineData("'; DROP TABLE--", false)]
     [InlineData("a@b.com\r\nBcc: x@y.com", false)]
-    public void An_account_email_must_be_a_real_address(string email, bool valid) =>
+    public void EmailMustBeValid(string email, bool valid) =>
         Assert.Equal(valid, !AccountValidation.Validate("someone", email).Any());
 
     [Theory]
@@ -63,15 +63,15 @@ public class AuthTests
     [InlineData("a b", false)]
     [InlineData("a/b", false)]
     [InlineData("", false)]
-    public void An_account_username_is_restricted_to_safe_characters(string username, bool valid) =>
+    public void UsernameCharactersRestricted(string username, bool valid) =>
         Assert.Equal(valid, !AccountValidation.Validate(username, "").Any());
 
     [Fact]
-    public void An_empty_email_is_allowed_because_it_is_optional() =>
+    public void EmptyEmailAllowed() =>
         Assert.Empty(AccountValidation.Validate("jane", ""));
 
     [Fact]
-    public void A_password_verifies_only_against_its_own_hash()
+    public void PasswordMatchesOwnHash()
     {
         var hash = AdminAuth.HashPassword("correct horse battery staple");
         Assert.True(AdminAuth.VerifyPassword("correct horse battery staple", hash));
@@ -83,25 +83,25 @@ public class AuthTests
     [InlineData(AccountRoles.Admin)]
     [InlineData(AccountRoles.Consumer)]
     [InlineData(AccountRoles.User)]
-    public void The_timing_decoy_never_signs_in_an_account_without_a_password(string role)
+    public void DecoyRejectsPasswordless(string role)
     {
         var account = new UserAccount { Id = "acct00000001", Username = "jane", Role = role, PasswordHash = "" };
         Assert.False(AdminAuth.CheckPassword("constant-time-decoy", account));
     }
 
     [Fact]
-    public void The_timing_decoy_never_signs_in_an_unknown_account() =>
+    public void DecoyRejectsUnknown() =>
         Assert.False(AdminAuth.CheckPassword("constant-time-decoy", null));
 
     [Fact]
-    public void A_disabled_account_is_refused_even_with_its_own_password()
+    public void DisabledAccountRefused()
     {
         var account = new UserAccount { Id = "acct00000001", Username = "jane", IsDisabled = true, PasswordHash = AdminAuth.HashPassword("hunter2hunter2") };
         Assert.False(AdminAuth.CheckPassword("hunter2hunter2", account));
     }
 
     [Fact]
-    public void An_enabled_account_signs_in_with_its_own_password_only()
+    public void EnabledAccountSignsIn()
     {
         var account = new UserAccount { Id = "acct00000001", Username = "jane", PasswordHash = AdminAuth.HashPassword("hunter2hunter2") };
         Assert.True(AdminAuth.CheckPassword("hunter2hunter2", account));
@@ -109,7 +109,7 @@ public class AuthTests
     }
 
     [Fact]
-    public void The_stored_hash_never_contains_the_password()
+    public void HashOmitsPassword()
     {
         var hash = AdminAuth.HashPassword("secret");
         Assert.DoesNotContain("secret", hash);
@@ -117,7 +117,7 @@ public class AuthTests
     }
 
     [Fact]
-    public void Two_hashes_of_the_same_password_differ_because_the_salt_does()
+    public void HashesAreSalted()
     {
         Assert.NotEqual(AdminAuth.HashPassword("secret"), AdminAuth.HashPassword("secret"));
     }
@@ -126,11 +126,11 @@ public class AuthTests
     [InlineData("short", false)]
     [InlineData("exactlyten", true)]
     [InlineData("a long enough passphrase", true)]
-    public void A_new_password_has_a_floor(string password, bool accepted) =>
+    public void PasswordHasMinimum(string password, bool accepted) =>
         Assert.Equal(accepted, AccountValidation.PasswordProblem(password) is null);
 
     [Fact]
-    public void A_new_password_has_a_ceiling_so_hashing_cannot_be_used_as_a_cpu_sink()
+    public void PasswordHasMaximum()
     {
         Assert.Null(AccountValidation.PasswordProblem(new string('x', AccountValidation.PasswordMax)));
         Assert.NotNull(AccountValidation.PasswordProblem(new string('x', AccountValidation.PasswordMax + 1)));
@@ -144,7 +144,7 @@ public class AuthTests
     [InlineData("garbage")]
     [InlineData("pbkdf2$notanumber$c2FsdA==$aGFzaA==")]
     [InlineData("pbkdf2$1000$!!!notbase64$aGFzaA==")]
-    public void A_malformed_hash_fails_closed_rather_than_throwing(string stored) =>
+    public void MalformedHashFailsClosed(string stored) =>
         Assert.False(AdminAuth.VerifyPassword("anything", stored));
 
     private static (AppDbContext Db, SqliteConnection Conn) NewDb()
@@ -176,7 +176,7 @@ public class AuthTests
     };
 
     [Fact]
-    public async Task A_token_resolves_to_the_account_that_owns_it()
+    public async Task TokenResolvesOwner()
     {
         var (db, conn) = NewDb();
         using var _ = conn;
@@ -190,7 +190,7 @@ public class AuthTests
     }
 
     [Fact]
-    public async Task A_valid_token_authenticates_but_is_not_what_the_row_holds()
+    public async Task TokenStoredAsHash()
     {
         var (db, conn) = NewDb();
         using var _ = conn;
@@ -206,7 +206,7 @@ public class AuthTests
     }
 
     [Fact]
-    public async Task Revoking_one_token_leaves_every_other_working()
+    public async Task RevokeLeavesOthers()
     {
         var (db, conn) = NewDb();
         using var _ = conn;
@@ -224,7 +224,7 @@ public class AuthTests
     }
 
     [Fact]
-    public async Task A_token_with_no_expiry_is_still_honoured_until_one_is_set()
+    public async Task TokenWithoutExpiryHonoured()
     {
 
         var (db, conn) = NewDb();
@@ -238,7 +238,7 @@ public class AuthTests
     }
 
     [Fact]
-    public async Task An_expired_token_is_refused()
+    public async Task ExpiredTokenRefused()
     {
         var (db, conn) = NewDb();
         using var _ = conn;
@@ -249,7 +249,7 @@ public class AuthTests
     }
 
     [Fact]
-    public async Task A_disabled_account_cannot_use_its_token()
+    public async Task DisabledAccountTokenRefused()
     {
         var (db, conn) = NewDb();
         using var _ = conn;
@@ -260,7 +260,7 @@ public class AuthTests
     }
 
     [Fact]
-    public async Task A_token_that_is_not_enabled_is_refused()
+    public async Task DisabledTokenRefused()
     {
         var (db, conn) = NewDb();
         using var _ = conn;
@@ -274,7 +274,7 @@ public class AuthTests
     [InlineData("")]
     [InlineData("wrong-token")]
     [InlineData("alice-token-with-suffix")]
-    public async Task An_unknown_token_resolves_to_nobody(string presented)
+    public async Task UnknownTokenResolvesNobody(string presented)
     {
         var (db, conn) = NewDb();
         using var _ = conn;
@@ -290,7 +290,7 @@ public class AuthTests
     [InlineData("\"><script>alert(1)</script>", "&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;")]
     [InlineData("Tom & Jerry's", "Tom &amp; Jerry&#39;s")]
     [InlineData("plain text", "plain text")]
-    public void Fragment_values_are_escaped_before_they_reach_the_dom(string raw, string expected)
+    public void FragmentValuesEscaped(string raw, string expected)
     {
 
         Assert.Equal(expected, Html.Text(raw));
@@ -301,14 +301,14 @@ public class AuthTests
     [InlineData("it's", "it\\'s")]
     [InlineData("back\\slash", "back\\\\slash")]
     [InlineData("line\nbreak", "line\\nbreak")]
-    public void Ids_embedded_in_an_onclick_are_escaped_for_a_js_string(string raw, string expected)
+    public void OnclickIdsEscaped(string raw, string expected)
     {
 
         Assert.Equal(expected, Html.JsString(raw));
     }
 
     [Fact]
-    public void A_rendered_button_escapes_its_argument_in_both_contexts()
+    public void ButtonEscapesBothContexts()
     {
         var html = Html.Button("Delete", "deleteRecord", "it's\"bad");
 
@@ -322,7 +322,7 @@ public class AuthTests
     }
 
     [Fact]
-    public void Each_client_and_form_gets_its_own_bucket()
+    public void RateLimitPerClientAndForm()
     {
         var a = Context("203.0.113.7", "form-a");
         var b = Context("203.0.113.8", "form-a");
@@ -353,7 +353,7 @@ public class AuthTests
         Assert.Equal(same, RateLimit.ClientKey(Context(a, "")) == RateLimit.ClientKey(Context(b, "")));
 
     [Fact]
-    public void A_spoofed_forwarded_header_cannot_buy_a_fresh_budget()
+    public void ForwardedHeaderIgnored()
     {
 
         var ctx = new DefaultHttpContext();
@@ -369,7 +369,7 @@ public class AuthTests
     }
 
     [Fact]
-    public void Five_consecutive_failures_lock_an_account_out()
+    public void FiveFailuresLockOut()
     {
         LoginGuard.Reset();
         for (var i = 0; i < 5; i++)
@@ -393,14 +393,14 @@ public class AuthTests
     [InlineData("https", "baseport.example.com")]
     [InlineData("http", "baseport.example.com")]
     [InlineData("http", "192.168.1.20:5000")]
-    public void Cookies_are_secure_on_any_public_host(string scheme, string host) =>
+    public void CookiesSecureOnPublicHost(string scheme, string host) =>
         Assert.Contains("secure", CookiesFor(scheme, host));
 
     [Theory]
     [InlineData("localhost:5000")]
     [InlineData("127.0.0.1:5000")]
     [InlineData("[::1]:5000")]
-    public void Cookies_are_not_secure_on_localhost(string host) =>
+    public void CookiesInsecureOnLocalhost(string host) =>
         Assert.DoesNotContain("secure", CookiesFor("http", host));
 
     [Theory]
@@ -408,7 +408,7 @@ public class AuthTests
     [InlineData("https", "baseport.example.com", false)]
     [InlineData("http", "localhost:5000", false)]
     [InlineData("http", "[::1]:5000", false)]
-    public void Sign_in_needs_https_off_localhost(string scheme, string host, bool refused)
+    public void SignInNeedsHttps(string scheme, string host, bool refused)
     {
         var ctx = new DefaultHttpContext();
         ctx.Request.Scheme = scheme;
@@ -418,7 +418,7 @@ public class AuthTests
     }
 
     [Fact]
-    public void The_insecure_override_allows_plain_http_sign_in_without_secure_cookies()
+    public void InsecureOverrideAllowsHttp()
     {
         AdminAuth.AllowInsecureSignIn = true;
         try
@@ -440,7 +440,7 @@ public class AuthTests
     }
 
     [Fact]
-    public void The_insecure_override_keeps_https_cookies_secure()
+    public void InsecureOverrideKeepsHttpsSecure()
     {
         AdminAuth.AllowInsecureSignIn = true;
         try
@@ -454,11 +454,11 @@ public class AuthTests
     }
 
     [Fact]
-    public void The_https_refusal_names_the_fix() =>
+    public void HttpsRefusalNamesFix() =>
         Assert.Contains("Baseport:TrustForwardedHeaders", AdminAuth.HttpsRequired);
 
     [Fact]
-    public void Failures_from_one_client_do_not_lock_out_another()
+    public void LockoutIsPerClient()
     {
         LoginGuard.Reset();
         var attacker = LoginGuard.Key("admin", Context("203.0.113.66", ""));
@@ -471,11 +471,11 @@ public class AuthTests
     }
 
     [Fact]
-    public void The_lockout_key_names_both_the_account_and_the_client() =>
+    public void LockoutKeyHasAccountAndClient() =>
         Assert.NotEqual(LoginGuard.Key("admin", Context("203.0.113.66", "")), LoginGuard.Key("other", Context("203.0.113.66", "")));
 
     [Fact]
-    public void A_quiet_entry_is_pruned_and_a_live_lockout_is_not()
+    public void PruneKeepsLiveLockout()
     {
         LoginGuard.Reset();
         var now = DateTime.UtcNow;
@@ -492,7 +492,7 @@ public class AuthTests
     }
 
     [Fact]
-    public void A_success_clears_the_failure_count_before_it_locks()
+    public void SuccessClearsFailures()
     {
         LoginGuard.Reset();
         for (var i = 0; i < 3; i++) LoginGuard.Failed("admin");
@@ -507,7 +507,7 @@ public class AuthTests
     }
 
     [Fact]
-    public void One_accounts_failures_do_not_lock_another()
+    public void LockoutIsPerAccount()
     {
         LoginGuard.Reset();
         for (var i = 0; i < 5; i++) LoginGuard.Failed("admin");
@@ -515,7 +515,7 @@ public class AuthTests
     }
 
     [Fact]
-    public async Task The_seeded_password_is_random_and_the_old_default_never_works()
+    public async Task SeededPasswordIsRandom()
     {
         var (db, conn) = NewDb();
         using var _ = conn;
@@ -539,7 +539,7 @@ public class AuthTests
     }
 
     [Fact]
-    public async Task An_existing_password_is_not_overwritten_by_the_seed()
+    public async Task SeedKeepsExistingPassword()
     {
         var (db, conn) = NewDb();
         using var _ = conn;

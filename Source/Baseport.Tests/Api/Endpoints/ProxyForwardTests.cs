@@ -16,7 +16,11 @@ public class ProxyForwardTests
 
     private static readonly TableDefinition Table = new()
     {
-        Id = Ids.NewShortId(12), Name = "Remote", IsProxy = true, ProxyMethod = "POST", ProxyUrl = "https://203.0.113.10/orders"
+        Id = Ids.NewShortId(12),
+        Name = "Remote",
+        IsProxy = true,
+        ProxyMethod = "POST",
+        ProxyUrl = "https://203.0.113.10/orders"
     };
 
     private static async Task<string> ForwardAsync(Func<HttpResponseMessage> answer)
@@ -29,7 +33,7 @@ public class ProxyForwardTests
     }
 
     [Fact]
-    public async Task A_proxied_submit_does_not_return_the_upstream_body()
+    public async Task ProxySubmitHidesUpstreamBody()
     {
         var body = await ForwardAsync(() => new HttpResponseMessage(HttpStatusCode.Created)
         {
@@ -42,7 +46,7 @@ public class ProxyForwardTests
     }
 
     [Fact]
-    public async Task A_proxy_transport_error_does_not_reveal_the_exception_text()
+    public async Task ProxyErrorHidesException()
     {
         var body = await ForwardAsync(() => throw new HttpRequestException("Connection refused (erp.internal.corp:8443)"));
 
@@ -51,7 +55,7 @@ public class ProxyForwardTests
     }
 
     [Fact]
-    public async Task A_proxy_rejection_still_carries_the_remote_validation_message()
+    public async Task ProxyRejectionKeepsMessage()
     {
         var body = await ForwardAsync(() => new HttpResponseMessage(HttpStatusCode.BadRequest)
         {

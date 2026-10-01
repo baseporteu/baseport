@@ -28,14 +28,14 @@ public class TableApiNameTests : IDisposable
         new() { Id = Ids.NewShortId(12), Name = "Orders", ApiName = apiName, ApiEnabled = published };
 
     [Fact]
-    public void Publishing_without_an_api_name_is_rejected()
+    public void PublishWithoutApiNameRejected()
     {
         var errs = FieldValidation.ValidateTable(Table("", true), Array.Empty<string>());
         Assert.Contains(errs, e => e.Contains("API name"));
     }
 
     [Fact]
-    public void Clearing_the_api_name_is_allowed_while_unpublished()
+    public void ClearApiNameWhenUnpublished()
     {
         Assert.Empty(FieldValidation.ValidateTable(Table("", false), Array.Empty<string>()));
     }
@@ -46,13 +46,13 @@ public class TableApiNameTests : IDisposable
     [InlineData("1orders")]
     [InlineData("o")]
     [InlineData("orders/records")]
-    public void An_api_name_outside_the_pattern_is_rejected(string apiName)
+    public void ApiNamePatternEnforced(string apiName)
     {
         Assert.NotEmpty(FieldValidation.ValidateTable(Table(apiName, true), Array.Empty<string>()));
     }
 
     [Fact]
-    public void An_api_name_is_stored_lowercased_and_trimmed()
+    public void ApiNameNormalized()
     {
         var table = Table("  Sales-Orders  ", true);
         Assert.Empty(FieldValidation.ValidateTable(table, Array.Empty<string>()));
@@ -60,13 +60,13 @@ public class TableApiNameTests : IDisposable
     }
 
     [Fact]
-    public void A_reserved_api_name_is_rejected()
+    public void ReservedApiNameRejected()
     {
         Assert.NotEmpty(FieldValidation.ValidateTable(Table("openapi", true), Array.Empty<string>()));
     }
 
     [Fact]
-    public async Task A_rejected_edit_is_not_written_by_a_later_save()
+    public async Task RejectedEditNotSaved()
     {
         var table = Table("sales-orders", true);
         _db.Tables.Add(table);

@@ -32,7 +32,7 @@ public class SameOriginWritesTests
     [Theory]
     [InlineData("same-site")]
     [InlineData("cross-site")]
-    public async Task A_cross_origin_write_with_the_console_cookie_is_refused(string fetchSite)
+    public async Task CrossOriginCookieWriteRefused(string fetchSite)
     {
         var (status, reached) = await SendAsync(HttpMethods.Post, fetchSite: fetchSite);
 
@@ -41,7 +41,7 @@ public class SameOriginWritesTests
     }
 
     [Fact]
-    public async Task The_refresh_cookie_alone_is_enough_to_be_checked()
+    public async Task RefreshCookieIsChecked()
     {
         var (status, reached) = await SendAsync(HttpMethods.Delete, cookie: AdminAuth.RefreshCookie, fetchSite: "same-site");
 
@@ -52,11 +52,11 @@ public class SameOriginWritesTests
     [Theory]
     [InlineData("same-origin")]
     [InlineData("none")]
-    public async Task A_same_origin_write_is_allowed(string fetchSite) =>
+    public async Task SameOriginWriteAllowed(string fetchSite) =>
         Assert.True((await SendAsync(HttpMethods.Post, fetchSite: fetchSite)).Reached);
 
     [Fact]
-    public async Task An_origin_mismatch_without_fetch_metadata_is_refused()
+    public async Task OriginMismatchRefused()
     {
         var (status, reached) = await SendAsync(HttpMethods.Patch, origin: "https://evil.example.com");
 
@@ -65,18 +65,18 @@ public class SameOriginWritesTests
     }
 
     [Fact]
-    public async Task A_matching_origin_without_fetch_metadata_is_allowed() =>
+    public async Task MatchingOriginAllowed() =>
         Assert.True((await SendAsync(HttpMethods.Post, origin: "https://baseport.example.com")).Reached);
 
     [Fact]
-    public async Task A_bearer_request_from_another_site_is_not_checked() =>
+    public async Task BearerNotChecked() =>
         Assert.True((await SendAsync(HttpMethods.Post, cookie: null, fetchSite: "cross-site", origin: "https://app.example.org")).Reached);
 
     [Fact]
-    public async Task A_request_without_either_header_is_allowed() =>
+    public async Task NoHeadersAllowed() =>
         Assert.True((await SendAsync(HttpMethods.Post)).Reached);
 
     [Fact]
-    public async Task A_cross_site_read_is_not_checked() =>
+    public async Task CrossSiteReadNotChecked() =>
         Assert.True((await SendAsync(HttpMethods.Get, fetchSite: "cross-site")).Reached);
 }

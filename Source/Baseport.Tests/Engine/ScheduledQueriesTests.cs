@@ -64,7 +64,7 @@ public class ScheduledQueriesTests : IDisposable
     }
 
     [Fact]
-    public async Task A_run_without_a_destination_records_what_it_read()
+    public async Task RunWithoutDestinationRecords()
     {
         var query = Save("SELECT 1 AS n");
         var now = DateTime.UtcNow;
@@ -77,7 +77,7 @@ public class ScheduledQueriesTests : IDisposable
     }
 
     [Fact]
-    public async Task A_run_with_a_destination_posts_the_grid()
+    public async Task RunPostsGrid()
     {
         var stub = Answering(System.Net.HttpStatusCode.Accepted);
         var query = Save("SELECT 7 AS n", webhook: "https://example.com/hook");
@@ -91,7 +91,7 @@ public class ScheduledQueriesTests : IDisposable
     }
 
     [Fact]
-    public async Task A_destination_that_refuses_is_recorded_rather_than_thrown()
+    public async Task RefusingDestinationRecorded()
     {
         var query = Save("SELECT 1 AS n", webhook: "https://example.com/hook");
 
@@ -102,7 +102,7 @@ public class ScheduledQueriesTests : IDisposable
     }
 
     [Fact]
-    public async Task A_query_that_stopped_being_readable_never_reaches_the_destination()
+    public async Task WriteQueryNeverPosted()
     {
         var stub = Answering(System.Net.HttpStatusCode.OK);
         var query = Save("DELETE FROM _records", webhook: "https://example.com/hook");
@@ -115,7 +115,7 @@ public class ScheduledQueriesTests : IDisposable
     }
 
     [Fact]
-    public async Task A_destination_on_the_servers_own_network_is_refused_at_run_time()
+    public async Task PrivateDestinationRefused()
     {
         var stub = Answering(System.Net.HttpStatusCode.OK);
         var query = Save("SELECT 1 AS n", webhook: "http://127.0.0.1:9/hook");
@@ -127,7 +127,7 @@ public class ScheduledQueriesTests : IDisposable
     }
 
     [Fact]
-    public async Task Only_an_enabled_schedule_that_is_due_comes_back()
+    public async Task OnlyDueSchedulesReturned()
     {
         var now = DateTime.UtcNow;
         var due = Save("SELECT 1 AS n");
@@ -151,7 +151,7 @@ public class ScheduledQueriesTests : IDisposable
     [InlineData("0 7 * * *", null)]
     [InlineData("@daily", null)]
     [InlineData("not a cron", "Schedule must be")]
-    public void A_schedule_is_checked_when_it_is_saved(string cron, string? expected)
+    public void ScheduleCheckedOnSave(string cron, string? expected)
     {
         var problem = ScheduledQueries.ScheduleProblem(cron);
         if (expected is null) Assert.Null(problem);
@@ -163,7 +163,7 @@ public class ScheduledQueriesTests : IDisposable
     [InlineData("https://example.com/hook", null)]
     [InlineData("ftp://example.com/hook", "The URL must be")]
     [InlineData("http://169.254.169.254/latest", "That address is on a private")]
-    public void A_destination_is_checked_when_it_is_saved(string url, string? expected)
+    public void DestinationCheckedOnSave(string url, string? expected)
     {
         var problem = ScheduledQueries.WebhookProblem(url);
         if (expected is null) Assert.Null(problem);

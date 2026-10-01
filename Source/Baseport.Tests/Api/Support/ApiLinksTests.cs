@@ -67,7 +67,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task A_record_transports_self_collection_and_a_link_per_reference()
+    public async Task RecordCarriesLinks()
     {
         var (orders, fields, _, customer) = await ShopAsync();
         var order = await RecordAsync(orders, new JsonObject { ["customer"] = customer.Id, ["total"] = 10 });
@@ -82,7 +82,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task An_unpublished_target_is_neither_linked_nor_expandable()
+    public async Task UnpublishedTargetNotLinked()
     {
         var (orders, fields, _, customer) = await ShopAsync(customersPublished: false);
         var order = await RecordAsync(orders, new JsonObject { ["customer"] = customer.Id });
@@ -98,7 +98,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task A_target_whose_GET_is_switched_off_is_not_a_relation()
+    public async Task TargetWithoutGetNotLinked()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var customers = await TableAsync("Customers", "customers", methods: "POST");
@@ -109,7 +109,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task Expand_embeds_the_referenced_record_one_level_deep()
+    public async Task ExpandEmbedsOneLevel()
     {
         var (orders, fields, _, customer) = await ShopAsync();
         var order = await RecordAsync(orders, new JsonObject { ["customer"] = customer.Id, ["total"] = 10 });
@@ -126,7 +126,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task Expand_obeys_the_targets_read_rule()
+    public async Task ExpandObeysReadRule()
     {
         var (orders, fields, _, customer) = await ShopAsync(customersReadRule: "_ROW_.owner = _USER_.id");
         var order = await RecordAsync(orders, new JsonObject { ["customer"] = customer.Id });
@@ -144,7 +144,7 @@ public class ApiLinksTests : IDisposable
     private static UserAccount Caller(string id, string role = AccountRoles.Consumer) => new() { Id = id, Role = role };
 
     [Fact]
-    public async Task A_role_read_rule_filters_an_expanded_relation()
+    public async Task ExpandObeysRoleRule()
     {
         var (orders, fields, _, customer) = await ShopAsync(customersReadRule: "_USER_.role = 'consumer'");
         var order = await RecordAsync(orders, new JsonObject { ["customer"] = customer.Id });
@@ -159,7 +159,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task A_misspelled_relation_is_refused_rather_than_ignored()
+    public async Task UnknownRelationRefused()
     {
         var (_, fields, _, _) = await ShopAsync();
         var relations = await ApiLinks.RelationsAsync(_db, fields, TestContext.Current.CancellationToken);
@@ -172,7 +172,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task A_field_named_self_cannot_shadow_the_self_link()
+    public async Task SelfFieldCannotShadowLink()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var customers = await TableAsync("Customers", "customers");
@@ -188,7 +188,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public void Page_links_keep_the_callers_query_and_only_offer_pages_that_exist()
+    public void PageLinksKeepQuery()
     {
         var request = new DefaultHttpContext().Request;
         request.Path = "/api/v1/orders/records";
@@ -204,7 +204,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public void The_first_page_offers_no_prev_and_a_last_page_no_next()
+    public void EdgePagesOmitLinks()
     {
         var request = new DefaultHttpContext().Request;
         request.Path = "/api/v1/orders/records";
@@ -217,7 +217,7 @@ public class ApiLinksTests : IDisposable
     }
 
     [Fact]
-    public void No_last_link_is_offered_once_the_count_stops_being_exact()
+    public void NoLastLinkWhenCountInexact()
     {
         var request = new DefaultHttpContext().Request;
         request.Path = "/api/v1/orders/records";

@@ -77,7 +77,7 @@ public class TdsProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_query_over_the_wire_matches_SqlEngine_run_directly()
+    public async Task WireMatchesSqlEngine()
     {
         const string sql = "SELECT name FROM sys.tables";
         using var client = await ConnectAsync(Token);
@@ -97,7 +97,7 @@ public class TdsProviderTests : IAsyncLifetime
     [InlineData("SELECT passwordhash FROM _users")]
     [InlineData("SELECT * FROM _records")]
     [InlineData("SELECT name FROM sqlite_master")]
-    public async Task A_read_of_a_system_table_is_refused(string sql)
+    public async Task SystemTableRefused(string sql)
     {
         using var client = await ConnectAsync(Token);
         var stream = client.GetStream();
@@ -107,7 +107,7 @@ public class TdsProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_wrong_token_is_refused_at_login()
+    public async Task WrongTokenRefused()
     {
         using var client = new TcpClient();
         await client.ConnectAsync(IPAddress.Loopback, Port, TestContext.Current.CancellationToken);
@@ -122,7 +122,7 @@ public class TdsProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_broken_query_reports_an_error_and_the_connection_stays_usable()
+    public async Task BrokenQueryKeepsConnection()
     {
         using var client = await ConnectAsync(Token);
         var stream = client.GetStream();
@@ -140,7 +140,7 @@ public class TdsProviderTests : IAsyncLifetime
     [InlineData("SELECT name FROM sys.tables")]
     [InlineData("SELECT name FROM sys.objects WHERE type = 'U '")]
     [InlineData("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES")]
-    public async Task A_catalog_probe_finds_the_authors_table(string sql)
+    public async Task CatalogFindsTable(string sql)
     {
         using var client = await ConnectAsync(Token);
         var (_, rows) = await RunBatchAsync(client, sql);
@@ -153,7 +153,7 @@ public class TdsProviderTests : IAsyncLifetime
     [InlineData("SELECT DB_NAME()", "baseport")]
     [InlineData("SELECT SCHEMA_NAME()", "dbo")]
     [InlineData("SELECT SERVERPROPERTY('ProductVersion')", "15.0.0")]
-    public async Task A_server_identity_probe_answers_like_sql_server(string sql, string expected)
+    public async Task IdentityAnswersLikeSqlServer(string sql, string expected)
     {
         using var client = await ConnectAsync(Token);
         var (_, rows) = await RunBatchAsync(client, sql);
@@ -164,7 +164,7 @@ public class TdsProviderTests : IAsyncLifetime
     [InlineData("SELECT TOP 10 name FROM sys.tables")]
     [InlineData("SELECT TOP (10) name FROM sys.tables")]
     [InlineData("select top 10 name from sys.tables;")]
-    public async Task A_top_clause_caps_the_result_instead_of_erroring(string sql)
+    public async Task TopCapsResult(string sql)
     {
         using var client = await ConnectAsync(Token);
         var (columns, rows) = await RunBatchAsync(client, sql);
@@ -173,7 +173,7 @@ public class TdsProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task An_unemulated_catalog_object_answers_empty_instead_of_leaking_sqlite()
+    public async Task UnknownCatalogIsEmpty()
     {
         using var client = await ConnectAsync(Token);
         var (_, rows) = await RunBatchAsync(client, "SELECT * FROM sys.dm_os_wait_stats");
@@ -183,7 +183,7 @@ public class TdsProviderTests : IAsyncLifetime
     private int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
 
     [Fact]
-    public async Task An_unpublished_table_is_neither_listed_nor_selectable()
+    public async Task UnpublishedTableHidden()
     {
         await SeedTableAsync("Drafts", apiEnabled: false, readRule: "");
 
@@ -198,7 +198,7 @@ public class TdsProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_read_rule_filters_the_rows_to_the_caller()
+    public async Task ReadRuleFiltersRows()
     {
         var tableId = await SeedTableAsync("Tickets", apiEnabled: true, readRule: "_ROW_.owner = _USER_.id", "owner", "subject");
         await SeedRecordAsync(tableId, $$"""{"owner":"{{_accountId}}","subject":"mine"}""");

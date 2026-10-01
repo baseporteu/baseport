@@ -15,7 +15,7 @@ public class ApiMethodTests
     };
 
     [Fact]
-    public void A_disabled_method_is_refused()
+    public void DisabledMethodRefused()
     {
         var table = Table("GET,POST");
 
@@ -26,14 +26,14 @@ public class ApiMethodTests
     }
 
     [Fact]
-    public void The_method_is_matched_whatever_case_it_arrives_in()
+    public void MethodIsCaseInsensitive()
     {
         Assert.True(ApiMethods.Allows(Table("get"), "GET"));
         Assert.True(ApiMethods.Allows(Table("GET"), "get"));
     }
 
     [Fact]
-    public void An_unknown_method_is_dropped_rather_than_stored()
+    public void UnknownMethodDropped()
     {
 
         Assert.Equal("GET,POST", ApiMethods.Serialize(new[] { "GET", "TRACE", "POST", "get" }));
@@ -41,7 +41,7 @@ public class ApiMethodTests
     }
 
     [Fact]
-    public void The_default_answers_everything()
+    public void DefaultAllowsAll()
     {
         var fresh = new TableDefinition();
 
@@ -49,7 +49,7 @@ public class ApiMethodTests
     }
 
     [Fact]
-    public void A_key_scoped_to_read_only_cannot_write_even_when_the_table_allows_it()
+    public void ReadOnlyKeyCannotWrite()
     {
         var table = Table("GET,POST,PATCH,PUT,DELETE");
         var readOnlyKey = new UserAccount { Id = "acct-1", ApiTokenMethods = "GET" };
@@ -60,7 +60,7 @@ public class ApiMethodTests
     }
 
     [Fact]
-    public void A_full_access_key_still_cannot_exceed_what_the_table_publishes()
+    public void KeyCannotExceedTable()
     {
         var table = Table("GET,POST");
         var fullAccessKey = new UserAccount { Id = "acct-2" };
@@ -70,7 +70,7 @@ public class ApiMethodTests
     }
 
     [Fact]
-    public void A_freshly_issued_account_defaults_to_every_method_so_existing_keys_are_unaffected()
+    public void NewAccountAllowsAllMethods()
     {
         var fresh = new UserAccount();
 
@@ -78,7 +78,7 @@ public class ApiMethodTests
     }
 
     [Fact]
-    public void Publishing_a_table_that_answers_nothing_is_rejected()
+    public void PublishWithoutMethodsRefused()
     {
         var table = Table("");
 
@@ -88,7 +88,7 @@ public class ApiMethodTests
     }
 
     [Fact]
-    public void An_unpublished_table_may_have_every_method_off()
+    public void UnpublishedMayDisableAll()
     {
         var table = Table("");
         table.ApiEnabled = false;
@@ -98,7 +98,7 @@ public class ApiMethodTests
     }
 
     [Fact]
-    public void Documentation_fields_are_bounded_because_they_are_published()
+    public void DocumentationIsBounded()
     {
         var table = Table("GET");
         table.ApiDisplayName = new string('x', 65);

@@ -80,7 +80,7 @@ public class SqlEngineFuzzTests : IDisposable
     }
 
     [Fact]
-    public async Task Accepted_statements_never_change_the_database()
+    public async Task AcceptedStatementsChangeNothing()
     {
         var seed = Random.Shared.Next();
         var rng = new Random(seed);
@@ -129,7 +129,7 @@ public class SqlEngineFuzzTests : IDisposable
     [InlineData("PRAGMA journal_mode(MEMORY)")]
     [InlineData("PRAGMA wal_checkpoint(TRUNCATE)")]
     [InlineData("PRAGMA optimize")]
-    public async Task A_console_pragma_that_sets_or_maintains_is_refused(string sql)
+    public async Task WritingPragmaRefused(string sql)
     {
         var mode = JournalMode();
         var watch = System.Diagnostics.Stopwatch.StartNew();
@@ -146,6 +146,6 @@ public class SqlEngineFuzzTests : IDisposable
     [InlineData("PRAGMA user_version")]
     [InlineData("PRAGMA journal_mode")]
     [InlineData("SELECT * FROM pragma_table_info('_records')")]
-    public async Task A_console_pragma_that_reads_still_works(string sql) =>
+    public async Task ReadingPragmaWorks(string sql) =>
         Assert.Null((await SqlEngine.ReadAsync(_db, sql, WireCatalog.Views, restrict: false)).Error);
 }

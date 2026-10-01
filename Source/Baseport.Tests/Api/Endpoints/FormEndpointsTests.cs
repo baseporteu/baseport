@@ -45,12 +45,18 @@ public class FormEndpointsTests : IDisposable
 
     private static FormConfig Form(string tableId, string layoutJson) => new()
     {
-        Id = Ids.NewShortId(12), TableId = tableId, Kind = FormKinds.Form, Actions = FormActions.Submit,
-        Title = "Order form", LayoutJson = layoutJson, ConfigJson = "{}", IsPublished = true
+        Id = Ids.NewShortId(12),
+        TableId = tableId,
+        Kind = FormKinds.Form,
+        Actions = FormActions.Submit,
+        Title = "Order form",
+        LayoutJson = layoutJson,
+        ConfigJson = "{}",
+        IsPublished = true
     };
 
     [Fact]
-    public async Task Resolves_the_configured_block_when_the_ref_field_points_back_correctly()
+    public async Task ResolvesBlockWithBackReference()
     {
         var (header, lines) = SeedHeaderAndLines();
         var form = Form(header.Id, $$"""{"rows":[{"t":"child_table","table":"{{lines.Id}}","refField":"OrderId","columns":["Sku"]}]}""");
@@ -65,7 +71,7 @@ public class FormEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Refuses_when_no_block_names_this_child_table()
+    public async Task RefusesUnnamedChildTable()
     {
         var (header, lines) = SeedHeaderAndLines();
         var form = Form(header.Id, "{\"rows\":[]}");
@@ -76,7 +82,7 @@ public class FormEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Refuses_when_the_named_field_does_not_point_back_at_this_header_table()
+    public async Task RefusesFieldWithoutBackReference()
     {
         var (header, lines) = SeedHeaderAndLines();
 
@@ -88,7 +94,7 @@ public class FormEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Default_visible_columns_exclude_the_reference_field_itself()
+    public async Task DefaultColumnsSkipReference()
     {
         var (header, lines) = SeedHeaderAndLines();
 
@@ -102,21 +108,21 @@ public class FormEndpointsTests : IDisposable
     }
 
     [Fact]
-    public void ChildTableIdsInLayout_finds_every_distinct_table_named_by_a_block()
+    public void ChildTableIdsFindsEveryTable()
     {
         var layout = """{"rows":[{"t":"child_table","table":"tbl_a"},{"t":"row"},{"t":"child_table","table":"tbl_b"},{"t":"child_table","table":"tbl_a"}]}""";
         Assert.Equal(new[] { "tbl_a", "tbl_b" }, FormEndpoints.ChildTableIdsInLayout(layout));
     }
 
     [Fact]
-    public void ChildTableIdsInLayout_is_empty_for_no_blocks_or_bad_json()
+    public void ChildTableIdsEmptyForBadLayout()
     {
         Assert.Empty(FormEndpoints.ChildTableIdsInLayout("[]"));
         Assert.Empty(FormEndpoints.ChildTableIdsInLayout("not json"));
     }
 
     [Fact]
-    public async Task Public_submit_cannot_set_hidden_read_only_or_computed_fields()
+    public async Task SubmitCannotSetProtectedFields()
     {
         var table = Seed("Cases",
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Subject", DataType = "text" },
@@ -125,7 +131,10 @@ public class FormEndpointsTests : IDisposable
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Ref", DataType = "systemid" });
         var obj = new System.Text.Json.Nodes.JsonObject
         {
-            ["Subject"] = "Broken", ["Status"] = "approved", ["Owner"] = "mallory", ["Ref"] = "chosen"
+            ["Subject"] = "Broken",
+            ["Status"] = "approved",
+            ["Owner"] = "mallory",
+            ["Ref"] = "chosen"
         };
 
         FormEndpoints.DropUnrendered(obj, table.Fields.ToList());
@@ -139,7 +148,7 @@ public class FormEndpointsTests : IDisposable
     }
 
     [Fact]
-    public void Child_rows_are_refused_on_a_form_without_the_submit_action()
+    public void ChildRowsNeedSubmitAction()
     {
         var (header, _) = SeedHeaderAndLines();
         var lookup = Form(header.Id, "[]");
@@ -153,7 +162,7 @@ public class FormEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Refuses_a_proxy_table_as_a_child_table()
+    public async Task RefusesProxyChildTable()
     {
         var header = Seed("Orders", new FieldDefinition { Id = Ids.NewShortId(12), Name = "Reference", DataType = "text" });
         var proxyLines = new TableDefinition { Id = Ids.NewShortId(12), Name = "RemoteLines", IsProxy = true, ProxyUrl = "https://example.com/lines" };
@@ -176,7 +185,9 @@ public class FormEndpointsTests : IDisposable
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Pin", DataType = "password", Position = 3 });
         _db.Records.Add(new Record
         {
-            Id = Ids.NewShortId(12), TableId = customers.Id, CreatedAt = DateTime.UtcNow,
+            Id = Ids.NewShortId(12),
+            TableId = customers.Id,
+            CreatedAt = DateTime.UtcNow,
             JsonData = """{"Note":"internal-only","Pin":"hunter2","Name":"Acme","Code":"AC-1"}"""
         });
         _db.SaveChanges();
@@ -187,7 +198,7 @@ public class FormEndpointsTests : IDisposable
     [InlineData("internal-only")]
     [InlineData("hunter2")]
     [InlineData("\"")]
-    public async Task A_reference_search_does_not_match_hidden_or_secret_content(string q)
+    public async Task ReferenceSearchSkipsHiddenFields(string q)
     {
         var customers = SeedCustomer();
 
@@ -195,7 +206,7 @@ public class FormEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_reference_row_is_labelled_by_its_identifier_field()
+    public async Task ReferenceRowUsesIdentifier()
     {
         var customers = SeedCustomer();
 

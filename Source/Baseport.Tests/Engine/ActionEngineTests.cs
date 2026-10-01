@@ -19,84 +19,84 @@ public class ActionDefValidationTests
         new() { Name = name, TriggerKind = trigger, StepsJson = stepsJson };
 
     [Fact]
-    public void Name_is_required()
+    public void NameRequired()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"runExpression","expr":"1"}]""", name: " "), Fields);
         Assert.Contains(errs, e => e.Contains("name", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
-    public void An_unknown_trigger_is_rejected()
+    public void UnknownTriggerRejected()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"runExpression","expr":"1"}]""", trigger: "onFrobnicate"), Fields);
         Assert.Contains(errs, e => e.Contains("Unknown trigger"));
     }
 
     [Fact]
-    public void At_least_one_step_is_required()
+    public void StepRequired()
     {
         var errs = FieldValidation.ValidateActionDef(Action("[]"), Fields);
         Assert.Contains(errs, e => e.Contains("at least one step"));
     }
 
     [Fact]
-    public void An_unknown_step_type_is_rejected()
+    public void UnknownStepRejected()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"launchMissiles"}]"""), Fields);
         Assert.Contains(errs, e => e.Contains("unknown step type"));
     }
 
     [Fact]
-    public void A_run_expression_step_validates_its_expression()
+    public void RunExpressionValidated()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"runExpression","expr":"data.Ghost + 1"}]"""), Fields);
         Assert.Contains(errs, e => e.Contains("Ghost"));
     }
 
     [Fact]
-    public void An_update_record_step_rejects_a_computed_field()
+    public void UpdateStepRejectsComputed()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"updateRecord","setJson":{"Total":"2"}}]"""), Fields);
         Assert.Contains(errs, e => e.Contains("server-computed"));
     }
 
     [Fact]
-    public void A_valid_update_record_step_is_accepted()
+    public void UpdateStepAccepted()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"updateRecord","setJson":{"Status":"'received'"}}]"""), Fields);
         Assert.Empty(errs);
     }
 
     [Fact]
-    public void An_http_request_step_requires_a_url()
+    public void HttpStepNeedsUrl()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"httpRequest"}]"""), Fields);
         Assert.Contains(errs, e => e.Contains("URL is required"));
     }
 
     [Fact]
-    public void An_http_request_step_refuses_a_private_target()
+    public void HttpStepRefusesPrivateTarget()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"httpRequest","url":"http://169.254.169.254/latest"}]"""), Fields);
         Assert.Contains(errs, e => e.Contains("private", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
-    public void An_http_request_step_rejects_an_unknown_method()
+    public void HttpStepRejectsUnknownMethod()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"httpRequest","url":"https://example.com/hook","method":"TRACE"}]"""), Fields);
         Assert.Contains(errs, e => e.Contains("method must be one of"));
     }
 
     [Fact]
-    public void An_http_request_step_validates_each_bodyTemplate_expression()
+    public void HttpStepValidatesTemplate()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"httpRequest","url":"https://example.com/hook","bodyTemplate":{"units":"data.Ghost"}}]"""), Fields);
         Assert.Contains(errs, e => e.Contains("Ghost"));
     }
 
     [Fact]
-    public void A_valid_http_request_step_is_accepted()
+    public void HttpStepAccepted()
     {
         var errs = FieldValidation.ValidateActionDef(Action("""[{"type":"httpRequest","url":"https://example.com/hook","method":"post","headers":{"X-Key":"abc"},"bodyTemplate":{"units":"Qty * 2"}}]"""), Fields);
         Assert.Empty(errs);
@@ -160,7 +160,7 @@ public class ActionEngineIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task Creating_a_record_enqueues_a_durable_run_that_the_runner_then_applies()
+    public async Task CreateEnqueuesRun()
     {
         var table = Seed(
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number" },
@@ -168,7 +168,10 @@ public class ActionEngineIntegrationTests : IDisposable
 
         var action = new ActionDef
         {
-            Id = Ids.NewShortId(12), TableId = table.Id, Name = "Mark received", TriggerKind = ActionTriggers.OnCreate,
+            Id = Ids.NewShortId(12),
+            TableId = table.Id,
+            Name = "Mark received",
+            TriggerKind = ActionTriggers.OnCreate,
             StepsJson = """[{"type":"updateRecord","setJson":{"Status":"'received'"}}]"""
         };
         _db.Actions.Add(action);
@@ -196,7 +199,7 @@ public class ActionEngineIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task An_action_updating_its_own_record_does_not_enqueue_a_second_run_for_itself()
+    public async Task SelfUpdateDoesNotRequeue()
     {
         var table = Seed(
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number" },
@@ -204,13 +207,19 @@ public class ActionEngineIntegrationTests : IDisposable
 
         var onCreate = new ActionDef
         {
-            Id = Ids.NewShortId(12), TableId = table.Id, Name = "Mark received", TriggerKind = ActionTriggers.OnCreate,
+            Id = Ids.NewShortId(12),
+            TableId = table.Id,
+            Name = "Mark received",
+            TriggerKind = ActionTriggers.OnCreate,
             StepsJson = """[{"type":"updateRecord","setJson":{"Status":"'received'"}}]"""
         };
 
         var onUpdate = new ActionDef
         {
-            Id = Ids.NewShortId(12), TableId = table.Id, Name = "Log update", TriggerKind = ActionTriggers.OnUpdate,
+            Id = Ids.NewShortId(12),
+            TableId = table.Id,
+            Name = "Log update",
+            TriggerKind = ActionTriggers.OnUpdate,
             StepsJson = """[{"type":"runExpression","expr":"1"}]"""
         };
         _db.Actions.AddRange(onCreate, onUpdate);
@@ -231,14 +240,17 @@ public class ActionEngineIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task A_failing_step_retries_with_backoff_instead_of_failing_immediately()
+    public async Task FailingStepRetries()
     {
         var table = Seed(
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Code", DataType = "text", IsUnique = true });
 
         var action = new ActionDef
         {
-            Id = Ids.NewShortId(12), TableId = table.Id, Name = "Collide", TriggerKind = ActionTriggers.OnCreate,
+            Id = Ids.NewShortId(12),
+            TableId = table.Id,
+            Name = "Collide",
+            TriggerKind = ActionTriggers.OnCreate,
             StepsJson = """[{"type":"updateRecord","setJson":{"Code":"'dup'"}}]"""
         };
         _db.Actions.Add(action);
@@ -265,7 +277,7 @@ public class ActionEngineIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task An_http_request_step_posts_the_bodyTemplate_evaluated_against_the_record()
+    public async Task HttpStepPostsTemplate()
     {
         var table = Seed(
             new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number" },
@@ -273,7 +285,10 @@ public class ActionEngineIntegrationTests : IDisposable
 
         var action = new ActionDef
         {
-            Id = Ids.NewShortId(12), TableId = table.Id, Name = "Notify", TriggerKind = ActionTriggers.OnCreate,
+            Id = Ids.NewShortId(12),
+            TableId = table.Id,
+            Name = "Notify",
+            TriggerKind = ActionTriggers.OnCreate,
             StepsJson = """[{"type":"httpRequest","url":"https://example.com/hook","bodyTemplate":{"units":"Qty * 2"}}]"""
         };
         _db.Actions.Add(action);
@@ -298,12 +313,15 @@ public class ActionEngineIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task An_http_request_step_retries_on_a_failure_status_the_same_way_updateRecord_does()
+    public async Task HttpStepRetriesOnFailure()
     {
         var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number" });
         var action = new ActionDef
         {
-            Id = Ids.NewShortId(12), TableId = table.Id, Name = "Notify", TriggerKind = ActionTriggers.OnCreate,
+            Id = Ids.NewShortId(12),
+            TableId = table.Id,
+            Name = "Notify",
+            TriggerKind = ActionTriggers.OnCreate,
             StepsJson = """[{"type":"httpRequest","url":"https://example.com/hook"}]"""
         };
         _db.Actions.Add(action);
@@ -325,12 +343,15 @@ public class ActionEngineIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task An_http_request_step_refuses_a_private_target_even_if_it_passed_validation_at_save_time()
+    public async Task HttpStepRechecksTarget()
     {
         var table = Seed(new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number" });
         var action = new ActionDef
         {
-            Id = Ids.NewShortId(12), TableId = table.Id, Name = "Notify", TriggerKind = ActionTriggers.OnCreate,
+            Id = Ids.NewShortId(12),
+            TableId = table.Id,
+            Name = "Notify",
+            TriggerKind = ActionTriggers.OnCreate,
 
             StepsJson = """[{"type":"httpRequest","url":"http://169.254.169.254/latest"}]"""
         };

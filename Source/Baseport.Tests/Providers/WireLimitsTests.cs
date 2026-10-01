@@ -46,7 +46,7 @@ public class WireLimitsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_silent_client_is_disconnected_after_the_handshake_timeout()
+    public async Task SilentClientDisconnected()
     {
         var saved = NetStreamExtensions.HandshakeTimeout;
         NetStreamExtensions.HandshakeTimeout = TimeSpan.FromMilliseconds(200);
@@ -75,7 +75,7 @@ public class WireLimitsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Connections_past_the_cap_are_closed_at_once()
+    public async Task ConnectionsOverCapClosed()
     {
         int port;
         using (var probe = new TcpListener(IPAddress.Loopback, 0))
@@ -124,7 +124,7 @@ public class WireLimitsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_stored_public_address_does_not_bind_without_the_switch()
+    public async Task StoredPublicAddressNotBound()
     {
         int port;
         using (var probe = new TcpListener(IPAddress.Loopback, 0))
@@ -155,7 +155,7 @@ public class WireLimitsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_runaway_recursive_query_is_stopped_by_the_deadline()
+    public async Task RunawayQueryStopped()
     {
         var saved = SqlEngine.StatementDeadline;
         SqlEngine.StatementDeadline = TimeSpan.FromMilliseconds(300);
@@ -178,7 +178,7 @@ public class WireLimitsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_normal_query_is_unaffected_by_the_deadline()
+    public async Task NormalQueryUnaffected()
     {
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -195,26 +195,26 @@ public class WireBindTests
     [Theory]
     [InlineData("127.0.0.1")]
     [InlineData("::1")]
-    public void A_loopback_address_is_always_allowed(string address) =>
+    public void LoopbackAllowed(string address) =>
         Assert.Null(WireBind.Problem(address, "Postgres", remoteAllowed: false));
 
     [Theory]
     [InlineData("0.0.0.0")]
     [InlineData("192.168.1.10")]
     [InlineData("::")]
-    public void A_public_bind_address_is_refused_without_the_switch(string address) =>
+    public void PublicBindRefused(string address) =>
         Assert.Contains("Baseport:AllowRemoteProviders", WireBind.Problem(address, "Postgres", remoteAllowed: false));
 
     [Fact]
-    public void A_public_bind_address_is_accepted_with_the_switch() =>
+    public void PublicBindWithSwitch() =>
         Assert.Null(WireBind.Problem("0.0.0.0", "Postgres", remoteAllowed: true));
 
     [Fact]
-    public void A_malformed_address_is_refused() =>
+    public void MalformedAddressRefused() =>
         Assert.Contains("valid IP address", WireBind.Problem("not-an-ip", "TDS", remoteAllowed: true));
 
     [Fact]
-    public void The_console_settings_patch_refuses_a_public_address()
+    public void SettingsPatchRefusesPublic()
     {
         var settings = new AppSettings();
         var body = new System.Text.Json.Nodes.JsonObject { ["tdsBindAddress"] = "0.0.0.0" };

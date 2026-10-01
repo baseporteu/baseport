@@ -8,7 +8,7 @@ namespace Baseport.Tests;
 public class UploadTests
 {
     [Fact]
-    public async Task An_uploaded_file_reaches_disk_only_when_the_caller_saves_it()
+    public async Task UploadWrittenOnSave()
     {
         FileStore.Initialize("Data Source=baseport.db");
         var bytes = "hello"u8.ToArray();

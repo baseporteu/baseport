@@ -37,7 +37,7 @@ public class ProvidersCliTests : IDisposable
     }
 
     [Fact]
-    public async Task Enabling_postgres_persists_the_default_port_and_bind_address()
+    public async Task EnablePostgresDefaults()
     {
         await EnsureMigratedAsync();
 
@@ -48,7 +48,7 @@ public class ProvidersCliTests : IDisposable
     }
 
     [Fact]
-    public async Task Enabling_postgres_with_port_and_bind_persists_both()
+    public async Task EnablePostgresWithOptions()
     {
         await EnsureMigratedAsync();
 
@@ -61,7 +61,7 @@ public class ProvidersCliTests : IDisposable
     }
 
     [Fact]
-    public async Task Disabling_tds_clears_the_enabled_flag()
+    public async Task DisableTds()
     {
         await EnsureMigratedAsync();
         await RunAsync("tds", "enable");
@@ -73,7 +73,7 @@ public class ProvidersCliTests : IDisposable
     }
 
     [Fact]
-    public async Task An_out_of_range_port_is_refused()
+    public async Task PortRangeEnforced()
     {
         await EnsureMigratedAsync();
 
@@ -84,7 +84,7 @@ public class ProvidersCliTests : IDisposable
     }
 
     [Fact]
-    public async Task An_invalid_bind_address_is_refused()
+    public async Task InvalidBindRefused()
     {
         await EnsureMigratedAsync();
 
@@ -95,7 +95,7 @@ public class ProvidersCliTests : IDisposable
     }
 
     [Fact]
-    public async Task Status_reports_the_current_configuration_without_changing_it()
+    public async Task StatusIsReadOnly()
     {
         await EnsureMigratedAsync();
         await RunAsync("postgres", "enable", "--port", "5433");
@@ -108,7 +108,7 @@ public class ProvidersCliTests : IDisposable
     }
 
     [Fact]
-    public async Task An_unknown_command_reports_usage_and_fails()
+    public async Task UnknownCommandFails()
     {
         await EnsureMigratedAsync();
 
@@ -116,7 +116,7 @@ public class ProvidersCliTests : IDisposable
     }
 
     [Fact]
-    public async Task No_command_reports_usage_and_succeeds()
+    public async Task NoCommandShowsUsage()
     {
         await EnsureMigratedAsync();
 

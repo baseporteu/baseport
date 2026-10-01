@@ -69,7 +69,7 @@ public class OidcTests : IDisposable
     [Theory]
     [InlineData("https://auth.example.com", "https://auth.example.com/.well-known/openid-configuration")]
     [InlineData("https://auth.example.com/", "https://auth.example.com/.well-known/openid-configuration")]
-    public void Discovery_hangs_off_the_authority_with_one_slash(string authority, string expected) =>
+    public void DiscoveryUrlHasOneSlash(string authority, string expected) =>
         Assert.Equal(expected, OidcFlow.MetadataAddress(authority));
 
     [Theory]
@@ -77,11 +77,11 @@ public class OidcTests : IDisposable
     [InlineData("http://localhost:9091", true)]
     [InlineData("http://auth.example.com", false)]
     [InlineData("https://auth.example.com", false)]
-    public void Only_a_provider_on_this_machine_may_be_reached_over_plain_http(string authority, bool allowed) =>
+    public void PlainHttpOnlyForLocalProvider(string authority, bool allowed) =>
         Assert.Equal(allowed, OidcFlow.AllowsPlainHttp(authority));
 
     [Fact]
-    public void The_session_cookies_survive_the_return_from_a_provider()
+    public void SessionCookiesSurviveReturn()
     {
 
         var ctx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
@@ -98,7 +98,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public void The_authorize_redirect_transports_pkce_a_state_and_a_nonce()
+    public void AuthorizeCarriesPkceStateNonce()
     {
         var start = OidcFlow.Begin(Document(), Provider(), "https://app.example.com/api/auth/oidc/authelia/callback", "/_/admin", console: true);
 
@@ -113,7 +113,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public void A_state_is_spent_by_the_first_callback_that_presents_it()
+    public void StateIsSingleUse()
     {
         var start = OidcFlow.Begin(Document(), Provider(), "https://app.example.com/cb", "/_/admin", console: true);
 
@@ -123,7 +123,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public void An_unknown_state_is_refused()
+    public void UnknownStateRefused()
     {
         Assert.Null(OidcFlow.Claim("never-issued", OidcFlow.Binding("never-issued")));
         Assert.Null(OidcFlow.Claim("", ""));
@@ -131,7 +131,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public void A_callback_without_the_binding_cookie_is_refused()
+    public void CallbackNeedsBindingCookie()
     {
         var start = OidcFlow.Begin(Document(), Provider(), "https://app.example.com/cb", "/_/admin", console: true);
 
@@ -139,7 +139,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public void A_callback_with_another_flows_binding_is_refused()
+    public void CallbackRejectsForeignBinding()
     {
         var provider = Provider();
         var attacker = OidcFlow.Begin(Document(), provider, "https://app.example.com/cb", "/_/admin", console: true);
@@ -149,7 +149,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public void The_binding_cookie_is_http_only_lax_and_never_the_state_itself()
+    public void BindingCookieIsHttpOnlyLax()
     {
         var ctx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
         OidcFlow.Bind(ctx, "state-value");
@@ -162,7 +162,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public void An_abandoned_sign_in_is_pruned()
+    public void AbandonedSignInPruned()
     {
         var start = OidcFlow.Begin(Document(), Provider(), "https://app.example.com/cb", "/_/admin", console: true);
 
@@ -171,7 +171,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_returning_subject_finds_its_account_even_after_a_rename_at_the_provider()
+    public async Task SubjectSurvivesRename()
     {
         var provider = Provider();
         var linked = Account("jane", providerId: provider.Id, subject: "sub-1");
@@ -186,7 +186,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_username_claim_never_links_an_existing_account()
+    public async Task UsernameClaimNeverLinks()
     {
         var provider = Provider();
         Account("jane", role: AccountRoles.Consumer);
@@ -200,7 +200,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_verified_email_never_links_an_account_that_has_a_password()
+    public async Task EmailNeverLinksPasswordAccount()
     {
         var provider = Provider();
         var existing = Account("someone", email: "jane@example.com");
@@ -221,7 +221,7 @@ public class OidcTests : IDisposable
     [InlineData("admin", "", false)]
 
     [InlineData("", "admin@example.com", true)]
-    public async Task An_admin_account_is_never_linked_by_a_claim(string username, string email, bool verified)
+    public async Task AdminNeverLinkedByClaim(string username, string email, bool verified)
     {
         var provider = Provider();
         Account("admin", email: "admin@example.com", role: AccountRoles.Admin);
@@ -236,7 +236,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public void A_link_flow_transports_the_account_that_started_it_and_a_sign_in_transports_none()
+    public void LinkFlowCarriesAccount()
     {
         var provider = Provider();
         var link = OidcFlow.Begin(Document(), provider, "https://app.example.com/cb", "/_/admin/settings/auth", console: true, linkTo: "acct00000001");
@@ -248,7 +248,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_link_started_by_one_account_never_binds_another()
+    public async Task LinkBindsOnlyStarter()
     {
         var provider = Provider();
         var starter = Account("alice");
@@ -262,7 +262,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_link_with_no_session_behind_it_is_refused()
+    public async Task LinkNeedsSession()
     {
         var provider = Provider();
         var flow = Flow(provider, linkTo: Account("alice").Id);
@@ -272,7 +272,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_sign_in_flow_is_not_a_link_flow()
+    public async Task SignInIsNotLink()
     {
         var provider = Provider();
         var alice = Account("alice");
@@ -282,7 +282,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_link_refuses_a_subject_another_account_already_holds()
+    public async Task LinkRefusesTakenSubject()
     {
         var provider = Provider();
         Account("bob", providerId: provider.Id, subject: "sub-1");
@@ -294,7 +294,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_link_the_session_still_holds_is_allowed()
+    public async Task LinkWithLiveSessionAllowed()
     {
         var provider = Provider();
         var alice = Account("alice");
@@ -304,7 +304,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_refusal_says_that_no_claim_will_ever_link_an_admin()
+    public async Task RefusalExplainsAdminBlock()
     {
         var provider = Provider();
         Account("admin-a1b2c3d4", role: AccountRoles.Admin);
@@ -316,7 +316,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task An_instance_whose_admins_are_all_linked_has_nothing_to_explain()
+    public async Task LinkedAdminsNeedNoHint()
     {
         var provider = Provider();
         Account("admin-a1b2c3d4", role: AccountRoles.Admin, providerId: provider.Id, subject: "sub-9");
@@ -325,7 +325,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task An_admin_that_was_linked_deliberately_still_signs_in()
+    public async Task LinkedAdminSignsIn()
     {
 
         var provider = Provider();
@@ -339,7 +339,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_provider_may_not_provision_its_way_around_the_admin_block()
+    public async Task ProvisionCannotBypassAdminBlock()
     {
 
         var provider = Provider(createAccounts: true);
@@ -354,7 +354,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task An_account_already_linked_elsewhere_is_never_relinked_by_name()
+    public async Task LinkedAccountNotRelinked()
     {
         var provider = Provider();
         Account("jane", providerId: "other0000001", subject: "sub-elsewhere");
@@ -367,7 +367,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task An_unverified_email_claim_never_links_an_account()
+    public async Task UnverifiedEmailNeverLinks()
     {
         var provider = Provider();
         Account("someone", email: "jane@example.com");
@@ -380,7 +380,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_verified_email_claim_links_the_account_that_holds_it()
+    public async Task VerifiedEmailLinks()
     {
         var provider = Provider();
         var existing = Account("someone", email: "jane@example.com");
@@ -393,7 +393,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task An_unknown_subject_is_refused_until_the_provider_is_allowed_to_provision()
+    public async Task UnknownSubjectNeedsProvisioning()
     {
         var provider = Provider(createAccounts: false);
 
@@ -406,7 +406,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_provisioned_account_is_never_an_admin()
+    public async Task ProvisionedAccountNotAdmin()
     {
         var provider = Provider(createAccounts: true);
 
@@ -421,7 +421,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_provisioned_account_never_takes_a_username_that_is_taken()
+    public async Task ProvisionedUsernameIsUnique()
     {
         var provider = Provider(createAccounts: true);
 
@@ -435,7 +435,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task A_disabled_account_is_refused_however_it_signs_in()
+    public async Task DisabledAccountAlwaysRefused()
     {
         var provider = Provider();
         Account("jane", providerId: provider.Id, subject: "sub-1", disabled: true);
@@ -448,7 +448,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task An_enabled_provider_offered_on_neither_screen_configures_nothing()
+    public async Task UnofferedProviderIsInert()
     {
 
         var body = new System.Text.Json.Nodes.JsonObject
@@ -468,7 +468,7 @@ public class OidcTests : IDisposable
     }
 
     [Fact]
-    public async Task The_refusal_names_which_email_path_failed()
+    public async Task RefusalNamesEmailPath()
     {
         var provider = Provider();
 
@@ -493,7 +493,7 @@ public class OidcTests : IDisposable
     [InlineData("/api/auth/oidc/authelia/callback", true)]
 
     [InlineData("/api/_admin/oidc-providers", false)]
-    public void The_flow_is_anonymous_and_its_management_is_not(string path, bool anonymous) =>
+    public void FlowAnonymousManagementNot(string path, bool anonymous) =>
         Assert.Equal(anonymous, AdminAuthMiddleware.IsPublicPath(path));
 
     public void Dispose()

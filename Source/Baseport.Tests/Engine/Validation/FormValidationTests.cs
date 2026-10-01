@@ -20,49 +20,49 @@ public class FormValidationTests
         Form(FormKinds.Form, config, title, FormActions.Lookup);
 
     [Fact]
-    public void Title_is_required()
+    public void TitleRequired()
     {
         var errors = FieldValidation.ValidateForm(Form(FormKinds.List, """{"columns":["Customer"]}""", title: " "), Fields);
         Assert.Contains(errors, e => e.Contains("title", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
-    public void Lookup_needs_at_least_one_identifier()
+    public void LookupNeedsIdentifier()
     {
         var errors = FieldValidation.ValidateForm(Lookup("{}"), Fields);
         Assert.Contains(errors, e => e.Contains("identifier field"));
     }
 
     [Fact]
-    public void Lookup_cannot_match_on_a_hidden_field()
+    public void LookupRejectsHiddenField()
     {
         var errors = FieldValidation.ValidateForm(Lookup("""{"matchFields":["InternalNote"]}"""), Fields);
         Assert.Contains(errors, e => e.Contains("hidden"));
     }
 
     [Fact]
-    public void Lookup_rejects_a_field_that_does_not_exist()
+    public void LookupRejectsUnknownField()
     {
         var errors = FieldValidation.ValidateForm(Lookup("""{"matchFields":["Ghost"]}"""), Fields);
         Assert.Contains(errors, e => e.Contains("unknown field 'Ghost'"));
     }
 
     [Fact]
-    public void Lookup_accepts_a_real_identifier()
+    public void LookupAcceptsIdentifier()
     {
         var config = """{"matchFields":["OrderNo"],"resultFields":["Customer","Total"]}""";
         Assert.Empty(FieldValidation.ValidateForm(Lookup(config), Fields));
     }
 
     [Fact]
-    public void List_needs_at_least_one_column()
+    public void ListNeedsColumn()
     {
         var errors = FieldValidation.ValidateForm(Form(FormKinds.List, "{}"), Fields);
         Assert.Contains(errors, e => e.Contains("at least one column"));
     }
 
     [Fact]
-    public void List_rejects_an_out_of_range_page_size()
+    public void ListPageSizeRange()
     {
         var config = """{"columns":["Customer"],"pageSize":100000}""";
         var errors = FieldValidation.ValidateForm(Form(FormKinds.List, config), Fields);
@@ -70,7 +70,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void List_rejects_an_unknown_sort_field()
+    public void ListRejectsUnknownSort()
     {
         var config = """{"columns":["Customer"],"sortField":"Ghost"}""";
         var errors = FieldValidation.ValidateForm(Form(FormKinds.List, config), Fields);
@@ -78,14 +78,14 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void List_accepts_a_complete_configuration()
+    public void ListAcceptsValidConfig()
     {
         var config = """{"columns":["OrderNo","Customer"],"searchFields":["Customer"],"sortField":"Customer","sortDir":"asc","pageSize":25}""";
         Assert.Empty(FieldValidation.ValidateForm(Form(FormKinds.List, config), Fields));
     }
 
     [Fact]
-    public void Malformed_config_is_reported_not_thrown()
+    public void MalformedConfigReported()
     {
         var errors = FieldValidation.ValidateForm(Form(FormKinds.List, "{not json"), Fields);
         Assert.Contains(errors, e => e.Contains("not valid JSON"));
@@ -99,7 +99,7 @@ public class FormValidationTests
 
     [InlineData("submit", FormKinds.Form)]
     [InlineData("LOOKUP", FormKinds.Form)]
-    public void Kind_normalizes_to_a_known_value(string? input, string expected) =>
+    public void KindNormalizes(string? input, string expected) =>
         Assert.Equal(expected, FormKinds.Normalize(input));
 
     [Theory]
@@ -112,11 +112,11 @@ public class FormValidationTests
     [InlineData("nonsense", new[] { "submit" })]
     [InlineData("", new[] { "submit" })]
     [InlineData(null, new[] { "submit" })]
-    public void Actions_parse_to_a_known_ordered_set(string? input, string[] expected) =>
+    public void ActionsParseOrdered(string? input, string[] expected) =>
         Assert.Equal(expected, FormActions.Parse(input));
 
     [Fact]
-    public void A_form_may_enable_both_actions_at_once()
+    public void BothActionsAllowed()
     {
 
         var config = @"{""matchFields"":[""OrderNo""],""resultFields"":[""Customer""]}";
@@ -127,7 +127,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void Enabling_both_validates_both()
+    public void BothActionsValidated()
     {
 
         var form = Form(FormKinds.Form, "{}", actions: "submit,lookup");
@@ -138,7 +138,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_read_only_form_cannot_also_submit()
+    public void ReadOnlyCannotSubmit()
     {
         var form = Form(FormKinds.Form, "{}", actions: "submit");
         form.IsReadOnly = true;
@@ -146,7 +146,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_list_renderer_must_be_a_valid_expression_over_real_columns()
+    public void RendererMustBeValid()
     {
         var bad = Form(FormKinds.List, """{"columns":["Customer"],"renderers":{"Ghost":"data.Customer"}}""");
         Assert.Contains(FieldValidation.ValidateForm(bad, Fields), e => e.Contains("unknown column 'Ghost'"));
@@ -156,7 +156,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_computed_field_cannot_be_a_lookup_identifier()
+    public void ComputedNotLookupIdentifier()
     {
         var field = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Total", DataType = "calculated", Expression = "1 + 1", IsIdentifier = true };
         var errors = FieldValidation.ValidateFieldDefinition(field, Array.Empty<string>(), new[] { "Total" }, _ => true);
@@ -164,7 +164,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_catastrophic_pattern_is_refused_at_save_time()
+    public void CatastrophicPatternRefused()
     {
 
         var field = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Code", DataType = "text", Pattern = "(a+)+$" };
@@ -176,7 +176,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_stored_pattern_that_does_not_compile_refuses_the_value()
+    public void BadStoredPatternRefuses()
     {
         var field = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Code", DataType = "text", Pattern = "(?<" };
         var errors = FieldValidation.ValidateFieldValue(field, System.Text.Json.Nodes.JsonValue.Create("anything"), (_, _) => false);
@@ -184,7 +184,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_list_keeps_its_column_order()
+    public void ListKeepsColumnOrder()
     {
 
         var config = @"{""columns"":[""Total"",""OrderNo"",""Customer""]}";
@@ -197,7 +197,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_submit_form_whose_layout_holds_no_fields_is_refused()
+    public void EmptyLayoutRefused()
     {
 
         var empty = Form(FormKinds.Form, "{}", title: "Empty");
@@ -209,7 +209,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_show_if_expression_is_validated_like_any_other()
+    public void ShowIfValidated()
     {
         var form = Form(FormKinds.Form, "{}", title: "Conditional");
         form.LayoutJson = @"{""rows"":[{""t"":""row"",""showIf"":""data.Customer === 'VIP'"",""cols"":[{""t"":""col"",""w"":12,""items"":[""Customer""]}]}]}";
@@ -220,7 +220,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_lookup_with_no_result_fields_is_refused()
+    public void LookupNeedsResultFields()
     {
         var errors = FieldValidation.ValidateForm(Lookup(@"{""matchFields"":[""OrderNo""]}"), Fields);
         Assert.Contains(errors, e => e.Contains("at least one field to show"));
@@ -233,7 +233,7 @@ public class FormValidationTests
     [InlineData("EURO", "currency", false)]
     [InlineData("E1R", "currency", false)]
     [InlineData("EUR", "text", false)]
-    public void A_currency_code_is_three_letters_on_a_currency_field(string code, string type, bool valid)
+    public void CurrencyCodeIsThreeLetters(string code, string type, bool valid)
     {
         var field = new FieldDefinition { Name = "Price", DataType = type, Currency = code };
         var errors = FieldValidation.ValidateFieldDefinition(field, Array.Empty<string>(), new[] { "Price" }, _ => true);
@@ -250,7 +250,7 @@ public class FormValidationTests
     [InlineData("sales_orders", false)]
     [InlineData("api", false)]
     [InlineData("openapi.json", false)]
-    public void A_published_api_name_is_url_safe_and_not_reserved(string apiName, bool valid)
+    public void ApiNameSafeAndUnreserved(string apiName, bool valid)
     {
         var table = new TableDefinition { Name = "Internal Working Name", ApiName = apiName };
         var errors = FieldValidation.ValidateTable(table, Array.Empty<string>());
@@ -258,7 +258,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void Publishing_a_table_requires_an_api_name()
+    public void PublishNeedsApiName()
     {
 
         var table = new TableDefinition { Name = "Internal Working Name", ApiEnabled = true };
@@ -270,14 +270,14 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void An_unpublished_table_needs_no_api_name()
+    public void UnpublishedNeedsNoApiName()
     {
         var table = new TableDefinition { Name = "Scratch", ApiEnabled = false };
         Assert.Empty(FieldValidation.ValidateTable(table, Array.Empty<string>()));
     }
 
     [Fact]
-    public void A_proxy_table_needs_an_absolute_target_and_a_known_method()
+    public void ProxyNeedsTargetAndMethod()
     {
         var table = new TableDefinition { Name = "Remote", IsProxy = true, ProxyUrl = "not-a-url", ProxyMethod = "FETCH" };
         var errors = FieldValidation.ValidateTable(table, Array.Empty<string>());
@@ -290,7 +290,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void Minimum_above_maximum_is_rejected()
+    public void MinAboveMaxRejected()
     {
         var field = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Qty", DataType = "number", Min = 10, Max = 1 };
         var errors = FieldValidation.ValidateFieldDefinition(field, Array.Empty<string>(), new[] { "Qty" }, _ => true);
@@ -302,7 +302,7 @@ public class FormValidationTests
     [InlineData("reset")]
     [InlineData("cancel")]
     [InlineData("validate")]
-    public void Button_action_accepts_cancel_and_validate_alongside_submit_and_reset(string action)
+    public void ButtonActionsAccepted(string action)
     {
         var form = Form(FormKinds.Form, "{}", title: "Buttons");
         form.LayoutJson = $$"""{"rows":[{"t":"button","label":"Go","action":"{{action}}"}]}""";
@@ -310,7 +310,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void An_unknown_button_action_is_rejected()
+    public void UnknownButtonActionRejected()
     {
         var form = Form(FormKinds.Form, "{}", title: "Buttons");
         form.LayoutJson = """{"rows":[{"t":"button","label":"Go","action":"teleport"}]}""";
@@ -319,7 +319,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_link_button_requires_a_valid_href_expression()
+    public void LinkButtonNeedsHref()
     {
         var missing = Form(FormKinds.Form, "{}", title: "Buttons");
         missing.LayoutJson = """{"rows":[{"t":"button","label":"View","action":"link"}]}""";
@@ -337,7 +337,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_run_button_requires_a_valid_expression()
+    public void RunButtonNeedsExpression()
     {
 
         var missing = Form(FormKinds.Form, "{}", title: "Buttons");
@@ -354,7 +354,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void OnSuccessRedirect_is_validated_like_a_renderer()
+    public void OnSuccessRedirectValidated()
     {
         var layout = """{"rows":[{"t":"row","cols":[{"t":"col","w":12,"items":["Customer"]}]}]}""";
 
@@ -372,7 +372,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_list_action_button_requires_a_label_and_a_valid_href_expression()
+    public void ListButtonNeedsLabelAndHref()
     {
         var noLabel = Form(FormKinds.List, """{"columns":["Customer"],"actions":[{"hrefExpr":"data.OrderNo"}]}""");
         Assert.Contains(FieldValidation.ValidateForm(noLabel, Fields), e => e.Contains("requires a label"));
@@ -385,7 +385,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void EncodeURIComponent_is_available_to_href_expressions()
+    public void HrefHasEncodeUriComponent()
     {
 
         var validation = JsExpr.Validate("encodeURIComponent('a b/c')", Array.Empty<string>());
@@ -395,12 +395,14 @@ public class FormValidationTests
 
     private static readonly FieldDefinition LineItemsField = new()
     {
-        Id = Ids.NewShortId(12), Name = "Lines", DataType = "array",
+        Id = Ids.NewShortId(12),
+        Name = "Lines",
+        DataType = "array",
         OptionsJson = """{"fields":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}"""
     };
 
     [Fact]
-    public void SUM_totals_a_column_across_a_line_items_array()
+    public void SumTotalsLineItems()
     {
         var fieldNames = new[] { "Lines" };
         var validation = JsExpr.Validate("SUM(Lines, 'Qty')", fieldNames);
@@ -412,7 +414,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void SUM_rejects_any_shape_other_than_field_and_literal_column()
+    public void SumRejectsOtherShapes()
     {
         Assert.False(JsExpr.Validate("SUM(Lines)", new[] { "Lines" }).Valid);
         Assert.False(JsExpr.Validate("SUM(data.Lines, 'Qty')", new[] { "Lines" }).Valid);
@@ -420,7 +422,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_line_items_block_must_reference_a_configured_array_field()
+    public void LineItemsNeedArrayField()
     {
         var withField = new List<FieldDefinition>(Fields) { LineItemsField };
 
@@ -444,7 +446,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_line_items_block_alone_satisfies_the_at_least_one_field_rule()
+    public void LineItemsCountAsField()
     {
         var withField = new List<FieldDefinition>(Fields) { LineItemsField };
         var form = Form(FormKinds.Form, "{}", title: "Order");
@@ -453,7 +455,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_child_table_block_needs_a_table_and_a_reference_field_chosen()
+    public void ChildTableNeedsReference()
     {
         var missingBoth = Form(FormKinds.Form, "{}", title: "Order");
         missingBoth.LayoutJson = """{"rows":[{"t":"child_table"}]}""";
@@ -469,7 +471,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_child_table_block_alone_satisfies_the_at_least_one_field_rule()
+    public void ChildTableCountsAsField()
     {
         var form = Form(FormKinds.Form, "{}", title: "Order");
         form.LayoutJson = """{"rows":[{"t":"child_table","table":"tbl_lines","refField":"OrderId"}]}""";
@@ -477,7 +479,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_container_nests_only_plain_rows()
+    public void ContainerNestsRows()
     {
         var good = Form(FormKinds.Form, "{}", title: "Sections");
         good.LayoutJson = """{"rows":[{"t":"container","title":"Addresses","rows":[{"t":"row","cols":[{"t":"col","w":6,"items":["Customer"]}]}]}]}""";
@@ -493,7 +495,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void A_button_bar_validates_alignment_and_every_button()
+    public void ButtonBarValidated()
     {
         var good = Form(FormKinds.Form, "{}", title: "Actions");
         good.LayoutJson = """{"rows":[{"t":"button_bar","align":"space-between","buttons":[{"label":"Cancel","action":"cancel"},{"label":"Save","action":"submit"}]}]}""";
@@ -513,7 +515,7 @@ public class FormValidationTests
     }
 
     [Fact]
-    public void Line_item_columns_are_validated_like_field_names()
+    public void LineItemColumnsValidated()
     {
         var goodCols = """{"fields":[{"name":"Qty","dataType":"number"},{"name":"Price","dataType":"currency"}]}""";
         var good = new FieldDefinition { Id = Ids.NewShortId(12), Name = "Lines", DataType = "array", OptionsJson = goodCols };

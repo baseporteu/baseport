@@ -21,6 +21,8 @@ public static class CliHelp
         "status                        Show whether Baseport is running and its location",
         "config [--check]              Display each setting and its source",
         "doctor                        Verify the installation and diagnose issues",
+        "check                         Run a quick integrity check on the database",
+        "restore <archive> [--yes]     Replace the data with a backup, keeping the old files aside",
         "logs [lines]                  Follow log files and show initial login details",
 
         // Operations

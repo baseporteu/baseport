@@ -12,6 +12,9 @@ public static class StartupFailure
         {
             switch (e)
             {
+                case InstanceLockedException locked:
+                    return $"Another Baseport is already running on {locked.Database}. Stop it first: baseport stop.";
+
                 case SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse }:
                 case IOException when e.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase):
                     return $"{Address(ex)} is already in use. Another Baseport instance is probably running: stop it, or start this one on a different port with --urls http://localhost:PORT";
@@ -25,6 +28,12 @@ public static class StartupFailure
                 case InvalidOperationException when e.Message.Contains("delete the database file", StringComparison.OrdinalIgnoreCase):
                 case InvalidOperationException when e.Message.StartsWith("Baseport:", StringComparison.Ordinal):
                     return e.Message;
+
+                case DatabaseCorruptException corrupt:
+                    return Damaged(corrupt.Database, corrupt.Detail);
+
+                case SqliteException { SqliteErrorCode: 11 or 26 } damaged:
+                    return Damaged("Baseport:ConnectionString", damaged.Message);
 
                 case SqliteException { SqliteErrorCode: 14 }:
                     return "The database file could not be opened. Check that the path in Baseport:ConnectionString exists and is writable.";
@@ -41,6 +50,9 @@ public static class StartupFailure
         }
         return null;
     }
+
+    private static string Damaged(string database, string detail) =>
+        $"The database at {database} is damaged ({detail.TrimEnd('.')}). Restore the latest backup: baseport restore <archive>.";
 
     private static IEnumerable<Exception> Unwrap(Exception? ex)
     {

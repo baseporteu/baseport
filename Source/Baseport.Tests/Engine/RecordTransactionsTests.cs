@@ -60,7 +60,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_rolled_back_transactional_batch_emits_no_event()
+    public async Task RollbackEmitsNoEvent()
     {
         var table = await NotesAsync();
         var channel = RecordEvents.TrySubscribe()!;
@@ -82,7 +82,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_committed_transactional_batch_emits_every_event_once()
+    public async Task CommitEmitsEachEventOnce()
     {
         var table = await NotesAsync();
         var channel = RecordEvents.TrySubscribe()!;
@@ -104,7 +104,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_non_transactional_write_still_emits_immediately()
+    public async Task NonTransactionalEmitsAtOnce()
     {
         var table = await NotesAsync();
         var channel = RecordEvents.TrySubscribe()!;
@@ -122,7 +122,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task Sequential_operations_apply_and_return_one_id_per_operation()
+    public async Task OperationsReturnIds()
     {
         var table = await NotesAsync();
 
@@ -138,7 +138,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task Non_transactional_mode_keeps_earlier_operations_when_a_later_one_fails()
+    public async Task NonTransactionalKeepsEarlier()
     {
         var table = await NotesAsync();
 
@@ -252,7 +252,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task Transactional_mode_rolls_back_every_operation_when_one_fails()
+    public async Task TransactionalRollsBackAll()
     {
         var table = await NotesAsync();
 
@@ -267,7 +267,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_later_operation_in_the_same_batch_sees_an_earlier_ones_write()
+    public async Task LaterOperationSeesEarlier()
     {
         await NotesAsync();
         var ops = new List<RecordTransactions.Operation> { Create("notes", "v1") };
@@ -286,7 +286,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task Batch_size_over_the_limit_is_refused_before_touching_the_database()
+    public async Task OversizedBatchRefused()
     {
         await NotesAsync();
         var ops = Enumerable.Range(0, 129).Select(i => Create("notes", i.ToString())).ToList();
@@ -299,7 +299,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task An_access_rule_that_refuses_the_operation_aborts_the_batch()
+    public async Task RuleRefusalAbortsBatch()
     {
         await NotesAsync(createRule: "0");
 
@@ -314,7 +314,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_read_only_key_cannot_delete_even_when_the_table_allows_it()
+    public async Task ReadOnlyKeyCannotDelete()
     {
         await NotesAsync();
         var readOnly = Caller(apiTokenMethods: "GET");
@@ -330,7 +330,7 @@ public class RecordTransactionsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_verb_the_table_does_not_publish_refuses_the_operation()
+    public async Task UnpublishedVerbRefused()
     {
         await SchemaBootstrap.ApplyAsync(_db);
         var table = new TableDefinition

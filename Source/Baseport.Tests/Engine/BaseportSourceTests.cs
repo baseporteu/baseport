@@ -51,7 +51,7 @@ public class BaseportSourceTests : IDisposable
     };
 
     [Fact]
-    public void DiscoversPublishedTablesFromOurOwnDocument()
+    public void DiscoversPublishedTables()
     {
         var hidden = Published("secret-table");
         hidden.ApiEnabled = false;

@@ -19,7 +19,7 @@ public class AllowedOriginsTests
         Assert.Equal(expected, AllowedOrigins.Normalize(raw));
 
     [Fact]
-    public void AnEmptyListAllowsAnySiteSoAnUnconfiguredInstanceKeepsWorking() =>
+    public void EmptyListAllowsAny() =>
         Assert.True(AllowedOrigins.Allows(AllowedOrigins.Parse(""), "https://anywhere.example"));
 
     [Fact]

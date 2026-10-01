@@ -1,0 +1,26 @@
+{
+  "admin": {
+    "username": "admin-cwLPlB7L",
+    "password": "baseport-dev-password"
+  },
+  "apiAccount": {
+    "username": "fixture-api",
+    "token": "IXz5cYBU04BZ4M-aLjOAivKPYvs9PTqtqITjTTH_LHkoy9ZE"
+  },
+  "counts": {
+    "_tables": 7,
+    "_fields": 49,
+    "_records": 338,
+    "_forms": 18,
+    "_users": 2
+  },
+  "records": {
+    "Customers": "7NdyzGZTs4Ai",
+    "Locations": "A1cMvTaqGEyR",
+    "OrderLines": "-edMEEOZlxdI",
+    "Orders": "-0j8CvoALN57",
+    "Products": "x96kSDLYdxNf",
+    "Shipments": "2KqfGwYlbmNm",
+    "StockLevels": "AmHtwVBfUOJ9"
+  }
+}

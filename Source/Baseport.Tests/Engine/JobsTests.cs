@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Xunit;
 using Baseport;
 using Microsoft.Data.Sqlite;
@@ -28,7 +29,7 @@ public class JobsTests : IDisposable
     }
 
     [Fact]
-    public async Task The_anonymous_sweep_takes_only_unreachable_anonymous_accounts()
+    public async Task AnonymousSweepTakesUnreachable()
     {
         var now = DateTime.UtcNow;
         var old = now.AddDays(-60);
@@ -54,12 +55,16 @@ public class JobsTests : IDisposable
     }
 
     [Fact]
-    public async Task The_anonymous_sweep_keeps_everything_when_retention_is_off()
+    public async Task AnonymousSweepOffKeepsAll()
     {
         _db.AppSettings.Add(new AppSettings { AnonymousRetentionDays = 0 });
         _db.UserAccounts.Add(new UserAccount
         {
-            Id = "anon-ancient1", Username = "a5", Role = AccountRoles.User, IsAnonymous = true, CreatedAt = DateTime.UtcNow.AddYears(-5)
+            Id = "anon-ancient1",
+            Username = "a5",
+            Role = AccountRoles.User,
+            IsAnonymous = true,
+            CreatedAt = DateTime.UtcNow.AddYears(-5)
         });
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -80,11 +85,11 @@ public class JobsTests : IDisposable
     [InlineData("0 99 * * *", false)]
     [InlineData("", false)]
     [InlineData("0 3 * *", false)]
-    public void The_schedule_must_be_a_valid_cron(string cron, bool valid) =>
+    public void ScheduleMustBeCron(string cron, bool valid) =>
         Assert.Equal(valid, Jobs.Validate(cron) is null);
 
     [Fact]
-    public void Next_run_falls_after_the_reference_time()
+    public void NextRunIsAfterReference()
     {
         var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         Assert.Equal(from.AddMinutes(5), Jobs.NextRun("*/5 * * * *", from));
@@ -95,7 +100,7 @@ public class JobsTests : IDisposable
     }
 
     [Fact]
-    public void The_registry_is_the_fixed_set_of_maintenance_jobs()
+    public void RegistryIsFixed()
     {
         Assert.Equal(
             new[] { "backup", "heartbeat", "logs-cleanup", "session-cleanup", "query-optimizer", "search-index", "anonymous-cleanup", "file-deletions" },
@@ -106,7 +111,7 @@ public class JobsTests : IDisposable
     }
 
     [Fact]
-    public async Task The_logs_cleanup_job_prunes_entries_older_than_retention()
+    public async Task LogsCleanupPrunesOld()
     {
         _db.AppSettings.Add(new AppSettings { LogRetentionSec = 3600 });
         var now = DateTime.UtcNow;
@@ -123,7 +128,7 @@ public class JobsTests : IDisposable
     }
 
     [Fact]
-    public async Task The_logs_cleanup_job_respects_a_disabled_retention()
+    public async Task LogsCleanupRespectsOff()
     {
         _db.AppSettings.Add(new AppSettings { LogRetentionSec = 0 });
         _db.AuditLogs.Add(new AuditLog { Id = Ids.NewShortId(12), CreatedAt = DateTime.UtcNow.AddDays(-30) });
@@ -136,7 +141,7 @@ public class JobsTests : IDisposable
     }
 
     [Fact]
-    public async Task The_backup_job_creates_a_snapshot_into_the_given_directory()
+    public async Task BackupJobCreatesArchive()
     {
         var dir = Path.Combine(Path.GetTempPath(), "baseport-jobs-" + Ids.NewShortId(8));
         var storePath = Path.Combine(dir, "store.db");
@@ -156,7 +161,10 @@ public class JobsTests : IDisposable
             var backups = BackupStore.List(BackupStore.Dir(store));
             var single = Assert.Single(backups);
 
-            using (var conn = new SqliteConnection($"Data Source={Path.Combine(BackupStore.Dir(store), single.Name)}"))
+            var extracted = Path.Combine(dir, "extracted.db");
+            using (var zip = ZipFile.OpenRead(Path.Combine(BackupStore.Dir(store), single.Name)))
+                zip.GetEntry(BackupArchive.DatabaseEntry)!.ExtractToFile(extracted);
+            using (var conn = new SqliteConnection($"Data Source={extracted};Pooling=False"))
             {
                 conn.Open();
                 using var cmd = conn.CreateCommand();
@@ -172,28 +180,28 @@ public class JobsTests : IDisposable
     }
 
     [Fact]
-    public async Task The_session_cleanup_job_reports_how_many_sessions_it_dropped()
+    public async Task SessionCleanupReportsCount()
     {
         var result = await Jobs.Find("session-cleanup")!.Run(_db, Log, TestContext.Current.CancellationToken);
         Assert.Equal("Removed 0 session(s), 0 code(s), 0 lockout entry(ies), 0 abandoned sign-in(s).", result);
     }
 
     [Fact]
-    public async Task The_file_deletions_job_is_a_noop_until_uploads_exist()
+    public async Task FileDeletionsIdleWithoutUploads()
     {
         var result = await Jobs.Find("file-deletions")!.Run(_db, Log, TestContext.Current.CancellationToken);
         Assert.Contains("No uploads", result);
     }
 
     [Fact]
-    public async Task The_heartbeat_job_records_its_last_run_without_failing()
+    public async Task HeartbeatRecordsRun()
     {
         var result = await Jobs.Find("heartbeat")!.Run(_db, Log, TestContext.Current.CancellationToken);
         Assert.Equal("ok", result);
     }
 
     [Fact]
-    public async Task Bootstrap_seeds_the_fixed_job_set_once()
+    public async Task BootstrapSeedsJobsOnce()
     {
         await SchemaBootstrap.ApplyAsync(_db);
 

@@ -84,7 +84,7 @@ function applySettingsPage(page) {
         secrets: 'Credentials for outbound requests. Encrypted at rest, never shown again.',
         connections: 'Remote APIs and Baseport instances to import from.',
         jobs: 'Scheduled clones and background maintenance.',
-        backups: 'Stored snapshots of the database.',
+        backups: 'Archives of the database, uploads and keys.',
     };
     document.getElementById('settingsTitle').innerText = titles[page];
     document.getElementById('settingsSub').innerText = subs[page];
@@ -503,7 +503,7 @@ async function runJobNow(key, name, btn) {
     });
 }
 
-/* backups: stored snapshots on a rolling window */
+/* backups: stored archives on a rolling window */
 
 function fmtSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
@@ -523,7 +523,7 @@ async function loadBackups() {
         time.textContent = formatWhen(b.createdAt);
         const size = document.createElement('td');
         size.className = 'muted';
-        size.textContent = fmtSize(b.size);
+        size.textContent = fmtSize(b.size) + (b.databaseOnly ? ' · database only' : '');
         const actions = document.createElement('td');
         actions.className = 'cell-actions end';
         actions.append(
@@ -548,8 +548,8 @@ async function triggerBackup() {
     const ok = await ui.confirm({
         title: 'Trigger backup',
         message: [
-            size ? `Copies the whole database, about ${size}${free ? `, with ${free} free` : ''}.` : 'Copies the whole database.',
-            `The newest ${retention} snapshots are kept; older ones are deleted.`,
+            size ? `Archives the database (about ${size}${free ? `, with ${free} free` : ''}), uploads and keys.` : 'Archives the database, uploads and keys.',
+            `The newest ${retention} archives are kept; older ones are deleted.`,
         ].join(' '),
         confirmLabel: 'Trigger backup',
     });

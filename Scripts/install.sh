@@ -309,6 +309,11 @@ doctor)
 
   if [ -f "$DIR/baseport.db" ]; then
     ok "database $DIR/baseport.db, $(du -h "$DIR/baseport.db" | cut -f1)"
+    if CHECK=$(cd "$DIR" && "$DIR/Baseport" check 2>&1); then
+      ok "database integrity: $CHECK"
+    else
+      bad "database integrity: $CHECK. Restore the latest backup: baseport restore <archive>"
+    fi
   else
     warn "no database yet, the first start creates one and prints a one-time admin login."
   fi
@@ -319,6 +324,10 @@ doctor)
   if [ "$INSECURE" = "true" ] \
     || printf '%s\n' "$UNITENV" | grep -qsiE '(Baseport__AllowInsecureSignIn|BASEPORT_ALLOW_INSECURE_SIGNIN)=["'"'"']?true'; then
     bad "Baseport:AllowInsecureSignIn is on: sign-in works over plain HTTP. Turn it off before exposing this instance."
+  fi
+
+  if [ -n "${DOTNET_SYSTEM_IO_DISABLEFILELOCKING:-}" ] || printf '%s\n' "$UNITENV" | grep -qs 'DOTNET_SYSTEM_IO_DISABLEFILELOCKING='; then
+    warn "DOTNET_SYSTEM_IO_DISABLEFILELOCKING is set: a second Baseport on the same database is not refused."
   fi
 
   if [ -e "$UNIT" ]; then
@@ -437,6 +446,25 @@ help|-h|--help)
   ;;
 version)
   exec "$DIR/Baseport" version
+  ;;
+restore)
+  [ -n "${2:-}" ] || die "Usage: baseport restore <archive> [--yes]"
+  ARCHIVE="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+  ACTIVE=no
+  if command -v systemctl >/dev/null 2>&1 && [ -e "$UNIT" ] && systemctl is-active --quiet baseport 2>/dev/null; then
+    need_root "$@"
+    systemctl stop baseport
+    ACTIVE=yes
+  fi
+  cd "$DIR"
+  RC=0
+  if [ "$(id -u)" = "0" ] && id baseport >/dev/null 2>&1 && [ "$(stat -c %U "$DIR")" = "baseport" ]; then
+    runuser -u baseport -- env DOTNET_BUNDLE_EXTRACT_BASE_DIR="$DIR/.net" "$DIR/Baseport" restore "$ARCHIVE" "${@:3}" || RC=$?
+  else
+    "$DIR/Baseport" restore "$ARCHIVE" "${@:3}" || RC=$?
+  fi
+  if [ "$ACTIVE" = "yes" ]; then systemctl start baseport; fi
+  exit $RC
   ;;
 accounts|providers|config)
   cd "$DIR"

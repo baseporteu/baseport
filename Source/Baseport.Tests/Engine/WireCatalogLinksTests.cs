@@ -44,7 +44,7 @@ public class WireCatalogLinksTests : IDisposable
         SqlEngine.ReadAsync(_db, sql, conn => WireCatalog.Apply(conn, dialect, null));
 
     [Fact]
-    public async Task Postgres_reports_the_reference_as_a_foreign_key_to_the_target()
+    public async Task PostgresReportsForeignKey()
     {
         var result = await Query(
             "SELECT k.table_name, k.column_name, u.table_name, u.column_name " +
@@ -58,7 +58,7 @@ public class WireCatalogLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task Postgres_gives_every_table_a_primary_key_on_id()
+    public async Task PostgresPrimaryKeyOnId()
     {
         var result = await Query(
             "SELECT table_name FROM information_schema.table_constraints " +
@@ -70,7 +70,7 @@ public class WireCatalogLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task Tds_reports_the_same_relationship_through_sys_foreign_keys()
+    public async Task TdsReportsForeignKey()
     {
         var result = await Query(
             "SELECT p.name, c.name, t.name " +
@@ -86,7 +86,7 @@ public class WireCatalogLinksTests : IDisposable
     }
 
     [Fact]
-    public async Task A_reference_to_an_unpublished_table_yields_no_key()
+    public async Task UnpublishedTargetHasNoKey()
     {
         var customers = await _db.Tables.FirstAsync(t => t.Id == _customers, TestContext.Current.CancellationToken);
         customers.ApiEnabled = false;

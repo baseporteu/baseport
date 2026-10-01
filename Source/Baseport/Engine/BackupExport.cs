@@ -38,12 +38,6 @@ public static class BackupExport
     public static string ObjectKey(AppSettings settings, string fileName) =>
         settings.S3Prefix.Length > 0 ? $"{settings.S3Prefix.TrimEnd('/')}/{fileName}" : fileName;
 
-    public static async Task UploadAsync(IBackupUploader uploader, string filePath, AppSettings settings, CancellationToken ct = default)
-    {
-        using var stream = File.OpenRead(filePath);
-        await uploader.PutAsync(settings.S3Bucket, ObjectKey(settings, Path.GetFileName(filePath)), stream, ct);
-    }
-
     public static async Task<(bool Ok, string? Error)> TestConnectionAsync(
         string bucket, string region, string serviceUrl, string accessKey, string secretKey, CancellationToken ct = default)
     {

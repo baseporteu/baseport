@@ -2,11 +2,15 @@ using Xunit;
 using Baseport;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.IO.Compression;
+using System.Security.Cryptography;
 
 namespace Baseport.Tests;
 
 public class BackupStoreTests : IDisposable
 {
+    static BackupStoreTests() => TestSecrets.Ensure();
+
     private readonly string _dir;
 
     public BackupStoreTests()
@@ -23,7 +27,7 @@ public class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task A_backup_lands_in_the_directory_and_lists_with_its_size_and_time()
+    public async Task BackupIsListed()
     {
         var storePath = Path.Combine(_dir, "store.db");
         using var store = NewFileStore(storePath);
@@ -39,7 +43,7 @@ public class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public void A_snapshot_is_refused_when_the_disk_could_not_hold_it()
+    public void LowDiskRefused()
     {
 
         var storePath = Path.Combine(_dir, "store.db");
@@ -55,7 +59,7 @@ public class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task The_rolling_window_keeps_only_the_newest_backups()
+    public async Task RetentionKeepsNewest()
     {
         var storePath = Path.Combine(_dir, "store.db");
         using var store = NewFileStore(storePath);
@@ -71,7 +75,7 @@ public class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Prune_removes_what_is_beyond_the_window_and_reports_it()
+    public async Task PruneReportsRemoved()
     {
         var storePath = Path.Combine(_dir, "store.db");
         using var store = NewFileStore(storePath);
@@ -85,7 +89,7 @@ public class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task A_backup_name_cannot_escape_the_directory()
+    public async Task BackupNameCannotEscape()
     {
         var storePath = Path.Combine(_dir, "store.db");
         using var store = NewFileStore(storePath);
@@ -98,7 +102,7 @@ public class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Delete_removes_a_specific_backup_and_reports_missing_ones()
+    public async Task DeleteReportsMissing()
     {
         var storePath = Path.Combine(_dir, "store.db");
         using var store = NewFileStore(storePath);
@@ -112,7 +116,7 @@ public class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateAndExport_creates_the_local_snapshot_and_attempts_no_export_when_S3_is_not_configured()
+    public async Task NoExportWithoutS3()
     {
         var storePath = Path.Combine(_dir, "store.db");
         using var store = NewFileStore(storePath);
@@ -120,6 +124,179 @@ public class BackupStoreTests : IDisposable
         var name = await BackupStore.CreateAndExportAsync(_dir, store, new AppSettings(), TestContext.Current.CancellationToken);
 
         Assert.True(File.Exists(Path.Combine(_dir, name)));
+    }
+
+    private sealed class FakeUploader(Exception? fail = null) : IBackupUploader
+    {
+        public string? Key;
+        public byte[]? Content;
+
+        public async Task PutAsync(string bucket, string key, Stream content, CancellationToken ct)
+        {
+            if (fail is not null) throw fail;
+            Key = key;
+            using var ms = new MemoryStream();
+            await content.CopyToAsync(ms, ct);
+            Content = ms.ToArray();
+        }
+    }
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private string Backups => Path.Combine(_dir, "backups");
+
+    private AppDbContext Instance()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, "uploads", "docs"));
+        Directory.CreateDirectory(Path.Combine(_dir, "keys"));
+        File.WriteAllText(Path.Combine(_dir, "uploads", "a.txt"), "root file");
+        File.WriteAllText(Path.Combine(_dir, "uploads", "docs", "b.txt"), "bucket file");
+        File.WriteAllText(Path.Combine(_dir, "uploads", "c.txt" + FileStore.PartialSuffix), "half");
+        File.WriteAllText(Path.Combine(_dir, "keys", "key-1.xml"), "<key/>");
+        File.WriteAllText(Path.Combine(_dir, "baseport.key"), "signing");
+        return NewFileStore(Path.Combine(_dir, "baseport.db"));
+    }
+
+    private static HashSet<string> Entries(ZipArchive zip) => zip.Entries.Select(e => e.FullName).ToHashSet();
+
+    [Fact]
+    public async Task ArchiveHoldsEverything()
+    {
+        using var store = Instance();
+
+        var name = await BackupStore.CreateAsync(Backups, store, retention: 5, Ct);
+
+        Assert.EndsWith(".zip", name);
+        using var zip = ZipFile.OpenRead(Path.Combine(Backups, name));
+        Assert.Equal(new HashSet<string> { "baseport.db", "uploads/a.txt", "uploads/docs/b.txt", "keys/key-1.xml", "baseport.key", "manifest.json" }, Entries(zip));
+        var manifest = BackupArchive.ReadManifest(zip)!;
+        Assert.True(manifest.SigningKey);
+        Assert.Equal("ok", manifest.Integrity);
+        await using var db = zip.GetEntry("baseport.db")!.Open();
+        Assert.Equal(manifest.DbSha256, Convert.ToHexStringLower(await SHA256.HashDataAsync(db, Ct)));
+        Assert.Empty(Directory.EnumerateFiles(Backups, "*" + FileStore.PartialSuffix));
+    }
+
+    [Fact]
+    public async Task S3ArchiveLeavesOutSigningKey()
+    {
+        using var store = Instance();
+        var uploader = new FakeUploader();
+
+        var name = await BackupStore.CreateAndExportAsync(Backups, store, BackupExportTests.Configured("nightly"), Ct, uploader);
+
+        Assert.Equal($"nightly/{name}", uploader.Key);
+        using var zip = new ZipArchive(new MemoryStream(uploader.Content!));
+        Assert.DoesNotContain("baseport.key", Entries(zip));
+        Assert.Contains("keys/key-1.xml", Entries(zip));
+        Assert.False(BackupArchive.ReadManifest(zip)!.SigningKey);
+        using var local = ZipFile.OpenRead(Path.Combine(Backups, name));
+        Assert.Contains("baseport.key", Entries(local));
+    }
+
+    [Fact]
+    public async Task UndecryptableSecretKeepsLocalArchive()
+    {
+        using var store = Instance();
+
+        var name = await BackupStore.CreateAndExportAsync(Backups, store, BackupExportTests.Configured(), Ct,
+            new FakeUploader(new CryptographicException("key not found")));
+
+        Assert.Equal(name, Assert.Single(BackupStore.List(Backups)).Name);
+    }
+
+    [Fact]
+    public async Task CancelledBackupLeavesNothing()
+    {
+        using var store = Instance();
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        BackupStore.AfterSnapshot = path => { if (path.StartsWith(_dir, StringComparison.Ordinal)) cancel.Cancel(); };
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => BackupStore.CreateAsync(Backups, store, retention: 5, cancel.Token));
+        }
+        finally
+        {
+            BackupStore.AfterSnapshot = null;
+        }
+
+        Assert.Empty(BackupStore.List(Backups));
+        Assert.Empty(Directory.EnumerateFiles(Backups));
+    }
+
+    [Fact]
+    public async Task CorruptSnapshotKeepsOlderArchives()
+    {
+        using var store = Instance();
+        var good = await BackupStore.CreateAsync(Backups, store, retention: 1, Ct);
+        BackupStore.AfterSnapshot = path =>
+        {
+            if (!path.StartsWith(_dir, StringComparison.Ordinal)) return;
+            using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
+            {
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "CREATE TABLE filler (body TEXT); WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 500) INSERT INTO filler SELECT hex(randomblob(60)) FROM n;";
+                cmd.ExecuteNonQuery();
+            }
+            var bytes = File.ReadAllBytes(path);
+            var page = bytes.Length / 4096 - 2;
+            bytes[page * 4096 + 3] = 0x7f;
+            bytes[page * 4096 + 4] = 0xff;
+            File.WriteAllBytes(path, bytes);
+        };
+        try
+        {
+            var ex = await Assert.ThrowsAsync<BackupIntegrityException>(() => BackupStore.CreateAsync(Backups, store, retention: 1, Ct));
+            Assert.StartsWith("Backup failed integrity check:", ex.Message);
+        }
+        finally
+        {
+            BackupStore.AfterSnapshot = null;
+        }
+
+        Assert.Equal(good, Assert.Single(BackupStore.List(Backups)).Name);
+        Assert.Single(Directory.EnumerateFiles(Backups));
+    }
+
+    [Fact]
+    public async Task PruneCoversLegacySnapshots()
+    {
+        using var store = Instance();
+        Directory.CreateDirectory(Backups);
+        var legacy = Path.Combine(Backups, "baseport-20200101000000000-abcd.db");
+        File.WriteAllText(legacy, "old");
+        File.SetLastWriteTimeUtc(legacy, DateTime.UtcNow.AddDays(-30));
+        Assert.True(Assert.Single(BackupStore.List(Backups)).DatabaseOnly);
+
+        var name = await BackupStore.CreateAsync(Backups, store, retention: 1, Ct);
+
+        var kept = Assert.Single(BackupStore.List(Backups));
+        Assert.Equal(name, kept.Name);
+        Assert.False(kept.DatabaseOnly);
+    }
+
+    [Fact]
+    public async Task SecondBackupIsRefusedWhileOneRuns()
+    {
+        using var store = Instance();
+        Exception? second = null;
+        BackupStore.AfterSnapshot = path =>
+        {
+            if (path.StartsWith(_dir, StringComparison.Ordinal))
+                second = Xunit.Record.Exception(() => BackupStore.CreateAndExportAsync(Backups, store, new AppSettings(), Ct).GetAwaiter().GetResult());
+        };
+        try
+        {
+            await BackupStore.CreateAndExportAsync(Backups, store, new AppSettings(), Ct);
+        }
+        finally
+        {
+            BackupStore.AfterSnapshot = null;
+        }
+
+        Assert.IsType<BackupBusyException>(second);
+        Assert.Single(BackupStore.List(Backups));
     }
 
     public void Dispose()
