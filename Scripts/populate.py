@@ -1,26 +1,29 @@
-"""Seeds a running Baseport instance with a production-like demo workspace: a distributor's sales side against a shared warehouse.
+"""
+Seeds a running Baseport instance with a production-like demo workspace simulating a distributor's sales side linked to a shared warehouse.
 
-  Locations    warehouse bins, fixed set, not referenced elsewhere
-  Products     catalogue, referenced by order lines
-  Customers    accounts that place sales orders
-  StockLevels  Product x Location on-hand quantity, seeded with an opening balance and decremented by the shipments below
-  Orders       references Customers
-  OrderLines   references Orders and Products
-  Shipments    goods-out against an Order and the Location it left from
-  Portway      optional proxy table over the Portway demo API
+Data Model:
+  - Locations:   Warehouse bins (fixed set, internal use).
+  - Products:    Product catalogue, referenced by order lines.
+  - Customers:   Accounts that place sales orders.
+  - StockLevels: Product x Location on-hand quantity; seeded with opening balances and decremented by shipments.
+  - Orders:      Sales orders scoped by Customer.
+  - OrderLines:  Line items linking Orders and Products.
+  - Shipments:   Goods-out fulfilled against an Order and source Location.
+  - Portway:     Optional proxy table over the Portway demo API.
 
-Tables, fields and forms go through the admin API so validation, ApiName rules
-and the generated-column DDL all run. Rows go straight into SQLite in batches,
-because a quarter million HTTP posts would outlast the rest of the seed. The
-one exception is stock: `StockLevels` reflects the same ledger the generator
-computes in memory while seeding opening balances and shipments, kept
-consistent by construction here since nothing at runtime maintains it across
-tables (the Action Engine only ever writes back to the record that triggered
-it).
+Execution Strategy:
+  - Schema & DDL: 
+        Tables, fields, and forms go through the admin API to execute validation, ApiName rules, and generated-column DDL.
+  - Direct Ingestion: 
+        Rows are batch-inserted directly into SQLite to bypass the overhead of HTTP POST requests at scale.
+  - Stock Consistency: 
+        `StockLevels` mirrors an in-memory ledger computed during seeding. This ensures consistency by construction, as the Action Engine only
+        writes back to the triggering record rather than updating cross-table state.
 
-Deterministic: the RNG is seeded, two runs produce the same database.
-
-Run through POPULATE.sh, which supplies the environment.
+Execution:
+  Deterministic run via a seeded RNG. Execute via `POPULATE.sh` to supply the
+  required environment.
+"""
 """
 import argparse
 import glob
@@ -51,6 +54,7 @@ BATCH = 5_000
 ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-"
 
 _cookie = ""
+DEMO_ACCOUNT = "demo-customer"
 
 CUSTOMERS_DOC = """The accounts that place orders.
 
@@ -473,7 +477,39 @@ def main():
 
     seed_queries()
     seed_actions(orders)
+    seed_scope(args.db, orders)
     seed_portway()
+
+
+def seed_scope(db_path, orders):
+    """Scopes /api/v1/sales-orders by Customer and pairs it with a consumer account for one customer."""
+    call("PATCH", f"/api/_admin/tables/{orders}", {"scopeField": "Customer"})
+
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        row = conn.execute(
+            "SELECT json_extract(o.JsonData, '$.Customer') AS c, count(*) FROM _records o "
+            "WHERE o.TableId = ? AND c IS NOT NULL GROUP BY c ORDER BY count(*) DESC, c LIMIT 1", (orders,)).fetchone()
+        if row is None:
+            print("  Scope: no orders to scope, skipped")
+            return
+        customer_id, order_count = row
+        found = conn.execute("SELECT JsonData FROM _records WHERE Id = ?", (customer_id,)).fetchone()
+        customer = json.loads(found[0]) if found else {}
+    finally:
+        conn.close()
+
+    account = next((a for a in call("GET", "/api/_admin/accounts")[0] if a["username"] == DEMO_ACCOUNT), None)
+    if account is None:
+        account = call("POST", "/api/_admin/accounts", {"username": DEMO_ACCOUNT, "role": "consumer", "scope": customer_id})[0]
+    else:
+        call("PATCH", f"/api/_admin/accounts/{account['id']}", {"scope": customer_id})
+    expires = date(date.today().year + 1, 12, 31).isoformat()
+    token = call("POST", f"/api/_admin/accounts/{account['id']}/token", {"expiresAt": expires})[0]["apiToken"]
+
+    print(f"  Scope: sales-orders scoped by Customer; {DEMO_ACCOUNT} sees the {order_count} orders of "
+          f"{customer.get('Name', customer_id)} ({customer.get('Email', 'no e-mail')})")
+    print(f"    curl -H 'Authorization: Bearer {token}' {BASE}/api/v1/sales-orders/records")
 
 
 def product_fields():
