@@ -56,26 +56,9 @@ async function loadSchema() {
         applySchemaTransform();
         return;
     }
-    const cols = Math.max(1, Math.ceil(Math.sqrt(tables.length)));
-    const rows = Math.ceil(tables.length / cols);
-    const heights = tables.map((t) => 48 + t.fields.length * 27 + 10);
-    const rowHeight = new Array(rows).fill(0);
-    tables.forEach((t, i) => {
-        const row = Math.floor(i / cols);
-        rowHeight[row] = Math.max(rowHeight[row], heights[i]);
-    });
-    const rowY = new Array(rows).fill(0);
-    for (let r = 1; r < rows; r++) rowY[r] = rowY[r - 1] + rowHeight[r - 1] + 44;
-
-    tables.forEach((t, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        schemaNodes[t.id] = {
-            x: col * 280,
-            y: rowY[row],
-            w: 240,
-            h: heights[i]
-        };
+    collectSchemaRefs(tables);
+    const cards = {};
+    tables.forEach((t) => {
         const card = document.createElement('div');
         card.className = 'schema-node';
         card.dataset.pid = t.id;
@@ -106,12 +89,55 @@ async function loadSchema() {
             document.addEventListener('pointerup', onSchemaDragEnd);
         });
         nodesEl.appendChild(card);
+        cards[t.id] = card;
     });
+    Object.assign(schemaNodes, layoutSchema(tables, (id) => cards[id].offsetHeight));
     positionSchemaNodes();
     schemaLayout = JSON.parse(JSON.stringify(schemaNodes));
     applySchemaTransform();
-    collectSchemaRefs(tables);
     renderSchemaLinks();
+}
+
+// referencing tables left of what they reference, so every link runs left to right
+function layoutSchema(tables, heightOf) {
+    const ids = tables.map((t) => t.id);
+    const targets = (id) => [...new Set(Object.values(schemaRefs[id] || {}))].filter((x) => x !== id && ids.includes(x));
+    const level = {};
+    const depth = (id, seen) => {
+        if (level[id] !== undefined) return level[id];
+        if (seen.has(id)) return 0;
+        seen.add(id);
+        const d = targets(id).reduce((m, x) => Math.max(m, depth(x, seen) + 1), 0);
+        seen.delete(id);
+        return (level[id] = d);
+    };
+    ids.forEach((id) => depth(id, new Set()));
+
+    const deepest = Math.max(...ids.map((id) => level[id]));
+    const columns = Array.from({ length: deepest + 1 }, () => []);
+    const name = Object.fromEntries(tables.map((t) => [t.id, t.name]));
+    ids.forEach((id) => columns[level[id]].push(id));
+
+    const rank = {};
+    columns.forEach((column) => {
+        const weight = (id) => {
+            const placed = targets(id).filter((x) => rank[x] !== undefined);
+            return placed.length ? placed.reduce((sum, x) => sum + rank[x], 0) / placed.length : Infinity;
+        };
+        column.sort((a, b) => weight(a) - weight(b) || name[a].localeCompare(name[b]));
+        column.forEach((id, i) => { rank[id] = i; });
+    });
+
+    const nodes = {};
+    columns.forEach((column, lvl) => {
+        let y = 0;
+        column.forEach((id) => {
+            const h = heightOf(id);
+            nodes[id] = { x: (deepest - lvl) * 320, y, w: 240, h };
+            y += h + 44;
+        });
+    });
+    return nodes;
 }
 
 function renderSchemaLinks() {
