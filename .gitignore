@@ -3,6 +3,7 @@
 [Oo]bj/
 [Oo]ut/
 Deployment/
+Source/Baseport/backups/
 [d][a-z][a-z]/
 .vs/
 .vscode/
@@ -59,3 +60,4 @@ appsettings.*.json
 !.github/
 Source/Baseport/*.key
 Source/Baseport/keys/
+Source/Baseport/baseport.lock
