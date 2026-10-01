@@ -1,0 +1,4 @@
+Source/Baseport/wwwroot/js/vendor/
+Source/Baseport/wwwroot/vendor/
+**/bin/
+**/obj/

@@ -26,7 +26,7 @@ const bpAuth = (() => {
             },
             body: JSON.stringify({
                 refresh_token: current.refresh_token
-            }),
+            })
         });
         if (!res.ok) return store(null);
         return store(await res.json());
@@ -55,7 +55,7 @@ const bpAuth = (() => {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(body),
+            body: JSON.stringify(body)
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -79,7 +79,7 @@ async function bpSignIn(event) {
     event.preventDefault();
     const tokens = await bpAuth.post('/login', {
         email_or_username: document.getElementById('authHandle').value.trim(),
-        password: document.getElementById('authPassword').value,
+        password: document.getElementById('authPassword').value
     });
     if (!tokens) return false;
     bpAuth.store(tokens);
@@ -92,7 +92,7 @@ async function bpRegister(event) {
     const tokens = await bpAuth.post('/register', {
         email: document.getElementById('authEmail').value.trim(),
         username: document.getElementById('authUsername').value.trim(),
-        password: document.getElementById('authPassword').value,
+        password: document.getElementById('authPassword').value
     });
     if (!tokens) return false;
     bpAuth.store(tokens);
@@ -129,8 +129,8 @@ async function bpChangePassword(event) {
         method: 'POST',
         body: {
             current_password: document.getElementById('currentPassword').value,
-            new_password: document.getElementById('newPassword').value,
-        },
+            new_password: document.getElementById('newPassword').value
+        }
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -153,7 +153,7 @@ async function bpSignOut() {
         },
         body: JSON.stringify({
             refresh_token: current ? current.refresh_token : ''
-        }),
+        })
     }).catch(() => {});
     bpAuth.store(null);
     location.href = '/auth/login';
@@ -164,7 +164,7 @@ async function bpDeleteAccount() {
         title: 'Delete your account?',
         message: 'Your account will be deleted. This is a destructive action and cannot be undone.',
         confirmLabel: 'Delete',
-        danger: true,
+        danger: true
     });
     if (!ok) return;
     const res = await bpAuth.authFetch('/delete', {

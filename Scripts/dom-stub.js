@@ -1,4 +1,3 @@
-
 function element(tag = 'div') {
     const node = {
         tagName: String(tag).toUpperCase(),
@@ -17,12 +16,12 @@ function element(tag = 'div') {
         selectionStart: 0,
         classList: {
             add(...c) {
-                c.forEach(x => node._classes.add(x));
+                c.forEach((x) => node._classes.add(x));
             },
             remove(...c) {
-                c.forEach(x => node._classes.delete(x));
+                c.forEach((x) => node._classes.delete(x));
             },
-            contains: c => node._classes.has(c),
+            contains: (c) => node._classes.has(c),
             toggle(c, force) {
                 const on = force === undefined ? !node._classes.has(c) : !!force;
                 on ? node._classes.add(c) : node._classes.delete(c);
@@ -58,7 +57,7 @@ function element(tag = 'div') {
             node.children = [];
         },
         append(...kids) {
-            kids.forEach(k => {
+            kids.forEach((k) => {
                 if (k && typeof k === 'object') {
                     k.parentNode = node;
                     node.children.push(k);
@@ -70,22 +69,24 @@ function element(tag = 'div') {
             return k;
         },
         replaceChildren(...kids) {
-            node.children.forEach(c => { c.parentNode = null; });
+            node.children.forEach((c) => {
+                c.parentNode = null;
+            });
             node.children = [];
             node.append(...kids);
         },
         replaceWith() {},
         remove() {
-            if (node.parentNode) node.parentNode.children = node.parentNode.children.filter(c => c !== node);
+            if (node.parentNode) node.parentNode.children = node.parentNode.children.filter((c) => c !== node);
         },
         setAttribute(k, v) {
             node.attributes[k] = String(v);
         },
-        getAttribute: k => node.attributes[k],
+        getAttribute: (k) => node.attributes[k],
         removeAttribute(k) {
             delete node.attributes[k];
         },
-        hasAttribute: k => k in node.attributes,
+        hasAttribute: (k) => k in node.attributes,
         toggleAttribute(k, force) {
             const on = force === undefined ? !(k in node.attributes) : !!force;
             if (on) node.attributes[k] = '';
@@ -107,26 +108,26 @@ function element(tag = 'div') {
 
 function install(ids = []) {
     const byId = {};
-    ids.forEach(id => {
+    ids.forEach((id) => {
         byId[id] = element();
         byId[id].id = id;
     });
 
     const store = {};
     global.localStorage = {
-        getItem: k => (k in store ? store[k] : null),
+        getItem: (k) => (k in store ? store[k] : null),
         setItem: (k, v) => {
             store[k] = String(v);
         },
-        removeItem: k => {
+        removeItem: (k) => {
             delete store[k];
         }
     };
     global.document = {
         documentElement: element('html'),
         body: element('body'),
-        getElementById: id => byId[id] || null,
-        createElement: tag => element(tag),
+        getElementById: (id) => byId[id] || null,
+        createElement: (tag) => element(tag),
         querySelector: () => null,
         querySelectorAll: () => [],
         addEventListener() {},
@@ -147,7 +148,7 @@ function install(ids = []) {
     global.navigator = {
         language: 'en'
     };
-    global.requestAnimationFrame = fn => fn();
+    global.requestAnimationFrame = (fn) => fn();
     return {
         byId,
         store,

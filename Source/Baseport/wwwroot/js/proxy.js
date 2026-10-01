@@ -1,4 +1,3 @@
-
 function openProxySheet() {
     const wrap = document.createElement('div');
     const status = document.createElement('p');
@@ -42,7 +41,7 @@ function openProxySheet() {
 
     wrap.appendChild(fieldInputRow('Table name', 'pxName', '', 'e.g. Remote Products'));
     wrap.appendChild(
-        fieldInputRow('Bearer token (optional)', 'pxToken', '', 'Paste the remote API token, stored on this table only'),
+        fieldInputRow('Bearer token (optional)', 'pxToken', '', 'Paste the remote API token, stored on this table only')
     );
     wrap.appendChild(status);
 
@@ -83,7 +82,7 @@ async function fetchProxyOperations() {
         },
         body: JSON.stringify({
             specUrl
-        }),
+        })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -105,7 +104,8 @@ async function fetchProxyOperations() {
     }
     const first = proxyOps[0];
     if (!document.getElementById('pxName').value.trim()) {
-        document.getElementById('pxName').value = first.summary || first.path.split('/').filter(Boolean).pop() || 'Proxied';
+        document.getElementById('pxName').value =
+            first.summary || first.path.split('/').filter(Boolean).pop() || 'Proxied';
     }
     renderPathParams();
     status.className = 'muted';
@@ -170,7 +170,7 @@ async function createProxy() {
             method,
             token,
             pathParams
-        }),
+        })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {

@@ -73,6 +73,9 @@ cd Source
 dotnet build Baseport.slnx
 dotnet test Baseport.slnx
 node ../Scripts/test-frontend.js
+cd .. && npx prettier@3 --check "Source/Baseport/wwwroot/**/*.js" "Scripts/*.js"
 ```
+
+JavaScript is formatted with Prettier using `.prettierrc.json`; `--write` instead of `--check` applies it. Template literals are left as written (`embeddedLanguageFormatting: off`), because the embed's `html` templates are markup.
 
 Build must be warning-free, both test suites must be green.

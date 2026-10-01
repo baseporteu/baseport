@@ -100,7 +100,7 @@
                                 </div>
                             </div>
                             <div class='card'>
-                                <div class='card-header'><div><h2>API per table</h2><p class='muted'>Expose endpoints at <code>/api/v1</code> and control whether they appear in the documentation above. Endpoint names, documentation, and methods are configured on individual tables.</p></div></div>
+                                <div class='card-header'><div><h2>API per table</h2><p class='muted'>Expose endpoints at <code>/api/v1</code> and control whether they appear in the documentation.</p></div></div>
                                 <ul class='api-table-list' id='apiTableList'></ul>
                                 <p id='apiTablesEmpty' class='muted empty-hint'>No tables.</p>
                             </div>
@@ -188,7 +188,7 @@
                                 <div class='card-header'>
                                     <div>
                                         <h2>Single sign-on</h2>
-                                        <p class='muted'>OpenID Connect providers displayed on sign-in screens, including Authelia, Authentik, Pocket ID, or any standard discovery-compliant provider. Accounts are matched using the subject identifier issued by the provider.</p>
+                                        <p class='muted'>OpenID Connect providers on your authentication routes using discovery-compliant provider. Accounts are matched using the subject identifier issued by the provider.</p>
                                     </div>
                                     <button class='btn btn-outline' onclick='openOidcSheet()'>Add provider</button>
                                 </div>
@@ -287,11 +287,11 @@
                         </div>
                         <div class='settings-pane hidden' data-pane='sites'>
                             <div class='card'>
-                                <div class='card-header'><div><h2>Allowed sites</h2><p class='muted'>Origins where published forms may be embedded. Specify one origin per line. Leave empty to allow any site.</p></div></div>
+                                <div class='card-header'><div><h2>Allowed sites</h2><p class='muted'>Origins where published forms may be embedded.</p></div></div>
                                 <div class='setting-row'>
                                     <div class='setting-label'>
                                         <label for='settingsAllowedOrigins'>Origins</label>
-                                        <p class='muted'>Include the scheme and domain, such as <code>https://shop.example.com</code>. Bare domains default to HTTPS.</p>
+                                        <p class='muted'>Beware to include the scheme and domain. Specify one origin per line. Leave empty to allow any site.</p>
                                     </div>
                                     <textarea id='settingsAllowedOrigins' class='input textarea' rows='6' spellcheck='false' placeholder='https://shop.example.com&#10;https://portal.example.org'></textarea>
                                 </div>
@@ -302,7 +302,7 @@
                                 </div>
                             </div>
                             <div class='card'>
-                                <div class='card-header'><div><h2>In use</h2><p class='muted'>Origins currently accepted after normalization.</p></div></div>
+                                <div class='card-header'><div><h2>In use</h2><p class='muted'>Origins currently accepted.</p></div></div>
                                 <ul class='api-table-list' id='allowedOriginList'></ul>
                                 <p id='allowedOriginsEmpty' class='muted empty-hint'>No restrictions configured. Any site may embed a form.</p>
                             </div>

@@ -29,10 +29,12 @@ function joinOptions(list) {
 
 function sortState(listKey, defaultKey) {
     try {
-        return JSON.parse(localStorage.getItem('bp.sort.' + listKey)) || {
-            key: defaultKey,
-            dir: 'asc'
-        };
+        return (
+            JSON.parse(localStorage.getItem('bp.sort.' + listKey)) || {
+                key: defaultKey,
+                dir: 'asc'
+            }
+        );
     } catch (e) {
         return {
             key: defaultKey,
@@ -54,10 +56,13 @@ function initSortableHeaders(headRowId, listKey, defaultKey, onChange) {
         th.onclick = () => {
             const key = th.dataset.sort;
             const dir = state.key === key && state.dir === 'asc' ? 'desc' : 'asc';
-            localStorage.setItem('bp.sort.' + listKey, JSON.stringify({
-                key,
-                dir
-            }));
+            localStorage.setItem(
+                'bp.sort.' + listKey,
+                JSON.stringify({
+                    key,
+                    dir
+                })
+            );
             onChange(key, dir);
         };
     });
@@ -87,7 +92,7 @@ function cloneField(f) {
         isUnique: !!f.isUnique,
         isIdentifier: !!f.isIdentifier,
         readRule: f.readRule || '',
-        writeRule: f.writeRule || '',
+        writeRule: f.writeRule || ''
     };
 }
 
@@ -126,7 +131,9 @@ function setView(v) {
 function applyView(v) {
     document.getElementById('builderView').classList.toggle('hidden', v !== 'builder');
     document.getElementById('recordsView').classList.toggle('hidden', v !== 'records');
-    document.querySelectorAll('#viewToggle .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
+    document
+        .querySelectorAll('#viewToggle .seg-btn')
+        .forEach((b) => b.classList.toggle('active', b.dataset.view === v));
     if (v === 'records') loadRecords();
 }
 
@@ -138,36 +145,54 @@ function routePath() {
 }
 
 const ROUTES = [
-    [/^\/(?:tables)?$/, () => ({
-        section: 'tables'
-    })],
+    [
+        /^\/(?:tables)?$/,
+        () => ({
+            section: 'tables'
+        })
+    ],
     [
         /^\/tables\/([\w-]+)(?:\/(records|builder))?$/,
         (m) => ({
             section: 'tables',
             id: m[1],
             view: m[2] === 'records' ? 'records' : 'builder'
-        }),
+        })
     ],
-    [/^\/forms(?:\/([\w-]+))?$/, (m) => ({
-        section: 'forms',
-        id: m[1]
-    })],
-    [/^\/actions(?:\/([\w-]+))?$/, (m) => ({
-        section: 'actions',
-        id: m[1]
-    })],
-    [/^\/sql(?:\/([\w-]+))?$/, (m) => ({
-        section: 'sql',
-        id: m[1]
-    })],
-    [/^\/settings(?:\/([\w-]+))?$/, (m) => ({
-        section: 'settings',
-        id: m[1] || 'host'
-    })],
-    [/^\/(schema|auth|logs)$/, (m) => ({
-        section: m[1]
-    })],
+    [
+        /^\/forms(?:\/([\w-]+))?$/,
+        (m) => ({
+            section: 'forms',
+            id: m[1]
+        })
+    ],
+    [
+        /^\/actions(?:\/([\w-]+))?$/,
+        (m) => ({
+            section: 'actions',
+            id: m[1]
+        })
+    ],
+    [
+        /^\/sql(?:\/([\w-]+))?$/,
+        (m) => ({
+            section: 'sql',
+            id: m[1]
+        })
+    ],
+    [
+        /^\/settings(?:\/([\w-]+))?$/,
+        (m) => ({
+            section: 'settings',
+            id: m[1] || 'host'
+        })
+    ],
+    [
+        /^\/(schema|auth|logs)$/,
+        (m) => ({
+            section: m[1]
+        })
+    ]
 ];
 
 function parseRoute() {
@@ -186,15 +211,13 @@ function hasUnsavedChanges() {
     return typeof hasUnsavedFormChanges === 'function' && hasUnsavedFormChanges();
 }
 
-async function navigate(path, {
-    replace = false
-} = {}) {
+async function navigate(path, { replace = false } = {}) {
     if (hasUnsavedChanges()) {
         const leave = await ui.confirm({
             title: 'Discard changes?',
             message: 'You have unsaved changes here. Leave without saving?',
             confirmLabel: 'Discard',
-            danger: true,
+            danger: true
         });
         if (!leave) return;
     }
@@ -220,9 +243,10 @@ const SECTION_ROUTES = {
         }
 
         const table = currentTables.find((t) => t.id === id);
-        if (!table) return navigate('/tables', {
-            replace: true
-        });
+        if (!table)
+            return navigate('/tables', {
+                replace: true
+            });
         selectTable(table);
         applyView(parseRoute().view || 'builder');
     },
@@ -274,7 +298,7 @@ const SECTION_ROUTES = {
     },
     schema: () => loadSchema(),
     auth: () => loadAccounts(),
-    logs: () => loadLogs(),
+    logs: () => loadLogs()
 };
 
 async function render() {
@@ -284,7 +308,7 @@ async function render() {
     const isTables = route.section === 'tables';
     document.getElementById('tablesArea').classList.toggle('hidden', !isTables);
     ['forms', 'actions', 'sql', 'schema', 'auth', 'logs', 'settings'].forEach((v) =>
-        document.getElementById(v + 'View').classList.toggle('active', v === route.section),
+        document.getElementById(v + 'View').classList.toggle('active', v === route.section)
     );
 
     renderSidebar(route.section);
@@ -317,7 +341,9 @@ async function loadTables() {
     const tables = await res.json();
     currentTables = tables;
     renderSidebar(currentSection);
-    summaryStats = await fetch('/api/_admin/settings').then((r) => r.json()).catch(() => ({}));
+    summaryStats = await fetch('/api/_admin/settings')
+        .then((r) => r.json())
+        .catch(() => ({}));
     updateSummary(currentTables);
 }
 
@@ -330,8 +356,13 @@ function updateSummary(tables) {
         ['Records', records.toLocaleString()],
         ['Database size', size(summaryStats.dbSizeBytes)],
         ['Index size', size(summaryStats.estimatedIndexBytes)],
-        ['Users enabled', (summaryStats.usersEnabled ?? 0).toLocaleString()],
-    ].map(([label, value]) => `<div class="summary-card"><div class="summary-value">${value}</div><div class="summary-label">${label}</div></div>`).join('');
+        ['Users enabled', (summaryStats.usersEnabled ?? 0).toLocaleString()]
+    ]
+        .map(
+            ([label, value]) =>
+                `<div class="summary-card"><div class="summary-value">${value}</div><div class="summary-label">${label}</div></div>`
+        )
+        .join('');
 }
 
 async function newTable() {
@@ -339,7 +370,7 @@ async function newTable() {
         title: 'New table',
         label: 'Table name',
         placeholder: 'e.g. Customers',
-        confirmLabel: 'Create',
+        confirmLabel: 'Create'
     });
     if (!name) return;
     const res = await fetch('/api/_admin/tables', {
@@ -349,7 +380,7 @@ async function newTable() {
         },
         body: JSON.stringify({
             name
-        }),
+        })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -377,10 +408,12 @@ function attachFieldExprAutocomplete(input, getFieldNames) {
         const pos = input.selectionStart || 0;
         const before = input.value.slice(0, pos);
         const m = /data\.(\w*)$/.exec(before);
-        return m ? {
-            start: pos - m[1].length,
-            query: m[1]
-        } : null;
+        return m
+            ? {
+                  start: pos - m[1].length,
+                  query: m[1]
+              }
+            : null;
     }
 
     function refreshActive() {
@@ -393,9 +426,11 @@ function attachFieldExprAutocomplete(input, getFieldNames) {
         input.value = before + name + after;
         const caret = before.length + name.length;
         input.setSelectionRange(caret, caret);
-        input.dispatchEvent(new Event('input', {
-            bubbles: true
-        }));
+        input.dispatchEvent(
+            new Event('input', {
+                bubbles: true
+            })
+        );
         close();
         input.focus();
     }

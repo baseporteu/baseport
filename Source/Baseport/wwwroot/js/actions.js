@@ -17,16 +17,16 @@ function actionTableName(tableId) {
 const TRIGGER_LABELS = {
     onCreate: 'On create',
     onUpdate: 'On update',
-    onDelete: 'On delete',
+    onDelete: 'On delete'
 };
 
 function renderActionsList() {
     const rows = document.getElementById('actionsRows');
     rows.innerHTML = actionsAll
         .map((a) => {
-            const status = a.isEnabled ?
-                '<span class="badge badge-ok">Enabled</span>' :
-                '<span class="badge">Disabled</span>';
+            const status = a.isEnabled
+                ? '<span class="badge badge-ok">Enabled</span>'
+                : '<span class="badge">Disabled</span>';
             return `<tr class="row-link" onclick="navigate('/actions/${a.id}')">
                 <td>${escapeHtml(a.name || 'Untitled action')}</td>
                 <td>${escapeHtml(actionTableName(a.tableId))}</td>
@@ -50,13 +50,16 @@ function deleteAction(id) {
             const res = await fetch(`/api/_admin/actions/${id}`, {
                 method: 'DELETE'
             });
-            if (!(await ui.handle(res, {
+            if (
+                !(await ui.handle(res, {
                     success: 'Action deleted.',
                     failure: 'The action could not be deleted.'
-                }))) return;
+                }))
+            )
+                return;
             if (actionEditingId === id) return navigate('/actions');
             await loadActions();
-        },
+        }
     });
 }
 
@@ -90,9 +93,10 @@ async function editAction(id) {
     const a = await fetch(`/api/_admin/actions/${id}`)
         .then((r) => r.json())
         .catch(() => null);
-    if (!a || !a.id) return navigate('/actions', {
-        replace: true
-    });
+    if (!a || !a.id)
+        return navigate('/actions', {
+            replace: true
+        });
 
     actionEditingId = a.id;
     document.getElementById('actionDeleteBtn').classList.remove('hidden');
@@ -140,7 +144,9 @@ function onActionTableChange() {
 }
 
 async function loadActionRuns(id) {
-    const runs = await fetch(`/api/_admin/actions/${id}/runs`).then((r) => r.json()).catch(() => []);
+    const runs = await fetch(`/api/_admin/actions/${id}/runs`)
+        .then((r) => r.json())
+        .catch(() => []);
     const rows = document.getElementById('actionRunsRows');
     rows.innerHTML = runs
         .map((r) => {
@@ -175,9 +181,11 @@ function stepsToJson() {
 
 function addActionStep(type) {
     actionSteps.push(
-        type === 'updateRecord' ? { type: 'updateRecord', setJson: {} } :
-        type === 'httpRequest' ? { type: 'httpRequest', url: '', method: 'POST', headers: {}, bodyTemplate: {} } :
-        { type: 'runExpression', expr: '' },
+        type === 'updateRecord'
+            ? { type: 'updateRecord', setJson: {} }
+            : type === 'httpRequest'
+              ? { type: 'httpRequest', url: '', method: 'POST', headers: {}, bodyTemplate: {} }
+              : { type: 'runExpression', expr: '' }
     );
     renderActionSteps();
 }
@@ -185,7 +193,7 @@ function addActionStep(type) {
 const STEP_LABELS = {
     updateRecord: 'update record',
     httpRequest: 'HTTP request',
-    runExpression: 'run expression',
+    runExpression: 'run expression'
 };
 
 function removeActionStep(i) {
@@ -227,7 +235,7 @@ function renderActionSteps() {
             const inp = document.createElement('input');
             inp.className = 'input input-sm';
             inp.value = step.expr || '';
-            inp.placeholder = "data.Qty > 0";
+            inp.placeholder = 'data.Qty > 0';
             inp.oninput = () => {
                 step.expr = inp.value;
             };
@@ -324,8 +332,15 @@ function actionKeyValueList(title, obj, addLabel, keyPlaceholder, valuePlacehold
             keyInp.value = currentKey;
             keyInp.placeholder = keyPlaceholder;
             keyInp.onchange = () => {
-                if (!keyInp.value || keyInp.value === currentKey) { keyInp.value = currentKey; return; }
-                if (keyInp.value in obj) { keyInp.value = currentKey; ui.toast(`'${keyInp.value}' is already used here.`, 'error'); return; }
+                if (!keyInp.value || keyInp.value === currentKey) {
+                    keyInp.value = currentKey;
+                    return;
+                }
+                if (keyInp.value in obj) {
+                    keyInp.value = currentKey;
+                    ui.toast(`'${keyInp.value}' is already used here.`, 'error');
+                    return;
+                }
                 const value = obj[currentKey];
                 delete obj[currentKey];
                 obj[keyInp.value] = value;
@@ -386,7 +401,10 @@ function actionSetFieldRow(step, fieldName) {
     const fieldSel = document.createElement('select');
     fieldSel.className = 'input input-sm';
     fieldSel.innerHTML = actionTableFieldsList
-        .map((f) => `<option value="${f.name}" ${f.name === fieldName ? 'selected' : ''}>${escapeHtml(f.label || f.name)}</option>`)
+        .map(
+            (f) =>
+                `<option value="${f.name}" ${f.name === fieldName ? 'selected' : ''}>${escapeHtml(f.label || f.name)}</option>`
+        )
         .join('');
     fieldSel.onchange = () => {
         const expr = step.setJson[fieldName];
@@ -440,7 +458,7 @@ async function saveAction(btn) {
         name,
         triggerKind: document.getElementById('actionTrigger').value,
         isEnabled: document.getElementById('actionEnabled').checked,
-        stepsJson: stepsToJson(),
+        stepsJson: stepsToJson()
     };
 
     await ui.busy(btn, async () => {
@@ -450,7 +468,7 @@ async function saveAction(btn) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(body),
+            body: JSON.stringify(body)
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {

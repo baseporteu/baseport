@@ -15,7 +15,7 @@ const ACTION_HINTS = {
     submit: 'Collects a new record. Design the matrix below.',
     lookup: 'Finds one record by an identifier the visitor already has. An unknown value returns the same not-found message every time.',
     both: 'Does both: the visitor can look an existing record up, or create a new one, from the same embed.',
-    list: 'A paged overview of records. Choose the columns, what the search box matches, and how many rows a page holds.',
+    list: 'A paged overview of records. Choose the columns, what the search box matches, and how many rows a page holds.'
 };
 
 /* listing */
@@ -39,9 +39,9 @@ async function renderFormsList() {
 
     const shown = formsAll.filter((f) => !filter || f.kind === filter);
     document.getElementById('formsEmpty').classList.toggle('hidden', shown.length > 0);
-    document.getElementById('formsEmpty').innerText = filter ?
-        `No ${filter === 'list' ? 'lists' : 'forms'} yet.` :
-        'No forms yet. Create one to get started.';
+    document.getElementById('formsEmpty').innerText = filter
+        ? `No ${filter === 'list' ? 'lists' : 'forms'} yet.`
+        : 'No forms yet. Create one to get started.';
 }
 
 function openPreview(id) {
@@ -63,13 +63,16 @@ function deleteForm(id) {
             const res = await fetch(`/api/_admin/forms/${id}`, {
                 method: 'DELETE'
             });
-            if (!(await ui.handle(res, {
+            if (
+                !(await ui.handle(res, {
                     success: 'Form deleted.',
                     failure: 'The form could not be deleted.'
-                }))) return;
+                }))
+            )
+                return;
             if (formEditingId === id) return navigate('/forms');
             await loadForms();
-        },
+        }
     });
 }
 
@@ -109,9 +112,10 @@ async function editForm(id) {
     const f = await fetch(`/api/_admin/forms/${id}`)
         .then((r) => r.json())
         .catch(() => null);
-    if (!f || !f.id) return navigate('/forms', {
-        replace: true
-    });
+    if (!f || !f.id)
+        return navigate('/forms', {
+            replace: true
+        });
 
     formEditingId = f.id;
     document.getElementById('formPreviewBtn').classList.remove('hidden');
@@ -182,11 +186,11 @@ function applyFormShape(kind, actions) {
     document.getElementById('formActions').classList.toggle('hidden', formKind !== 'form');
 
     document.getElementById('formKindHint').innerText =
-        formKind === 'list' ?
-        ACTION_HINTS.list :
-        doesSubmit && doesLookup ?
-        ACTION_HINTS.both :
-        ACTION_HINTS[formActions[0]] || '';
+        formKind === 'list'
+            ? ACTION_HINTS.list
+            : doesSubmit && doesLookup
+              ? ACTION_HINTS.both
+              : ACTION_HINTS[formActions[0]] || '';
 
     if (formKind === 'form') renderCanvas();
 }
@@ -253,7 +257,7 @@ function selectableFields() {
 
 function identifierCandidates() {
     return selectableFields().filter(
-        (f) => f.isIdentifier || !['multiselect', 'file', 'calculated', 'systemid', 'boolean'].includes(f.dataType),
+        (f) => f.isIdentifier || !['multiselect', 'file', 'calculated', 'systemid', 'boolean'].includes(f.dataType)
     );
 }
 
@@ -270,7 +274,7 @@ function checkGrid(containerId, fields, checked, emptyText) {
             <input type="checkbox" value="${escapeHtml(f.name)}" ${checked.includes(f.name) ? 'checked' : ''}>
             ${escapeHtml(f.label || f.name)}
             <span class="muted">${escapeHtml(f.dataType)}${f.isIdentifier ? ' · identifier' : ''}</span>
-        </label>`,
+        </label>`
         )
         .join('');
 }
@@ -285,7 +289,7 @@ function renderKindFieldPickers(config) {
         'lookupMatchFields',
         identifierCandidates(),
         cfg.matchFields || [],
-        'This table has no field a visitor could type. Mark one as an identifier in the table builder.',
+        'This table has no field a visitor could type. Mark one as an identifier in the table builder.'
     );
     document.getElementById('lookupMatchFields').onchange = () => syncLookupOnboardNav();
     lookupResultOrder = (cfg.resultFields || []).filter((n) => selectableFields().some((f) => f.name === n));
@@ -296,11 +300,11 @@ function renderKindFieldPickers(config) {
     sort.innerHTML =
         '<option value="">Newest first (created date)</option>' +
         selectableFields()
-        .map(
-            (f) =>
-            `<option value="${escapeHtml(f.name)}" ${cfg.sortField === f.name ? 'selected' : ''}>${escapeHtml(f.label || f.name)}</option>`,
-        )
-        .join('');
+            .map(
+                (f) =>
+                    `<option value="${escapeHtml(f.name)}" ${cfg.sortField === f.name ? 'selected' : ''}>${escapeHtml(f.label || f.name)}</option>`
+            )
+            .join('');
 }
 
 function applyKindConfig(cfg) {
@@ -339,7 +343,9 @@ function renderLookupOnboardNav() {
         document.getElementById(id).classList.toggle('hidden', onboarding && lookupOnboardStep !== i);
     });
     if (!onboarding) return;
-    nav.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', Number(b.dataset.step) === lookupOnboardStep));
+    nav.querySelectorAll('.seg-btn').forEach((b) =>
+        b.classList.toggle('active', Number(b.dataset.step) === lookupOnboardStep)
+    );
     document.getElementById('lookupOnboardBack').classList.toggle('hidden', lookupOnboardStep === 0);
     document.getElementById('lookupOnboardNext').innerText = lookupOnboardStep === 2 ? 'Finish setup' : 'Next';
     syncLookupOnboardNav();
@@ -679,7 +685,7 @@ const FILTER_OPS = [
     ['ne', 'does not equal'],
     ['gt', 'greater than'],
     ['lt', 'less than'],
-    ['contains', 'contains'],
+    ['contains', 'contains']
 ];
 
 function renderListFilters(filters) {
@@ -697,7 +703,7 @@ function filterRow(f, index) {
     field.innerHTML = selectableFields()
         .map(
             (x) =>
-            `<option value="${escapeHtml(x.name)}" ${x.name === f.field ? 'selected' : ''}>${escapeHtml(x.label || x.name)}</option>`,
+                `<option value="${escapeHtml(x.name)}" ${x.name === f.field ? 'selected' : ''}>${escapeHtml(x.label || x.name)}</option>`
         )
         .join('');
 
@@ -713,11 +719,11 @@ function filterRow(f, index) {
         const numeric = type === 'number' || type === 'currency';
         const enumerated = type === 'select' || type === 'multiselect';
 
-        const allowed = numeric ?
-            FILTER_OPS :
-            enumerated ?
-            FILTER_OPS.filter(([v]) => v === 'eq' || v === 'ne') :
-            FILTER_OPS.filter(([v]) => v !== 'gt' && v !== 'lt');
+        const allowed = numeric
+            ? FILTER_OPS
+            : enumerated
+              ? FILTER_OPS.filter(([v]) => v === 'eq' || v === 'ne')
+              : FILTER_OPS.filter(([v]) => v !== 'gt' && v !== 'lt');
         const keep = allowed.some(([v]) => v === op.value) ? op.value : allowed[0][0];
         op.innerHTML = allowed
             .map(([v, l]) => `<option value="${v}" ${v === keep ? 'selected' : ''}>${l}</option>`)
@@ -729,7 +735,10 @@ function filterRow(f, index) {
             const select = document.createElement('select');
             select.className = 'input filter-value';
             select.innerHTML = options
-                .map((o) => `<option value="${escapeHtml(o)}" ${o === current ? 'selected' : ''}>${escapeHtml(o)}</option>`)
+                .map(
+                    (o) =>
+                        `<option value="${escapeHtml(o)}" ${o === current ? 'selected' : ''}>${escapeHtml(o)}</option>`
+                )
                 .join('');
             value.replaceWith(select);
             return;
@@ -782,8 +791,8 @@ async function loadFilterSuggestions(fieldName, datalist) {
     if (!data || !data.rows) return;
     const seen = [
         ...new Set(
-            data.rows.map((r) => r.data && r.data[fieldName]).filter((v) => v !== null && v !== undefined && v !== ''),
-        ),
+            data.rows.map((r) => r.data && r.data[fieldName]).filter((v) => v !== null && v !== undefined && v !== '')
+        )
     ];
     datalist.innerHTML = seen
         .slice(0, 25)
@@ -793,11 +802,13 @@ async function loadFilterSuggestions(fieldName, datalist) {
 
 function addListFilter() {
     if (selectableFields().length === 0) return;
-    renderListFilters(collectListFilters().concat({
-        field: selectableFields()[0].name,
-        op: 'eq',
-        value: ''
-    }));
+    renderListFilters(
+        collectListFilters().concat({
+            field: selectableFields()[0].name,
+            op: 'eq',
+            value: ''
+        })
+    );
 }
 
 function collectListFilters() {
@@ -840,7 +851,7 @@ function collectConfig() {
             filters: collectListFilters().filter((f) => f.field),
             sortField: document.getElementById('listSortField').value,
             sortDir: document.getElementById('listSortDir').value,
-            pageSize: Number(document.getElementById('listPageSize').value) || 25,
+            pageSize: Number(document.getElementById('listPageSize').value) || 25
         };
     }
     return {};
@@ -868,7 +879,7 @@ function formSnapshot() {
             ...formConfigDraft,
             ...collectConfig()
         }),
-        isPublished: document.getElementById('formPublished').checked,
+        isPublished: document.getElementById('formPublished').checked
     };
 }
 
@@ -887,25 +898,25 @@ async function saveForm(btn) {
             return;
         }
 
-        const res = formEditingId ?
-            await fetch(`/api/_admin/forms/${formEditingId}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body),
-            }) :
-            await fetch('/api/_admin/forms', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body),
-            });
+        const res = formEditingId
+            ? await fetch(`/api/_admin/forms/${formEditingId}`, {
+                  method: 'PATCH',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify(body)
+              })
+            : await fetch('/api/_admin/forms', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify(body)
+              });
 
         const saved = await ui.handle(res, {
             success: formEditingId ? 'Form saved.' : 'Form published.',
-            failure: 'Failed to save the form.',
+            failure: 'Failed to save the form.'
         });
         if (!saved) return;
         formOriginalSnapshot = JSON.stringify(body); // just persisted; navigate() below must not think this is still unsaved
@@ -937,12 +948,14 @@ function parseLayout(layoutJson) {
             return {
                 rows: p.map((r) => ({
                     t: 'row',
-                    cols: [{
-                        t: 'col',
-                        w: 12,
-                        items: r.filter((x) => x !== 'spacer')
-                    }]
-                })),
+                    cols: [
+                        {
+                            t: 'col',
+                            w: 12,
+                            items: r.filter((x) => x !== 'spacer')
+                        }
+                    ]
+                }))
             };
     } catch (e) {}
     return {
@@ -960,52 +973,64 @@ function emptyCol() {
 
 function addRow(type, atIndex) {
     let row;
-    if (type === 'group') row = {
-        t: 'group',
-        title: 'Group',
-        cols: [emptyCol()]
-    };
-    else if (type === 'row') row = {
-        t: 'row',
-        cols: [emptyCol()]
-    };
-    else if (type === 'subtotal') row = {
-        t: 'subtotal',
-        label: 'Total',
-        expr: '',
-        format: 'currency'
-    };
-    else if (type === 'button') row = {
-        t: 'button',
-        label: 'Button',
-        action: 'submit'
-    };
-    else if (type === 'container') row = {
-        t: 'container',
-        title: 'Section',
-        rows: [{
+    if (type === 'group')
+        row = {
+            t: 'group',
+            title: 'Group',
+            cols: [emptyCol()]
+        };
+    else if (type === 'row')
+        row = {
             t: 'row',
             cols: [emptyCol()]
-        }]
-    };
-    else if (type === 'line_items') row = {
-        t: 'line_items',
-        field: ''
-    };
-    else if (type === 'child_table') row = {
-        t: 'child_table',
-        table: '',
-        refField: '',
-        columns: []
-    };
-    else if (type === 'button_bar') row = {
-        t: 'button_bar',
-        align: 'flex-end',
-        buttons: [{
-            label: 'Submit',
+        };
+    else if (type === 'subtotal')
+        row = {
+            t: 'subtotal',
+            label: 'Total',
+            expr: '',
+            format: 'currency'
+        };
+    else if (type === 'button')
+        row = {
+            t: 'button',
+            label: 'Button',
             action: 'submit'
-        }]
-    };
+        };
+    else if (type === 'container')
+        row = {
+            t: 'container',
+            title: 'Section',
+            rows: [
+                {
+                    t: 'row',
+                    cols: [emptyCol()]
+                }
+            ]
+        };
+    else if (type === 'line_items')
+        row = {
+            t: 'line_items',
+            field: ''
+        };
+    else if (type === 'child_table')
+        row = {
+            t: 'child_table',
+            table: '',
+            refField: '',
+            columns: []
+        };
+    else if (type === 'button_bar')
+        row = {
+            t: 'button_bar',
+            align: 'flex-end',
+            buttons: [
+                {
+                    label: 'Submit',
+                    action: 'submit'
+                }
+            ]
+        };
     if (!row) return;
     layout.rows.splice(atIndex, 0, row);
     renderCanvas();
@@ -1061,8 +1086,8 @@ function testExprButton(getExpr) {
             body: JSON.stringify({
                 expression: expr,
                 fieldNames: formTableFields.map((f) => f.name),
-                tableId: document.getElementById('formTable').value,
-            }),
+                tableId: document.getElementById('formTable').value
+            })
         }).then((res) => res.json());
         btn.disabled = false;
         btn.innerText = original;
@@ -1115,10 +1140,10 @@ function rowFields(row) {
                 'format',
                 [
                     ['plain', 'Plain'],
-                    ['currency', 'Currency'],
+                    ['currency', 'Currency']
                 ],
-                'plain',
-            ),
+                'plain'
+            )
         );
     } else if (row.t === 'button') {
         div.appendChild(labeledInput('Label', row, 'label', 'Submit'));
@@ -1129,13 +1154,13 @@ function rowFields(row) {
         const actionSel = document.createElement('select');
         actionSel.className = 'input input-sm';
         actionSel.innerHTML = [
-                ['submit', 'Submit'],
-                ['reset', 'Reset'],
-                ['cancel', 'Cancel'],
-                ['validate', 'Validate'],
-                ['link', 'Link'],
-                ['run', 'Run expression'],
-            ]
+            ['submit', 'Submit'],
+            ['reset', 'Reset'],
+            ['cancel', 'Cancel'],
+            ['validate', 'Validate'],
+            ['link', 'Link'],
+            ['run', 'Run expression']
+        ]
             .map(([v, l]) => `<option value="${v}">${l}</option>`)
             .join('');
         actionSel.value = row.action || 'submit';
@@ -1166,7 +1191,8 @@ function rowFields(row) {
         if (!candidates.length) {
             const hint = document.createElement('p');
             hint.className = 'muted field-hint';
-            hint.innerText = 'No array field with line-item columns yet. Add columns to an array field in the table schema first.';
+            hint.innerText =
+                'No array field with line-item columns yet. Add columns to an array field in the table schema first.';
             div.appendChild(hint);
         } else {
             if (!row.field || !candidates.some((f) => f.name === row.field)) row.field = candidates[0].name;
@@ -1176,7 +1202,10 @@ function rowFields(row) {
             const sel = document.createElement('select');
             sel.className = 'input input-sm';
             sel.innerHTML = candidates
-                .map((f) => `<option value="${f.name}" ${row.field === f.name ? 'selected' : ''}>${f.label || f.name}</option>`)
+                .map(
+                    (f) =>
+                        `<option value="${f.name}" ${row.field === f.name ? 'selected' : ''}>${f.label || f.name}</option>`
+                )
                 .join('');
             sel.onchange = () => {
                 row.field = sel.value;
@@ -1218,13 +1247,17 @@ function refTargetId(optionsJson) {
 function childTableCandidates() {
     const formTableId = document.getElementById('formTable').value;
     return currentTables.filter(
-        (t) => t.id !== formTableId && (t.fields || []).some((f) => f.dataType === 'reference' && refTargetId(f.optionsJson) === formTableId),
+        (t) =>
+            t.id !== formTableId &&
+            (t.fields || []).some((f) => f.dataType === 'reference' && refTargetId(f.optionsJson) === formTableId)
     );
 }
 
 function refFieldCandidates(childTable) {
     const formTableId = document.getElementById('formTable').value;
-    return (childTable ? childTable.fields || [] : []).filter((f) => f.dataType === 'reference' && refTargetId(f.optionsJson) === formTableId);
+    return (childTable ? childTable.fields || [] : []).filter(
+        (f) => f.dataType === 'reference' && refTargetId(f.optionsJson) === formTableId
+    );
 }
 
 function childTableEditor(row) {
@@ -1233,7 +1266,8 @@ function childTableEditor(row) {
     if (!candidates.length) {
         const hint = document.createElement('p');
         hint.className = 'muted field-hint';
-        hint.innerText = 'No table has a reference field pointing back at this table yet. Add one in the table builder first.';
+        hint.innerText =
+            'No table has a reference field pointing back at this table yet. Add one in the table builder first.';
         wrap.appendChild(hint);
         return wrap;
     }
@@ -1244,7 +1278,9 @@ function childTableEditor(row) {
     tableLab.innerText = 'Child table';
     const tableSel = document.createElement('select');
     tableSel.className = 'input input-sm';
-    tableSel.innerHTML = candidates.map((t) => `<option value="${t.id}" ${row.table === t.id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
+    tableSel.innerHTML = candidates
+        .map((t) => `<option value="${t.id}" ${row.table === t.id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`)
+        .join('');
     tableSel.onchange = () => {
         row.table = tableSel.value;
         row.refField = '';
@@ -1256,14 +1292,20 @@ function childTableEditor(row) {
 
     const childTable = candidates.find((t) => t.id === row.table);
     const refCandidates = refFieldCandidates(childTable);
-    if (!row.refField || !refCandidates.some((f) => f.name === row.refField)) row.refField = refCandidates[0] ? refCandidates[0].name : '';
+    if (!row.refField || !refCandidates.some((f) => f.name === row.refField))
+        row.refField = refCandidates[0] ? refCandidates[0].name : '';
 
     const refLab = document.createElement('label');
     refLab.className = 'brow-field-label';
     refLab.innerText = 'Reference field';
     const refSel = document.createElement('select');
     refSel.className = 'input input-sm';
-    refSel.innerHTML = refCandidates.map((f) => `<option value="${f.name}" ${row.refField === f.name ? 'selected' : ''}>${escapeHtml(f.label || f.name)}</option>`).join('');
+    refSel.innerHTML = refCandidates
+        .map(
+            (f) =>
+                `<option value="${f.name}" ${row.refField === f.name ? 'selected' : ''}>${escapeHtml(f.label || f.name)}</option>`
+        )
+        .join('');
     refSel.onchange = () => {
         row.refField = refSel.value;
     };
@@ -1299,11 +1341,11 @@ function buttonBarEditor(row) {
     const alignSel = document.createElement('select');
     alignSel.className = 'input input-sm';
     alignSel.innerHTML = [
-            ['flex-start', 'Left'],
-            ['center', 'Center'],
-            ['flex-end', 'Right'],
-            ['space-between', 'Space between'],
-        ]
+        ['flex-start', 'Left'],
+        ['center', 'Center'],
+        ['flex-end', 'Right'],
+        ['space-between', 'Space between']
+    ]
         .map(([v, l]) => `<option value="${v}" ${(row.align || 'flex-end') === v ? 'selected' : ''}>${l}</option>`)
         .join('');
     alignSel.onchange = () => {
@@ -1328,14 +1370,16 @@ function buttonBarEditor(row) {
             const actionSel = document.createElement('select');
             actionSel.className = 'input input-sm';
             actionSel.innerHTML = [
-                    ['submit', 'Submit'],
-                    ['reset', 'Reset'],
-                    ['cancel', 'Cancel'],
-                    ['validate', 'Validate'],
-                    ['link', 'Link'],
-                    ['run', 'Run expression'],
-                ]
-                .map(([v, l]) => `<option value="${v}" ${(btn.action || 'submit') === v ? 'selected' : ''}>${l}</option>`)
+                ['submit', 'Submit'],
+                ['reset', 'Reset'],
+                ['cancel', 'Cancel'],
+                ['validate', 'Validate'],
+                ['link', 'Link'],
+                ['run', 'Run expression']
+            ]
+                .map(
+                    ([v, l]) => `<option value="${v}" ${(btn.action || 'submit') === v ? 'selected' : ''}>${l}</option>`
+                )
                 .join('');
             actionSel.value = btn.action || 'submit';
             actionSel.onchange = () => {
@@ -1472,13 +1516,13 @@ function buildRowElement(row, index, ownerArray, path) {
         presetSel.className = 'input input-sm';
         presetSel.title = 'Apply a column layout preset';
         presetSel.innerHTML = [
-                ['', 'Preset…'],
-                ['12', '1 column'],
-                ['6-6', '2 columns (half)'],
-                ['4-4-4', '3 columns (thirds)'],
-                ['3-3-3-3', '4 columns (quarters)'],
-                ['8-4', '2 columns (main/side)'],
-            ]
+            ['', 'Preset…'],
+            ['12', '1 column'],
+            ['6-6', '2 columns (half)'],
+            ['4-4-4', '3 columns (thirds)'],
+            ['3-3-3-3', '4 columns (quarters)'],
+            ['8-4', '2 columns (main/side)']
+        ]
             .map(([v, l]) => `<option value="${v}">${l}</option>`)
             .join('');
         presetSel.onchange = () => {
@@ -1501,10 +1545,14 @@ function buildRowElement(row, index, ownerArray, path) {
         });
     mkBtn('↑', () => moveRowIn(ownerArray, index, -1), 'Move up');
     mkBtn('↓', () => moveRowIn(ownerArray, index, 1), 'Move down');
-    mkBtn('✕', () => {
-        ownerArray.splice(index, 1);
-        renderCanvas();
-    }, 'Remove');
+    mkBtn(
+        '✕',
+        () => {
+            ownerArray.splice(index, 1);
+            renderCanvas();
+        },
+        'Remove'
+    );
 
     head.appendChild(type);
     head.appendChild(actions);
@@ -1600,15 +1648,18 @@ function createHistory(undoBtnId, redoBtnId) {
             sync();
         },
         undo: () => restore(index - 1),
-        redo: () => restore(index + 1),
+        redo: () => restore(index + 1)
     };
 }
 
 const layoutHistory = createHistory('builderUndo', 'builderRedo');
-layoutHistory.bind(() => layout, (v) => {
-    layout = v;
-    renderCanvas();
-});
+layoutHistory.bind(
+    () => layout,
+    (v) => {
+        layout = v;
+        renderCanvas();
+    }
+);
 function resetLayoutHistory() {
     layoutHistory.reset();
 }
@@ -1620,10 +1671,13 @@ function redoLayout() {
 }
 
 const listColumnsHistory = createHistory('listUndo', 'listRedo');
-listColumnsHistory.bind(() => listColumns, (v) => {
-    listColumns = v;
-    renderListBuilder();
-});
+listColumnsHistory.bind(
+    () => listColumns,
+    (v) => {
+        listColumns = v;
+        renderListBuilder();
+    }
+);
 function resetListColumnsHistory() {
     listColumnsHistory.reset();
 }
@@ -1635,10 +1689,13 @@ function redoListColumns() {
 }
 
 const lookupResultHistory = createHistory('lookupResultUndo', 'lookupResultRedo');
-lookupResultHistory.bind(() => lookupResultOrder, (v) => {
-    lookupResultOrder = v;
-    renderLookupResultBuilder();
-});
+lookupResultHistory.bind(
+    () => lookupResultOrder,
+    (v) => {
+        lookupResultOrder = v;
+        renderLookupResultBuilder();
+    }
+);
 function resetLookupResultHistory() {
     lookupResultHistory.reset();
 }
@@ -1655,12 +1712,15 @@ const COL_WIDTHS = [
     [8, 'Two thirds'],
     [6, 'Half'],
     [4, 'One third'],
-    [3, 'One quarter'],
+    [3, 'One quarter']
 ];
 
 function colAtPath(path) {
     const ci = path[path.length - 1];
-    const row = path.length === 2 ? layout.rows[path[0]] : (layout.rows[path[0]] || {}).rows && layout.rows[path[0]].rows[path[1]];
+    const row =
+        path.length === 2
+            ? layout.rows[path[0]]
+            : (layout.rows[path[0]] || {}).rows && layout.rows[path[0]].rows[path[1]];
     return row && row.cols && row.cols[ci];
 }
 
@@ -1680,7 +1740,10 @@ function renderColumn(row, path, col, ci) {
 
         if (moved && JSON.stringify(moved.path) === JSON.stringify(path)) {
             const fromIdx = col.items.indexOf(field);
-            if (fromIdx === -1) { renderCanvas(); return; }
+            if (fromIdx === -1) {
+                renderCanvas();
+                return;
+            }
             col.items.splice(fromIdx, 1);
             let insertAt = targetIndex === undefined ? col.items.length : targetIndex;
             if (fromIdx < insertAt) insertAt--; // removing the source first shifts every later index down by one
@@ -1724,9 +1787,12 @@ function renderColumn(row, path, col, ci) {
         chip.addEventListener('dragstart', (ev) => {
             ev.stopPropagation();
             ev.dataTransfer.setData('text/field', item);
-            ev.dataTransfer.setData('text/movefield', JSON.stringify({
-                path
-            }));
+            ev.dataTransfer.setData(
+                'text/movefield',
+                JSON.stringify({
+                    path
+                })
+            );
         });
         chip.addEventListener('dragend', () => {
             document.querySelectorAll('.chip.drop-before').forEach((c) => c.classList.remove('drop-before'));
@@ -1803,8 +1869,7 @@ document.getElementById('formLayout').addEventListener('change', (ev) => {
         if (!p || !Array.isArray(p.rows)) return;
         layout = p;
         renderCanvas();
-    } catch (e) {
-    }
+    } catch (e) {}
 });
 
 document.querySelectorAll('.builder-palette [data-block]').forEach((li) => {
@@ -1826,11 +1891,13 @@ document.querySelectorAll('.builder-palette [data-block]').forEach((li) => {
         if (field) {
             layout.rows.push({
                 t: 'row',
-                cols: [{
-                    t: 'col',
-                    w: 12,
-                    items: [field]
-                }]
+                cols: [
+                    {
+                        t: 'col',
+                        w: 12,
+                        items: [field]
+                    }
+                ]
             });
             renderCanvas();
         }

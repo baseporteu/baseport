@@ -25,7 +25,7 @@ async function loadLogs(page) {
     const meta = await ui.fragment(
         'logsList',
         `/api/_admin/fragments/logs?page=${logsPage}&perPage=${logsPerPage}&sort=${logsSort}&order=${logsOrder}` +
-        (filter ? `&filter=${encodeURIComponent(filter)}` : ''),
+            (filter ? `&filter=${encodeURIComponent(filter)}` : '')
     );
     if (!meta) return;
 
@@ -38,7 +38,7 @@ async function loadLogs(page) {
         onPerPage: (n) => {
             logsPerPage = n;
             loadLogs(1);
-        },
+        }
     });
 }
 
@@ -58,7 +58,8 @@ function reportLinkOutcome() {
     url.searchParams.delete('sso');
     history.replaceState(null, '', url);
 
-    if (code === 'linked') ui.toast('Your account is now linked. Every other session has been signed out.', 'success', 8000);
+    if (code === 'linked')
+        ui.toast('Your account is now linked. Every other session has been signed out.', 'success', 8000);
     else ui.toast(SSO_PROBLEMS[code] || SSO_PROBLEMS.failed, 'error', 8000);
 }
 
@@ -84,7 +85,7 @@ function applySettingsPage(page) {
         secrets: 'Credentials for outbound requests. Encrypted at rest, never shown again.',
         connections: 'Remote APIs, Baseport instances and SQL databases to import from.',
         jobs: 'Scheduled clones and background maintenance.',
-        backups: 'Archives of the database, uploads and keys.',
+        backups: 'Archives of the database, uploads and keys.'
     };
     document.getElementById('settingsTitle').innerText = titles[page];
     document.getElementById('settingsSub').innerText = subs[page];
@@ -111,13 +112,17 @@ async function loadSettings() {
     document.getElementById('settingsS3ServiceUrl').value = settingsData.s3ServiceUrl || '';
     document.getElementById('settingsS3AccessKey').value = settingsData.s3AccessKey || '';
     document.getElementById('settingsS3Prefix').value = settingsData.s3Prefix || '';
-    document.getElementById('settingsS3SecretKey').placeholder = settingsData.hasS3SecretKey ? 'Set. Type to replace it.' : '';
+    document.getElementById('settingsS3SecretKey').placeholder = settingsData.hasS3SecretKey
+        ? 'Set. Type to replace it.'
+        : '';
     document.getElementById('settingsOpenApiEnabled').checked = settingsData.openApiEnabled !== false;
-    document.getElementById('settingsProxyPrivateTargetsEnabled').checked = settingsData.proxyPrivateTargetsEnabled === true;
+    document.getElementById('settingsProxyPrivateTargetsEnabled').checked =
+        settingsData.proxyPrivateTargetsEnabled === true;
     document.getElementById('settingsApiTitle').value = settingsData.apiTitle || '';
     document.getElementById('settingsApiDescription').value = settingsData.apiDescription || '';
     document.getElementById('settingsPublicAuthEnabled').checked = settingsData.publicAuthEnabled === true;
-    document.getElementById('settingsPublicRegistrationEnabled').checked = settingsData.publicRegistrationEnabled === true;
+    document.getElementById('settingsPublicRegistrationEnabled').checked =
+        settingsData.publicRegistrationEnabled === true;
     document.getElementById('settingsAnonymousAuthEnabled').checked = settingsData.anonymousAuthEnabled === true;
     document.getElementById('settingsAnonymousRetention').value = settingsData.anonymousRetentionDays ?? 30;
     document.getElementById('settingsAuthIssuer').value = settingsData.authIssuer || 'baseport';
@@ -168,7 +173,7 @@ function renderSettingsInfo() {
         ['Fields', (s.fields ?? 0).toLocaleString()],
         ['Forms', (s.forms ?? 0).toLocaleString()],
         ['Records', (s.records ?? 0).toLocaleString()],
-        ['Tables with API enabled', (s.apiEnabledTables ?? 0).toLocaleString()],
+        ['Tables with API enabled', (s.apiEnabledTables ?? 0).toLocaleString()]
     ];
     const el = document.getElementById('settingsInfoRows');
     el.innerHTML = rows
@@ -185,21 +190,21 @@ async function submitSettings(btn) {
             currency: document.getElementById('settingsCurrency').value.trim().toUpperCase(),
             timeZone: document.getElementById('settingsTimeZone').value,
             backupRetention: Number(document.getElementById('settingsBackupRetention').value) || 5,
-            uploadsMaxMegabytes: Number(document.getElementById('settingsUploadsMax').value) || 10240,
+            uploadsMaxMegabytes: Number(document.getElementById('settingsUploadsMax').value) || 10240
         };
         const res = await fetch('/api/_admin/settings', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(body),
+            body: JSON.stringify(body)
         });
         const data = await res.json();
         if (!res.ok) {
             openModal({
                 title: 'Could not save settings',
                 message: (data.errors || ['Failed to save settings.']).join(' '),
-                confirmLabel: 'OK',
+                confirmLabel: 'OK'
             });
             return;
         }
@@ -219,9 +224,9 @@ async function submitApiInfo(btn) {
             body: {
                 apiTitle: document.getElementById('settingsApiTitle').value,
                 apiDescription: document.getElementById('settingsApiDescription').value,
-                openApiEnabled: document.getElementById('settingsOpenApiEnabled').checked,
+                openApiEnabled: document.getElementById('settingsOpenApiEnabled').checked
             },
-            success: 'The API reference has been updated.',
+            success: 'The API reference has been updated.'
         });
         if (!saved) return;
         settingsData = {
@@ -244,9 +249,9 @@ async function submitAuthSettings(btn) {
                 anonymousRetentionDays: Number(document.getElementById('settingsAnonymousRetention').value) || 0,
                 authIssuer: document.getElementById('settingsAuthIssuer').value.trim() || 'baseport',
                 authTokenLifetimeSec: Number(document.getElementById('settingsAuthTokenLifetime').value) || 3600,
-                authRefreshLifetimeDays: Number(document.getElementById('settingsAuthRefreshLifetime').value) || 30,
+                authRefreshLifetimeDays: Number(document.getElementById('settingsAuthRefreshLifetime').value) || 30
             },
-            success: 'End-user authentication has been updated.',
+            success: 'End-user authentication has been updated.'
         });
         if (!saved) return;
         settingsData = {
@@ -262,15 +267,16 @@ async function submitAuthSettings(btn) {
 async function rotateAuthKey(btn) {
     const ok = await ui.confirm({
         title: 'Rotate the signing key?',
-        message: 'Every access and refresh token issued so far stops working, and every signed-in user has to sign in again.',
+        message:
+            'Every access and refresh token issued so far stops working, and every signed-in user has to sign in again.',
         confirmLabel: 'Rotate',
-        danger: true,
+        danger: true
     });
     if (!ok) return;
     await ui.busy(btn, async () => {
         await ui.send('/api/_admin/settings/auth-key', {
             method: 'POST',
-            success: 'A new signing key is in use.',
+            success: 'A new signing key is in use.'
         });
     });
 }
@@ -286,9 +292,9 @@ async function saveProviderSettings(btn) {
                 tdsEnabled: document.getElementById('settingsTdsEnabled').checked,
                 tdsPort: Number(document.getElementById('settingsTdsPort').value) || 1433,
                 tdsBindAddress: document.getElementById('settingsTdsBindAddress').value.trim() || '127.0.0.1',
-                proxyPrivateTargetsEnabled: document.getElementById('settingsProxyPrivateTargetsEnabled').checked,
+                proxyPrivateTargetsEnabled: document.getElementById('settingsProxyPrivateTargetsEnabled').checked
             },
-            success: 'Provider settings have been updated. Listening ports apply within a few seconds.',
+            success: 'Provider settings have been updated. Listening ports apply within a few seconds.'
         });
         if (!saved) return;
         settingsData = {
@@ -332,11 +338,13 @@ async function loadApiTables() {
 
         const docsGroup = document.createElement('span');
         docsGroup.className = 'api-table-state';
-        docsGroup.title = t.apiEnabled ?
-            'Whether this table appears in the OpenAPI document. It stays live at /api/v1 either way.' :
-            'Turn the REST API on first. An unpublished table is never listed.';
+        docsGroup.title = t.apiEnabled
+            ? 'Whether this table appears in the OpenAPI document. Beware, this does not disable the API.'
+            : 'Turn the REST API on first. An unpublished table is never listed.';
         docsGroup.append('OpenAPI');
-        const docsToggle = apiSwitch(`apiDocs-${t.id}`, t.apiDocsEnabled !== false, (checked) => toggleTableApiDocs(t.id, checked));
+        const docsToggle = apiSwitch(`apiDocs-${t.id}`, t.apiDocsEnabled !== false, (checked) =>
+            toggleTableApiDocs(t.id, checked)
+        );
         docsToggle.querySelector('input').disabled = !t.apiEnabled;
         docsGroup.append(docsToggle);
 
@@ -358,7 +366,7 @@ async function toggleTableApi(pid, enabled) {
         },
         body: JSON.stringify({
             enabled
-        }),
+        })
     });
     if (!res.ok) {
         ui.toast('The change could not be saved.', 'error');
@@ -377,7 +385,7 @@ async function toggleTableApiDocs(pid, enabled) {
         body: {
             apiDocsEnabled: enabled
         },
-        failure: 'The change could not be saved.',
+        failure: 'The change could not be saved.'
     });
     if (!saved) {
         await loadApiTables();
@@ -439,28 +447,44 @@ async function loadJobs() {
 
         const enabledTd = document.createElement('td');
         const toggle = switchHtml(job.key, job.enabled);
-        toggle.querySelector('input').addEventListener('change', (ev) => saveJob(job.key, {
-            enabled: ev.target.checked
-        }));
+        toggle.querySelector('input').addEventListener('change', (ev) =>
+            saveJob(job.key, {
+                enabled: ev.target.checked
+            })
+        );
         enabledTd.appendChild(toggle);
         tr.appendChild(enabledTd);
 
         const actionTd = document.createElement('td');
         actionTd.className = 'cell-actions end';
-        const save = ui.button('Save', () => saveJob(job.key, {
-            schedule: schedule.value
-        }, save), {
-            size: 'btn-sm'
-        });
+        const save = ui.button(
+            'Save',
+            () =>
+                saveJob(
+                    job.key,
+                    {
+                        schedule: schedule.value
+                    },
+                    save
+                ),
+            {
+                size: 'btn-sm'
+            }
+        );
         save.disabled = true;
         schedule.addEventListener('input', () => {
             save.disabled = schedule.value === job.schedule;
         });
         schedule.addEventListener('keydown', (ev) => {
             if (ev.key !== 'Enter') return;
-            if (schedule.value !== job.schedule) saveJob(job.key, {
-                schedule: schedule.value
-            }, save);
+            if (schedule.value !== job.schedule)
+                saveJob(
+                    job.key,
+                    {
+                        schedule: schedule.value
+                    },
+                    save
+                );
         });
         const run = ui.button('Run now', () => runJobNow(job.key, job.name, run), {
             size: 'btn-sm'
@@ -477,7 +501,7 @@ async function saveJob(key, patch, btn) {
         const res = await ui.send(`/api/_admin/jobs/${encodeURIComponent(key)}`, {
             method: 'PUT',
             body: patch,
-            failure: 'The job could not be saved.',
+            failure: 'The job could not be saved.'
         });
         if (!res) return;
         ui.toast('Job updated.', 'success');
@@ -489,13 +513,13 @@ async function runJobNow(key, name, btn) {
     const ok = await ui.confirm({
         title: 'Run job now',
         message: `Run "${name}" now, outside its schedule?`,
-        confirmLabel: 'Run now',
+        confirmLabel: 'Run now'
     });
     if (!ok) return;
     await ui.busy(btn, async () => {
         const res = await ui.send(`/api/_admin/jobs/${encodeURIComponent(key)}/run`, {
             method: 'POST',
-            failure: 'The job could not be run.',
+            failure: 'The job could not be run.'
         });
         if (!res) return;
         ui.toast('Job ran.', 'success');
@@ -534,7 +558,7 @@ async function loadBackups() {
             ui.button('Delete', () => deleteBackup(b.name), {
                 size: 'btn-sm',
                 variant: 'btn-danger'
-            }),
+            })
         );
         tr.append(time, size, actions);
         body.appendChild(tr);
@@ -548,16 +572,18 @@ async function triggerBackup() {
     const ok = await ui.confirm({
         title: 'Trigger backup',
         message: [
-            size ? `Archives the database (about ${size}${free ? `, with ${free} free` : ''}), uploads and keys.` : 'Archives the database, uploads and keys.',
-            `The newest ${retention} archives are kept; older ones are deleted.`,
+            size
+                ? `Archives the database (about ${size}${free ? `, with ${free} free` : ''}), uploads and keys.`
+                : 'Archives the database, uploads and keys.',
+            `The newest ${retention} archives are kept; older ones are deleted.`
         ].join(' '),
-        confirmLabel: 'Trigger backup',
+        confirmLabel: 'Trigger backup'
     });
     if (!ok) return;
     await ui.busy(document.getElementById('triggerBackupBtn'), async () => {
         const res = await ui.send('/api/_admin/backups', {
             method: 'POST',
-            failure: 'The backup could not be created.',
+            failure: 'The backup could not be created.'
         });
         if (!res) return;
         ui.toast('Backup created.', 'success');
@@ -573,7 +599,7 @@ async function saveBackupSettings(btn) {
             body: {
                 backupRetention: retention
             },
-            failure: 'The retention window could not be saved.',
+            failure: 'The retention window could not be saved.'
         });
         if (!res) return;
         ui.toast('Backup retention updated.', 'success');
@@ -589,18 +615,20 @@ async function saveS3Settings(btn) {
             s3Region: document.getElementById('settingsS3Region').value.trim(),
             s3ServiceUrl: document.getElementById('settingsS3ServiceUrl').value.trim(),
             s3AccessKey: document.getElementById('settingsS3AccessKey').value.trim(),
-            s3Prefix: document.getElementById('settingsS3Prefix').value.trim(),
+            s3Prefix: document.getElementById('settingsS3Prefix').value.trim()
         };
         const secret = document.getElementById('settingsS3SecretKey').value;
         if (secret) body.s3SecretKey = secret;
         const res = await ui.send('/api/_admin/settings', {
             method: 'PUT',
             body,
-            failure: 'The S3 export settings could not be saved.',
+            failure: 'The S3 export settings could not be saved.'
         });
         if (!res) return;
         document.getElementById('settingsS3SecretKey').value = '';
-        document.getElementById('settingsS3SecretKey').placeholder = res.hasS3SecretKey ? 'Set. Type to replace it.' : '';
+        document.getElementById('settingsS3SecretKey').placeholder = res.hasS3SecretKey
+            ? 'Set. Type to replace it.'
+            : '';
         if (settingsData) settingsData = { ...settingsData, ...res };
         ui.toast('S3 export settings updated.', 'success');
     });
@@ -611,7 +639,7 @@ function s3TestBody() {
         bucket: document.getElementById('settingsS3Bucket').value.trim(),
         region: document.getElementById('settingsS3Region').value.trim(),
         serviceUrl: document.getElementById('settingsS3ServiceUrl').value.trim(),
-        accessKey: document.getElementById('settingsS3AccessKey').value.trim(),
+        accessKey: document.getElementById('settingsS3AccessKey').value.trim()
     };
     const secret = document.getElementById('settingsS3SecretKey').value;
     if (secret) body.secretKey = secret;
@@ -623,7 +651,7 @@ async function testS3Settings(btn) {
         const res = await ui.send('/api/_admin/settings/s3-test', {
             method: 'POST',
             body: s3TestBody(),
-            failure: 'Could not reach the server to test the connection.',
+            failure: 'Could not reach the server to test the connection.'
         });
         if (!res) return;
         if (res.ok) {
@@ -638,7 +666,7 @@ async function downloadBackup(name) {
     const ok = await ui.confirm({
         title: 'Download backup',
         message: `Download "${name}"? It contains a full copy of your database.`,
-        confirmLabel: 'Download',
+        confirmLabel: 'Download'
     });
     if (!ok) return;
     location.href = '/api/_admin/backups/' + encodeURIComponent(name);
@@ -649,12 +677,12 @@ async function deleteBackup(name) {
         title: 'Delete backup',
         message: `Delete the backup "${name}"? There is no way back.`,
         confirmLabel: 'Delete',
-        danger: true,
+        danger: true
     });
     if (!ok) return;
     const res = await ui.send(`/api/_admin/backups/${encodeURIComponent(name)}`, {
         method: 'DELETE',
-        failure: 'The backup could not be deleted.',
+        failure: 'The backup could not be deleted.'
     });
     if (!res) return;
     ui.toast('Backup deleted.', 'success');
@@ -681,7 +709,7 @@ function deleteCurrentTable() {
             currentTablePublicId = null;
             await loadTables();
             await navigate('/tables');
-        },
+        }
     });
 }
 
@@ -689,13 +717,16 @@ function renderAllowedOrigins(stored) {
     const list = document.getElementById('allowedOriginList');
     const empty = document.getElementById('allowedOriginsEmpty');
     if (!list) return;
-    const origins = (stored || '').split('\n').map((o) => o.trim()).filter(Boolean);
+    const origins = (stored || '')
+        .split('\n')
+        .map((o) => o.trim())
+        .filter(Boolean);
     list.replaceChildren(
         ...origins.map((origin) => {
             const li = document.createElement('li');
             li.textContent = origin;
             return li;
-        }),
+        })
     );
     empty.classList.toggle('hidden', origins.length > 0);
 }
@@ -707,7 +738,7 @@ async function saveAllowedOrigins(btn) {
             body: {
                 allowedOrigins: document.getElementById('settingsAllowedOrigins').value
             },
-            ok: 'Allowed sites saved.',
+            ok: 'Allowed sites saved.'
         });
         if (!saved) return;
         document.getElementById('settingsAllowedOrigins').value = saved.allowedOrigins || '';
@@ -751,22 +782,27 @@ async function loadOidcProviders() {
 
         const enabledTd = document.createElement('td');
         const toggle = switchHtml(`oidcEnabled-${p.id}`, p.isEnabled);
-        toggle.querySelector('input').addEventListener('change', (ev) =>
-            saveOidcProvider(p.id, { isEnabled: ev.target.checked }));
+        toggle
+            .querySelector('input')
+            .addEventListener('change', (ev) => saveOidcProvider(p.id, { isEnabled: ev.target.checked }));
         enabledTd.append(toggle);
         tr.append(enabledTd);
 
         const actions = document.createElement('td');
         actions.className = 'cell-actions end';
         if (p.isEnabled && p.consoleEnabled && !currentAccount?.linked)
-            actions.append(ui.button('Link my account', () => linkMyAccount(p), {
+            actions.append(
+                ui.button('Link my account', () => linkMyAccount(p), {
+                    size: 'btn-sm',
+                    variant: 'btn-outline'
+                })
+            );
+        actions.append(
+            ui.button('Configure', () => openOidcSheet(p.id), {
                 size: 'btn-sm',
                 variant: 'btn-outline'
-            }));
-        actions.append(ui.button('Configure', () => openOidcSheet(p.id), {
-            size: 'btn-sm',
-            variant: 'btn-outline'
-        }));
+            })
+        );
         tr.append(actions);
 
         body.append(tr);
@@ -779,7 +815,7 @@ async function linkMyAccount(p) {
         label: 'Your current password',
         type: 'password',
         confirmLabel: 'Continue',
-        help: `You will sign in at ${p.name} once. The identity it returns is bound to the account you are signed in as here.`,
+        help: `You will sign in at ${p.name} once. The identity it returns is bound to the account you are signed in as here.`
     });
     if (!password) return;
 
@@ -787,7 +823,7 @@ async function linkMyAccount(p) {
         method: 'POST',
         body: {
             currentPassword: password
-        },
+        }
     });
     if (started && started.authorizeUrl) location.href = started.authorizeUrl;
 }
@@ -797,7 +833,7 @@ async function saveOidcProvider(id, body) {
         method: 'PATCH',
         body,
         success: 'Provider saved.',
-        failure: 'Could not save the provider.',
+        failure: 'Could not save the provider.'
     });
     if (saved) await loadOidcProviders();
     return saved;
@@ -811,13 +847,13 @@ function openOidcSheet(id) {
         id: 'oidcName',
         value: p ? p.name : '',
         placeholder: 'Authelia',
-        help: 'What the button on the sign-in screen says.',
+        help: 'What the button on the sign-in screen says.'
     });
     const slug = ui.field('Key', {
         id: 'oidcSlug',
         value: p ? p.slug : '',
         placeholder: 'authelia',
-        help: 'Appears in the callback URL below. Lowercase letters, digits and hyphens.',
+        help: 'Appears in the callback URL below. Lowercase letters, digits and hyphens.'
     });
     slug.ctrl.addEventListener('input', () => {
         slug.ctrl.value = slug.ctrl.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
@@ -828,14 +864,14 @@ function openOidcSheet(id) {
         id: 'oidcAuthority',
         value: p ? p.authority : '',
         placeholder: 'https://auth.example.com',
-        help: 'The discovery document is read from this address on save; a wrong URL is refused there instead of at sign-in.',
+        help: 'The discovery document is read from this address on save; a wrong URL is refused there instead of at sign-in.'
     });
 
     const redirect = ui.field('Redirect URL', {
         id: 'oidcRedirect',
         value: p ? p.redirectUri : callbackFor(''),
         mono: true,
-        help: 'Register this exact address at the provider.',
+        help: 'Register this exact address at the provider.'
     });
     redirect.ctrl.readOnly = true;
 
@@ -853,7 +889,7 @@ function openOidcSheet(id) {
     const scopes = ui.field('Scopes', {
         id: 'oidcScopes',
         value: p ? p.scopes : 'openid profile email',
-        help: 'Space separated. Must include openid.',
+        help: 'Space separated. Must include openid.'
     });
     const usernameClaim = ui.field('Username claim', {
         id: 'oidcUsernameClaim',
@@ -881,8 +917,21 @@ function openOidcSheet(id) {
         checked: p ? p.createAccounts : false
     });
 
-    body.append(name, slug, authority, redirect, clientId, clientSecret, scopes, usernameClaim, emailClaim,
-        enabled, console_, publicSurface, createAccounts);
+    body.append(
+        name,
+        slug,
+        authority,
+        redirect,
+        clientId,
+        clientSecret,
+        scopes,
+        usernameClaim,
+        emailClaim,
+        enabled,
+        console_,
+        publicSurface,
+        createAccounts
+    );
 
     const payload = () => ({
         name: name.ctrl.value.trim(),
@@ -896,55 +945,65 @@ function openOidcSheet(id) {
         isEnabled: enabled.ctrl.checked,
         consoleEnabled: console_.ctrl.checked,
         publicEnabled: publicSurface.ctrl.checked,
-        createAccounts: createAccounts.ctrl.checked,
+        createAccounts: createAccounts.ctrl.checked
     });
 
     const actions = ui.el('div', 'form-actions');
     if (p) {
-        actions.append(ui.button('Delete', async () => {
-            const ok = await ui.confirm({
-                title: 'Delete provider',
-                message: `Remove ${p.name}? Accounts linked to it keep their history and fall back to their password.`,
-                confirmLabel: 'Delete',
-                danger: true,
-            });
-            if (!ok) return;
-            const done = await ui.send(`/api/_admin/oidc-providers/${p.id}`, {
-                method: 'DELETE',
-                success: 'Provider deleted.',
-                failure: 'Could not delete the provider.',
-            });
-            if (!done) return;
-            ui.closeSheet();
-            await loadOidcProviders();
-        }, {
-            variant: 'btn-danger'
-        }), ui.el('div', 'form-actions-spacer'));
+        actions.append(
+            ui.button(
+                'Delete',
+                async () => {
+                    const ok = await ui.confirm({
+                        title: 'Delete provider',
+                        message: `Remove ${p.name}? Accounts linked to it keep their history and fall back to their password.`,
+                        confirmLabel: 'Delete',
+                        danger: true
+                    });
+                    if (!ok) return;
+                    const done = await ui.send(`/api/_admin/oidc-providers/${p.id}`, {
+                        method: 'DELETE',
+                        success: 'Provider deleted.',
+                        failure: 'Could not delete the provider.'
+                    });
+                    if (!done) return;
+                    ui.closeSheet();
+                    await loadOidcProviders();
+                },
+                {
+                    variant: 'btn-danger'
+                }
+            ),
+            ui.el('div', 'form-actions-spacer')
+        );
     }
-    actions.append(ui.button('Cancel', ui.closeSheet, {
-        variant: 'btn-outline'
-    }));
+    actions.append(
+        ui.button('Cancel', ui.closeSheet, {
+            variant: 'btn-outline'
+        })
+    );
     const saveBtn = ui.button(p ? 'Save' : 'Add provider', () =>
         ui.busy(saveBtn, async () => {
             const saved = p
                 ? await saveOidcProvider(p.id, payload())
                 : await ui.send('/api/_admin/oidc-providers', {
-                    method: 'POST',
-                    body: payload(),
-                    success: 'Provider added.',
-                    failure: 'Could not add the provider.',
-                });
+                      method: 'POST',
+                      body: payload(),
+                      success: 'Provider added.',
+                      failure: 'Could not add the provider.'
+                  });
             if (!saved) return;
             ui.closeSheet();
             await loadOidcProviders();
-        }));
+        })
+    );
     actions.append(saveBtn);
 
     ui.sheet(p ? p.name : 'Add provider', body, actions);
 }
 
 function callbackFor(slug) {
-    const origin = (settingsData && settingsData.siteUrl || '').trim().replace(/\/+$/, '') || location.origin;
+    const origin = ((settingsData && settingsData.siteUrl) || '').trim().replace(/\/+$/, '') || location.origin;
     return `${origin}/api/auth/oidc/${slug || '<key>'}/callback`;
 }
 
@@ -987,17 +1046,20 @@ async function loadBuckets() {
 
         const enabledTd = document.createElement('td');
         const toggle = switchHtml(`bucketEnabled-${b.id}`, b.apiEnabled);
-        toggle.querySelector('input').addEventListener('change', (ev) =>
-            saveBucket(b.id, { apiEnabled: ev.target.checked }));
+        toggle
+            .querySelector('input')
+            .addEventListener('change', (ev) => saveBucket(b.id, { apiEnabled: ev.target.checked }));
         enabledTd.append(toggle);
         tr.append(enabledTd);
 
         const actions = document.createElement('td');
         actions.className = 'cell-actions end';
-        actions.append(ui.button('Configure', () => openBucketSheet(b.id), {
-            size: 'btn-sm',
-            variant: 'btn-outline'
-        }));
+        actions.append(
+            ui.button('Configure', () => openBucketSheet(b.id), {
+                size: 'btn-sm',
+                variant: 'btn-outline'
+            })
+        );
         tr.append(actions);
 
         body.append(tr);
@@ -1009,7 +1071,7 @@ async function saveBucket(id, body) {
         method: 'PATCH',
         body,
         success: 'Bucket saved.',
-        failure: 'Could not save the bucket.',
+        failure: 'Could not save the bucket.'
     });
     await loadBuckets();
     return saved;
@@ -1024,7 +1086,7 @@ function openBucketSheet(id) {
         value: b ? b.name : '',
         placeholder: 'avatars',
         mono: true,
-        help: 'Lowercase letters, digits and hyphens. Part of the URL.',
+        help: 'Lowercase letters, digits and hyphens. Part of the URL.'
     });
     name.ctrl.addEventListener('input', () => {
         name.ctrl.value = name.ctrl.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
@@ -1034,19 +1096,19 @@ function openBucketSheet(id) {
         type: 'textarea',
         rows: 3,
         value: b ? b.description : '',
-        help: 'Shown in the API reference.',
+        help: 'Shown in the API reference.'
     });
     const maxMegabytes = ui.field('File size limit (MB)', {
         id: 'bucketMaxMegabytes',
         type: 'number',
-        value: b ? b.maxMegabytes : 25,
+        value: b ? b.maxMegabytes : 25
     });
     const contentTypes = ui.field('Accepted types', {
         id: 'bucketContentTypes',
         value: b ? b.contentTypes : '',
         placeholder: 'image/*, application/pdf',
         mono: true,
-        help: 'Comma separated. Empty accepts every allowed file type.',
+        help: 'Comma separated. Empty accepts every allowed file type.'
     });
     const enabled = ui.switchRow('Enabled', {
         id: 'bucketApiEnabled',
@@ -1056,8 +1118,11 @@ function openBucketSheet(id) {
         id: 'bucketAllowJwt',
         checked: b ? b.allowJwt : false
     });
-    const methods = ui.methodSwitches(['GET', 'POST', 'DELETE'], b ? b.apiMethods : ['GET', 'POST', 'DELETE'],
-        'A method turned off is removed from the documentation and refused by the API.');
+    const methods = ui.methodSwitches(
+        ['GET', 'POST', 'DELETE'],
+        b ? b.apiMethods : ['GET', 'POST', 'DELETE'],
+        'A method turned off is removed from the documentation and refused by the API.'
+    );
 
     body.append(name, description, maxMegabytes, contentTypes, enabled, allowJwt, methods);
 
@@ -1068,48 +1133,58 @@ function openBucketSheet(id) {
         contentTypes: contentTypes.ctrl.value.trim(),
         apiEnabled: enabled.ctrl.checked,
         allowJwt: allowJwt.ctrl.checked,
-        apiMethods: methods.selected(),
+        apiMethods: methods.selected()
     });
 
     const actions = ui.el('div', 'form-actions');
     if (b) {
-        actions.append(ui.button('Delete', async () => {
-            const ok = await ui.confirm({
-                title: 'Delete bucket',
-                message: `Remove ${b.name}? Stored files stay on disk and remain reachable at their URLs.`,
-                confirmLabel: 'Delete',
-                danger: true,
-            });
-            if (!ok) return;
-            const done = await ui.send(`/api/_admin/buckets/${b.id}`, {
-                method: 'DELETE',
-                success: 'Bucket deleted.',
-                failure: 'Could not delete the bucket.',
-            });
-            if (!done) return;
-            ui.closeSheet();
-            await loadBuckets();
-        }, {
-            variant: 'btn-danger'
-        }), ui.el('div', 'form-actions-spacer'));
+        actions.append(
+            ui.button(
+                'Delete',
+                async () => {
+                    const ok = await ui.confirm({
+                        title: 'Delete bucket',
+                        message: `Remove ${b.name}? Stored files stay on disk and remain reachable at their URLs.`,
+                        confirmLabel: 'Delete',
+                        danger: true
+                    });
+                    if (!ok) return;
+                    const done = await ui.send(`/api/_admin/buckets/${b.id}`, {
+                        method: 'DELETE',
+                        success: 'Bucket deleted.',
+                        failure: 'Could not delete the bucket.'
+                    });
+                    if (!done) return;
+                    ui.closeSheet();
+                    await loadBuckets();
+                },
+                {
+                    variant: 'btn-danger'
+                }
+            ),
+            ui.el('div', 'form-actions-spacer')
+        );
     }
-    actions.append(ui.button('Cancel', ui.closeSheet, {
-        variant: 'btn-outline'
-    }));
+    actions.append(
+        ui.button('Cancel', ui.closeSheet, {
+            variant: 'btn-outline'
+        })
+    );
     const saveBtn = ui.button(b ? 'Save' : 'Add bucket', () =>
         ui.busy(saveBtn, async () => {
             const saved = b
                 ? await saveBucket(b.id, payload())
                 : await ui.send('/api/_admin/buckets', {
-                    method: 'POST',
-                    body: payload(),
-                    success: 'Bucket added.',
-                    failure: 'Could not add the bucket.',
-                });
+                      method: 'POST',
+                      body: payload(),
+                      success: 'Bucket added.',
+                      failure: 'Could not add the bucket.'
+                  });
             if (!saved) return;
             ui.closeSheet();
             await loadBuckets();
-        }));
+        })
+    );
     actions.append(saveBtn);
 
     ui.sheet(b ? b.name : 'Add bucket', body, actions);
@@ -1147,10 +1222,12 @@ async function loadSecrets() {
         used.textContent = s.lastUsedAt ? ui.when(s.lastUsedAt) : 'Never';
         const actions = document.createElement('td');
         actions.className = 'cell-actions end';
-        actions.append(ui.button('Replace', () => openSecretSheet(s.id), {
-            size: 'btn-sm',
-            variant: 'btn-outline'
-        }));
+        actions.append(
+            ui.button('Replace', () => openSecretSheet(s.id), {
+                size: 'btn-sm',
+                variant: 'btn-outline'
+            })
+        );
         tr.append(name, updated, used, actions);
         body.append(tr);
     });
@@ -1165,7 +1242,7 @@ function openSecretSheet(id) {
         value: s ? s.name : '',
         placeholder: 'crm-token',
         mono: true,
-        help: 'Lowercase letters, digits and hyphens.',
+        help: 'Lowercase letters, digits and hyphens.'
     });
     name.ctrl.addEventListener('input', () => {
         name.ctrl.value = name.ctrl.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
@@ -1176,56 +1253,66 @@ function openSecretSheet(id) {
         type: 'password',
         value: '',
         placeholder: s ? 'Type a new value to replace the stored one' : '',
-        help: 'Stored encrypted. It is never shown again.',
+        help: 'Stored encrypted. It is never shown again.'
     });
     value.ctrl.autocomplete = 'off';
     body.append(name, value);
 
     const actions = ui.el('div', 'form-actions');
     if (s) {
-        actions.append(ui.button('Delete', async () => {
-            const ok = await ui.confirm({
-                title: 'Delete secret',
-                message: `Remove ${s.name}? Anything using it stops authenticating.`,
-                confirmLabel: 'Delete',
-                danger: true,
-            });
-            if (!ok) return;
-            const done = await ui.send(`/api/_admin/secrets/${s.id}`, {
-                method: 'DELETE',
-                success: 'Secret deleted.',
-                failure: 'Could not delete the secret.',
-            });
-            if (!done) return;
-            ui.closeSheet();
-            await loadSecrets();
-        }, {
-            variant: 'btn-danger'
-        }), ui.el('div', 'form-actions-spacer'));
+        actions.append(
+            ui.button(
+                'Delete',
+                async () => {
+                    const ok = await ui.confirm({
+                        title: 'Delete secret',
+                        message: `Remove ${s.name}? Anything using it stops authenticating.`,
+                        confirmLabel: 'Delete',
+                        danger: true
+                    });
+                    if (!ok) return;
+                    const done = await ui.send(`/api/_admin/secrets/${s.id}`, {
+                        method: 'DELETE',
+                        success: 'Secret deleted.',
+                        failure: 'Could not delete the secret.'
+                    });
+                    if (!done) return;
+                    ui.closeSheet();
+                    await loadSecrets();
+                },
+                {
+                    variant: 'btn-danger'
+                }
+            ),
+            ui.el('div', 'form-actions-spacer')
+        );
     }
-    actions.append(ui.button('Cancel', ui.closeSheet, {
-        variant: 'btn-outline'
-    }));
+    actions.append(
+        ui.button('Cancel', ui.closeSheet, {
+            variant: 'btn-outline'
+        })
+    );
     const saveBtn = ui.button(s ? 'Replace' : 'Add secret', () =>
         ui.busy(saveBtn, async () => {
             const saved = s
                 ? await ui.send(`/api/_admin/secrets/${s.id}`, {
-                    method: 'PUT',
-                    body: { value: value.ctrl.value },
-                    success: 'Secret replaced.',
-                    failure: 'Could not replace the secret.',
-                })
+                      method: 'PUT',
+                      body: { value: value.ctrl.value },
+                      success: 'Secret replaced.',
+                      failure: 'Could not replace the secret.'
+                  })
                 : await ui.send('/api/_admin/secrets', {
-                    method: 'POST',
-                    body: { name: name.ctrl.value.trim(), value: value.ctrl.value },
-                    success: 'Secret added.',
-                    failure: 'Could not add the secret.',
-                });
+                      method: 'POST',
+                      body: { name: name.ctrl.value.trim(), value: value.ctrl.value },
+                      success: 'Secret added.',
+                      failure: 'Could not add the secret.'
+                  });
             value.ctrl.value = '';
             if (!saved) return;
             ui.closeSheet();
             await loadSecrets();
-        }));
+        })
+    );
     actions.append(saveBtn);
 
     ui.sheet(s ? s.name : 'Add secret', body, actions);

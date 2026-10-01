@@ -15,7 +15,7 @@ function importFileRow(onPick) {
     const row = ui.field('File', {
         id: 'impFile',
         type: 'file',
-        help: 'CSV, tab or semicolon separated, JSON or XML. Column types are read from the file.',
+        help: 'CSV, tab or semicolon separated, JSON or XML. Column types are read from the file.'
     });
     row.ctrl.accept = IMPORT_ACCEPT;
     row.ctrl.onchange = () => {
@@ -66,9 +66,11 @@ function openImportDefinition() {
     };
 
     const actions = ui.el('div', 'form-actions');
-    actions.appendChild(ui.button('Cancel', () => ui.closeSheet(), {
-        variant: 'btn-outline'
-    }));
+    actions.appendChild(
+        ui.button('Cancel', () => ui.closeSheet(), {
+            variant: 'btn-outline'
+        })
+    );
     actions.appendChild(create);
 
     ui.sheet('Import', body, actions);
@@ -110,17 +112,25 @@ function renderImportPreview(target, data) {
     const wrap = ui.el('div', 'table-wrap');
     const table = ui.el('table', 'table');
     const head = ui.el('tr');
-    ['Column', 'Field', 'Type', 'Required'].forEach((h) => head.appendChild(ui.el('th', null, {
-        textContent: h
-    })));
+    ['Column', 'Field', 'Type', 'Required'].forEach((h) =>
+        head.appendChild(
+            ui.el('th', null, {
+                textContent: h
+            })
+        )
+    );
     table.appendChild(ui.el('thead')).appendChild(head);
 
     const tbody = ui.el('tbody');
     (data.fields || []).forEach((f) => {
         const tr = ui.el('tr');
-        [f.label || f.name, f.name, f.dataType, f.isRequired ? 'Yes' : ''].forEach((v) => tr.appendChild(ui.el('td', null, {
-            textContent: v
-        })));
+        [f.label || f.name, f.name, f.dataType, f.isRequired ? 'Yes' : ''].forEach((v) =>
+            tr.appendChild(
+                ui.el('td', null, {
+                    textContent: v
+                })
+            )
+        );
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
@@ -158,24 +168,33 @@ function openImportRecords() {
     const submit = ui.button('Import', () => ui.busy(submit, () => importRecords()));
     submit.hidden = true;
 
-    body.appendChild(importFileRow(() => {
-        submit.hidden = false;
-    }));
-    body.appendChild(ui.el('p', 'sheet-note', {
-        textContent: 'Columns are matched to this table’s fields by name. Every row is checked before any row is stored, a file with a bad row imports nothing.',
-    }));
+    body.appendChild(
+        importFileRow(() => {
+            submit.hidden = false;
+        })
+    );
+    body.appendChild(
+        ui.el('p', 'sheet-note', {
+            textContent:
+                'Columns are matched to this table’s fields by name. Every row is checked before any row is stored, a file with a bad row imports nothing.'
+        })
+    );
 
     const existing = currentTables.find((t) => t.id === currentTablePublicId)?.recordCount || 0;
     if (existing > 0) {
-        body.appendChild(ui.el('p', 'sheet-note sheet-warning', {
-            textContent: `This table already holds ${existing} record(s). Import adds rows on top of them; it does not update or remove existing ones.`,
-        }));
+        body.appendChild(
+            ui.el('p', 'sheet-note sheet-warning', {
+                textContent: `This table already holds ${existing} record(s). Import adds rows on top of them; it does not update or remove existing ones.`
+            })
+        );
     }
 
     const actions = ui.el('div', 'form-actions');
-    actions.appendChild(ui.button('Cancel', () => ui.closeSheet(), {
-        variant: 'btn-outline'
-    }));
+    actions.appendChild(
+        ui.button('Cancel', () => ui.closeSheet(), {
+            variant: 'btn-outline'
+        })
+    );
     actions.appendChild(submit);
     ui.sheet('Import records', body, actions);
 }
@@ -186,7 +205,7 @@ async function importRecords() {
         const ok = await ui.confirm({
             title: 'Import into a table with data',
             message: `This table already holds ${existing} record(s). The imported rows will be added on top of them. Continue?`,
-            confirmLabel: 'Import',
+            confirmLabel: 'Import'
         });
         if (!ok) return;
     }

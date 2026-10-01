@@ -1,4 +1,4 @@
-(function() {
+(function () {
     const vendorLoads = (window.__baseportVendorLoads = window.__baseportVendorLoads || {});
     function loadVendorScript(src) {
         if (!vendorLoads[src]) {
@@ -24,12 +24,12 @@
     }
 
     function mountBaseportForm(container, formId, apiBase) {
-    container.classList.add('baserow-embed');
+        container.classList.add('baserow-embed');
 
-    if (!document.getElementById('baserow-embed-style')) {
-        const style = document.createElement('style');
-        style.id = 'baserow-embed-style';
-        style.innerText = `
+        if (!document.getElementById('baserow-embed-style')) {
+            const style = document.createElement('style');
+            style.id = 'baserow-embed-style';
+            style.innerText = `
             .baserow-embed {
                 --baserow-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
                 --baserow-fg: #1a1a1a;
@@ -206,738 +206,777 @@
             .baserow-embed .baserow-combobox-chip-remove { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; padding: 0; margin: 0; border: none; border-radius: 999px; background: transparent; color: var(--baserow-muted); font-size: 1rem; line-height: 1; cursor: pointer; }
             .baserow-embed .baserow-combobox-chip-remove:hover { background: rgb(0 0 0 / .08); color: var(--baserow-fg); }
         `;
-        document.head.appendChild(style);
-    }
-
-    function toastHost() {
-        let host = document.querySelector('.baserow-toasts');
-        if (!host) {
-            host = document.createElement('div');
-            host.className = 'baserow-toasts';
-            host.setAttribute('role', 'status');
-            host.setAttribute('aria-live', 'polite');
-            document.body.appendChild(host);
+            document.head.appendChild(style);
         }
-        return host;
-    }
 
-    function toast(message, kind) {
-        const text = Array.isArray(message) ? message.join(' ') : String(message || '');
-        if (!text.trim()) return;
-        const host = toastHost();
-        while (host.children.length >= 8) host.firstChild.remove();
-        const el = document.createElement('div');
-        el.className = 'baserow-toast baserow-toast-' + (kind || 'info');
-        el.textContent = text;
-        el.title = 'Click to copy';
-        el.addEventListener('click', () => copyToast(el, text));
-        host.appendChild(el);
-        setTimeout(() => el.remove(), kind === 'error' ? 8000 : 4500);
-    }
-
-    function copyToast(el, text) {
-        const flash = () => {
-            const original = el.textContent;
-            el.textContent = 'Copied to clipboard';
-            setTimeout(() => (el.textContent = original), 1200);
-        };
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(text).then(flash).catch(() => legacyCopy(text, flash));
-        } else {
-            legacyCopy(text, flash);
+        function toastHost() {
+            let host = document.querySelector('.baserow-toasts');
+            if (!host) {
+                host = document.createElement('div');
+                host.className = 'baserow-toasts';
+                host.setAttribute('role', 'status');
+                host.setAttribute('aria-live', 'polite');
+                document.body.appendChild(host);
+            }
+            return host;
         }
-    }
 
-    function legacyCopy(text, done) {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.setAttribute('readonly', '');
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        try {
-            document.execCommand('copy');
-        } catch (e) {}
-        ta.remove();
-        done();
-    }
+        function toast(message, kind) {
+            const text = Array.isArray(message) ? message.join(' ') : String(message || '');
+            if (!text.trim()) return;
+            const host = toastHost();
+            while (host.children.length >= 8) host.firstChild.remove();
+            const el = document.createElement('div');
+            el.className = 'baserow-toast baserow-toast-' + (kind || 'info');
+            el.textContent = text;
+            el.title = 'Click to copy';
+            el.addEventListener('click', () => copyToast(el, text));
+            host.appendChild(el);
+            setTimeout(() => el.remove(), kind === 'error' ? 8000 : 4500);
+        }
 
-    let formEl = null;
-    let tableSchema = null;
-    let formIsReadOnly = false;
-    let formCurrency = 'EUR';
-    let readOnlyData = null;
-    let pendingChildTables = [];
-
-    const TEXT_LENGTH_TYPES = new Set(['text', 'longtext', 'richtext', 'slug', 'email', 'url', 'password']);
-
-    fetch(`${apiBase}/api/forms/${formId}/schema`)
-        .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
-        .then((data) => (usesPreact(data.form.layoutJson) ? ensurePreactHtm(apiBase) : Promise.resolve()).then(() => data))
-        .then((data) => {
-            tableSchema = data.table;
-            formIsReadOnly = !!data.form.isReadOnly;
-            formCurrency = data.currency || 'EUR';
-            if (data.form.kind === 'list') {
-                renderList(data.form, data.table, container);
+        function copyToast(el, text) {
+            const flash = () => {
+                const original = el.textContent;
+                el.textContent = 'Copied to clipboard';
+                setTimeout(() => (el.textContent = original), 1200);
+            };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard
+                    .writeText(text)
+                    .then(flash)
+                    .catch(() => legacyCopy(text, flash));
             } else {
-                const actions = data.form.actions || ['submit'];
-                if (actions.includes('lookup')) renderLookup(data.form, data.table, container);
-                if (actions.includes('submit')) renderForm(data.form, data.table, container);
+                legacyCopy(text, flash);
             }
-            document.getElementById('baseport-ssr')?.remove();
-        })
-        .catch(() => {
-            container.innerHTML = '<p>This form is not available.</p>';
-        });
-
-    function parseConfig(json) {
-        try {
-            return JSON.parse(json || '{}') || {};
-        } catch (e) {
-            return {};
         }
-    }
 
-    function fieldLabel(f) {
-        return f.label || f.name;
-    }
+        function legacyCopy(text, done) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand('copy');
+            } catch (e) {}
+            ta.remove();
+            done();
+        }
 
-    const BANNED = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'SVG']);
+        let formEl = null;
+        let tableSchema = null;
+        let formIsReadOnly = false;
+        let formCurrency = 'EUR';
+        let readOnlyData = null;
+        let pendingChildTables = [];
 
-    function isUnsafeUrl(v) {
-        const s = String(v == null ? '' : v).replace(/[\s\u0000-\u001f]/g, '').toLowerCase();
-        return s.startsWith('javascript:') || s.startsWith('data:text/html');
-    }
+        const TEXT_LENGTH_TYPES = new Set(['text', 'longtext', 'richtext', 'slug', 'email', 'url', 'password']);
 
-    function setSafeHtml(target, html) {
-        const parsed = new DOMParser().parseFromString(String(html), 'text/html');
-        parsed.body.querySelectorAll('*').forEach((el) => {
-            if (BANNED.has(el.tagName)) {
-                el.remove();
-                return;
-            }
-            [...el.attributes].forEach((attr) => {
-                const name = attr.name.toLowerCase();
-                // on* is script by another name.
-                if (name.startsWith('on') || name === 'style' || isUnsafeUrl(attr.value)) {
-                    el.removeAttribute(attr.name);
+        fetch(`${apiBase}/api/forms/${formId}/schema`)
+            .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+            .then((data) =>
+                (usesPreact(data.form.layoutJson) ? ensurePreactHtm(apiBase) : Promise.resolve()).then(() => data)
+            )
+            .then((data) => {
+                tableSchema = data.table;
+                formIsReadOnly = !!data.form.isReadOnly;
+                formCurrency = data.currency || 'EUR';
+                if (data.form.kind === 'list') {
+                    renderList(data.form, data.table, container);
+                } else {
+                    const actions = data.form.actions || ['submit'];
+                    if (actions.includes('lookup')) renderLookup(data.form, data.table, container);
+                    if (actions.includes('submit')) renderForm(data.form, data.table, container);
                 }
+                document.getElementById('baseport-ssr')?.remove();
+            })
+            .catch(() => {
+                container.innerHTML = '<p>This form is not available.</p>';
             });
-        });
-        target.replaceChildren(...parsed.body.childNodes);
-    }
 
-    function safeEval(expression, data) {
-        try {
-            return new Function('data', 'return ' + expression)(data || {});
-        } catch (e) {
-            return null;
+        function parseConfig(json) {
+            try {
+                return JSON.parse(json || '{}') || {};
+            } catch (e) {
+                return {};
+            }
         }
-    }
 
-    // escapes strings at any depth
-    function escapeDeep(v) {
-        if (typeof v === 'string') return escapeHtml(v);
-        if (Array.isArray(v)) return v.map(escapeDeep);
-        if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, escapeDeep(x)]));
-        return v;
-    }
-
-    function renderCell(expression, data) {
-        const safe = escapeDeep(data || {});
-        try {
-            const out = new Function('data', 'return ' + expression)(safe);
-            return out === null || out === undefined ? '' : String(out);
-        } catch (e) {
-            return escapeHtml(displayValue(data ? data[Object.keys(data)[0]] : ''));
+        function fieldLabel(f) {
+            return f.label || f.name;
         }
-    }
 
-    function escapeHtml(s) {
-        return String(s === null || s === undefined ? '' : s)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
+        const BANNED = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'SVG']);
 
-    function displayValue(v) {
-        if (v === null || v === undefined || v === '') return '-';
-        if (Array.isArray(v)) return v.join(', ');
-        if (typeof v === 'object') return JSON.stringify(v);
-        return String(v);
-    }
+        function isUnsafeUrl(v) {
+            const s = String(v == null ? '' : v)
+                .replace(/[\s\u0000-\u001f]/g, '')
+                .toLowerCase();
+            return s.startsWith('javascript:') || s.startsWith('data:text/html');
+        }
 
-    function heading(text) {
-        const h = document.createElement('h3');
-        h.className = 'baserow-head';
-        h.innerText = text;
-        return h;
-    }
-
-    function description(text) {
-        const p = document.createElement('p');
-        p.className = 'baserow-desc';
-        p.innerText = text;
-        return p;
-    }
-
-    function emptyNote(text) {
-        const p = document.createElement('p');
-        p.className = 'baserow-empty';
-        p.innerText = text;
-        return p;
-    }
-
-    /* LOOKUP */
-
-    function renderLookup(form, table, parent) {
-        const cfg = parseConfig(form.configJson);
-        const both = (form.actions || []).includes('submit') && (form.actions || []).includes('lookup');
-        const wrap = document.createElement('div');
-        wrap.className = 'baserow-section';
-        if (form.title) wrap.appendChild(heading(both ? cfg.lookupTitle || 'Find an existing record' : form.title));
-        if (form.description && !both) wrap.appendChild(description(form.description));
-
-        const searchForm = document.createElement('form');
-        searchForm.className = 'baserow-toolbar';
-        const input = document.createElement('input');
-        input.className = 'baserow-search';
-        input.type = 'search';
-        input.required = true;
-        input.placeholder = (cfg.matchFields || []).length ?
-            'Enter your ' + cfg.matchFields.map((n) => {
-                const f = (table.fields || []).find((x) => x.name === n);
-                return f ? fieldLabel(f) : n;
-            }).join(' or ') :
-            'Enter your reference';
-        input.setAttribute('aria-label', input.placeholder);
-        const btn = document.createElement('button');
-        btn.type = 'submit';
-        btn.innerText = 'Look up';
-        searchForm.appendChild(input);
-        searchForm.appendChild(btn);
-
-        const result = document.createElement('div');
-        result.setAttribute('aria-live', 'polite');
-
-        function runLookup(term) {
-            input.value = term;
-            window.dispatchEvent(new CustomEvent('baseport:lookup', {
-                detail: {
-                    formId,
-                    term
+        function setSafeHtml(target, html) {
+            const parsed = new DOMParser().parseFromString(String(html), 'text/html');
+            parsed.body.querySelectorAll('*').forEach((el) => {
+                if (BANNED.has(el.tagName)) {
+                    el.remove();
+                    return;
                 }
-            }));
-            btn.setAttribute('aria-busy', 'true');
-            fetch(`${apiBase}/api/forms/${formId}/form?mode=lookup&q=${encodeURIComponent(term)}`)
-                .then((r) => r.json().then((body) => ({
-                    ok: r.ok,
-                    body
-                })))
-                .then(({
-                    ok,
-                    body
-                }) => {
-                    btn.removeAttribute('aria-busy');
-                    if (!ok || !body.found) {
-                        result.innerHTML = '';
-                        toast(body.message || (body.errors || []).join(' ') || 'No matching record was found.', 'error');
-                        return;
+                [...el.attributes].forEach((attr) => {
+                    const name = attr.name.toLowerCase();
+                    // on* is script by another name.
+                    if (name.startsWith('on') || name === 'style' || isUnsafeUrl(attr.value)) {
+                        el.removeAttribute(attr.name);
                     }
-                    result.innerHTML = '';
-                    result.appendChild(renderRecordTable(table.fields, body.data));
-                    if (!body.proxy && body.id) renderChildRows(table, body.id, result);
-                })
-                .catch(() => {
-                    btn.removeAttribute('aria-busy');
-                    toast('Lookup failed. Please try again.', 'error');
                 });
-        }
-
-        searchForm.onsubmit = (ev) => {
-            ev.preventDefault();
-            const term = input.value.trim();
-            if (term) runLookup(term);
-        };
-
-        wrap.appendChild(searchForm);
-        wrap.appendChild(result);
-        parent.appendChild(wrap);
-
-        const qs = (new URLSearchParams(window.location.search).get('q') || '').trim();
-        if (qs) runLookup(qs);
-    }
-
-    function cellText(f, raw) {
-        if (raw === null || raw === undefined || raw === '') return displayValue(raw);
-        if (f.dataType === 'currency') return fmtCurrency(raw, f.currency);
-        if (f.dataType === 'boolean') return raw ? 'Yes' : 'No';
-        return displayValue(raw);
-    }
-
-    function renderChildRows(table, headerId, parent) {
-        ((table && table.childTables) || []).forEach((child) => {
-            if (!child.columns.length) return;
-            fetch(`${apiBase}/api/forms/${formId}/child/${encodeURIComponent(child.id)}?refId=${encodeURIComponent(headerId)}`)
-                .then((r) => (r.ok ? r.json() : Promise.reject(r)))
-                .then((body) => parent.appendChild(childRowsTable(child, body.rows || [])))
-                .catch(() => toast(`Could not load ${child.name}.`, 'error'));
-        });
-    }
-
-    function childRowsTable(child, rows) {
-        const section = document.createElement('div');
-        section.className = 'baserow-child-rows';
-        const caption = document.createElement('h4');
-        caption.className = 'baserow-subhead';
-        caption.innerText = child.name;
-        section.appendChild(caption);
-        if (!rows.length) {
-            section.appendChild(emptyNote('No rows yet.'));
-            return section;
-        }
-        const wrap = document.createElement('div');
-        wrap.className = 'baserow-table-wrap';
-        const table = document.createElement('table');
-        table.className = 'baserow-table';
-        const head = document.createElement('tr');
-        child.columns.forEach((c) => {
-            const th = document.createElement('th');
-            th.scope = 'col';
-            th.innerText = c.label || c.name;
-            head.appendChild(th);
-        });
-        table.appendChild(document.createElement('thead')).appendChild(head);
-        const tbody = document.createElement('tbody');
-        rows.forEach((row) => {
-            const tr = document.createElement('tr');
-            child.columns.forEach((c) => {
-                const td = document.createElement('td');
-                td.innerText = cellText(c, row[c.name]);
-                tr.appendChild(td);
             });
-            tbody.appendChild(tr);
-        });
-        table.appendChild(tbody);
-        wrap.appendChild(table);
-        section.appendChild(wrap);
-        return section;
-    }
-
-    function renderRecordTable(fields, data) {
-        const table = document.createElement('table');
-        table.className = 'baserow-record';
-        const tbody = document.createElement('tbody');
-        fields.forEach((f) => {
-            const tr = document.createElement('tr');
-            const th = document.createElement('th');
-            th.scope = 'row';
-            th.innerText = fieldLabel(f);
-            const td = document.createElement('td');
-            td.innerText = cellText(f, data ? data[f.name] : null);
-            tr.appendChild(th);
-            tr.appendChild(td);
-            tbody.appendChild(tr);
-        });
-        table.appendChild(tbody);
-        return table;
-    }
-
-    /* LIST */
-
-    function renderList(form, table, parent) {
-        const cfg = parseConfig(form.configJson);
-        const wrap = document.createElement('div');
-        if (form.title) wrap.appendChild(heading(form.title));
-        if (form.description) wrap.appendChild(description(form.description));
-
-        const toolbar = document.createElement('div');
-        toolbar.className = 'baserow-toolbar';
-        const search = document.createElement('input');
-        search.className = 'baserow-search';
-        search.type = 'search';
-        search.placeholder = 'Search…';
-        search.setAttribute('aria-label', 'Search the list');
-        toolbar.appendChild(search);
-
-        const body = document.createElement('div');
-        body.setAttribute('aria-live', 'polite');
-        const pager = document.createElement('div');
-        pager.className = 'baserow-pager';
-
-        let page = 1;
-        let timer = null;
-        search.addEventListener('input', () => {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                page = 1;
-                load();
-            }, 250);
-        });
-
-        if (cfg.followLookup) {
-            window.addEventListener('baseport:lookup', (e) => {
-                if (e.detail.formId !== cfg.followLookup) return;
-                page = 1;
-                search.value = e.detail.term;
-                load();
-            });
+            target.replaceChildren(...parsed.body.childNodes);
         }
 
-        function load() {
-            const q = search.value.trim();
-            if (cfg.requireQuery && !q) {
-                body.innerHTML = '';
-                pager.innerHTML = '';
-                body.appendChild(emptyNote('Enter a value to search.'));
-                return;
+        function safeEval(expression, data) {
+            try {
+                return new Function('data', 'return ' + expression)(data || {});
+            } catch (e) {
+                return null;
             }
-            const url = `${apiBase}/api/forms/${formId}/list?page=${page}` + (q ? `&q=${encodeURIComponent(q)}` : '');
-            fetch(url)
-                .then((r) => r.json())
-                .then((data) => {
-                    body.innerHTML = '';
-                    pager.innerHTML = '';
-                    if (!data.rows || !data.rows.length) {
-                        body.appendChild(emptyNote(q ? 'Nothing matches that search.' : 'Nothing to show yet.'));
-                        return;
-                    }
-                    body.appendChild(buildListTable(data));
-                    buildPager(data);
-                })
-                .catch(() => toast('Could not load the list.', 'error'));
         }
 
-        function buildListTable(data) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'baserow-table-wrap';
-            const t = document.createElement('table');
-            t.className = 'baserow-table';
-            const actions = data.actions || [];
-            const thead = document.createElement('thead');
-            const hr = document.createElement('tr');
-            data.columns.forEach((c) => {
+        // escapes strings at any depth
+        function escapeDeep(v) {
+            if (typeof v === 'string') return escapeHtml(v);
+            if (Array.isArray(v)) return v.map(escapeDeep);
+            if (v && typeof v === 'object')
+                return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, escapeDeep(x)]));
+            return v;
+        }
+
+        function renderCell(expression, data) {
+            const safe = escapeDeep(data || {});
+            try {
+                const out = new Function('data', 'return ' + expression)(safe);
+                return out === null || out === undefined ? '' : String(out);
+            } catch (e) {
+                return escapeHtml(displayValue(data ? data[Object.keys(data)[0]] : ''));
+            }
+        }
+
+        function escapeHtml(s) {
+            return String(s === null || s === undefined ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function displayValue(v) {
+            if (v === null || v === undefined || v === '') return '-';
+            if (Array.isArray(v)) return v.join(', ');
+            if (typeof v === 'object') return JSON.stringify(v);
+            return String(v);
+        }
+
+        function heading(text) {
+            const h = document.createElement('h3');
+            h.className = 'baserow-head';
+            h.innerText = text;
+            return h;
+        }
+
+        function description(text) {
+            const p = document.createElement('p');
+            p.className = 'baserow-desc';
+            p.innerText = text;
+            return p;
+        }
+
+        function emptyNote(text) {
+            const p = document.createElement('p');
+            p.className = 'baserow-empty';
+            p.innerText = text;
+            return p;
+        }
+
+        /* LOOKUP */
+
+        function renderLookup(form, table, parent) {
+            const cfg = parseConfig(form.configJson);
+            const both = (form.actions || []).includes('submit') && (form.actions || []).includes('lookup');
+            const wrap = document.createElement('div');
+            wrap.className = 'baserow-section';
+            if (form.title) wrap.appendChild(heading(both ? cfg.lookupTitle || 'Find an existing record' : form.title));
+            if (form.description && !both) wrap.appendChild(description(form.description));
+
+            const searchForm = document.createElement('form');
+            searchForm.className = 'baserow-toolbar';
+            const input = document.createElement('input');
+            input.className = 'baserow-search';
+            input.type = 'search';
+            input.required = true;
+            input.placeholder = (cfg.matchFields || []).length
+                ? 'Enter your ' +
+                  cfg.matchFields
+                      .map((n) => {
+                          const f = (table.fields || []).find((x) => x.name === n);
+                          return f ? fieldLabel(f) : n;
+                      })
+                      .join(' or ')
+                : 'Enter your reference';
+            input.setAttribute('aria-label', input.placeholder);
+            const btn = document.createElement('button');
+            btn.type = 'submit';
+            btn.innerText = 'Look up';
+            searchForm.appendChild(input);
+            searchForm.appendChild(btn);
+
+            const result = document.createElement('div');
+            result.setAttribute('aria-live', 'polite');
+
+            function runLookup(term) {
+                input.value = term;
+                window.dispatchEvent(
+                    new CustomEvent('baseport:lookup', {
+                        detail: {
+                            formId,
+                            term
+                        }
+                    })
+                );
+                btn.setAttribute('aria-busy', 'true');
+                fetch(`${apiBase}/api/forms/${formId}/form?mode=lookup&q=${encodeURIComponent(term)}`)
+                    .then((r) =>
+                        r.json().then((body) => ({
+                            ok: r.ok,
+                            body
+                        }))
+                    )
+                    .then(({ ok, body }) => {
+                        btn.removeAttribute('aria-busy');
+                        if (!ok || !body.found) {
+                            result.innerHTML = '';
+                            toast(
+                                body.message || (body.errors || []).join(' ') || 'No matching record was found.',
+                                'error'
+                            );
+                            return;
+                        }
+                        result.innerHTML = '';
+                        result.appendChild(renderRecordTable(table.fields, body.data));
+                        if (!body.proxy && body.id) renderChildRows(table, body.id, result);
+                    })
+                    .catch(() => {
+                        btn.removeAttribute('aria-busy');
+                        toast('Lookup failed. Please try again.', 'error');
+                    });
+            }
+
+            searchForm.onsubmit = (ev) => {
+                ev.preventDefault();
+                const term = input.value.trim();
+                if (term) runLookup(term);
+            };
+
+            wrap.appendChild(searchForm);
+            wrap.appendChild(result);
+            parent.appendChild(wrap);
+
+            const qs = (new URLSearchParams(window.location.search).get('q') || '').trim();
+            if (qs) runLookup(qs);
+        }
+
+        function cellText(f, raw) {
+            if (raw === null || raw === undefined || raw === '') return displayValue(raw);
+            if (f.dataType === 'currency') return fmtCurrency(raw, f.currency);
+            if (f.dataType === 'boolean') return raw ? 'Yes' : 'No';
+            return displayValue(raw);
+        }
+
+        function renderChildRows(table, headerId, parent) {
+            ((table && table.childTables) || []).forEach((child) => {
+                if (!child.columns.length) return;
+                fetch(
+                    `${apiBase}/api/forms/${formId}/child/${encodeURIComponent(child.id)}?refId=${encodeURIComponent(headerId)}`
+                )
+                    .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+                    .then((body) => parent.appendChild(childRowsTable(child, body.rows || [])))
+                    .catch(() => toast(`Could not load ${child.name}.`, 'error'));
+            });
+        }
+
+        function childRowsTable(child, rows) {
+            const section = document.createElement('div');
+            section.className = 'baserow-child-rows';
+            const caption = document.createElement('h4');
+            caption.className = 'baserow-subhead';
+            caption.innerText = child.name;
+            section.appendChild(caption);
+            if (!rows.length) {
+                section.appendChild(emptyNote('No rows yet.'));
+                return section;
+            }
+            const wrap = document.createElement('div');
+            wrap.className = 'baserow-table-wrap';
+            const table = document.createElement('table');
+            table.className = 'baserow-table';
+            const head = document.createElement('tr');
+            child.columns.forEach((c) => {
                 const th = document.createElement('th');
                 th.scope = 'col';
-                th.innerText = c.label;
-                hr.appendChild(th);
+                th.innerText = c.label || c.name;
+                head.appendChild(th);
             });
-            if (actions.length) hr.appendChild(document.createElement('th'));
-            thead.appendChild(hr);
+            table.appendChild(document.createElement('thead')).appendChild(head);
             const tbody = document.createElement('tbody');
-            data.rows.forEach((row) => {
+            rows.forEach((row) => {
                 const tr = document.createElement('tr');
-                data.columns.forEach((c) => {
+                child.columns.forEach((c) => {
                     const td = document.createElement('td');
-                    const raw = row.data ? row.data[c.name] : null;
-                    if (c.render) setSafeHtml(td, renderCell(c.render, row.data));
-                    else if (c.dataType === 'currency' && raw !== null && raw !== undefined && raw !== '') td.innerText = fmtCurrency(raw, c.currency);
-                    else td.innerText = displayValue(raw);
+                    td.innerText = cellText(c, row[c.name]);
                     tr.appendChild(td);
                 });
-                if (actions.length) {
-                    const td = document.createElement('td');
-                    actions.forEach((a) => {
-                        const b = document.createElement('button');
-                        b.type = 'button';
-                        b.className = 'baserow-btn';
-                        b.innerText = a.label;
-                        b.onclick = () => {
-                            const url = safeEval(a.hrefExpr, row.data);
-                            if (typeof url === 'string' && url && !isUnsafeUrl(url)) window.location.href = url;
-                        };
-                        td.appendChild(b);
-                    });
-                    tr.appendChild(td);
-                }
                 tbody.appendChild(tr);
             });
-            t.appendChild(thead);
-            t.appendChild(tbody);
-            wrapper.appendChild(t);
-            return wrapper;
+            table.appendChild(tbody);
+            wrap.appendChild(table);
+            section.appendChild(wrap);
+            return section;
         }
 
-        function buildPager(data) {
-            if (data.paged === false) return;
-            const prev = document.createElement('button');
-            prev.type = 'button';
-            prev.className = 'baserow-btn';
-            prev.innerText = 'Previous';
-            prev.disabled = data.page <= 1;
-            prev.onclick = () => {
-                page = data.page - 1;
-                load();
-            };
-
-            const next = document.createElement('button');
-            next.type = 'button';
-            next.className = 'baserow-btn';
-            next.innerText = 'Next';
-            next.disabled = data.page >= data.totalPages;
-            next.onclick = () => {
-                page = data.page + 1;
-                load();
-            };
-
-            const status = document.createElement('span');
-            status.className = 'baserow-pager-status';
-            status.innerText = `Page ${data.page} of ${data.totalPages} · ${data.total} records`;
-
-            pager.appendChild(status);
-            pager.appendChild(prev);
-            pager.appendChild(next);
+        function renderRecordTable(fields, data) {
+            const table = document.createElement('table');
+            table.className = 'baserow-record';
+            const tbody = document.createElement('tbody');
+            fields.forEach((f) => {
+                const tr = document.createElement('tr');
+                const th = document.createElement('th');
+                th.scope = 'row';
+                th.innerText = fieldLabel(f);
+                const td = document.createElement('td');
+                td.innerText = cellText(f, data ? data[f.name] : null);
+                tr.appendChild(th);
+                tr.appendChild(td);
+                tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+            return table;
         }
 
-        wrap.appendChild(toolbar);
-        wrap.appendChild(body);
-        wrap.appendChild(pager);
-        parent.appendChild(wrap);
+        /* LIST */
 
-        const qs = (new URLSearchParams(window.location.search).get('q') || '').trim();
-        if (qs) search.value = qs;
-        load();
-    }
+        function renderList(form, table, parent) {
+            const cfg = parseConfig(form.configJson);
+            const wrap = document.createElement('div');
+            if (form.title) wrap.appendChild(heading(form.title));
+            if (form.description) wrap.appendChild(description(form.description));
 
-    function parseLayout(layoutJson, table) {
-        try {
-            const p = JSON.parse(layoutJson || '[]');
-            if (p && Array.isArray(p.rows)) return p;
-            if (Array.isArray(p)) {
-                const rows = p.map((r) => ({
-                    t: 'row',
-                    cols: [{
-                        t: 'col',
-                        w: 12,
-                        items: r.filter((x) => x !== 'spacer')
-                    }]
-                }));
-                return {
-                    rows
-                };
-            }
-        } catch (e) {}
-        return {
-            rows: [{
-                t: 'row',
-                cols: [{
-                    t: 'col',
-                    w: 12,
-                    items: table.fields.map((f) => f.name)
-                }]
-            }]
-        };
-    }
+            const toolbar = document.createElement('div');
+            toolbar.className = 'baserow-toolbar';
+            const search = document.createElement('input');
+            search.className = 'baserow-search';
+            search.type = 'search';
+            search.placeholder = 'Search…';
+            search.setAttribute('aria-label', 'Search the list');
+            toolbar.appendChild(search);
 
-    function renderForm(formConfig, table, parent) {
-        const cfg = parseConfig(formConfig.configJson);
-        const both = (formConfig.actions || []).includes('submit') && (formConfig.actions || []).includes('lookup');
-        formEl = document.createElement('form');
-        formEl.className = 'baserow-section';
+            const body = document.createElement('div');
+            body.setAttribute('aria-live', 'polite');
+            const pager = document.createElement('div');
+            pager.className = 'baserow-pager';
 
-        const shownTitle = both ?
-            cfg.submitTitle || 'Or create a new one' :
-            formConfig.title;
-        if (shownTitle) {
-            const title = document.createElement('h3');
-            title.className = 'baserow-head';
-            title.innerText = shownTitle;
-            formEl.appendChild(title);
-        }
+            let page = 1;
+            let timer = null;
+            search.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    page = 1;
+                    load();
+                }, 250);
+            });
 
-        pendingChildTables = [];
-        const layout = parseLayout(formConfig.layoutJson, table);
-        let hasSubmitButton = false;
-
-        layout.rows.forEach((row) => {
-            const node = renderLayoutRow(row, table);
-            if (!node) return;
-            if (row.t === 'button' && row.action === 'submit') hasSubmitButton = true;
-            if (row.t === 'button_bar' && (row.buttons || []).some((b) => b.action === 'submit')) hasSubmitButton = true;
-            formEl.appendChild(node);
-        });
-
-        if (!hasSubmitButton) {
-            const saveBtn = document.createElement('button');
-            saveBtn.type = 'submit';
-            saveBtn.innerText = 'Submit Data';
-            formEl.appendChild(saveBtn);
-        }
-
-        formEl.addEventListener('input', (e) => {
-            if (e.target && e.target.classList) e.target.classList.remove('baserow-invalid');
-            triggerReactiveUpdate();
-        });
-        triggerReactiveUpdate();
-
-        formEl.onsubmit = (e) => {
-            e.preventDefault();
-            const result = validate();
-            if (result.errors.length) {
-                markInvalid(result.invalid);
-                toast(result.errors, 'error');
-                return;
-            }
-            const submitBtn = formEl.querySelector('button[type="submit"]');
-            if (submitBtn) submitBtn.setAttribute('aria-busy', 'true');
-            const data = extractFormData();
-
-            const hasFile = Object.values(data).some((v) => typeof File !== 'undefined' && v instanceof File);
-            const fetchOptions = hasFile ? {
-                method: 'POST',
-                body: toFormData(data)
-            } : {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            };
-
-            fetch(`${apiBase}/api/forms/${formId}/form`, fetchOptions)
-                .then((r) => r.json().then((res) => ({
-                    ok: r.ok,
-                    res
-                })))
-                .then(({
-                    ok,
-                    res
-                }) => {
-                    if (submitBtn) submitBtn.removeAttribute('aria-busy');
-                    if (ok) {
-                        const afterChildRows = pendingChildTables.length ? flushChildTables(res.recordId) : Promise.resolve([]);
-                        afterChildRows.then((lineErrors) => {
-                            if (cfg.onSuccessRedirect) {
-                                const url = safeEval(cfg.onSuccessRedirect, data);
-                                if (typeof url === 'string' && url && !isUnsafeUrl(url)) {
-                                    window.location.href = url;
-                                    return;
-                                }
-                            }
-                            if (lineErrors.length) toast(['Saved, but some rows failed:', ...lineErrors], 'error');
-                            else toast('Thanks, your submission was received.', 'success');
-                            formEl.reset();
-                            pendingChildTables.forEach((entry) => entry.reset());
-                            triggerReactiveUpdate();
-                        });
-                    } else {
-                        markInvalid(res.invalid || []);
-                        toast(res && res.errors && res.errors.length ? res.errors : ['Submit failed. Please try again.'], 'error');
-                    }
-                })
-                .catch(() => {
-                    if (submitBtn) submitBtn.removeAttribute('aria-busy');
-                    toast('Submit failed. Please try again.', 'error');
+            if (cfg.followLookup) {
+                window.addEventListener('baseport:lookup', (e) => {
+                    if (e.detail.formId !== cfg.followLookup) return;
+                    page = 1;
+                    search.value = e.detail.term;
+                    load();
                 });
-        };
+            }
 
-        parent.appendChild(formEl);
-    }
+            function load() {
+                const q = search.value.trim();
+                if (cfg.requireQuery && !q) {
+                    body.innerHTML = '';
+                    pager.innerHTML = '';
+                    body.appendChild(emptyNote('Enter a value to search.'));
+                    return;
+                }
+                const url =
+                    `${apiBase}/api/forms/${formId}/list?page=${page}` + (q ? `&q=${encodeURIComponent(q)}` : '');
+                fetch(url)
+                    .then((r) => r.json())
+                    .then((data) => {
+                        body.innerHTML = '';
+                        pager.innerHTML = '';
+                        if (!data.rows || !data.rows.length) {
+                            body.appendChild(emptyNote(q ? 'Nothing matches that search.' : 'Nothing to show yet.'));
+                            return;
+                        }
+                        body.appendChild(buildListTable(data));
+                        buildPager(data);
+                    })
+                    .catch(() => toast('Could not load the list.', 'error'));
+            }
 
-    function buildActionButton(row) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'baserow-btn-custom';
-        btn.innerText = row.label || 'Button';
-        btn.onclick = () => {
-            if (row.action === 'submit') formEl.requestSubmit();
-            else if (row.action === 'reset') {
-                formEl.reset();
+            function buildListTable(data) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'baserow-table-wrap';
+                const t = document.createElement('table');
+                t.className = 'baserow-table';
+                const actions = data.actions || [];
+                const thead = document.createElement('thead');
+                const hr = document.createElement('tr');
+                data.columns.forEach((c) => {
+                    const th = document.createElement('th');
+                    th.scope = 'col';
+                    th.innerText = c.label;
+                    hr.appendChild(th);
+                });
+                if (actions.length) hr.appendChild(document.createElement('th'));
+                thead.appendChild(hr);
+                const tbody = document.createElement('tbody');
+                data.rows.forEach((row) => {
+                    const tr = document.createElement('tr');
+                    data.columns.forEach((c) => {
+                        const td = document.createElement('td');
+                        const raw = row.data ? row.data[c.name] : null;
+                        if (c.render) setSafeHtml(td, renderCell(c.render, row.data));
+                        else if (c.dataType === 'currency' && raw !== null && raw !== undefined && raw !== '')
+                            td.innerText = fmtCurrency(raw, c.currency);
+                        else td.innerText = displayValue(raw);
+                        tr.appendChild(td);
+                    });
+                    if (actions.length) {
+                        const td = document.createElement('td');
+                        actions.forEach((a) => {
+                            const b = document.createElement('button');
+                            b.type = 'button';
+                            b.className = 'baserow-btn';
+                            b.innerText = a.label;
+                            b.onclick = () => {
+                                const url = safeEval(a.hrefExpr, row.data);
+                                if (typeof url === 'string' && url && !isUnsafeUrl(url)) window.location.href = url;
+                            };
+                            td.appendChild(b);
+                        });
+                        tr.appendChild(td);
+                    }
+                    tbody.appendChild(tr);
+                });
+                t.appendChild(thead);
+                t.appendChild(tbody);
+                wrapper.appendChild(t);
+                return wrapper;
+            }
+
+            function buildPager(data) {
+                if (data.paged === false) return;
+                const prev = document.createElement('button');
+                prev.type = 'button';
+                prev.className = 'baserow-btn';
+                prev.innerText = 'Previous';
+                prev.disabled = data.page <= 1;
+                prev.onclick = () => {
+                    page = data.page - 1;
+                    load();
+                };
+
+                const next = document.createElement('button');
+                next.type = 'button';
+                next.className = 'baserow-btn';
+                next.innerText = 'Next';
+                next.disabled = data.page >= data.totalPages;
+                next.onclick = () => {
+                    page = data.page + 1;
+                    load();
+                };
+
+                const status = document.createElement('span');
+                status.className = 'baserow-pager-status';
+                status.innerText = `Page ${data.page} of ${data.totalPages} · ${data.total} records`;
+
+                pager.appendChild(status);
+                pager.appendChild(prev);
+                pager.appendChild(next);
+            }
+
+            wrap.appendChild(toolbar);
+            wrap.appendChild(body);
+            wrap.appendChild(pager);
+            parent.appendChild(wrap);
+
+            const qs = (new URLSearchParams(window.location.search).get('q') || '').trim();
+            if (qs) search.value = qs;
+            load();
+        }
+
+        function parseLayout(layoutJson, table) {
+            try {
+                const p = JSON.parse(layoutJson || '[]');
+                if (p && Array.isArray(p.rows)) return p;
+                if (Array.isArray(p)) {
+                    const rows = p.map((r) => ({
+                        t: 'row',
+                        cols: [
+                            {
+                                t: 'col',
+                                w: 12,
+                                items: r.filter((x) => x !== 'spacer')
+                            }
+                        ]
+                    }));
+                    return {
+                        rows
+                    };
+                }
+            } catch (e) {}
+            return {
+                rows: [
+                    {
+                        t: 'row',
+                        cols: [
+                            {
+                                t: 'col',
+                                w: 12,
+                                items: table.fields.map((f) => f.name)
+                            }
+                        ]
+                    }
+                ]
+            };
+        }
+
+        function renderForm(formConfig, table, parent) {
+            const cfg = parseConfig(formConfig.configJson);
+            const both = (formConfig.actions || []).includes('submit') && (formConfig.actions || []).includes('lookup');
+            formEl = document.createElement('form');
+            formEl.className = 'baserow-section';
+
+            const shownTitle = both ? cfg.submitTitle || 'Or create a new one' : formConfig.title;
+            if (shownTitle) {
+                const title = document.createElement('h3');
+                title.className = 'baserow-head';
+                title.innerText = shownTitle;
+                formEl.appendChild(title);
+            }
+
+            pendingChildTables = [];
+            const layout = parseLayout(formConfig.layoutJson, table);
+            let hasSubmitButton = false;
+
+            layout.rows.forEach((row) => {
+                const node = renderLayoutRow(row, table);
+                if (!node) return;
+                if (row.t === 'button' && row.action === 'submit') hasSubmitButton = true;
+                if (row.t === 'button_bar' && (row.buttons || []).some((b) => b.action === 'submit'))
+                    hasSubmitButton = true;
+                formEl.appendChild(node);
+            });
+
+            if (!hasSubmitButton) {
+                const saveBtn = document.createElement('button');
+                saveBtn.type = 'submit';
+                saveBtn.innerText = 'Submit Data';
+                formEl.appendChild(saveBtn);
+            }
+
+            formEl.addEventListener('input', (e) => {
+                if (e.target && e.target.classList) e.target.classList.remove('baserow-invalid');
                 triggerReactiveUpdate();
-            } else if (row.action === 'cancel') {
-                const url = (row.href || '').trim();
-                if (!url) window.history.back();
-                else if (!isUnsafeUrl(url)) window.location.href = url;
-            } else if (row.action === 'validate') {
+            });
+            triggerReactiveUpdate();
+
+            formEl.onsubmit = (e) => {
+                e.preventDefault();
                 const result = validate();
                 if (result.errors.length) {
                     markInvalid(result.invalid);
                     toast(result.errors, 'error');
-                } else {
-                    toast('Looks good.', 'success');
+                    return;
                 }
-            } else if (row.action === 'link') {
-                const url = safeEval(row.hrefExpr, extractFormData());
-                if (typeof url === 'string' && url && !isUnsafeUrl(url)) window.location.href = url;
-            } else if (row.action === 'run') {
-                const result = safeEval(row.expr, extractFormData());
-                if (result !== '' && result !== null && result !== undefined) toast(String(result), 'info');
-            }
-        };
-        return btn;
-    }
+                const submitBtn = formEl.querySelector('button[type="submit"]');
+                if (submitBtn) submitBtn.setAttribute('aria-busy', 'true');
+                const data = extractFormData();
 
-    function arrayColumns(field) {
-        try {
-            const o = JSON.parse(field.optionsJson || '{}');
-            return Array.isArray(o.fields) && o.fields.length ? o.fields : null;
-        } catch (e) {
-            return null;
-        }
-    }
+                const hasFile = Object.values(data).some((v) => typeof File !== 'undefined' && v instanceof File);
+                const fetchOptions = hasFile
+                    ? {
+                          method: 'POST',
+                          body: toFormData(data)
+                      }
+                    : {
+                          method: 'POST',
+                          headers: {
+                              'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify(data)
+                      };
 
-    function lineItemInputType(dataType) {
-        if (dataType === 'number' || dataType === 'currency') return 'number';
-        if (dataType === 'boolean') return 'checkbox';
-        if (dataType === 'date') return 'date';
-        return 'text'; // also covers 'select': the server accepts any string for a line-item cell of that type
-    }
-
-    function renderLineItems(rowCfg, table) {
-        const field = table.fields.find((f) => f.name === rowCfg.field);
-        const columns = field ? arrayColumns(field) : null;
-        if (!field || !columns) return null;
-
-        const html = htm.bind(preact.h);
-
-        const wrap = document.createElement('div');
-        const caption = document.createElement('label');
-        caption.innerText = field.label || field.name;
-        wrap.appendChild(caption);
-
-        const mount = document.createElement('div');
-        wrap.appendChild(mount);
-
-        const hidden = document.createElement('input');
-        hidden.type = 'hidden';
-        hidden.dataset.name = field.name;
-        hidden.dataset.kind = 'json';
-        wrap.appendChild(hidden);
-
-        let rows = [];
-
-        function sync() {
-            hidden.value = JSON.stringify(rows);
-            hidden.dispatchEvent(new Event('input', {
-                bubbles: true
-            }));
-        }
-
-        function setRows(next) {
-            rows = next;
-            sync();
-            paint();
-        }
-
-        function cellInput(row, c) {
-            const type = lineItemInputType(c.dataType);
-            const onInput = (e) => {
-                row[c.name] = type === 'checkbox' ? e.target.checked
-                    : type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value))
-                    : e.target.value;
-                sync();
+                fetch(`${apiBase}/api/forms/${formId}/form`, fetchOptions)
+                    .then((r) =>
+                        r.json().then((res) => ({
+                            ok: r.ok,
+                            res
+                        }))
+                    )
+                    .then(({ ok, res }) => {
+                        if (submitBtn) submitBtn.removeAttribute('aria-busy');
+                        if (ok) {
+                            const afterChildRows = pendingChildTables.length
+                                ? flushChildTables(res.recordId)
+                                : Promise.resolve([]);
+                            afterChildRows.then((lineErrors) => {
+                                if (cfg.onSuccessRedirect) {
+                                    const url = safeEval(cfg.onSuccessRedirect, data);
+                                    if (typeof url === 'string' && url && !isUnsafeUrl(url)) {
+                                        window.location.href = url;
+                                        return;
+                                    }
+                                }
+                                if (lineErrors.length) toast(['Saved, but some rows failed:', ...lineErrors], 'error');
+                                else toast('Thanks, your submission was received.', 'success');
+                                formEl.reset();
+                                pendingChildTables.forEach((entry) => entry.reset());
+                                triggerReactiveUpdate();
+                            });
+                        } else {
+                            markInvalid(res.invalid || []);
+                            toast(
+                                res && res.errors && res.errors.length
+                                    ? res.errors
+                                    : ['Submit failed. Please try again.'],
+                                'error'
+                            );
+                        }
+                    })
+                    .catch(() => {
+                        if (submitBtn) submitBtn.removeAttribute('aria-busy');
+                        toast('Submit failed. Please try again.', 'error');
+                    });
             };
-            return type === 'checkbox'
-                ? html`<input type="checkbox" checked=${!!row[c.name]} onInput=${onInput} />`
-                : html`<input type=${type} value=${row[c.name] == null ? '' : row[c.name]} onInput=${onInput} />`;
+
+            parent.appendChild(formEl);
         }
 
-        function Table() {
-            return html`
+        function buildActionButton(row) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'baserow-btn-custom';
+            btn.innerText = row.label || 'Button';
+            btn.onclick = () => {
+                if (row.action === 'submit') formEl.requestSubmit();
+                else if (row.action === 'reset') {
+                    formEl.reset();
+                    triggerReactiveUpdate();
+                } else if (row.action === 'cancel') {
+                    const url = (row.href || '').trim();
+                    if (!url) window.history.back();
+                    else if (!isUnsafeUrl(url)) window.location.href = url;
+                } else if (row.action === 'validate') {
+                    const result = validate();
+                    if (result.errors.length) {
+                        markInvalid(result.invalid);
+                        toast(result.errors, 'error');
+                    } else {
+                        toast('Looks good.', 'success');
+                    }
+                } else if (row.action === 'link') {
+                    const url = safeEval(row.hrefExpr, extractFormData());
+                    if (typeof url === 'string' && url && !isUnsafeUrl(url)) window.location.href = url;
+                } else if (row.action === 'run') {
+                    const result = safeEval(row.expr, extractFormData());
+                    if (result !== '' && result !== null && result !== undefined) toast(String(result), 'info');
+                }
+            };
+            return btn;
+        }
+
+        function arrayColumns(field) {
+            try {
+                const o = JSON.parse(field.optionsJson || '{}');
+                return Array.isArray(o.fields) && o.fields.length ? o.fields : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function lineItemInputType(dataType) {
+            if (dataType === 'number' || dataType === 'currency') return 'number';
+            if (dataType === 'boolean') return 'checkbox';
+            if (dataType === 'date') return 'date';
+            return 'text'; // also covers 'select': the server accepts any string for a line-item cell of that type
+        }
+
+        function renderLineItems(rowCfg, table) {
+            const field = table.fields.find((f) => f.name === rowCfg.field);
+            const columns = field ? arrayColumns(field) : null;
+            if (!field || !columns) return null;
+
+            const html = htm.bind(preact.h);
+
+            const wrap = document.createElement('div');
+            const caption = document.createElement('label');
+            caption.innerText = field.label || field.name;
+            wrap.appendChild(caption);
+
+            const mount = document.createElement('div');
+            wrap.appendChild(mount);
+
+            const hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.dataset.name = field.name;
+            hidden.dataset.kind = 'json';
+            wrap.appendChild(hidden);
+
+            let rows = [];
+
+            function sync() {
+                hidden.value = JSON.stringify(rows);
+                hidden.dispatchEvent(
+                    new Event('input', {
+                        bubbles: true
+                    })
+                );
+            }
+
+            function setRows(next) {
+                rows = next;
+                sync();
+                paint();
+            }
+
+            function cellInput(row, c) {
+                const type = lineItemInputType(c.dataType);
+                const onInput = (e) => {
+                    row[c.name] =
+                        type === 'checkbox'
+                            ? e.target.checked
+                            : type === 'number'
+                              ? e.target.value === ''
+                                  ? ''
+                                  : Number(e.target.value)
+                              : e.target.value;
+                    sync();
+                };
+                return type === 'checkbox'
+                    ? html`<input type="checkbox" checked=${!!row[c.name]} onInput=${onInput} />`
+                    : html`<input type=${type} value=${row[c.name] == null ? '' : row[c.name]} onInput=${onInput} />`;
+            }
+
+            function Table() {
+                return html`
                 <div class="baserow-table-wrap">
                     <table class="baserow-table">
                         <thead>
@@ -947,64 +986,71 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows.map((row, i) => html`
+                            ${rows.map(
+                                (row, i) => html`
                                 <tr key=${i}>
                                     ${columns.map((c) => html`<td>${cellInput(row, c)}</td>`)}
                                     <td><button type="button" class="baserow-btn-custom"
                                         onClick=${() => setRows(rows.filter((_, idx) => idx !== i))}>✕</button></td>
                                 </tr>
-                            `)}
+                            `
+                            )}
                         </tbody>
                     </table>
                 </div>
                 <button type="button" class="baserow-btn-custom" onClick=${() => setRows([...rows, {}])}>+ Add row</button>
             `;
-        }
+            }
 
-        function paint() {
-            preact.render(html`<${Table} />`, mount);
-        }
+            function paint() {
+                preact.render(html`<${Table} />`, mount);
+            }
 
-        paint();
-        sync();
-        return wrap;
-    }
-
-    function renderChildTable(row, table) {
-        const childDef = ((table && table.childTables) || []).find((c) => c.id === row.table);
-        if (!childDef || !childDef.columns.length) return null;
-
-        const html = htm.bind(preact.h);
-
-        const wrap = document.createElement('div');
-        const caption = document.createElement('label');
-        caption.innerText = childDef.name;
-        wrap.appendChild(caption);
-
-        const mount = document.createElement('div');
-        wrap.appendChild(mount);
-
-        let rows = [];
-
-        function cellInput(r, c) {
-            const type = lineItemInputType(c.dataType);
-            const onInput = (e) => {
-                r[c.name] = type === 'checkbox' ? e.target.checked
-                    : type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value))
-                    : e.target.value;
-            };
-            return type === 'checkbox'
-                ? html`<input type="checkbox" checked=${!!r[c.name]} onInput=${onInput} />`
-                : html`<input type=${type} value=${r[c.name] == null ? '' : r[c.name]} onInput=${onInput} />`;
-        }
-
-        function setRows(next) {
-            rows = next;
             paint();
+            sync();
+            return wrap;
         }
 
-        function Table() {
-            return html`
+        function renderChildTable(row, table) {
+            const childDef = ((table && table.childTables) || []).find((c) => c.id === row.table);
+            if (!childDef || !childDef.columns.length) return null;
+
+            const html = htm.bind(preact.h);
+
+            const wrap = document.createElement('div');
+            const caption = document.createElement('label');
+            caption.innerText = childDef.name;
+            wrap.appendChild(caption);
+
+            const mount = document.createElement('div');
+            wrap.appendChild(mount);
+
+            let rows = [];
+
+            function cellInput(r, c) {
+                const type = lineItemInputType(c.dataType);
+                const onInput = (e) => {
+                    r[c.name] =
+                        type === 'checkbox'
+                            ? e.target.checked
+                            : type === 'number'
+                              ? e.target.value === ''
+                                  ? ''
+                                  : Number(e.target.value)
+                              : e.target.value;
+                };
+                return type === 'checkbox'
+                    ? html`<input type="checkbox" checked=${!!r[c.name]} onInput=${onInput} />`
+                    : html`<input type=${type} value=${r[c.name] == null ? '' : r[c.name]} onInput=${onInput} />`;
+            }
+
+            function setRows(next) {
+                rows = next;
+                paint();
+            }
+
+            function Table() {
+                return html`
                 <div class="baserow-table-wrap">
                     <table class="baserow-table">
                         <thead>
@@ -1014,675 +1060,702 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows.map((r, i) => html`
+                            ${rows.map(
+                                (r, i) => html`
                                 <tr key=${i}>
                                     ${childDef.columns.map((c) => html`<td>${cellInput(r, c)}</td>`)}
                                     <td><button type="button" class="baserow-btn-custom"
                                         onClick=${() => setRows(rows.filter((_, idx) => idx !== i))}>✕</button></td>
                                 </tr>
-                            `)}
+                            `
+                            )}
                         </tbody>
                     </table>
                 </div>
                 <button type="button" class="baserow-btn-custom" onClick=${() => setRows([...rows, {}])}>+ Add row</button>
             `;
-        }
-
-        function paint() {
-            preact.render(html`<${Table} />`, mount);
-        }
-
-        paint();
-        pendingChildTables.push({
-            table: childDef.id,
-            rows: () => rows.filter((r) => Object.keys(r).length > 0),
-            reset: () => setRows([])
-        });
-        return wrap;
-    }
-
-    async function flushChildTables(headerId) {
-        const errors = [];
-        for (const entry of pendingChildTables) {
-            for (const row of entry.rows()) {
-                const res = await fetch(`${apiBase}/api/forms/${formId}/child/${entry.table}?refId=${encodeURIComponent(headerId)}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(row)
-                });
-                if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
-                    errors.push(...(body.errors && body.errors.length ? body.errors : ['A row failed to save.']));
-                }
             }
-        }
-        return errors;
-    }
 
-    function renderLayoutRow(row, table) {
-        const node = renderLayoutRowInner(row, table);
-        if (node && row.showIf) node.dataset.showIf = row.showIf;
-        return node;
-    }
-
-    function renderLayoutRowInner(row, table) {
-        if (row.t === 'subtotal') {
-            const div = document.createElement('div');
-            div.className = 'baserow-subtotal';
-            const lab = document.createElement('span');
-            lab.innerText = row.label || 'Total';
-            const val = document.createElement('strong');
-            val.className = 'baserow-subtotal-value';
-            val.dataset.expr = row.expr || '0';
-            val.dataset.format = row.format || '';
-            if (row.currency) val.dataset.currency = row.currency;
-            div.appendChild(lab);
-            div.appendChild(val);
-            return div;
-        }
-
-        if (row.t === 'button') return buildActionButton(row);
-
-        if (row.t === 'button_bar') {
-            const bar = document.createElement('div');
-            bar.style.display = 'flex';
-            bar.style.gap = '.5rem';
-            bar.style.flexWrap = 'wrap';
-            bar.style.justifyContent = row.align || 'flex-end';
-            (row.buttons || []).forEach((btnCfg) => bar.appendChild(buildActionButton(btnCfg)));
-            return bar;
-        }
-
-        if (row.t === 'container') {
-            const wrap = document.createElement('fieldset');
-            wrap.className = 'baserow-group';
-            if (row.title) {
-                const leg = document.createElement('legend');
-                leg.innerText = row.title;
-                wrap.appendChild(leg);
+            function paint() {
+                preact.render(html`<${Table} />`, mount);
             }
-            (row.rows || []).forEach((nrow) => {
-                const node = renderLayoutRow(nrow, table);
-                if (node) wrap.appendChild(node);
+
+            paint();
+            pendingChildTables.push({
+                table: childDef.id,
+                rows: () => rows.filter((r) => Object.keys(r).length > 0),
+                reset: () => setRows([])
             });
             return wrap;
         }
 
-        if (row.t === 'line_items') return renderLineItems(row, table);
-        if (row.t === 'child_table') return renderChildTable(row, table);
-
-        if (row.t !== 'row' && row.t !== 'group') return null;
-
-        const wrap = document.createElement(row.t === 'group' ? 'fieldset' : 'div');
-        wrap.className = row.t === 'group' ? 'baserow-group' : 'baserow-row';
-        if (row.t === 'group' && row.title) {
-            const leg = document.createElement('legend');
-            leg.innerText = row.title;
-            wrap.appendChild(leg);
-        }
-        (row.cols || []).forEach((col) => {
-            const colDiv = document.createElement('div');
-            colDiv.className = 'baserow-col';
-            const total = row.cols.length || 1;
-            colDiv.style.flexGrow = col.w || 12 / total;
-            (col.items || []).forEach((item) => {
-                if (typeof item === 'string') renderField(item, table, colDiv);
-            });
-            wrap.appendChild(colDiv);
-        });
-        return wrap;
-    }
-
-    function renderField(name, table, parent) {
-        const field = table.fields.find((f) => f.name === name);
-        if (!field) return;
-        if (field.isHidden || field.dataType === 'derived') return;
-        field.options = parseOptions(field);
-
-        if (formIsReadOnly || field.isReadOnly) {
-            const row = document.createElement('div');
-            row.className = 'baserow-readonly';
-            const label = document.createElement('span');
-            label.className = 'baserow-readonly-label';
-            label.innerText = fieldLabel(field);
-            const value = document.createElement('span');
-            value.className = 'baserow-readonly-value';
-            value.dataset.name = field.name;
-            const raw = readOnlyData ? readOnlyData[field.name] : null;
-            value.innerText =
-                field.dataType === 'currency' && raw !== null && raw !== undefined && raw !== '' ?
-                fmtCurrency(raw, field.currency) :
-                displayValue(raw);
-            row.appendChild(label);
-            row.appendChild(value);
-            parent.appendChild(row);
-            return;
-        }
-        const label = document.createElement('label');
-        label.innerText = fieldLabel(field) + (field.isRequired ? ' *' : '');
-        const input = createFieldInput(field);
-
-        const help = field.helpText ? document.createElement('small') : null;
-        if (help) {
-            help.innerText = field.helpText;
-            help.id = 'help-' + field.name;
-            input.setAttribute('aria-describedby', help.id);
-        }
-
-        if (input.dataset && (input.dataset.multiselect || input.dataset.standalone)) {
-            parent.appendChild(label);
-            parent.appendChild(input);
-        } else {
-            label.appendChild(input);
-            parent.appendChild(label);
-        }
-        if (help) parent.appendChild(help);
-    }
-
-    function parseOptions(field) {
-        try {
-            const o = JSON.parse(field.optionsJson || '[]');
-            return Array.isArray(o) ? o : o || {};
-        } catch (e) {
-            return [];
-        }
-    }
-
-    function slugSourceField(field) {
-        try {
-            return JSON.parse(field.optionsJson || '{}').sourceField || '';
-        } catch (e) {
-            return '';
-        }
-    }
-
-    function createFieldInput(field) {
-        const type = field.dataType || 'text';
-        let el;
-
-        if (type === 'longtext' || type === 'markdown') {
-            el = document.createElement('textarea');
-            el.rows = 3;
-        } else if (type === 'boolean' || type === 'checkbox') {
-            el = document.createElement('input');
-            el.type = 'checkbox';
-        } else if (type === 'number') {
-            el = document.createElement('input');
-            el.type = 'number';
-            el.step = field.scale === null || field.scale === undefined ? 'any' : (1 / Math.pow(10, field.scale)).toString();
-            el.dataset.kind = 'num';
-        } else if (type === 'currency' || type === 'price') {
-            el = document.createElement('input');
-            el.type = 'number';
-            el.step = (1 / Math.pow(10, field.scale === null || field.scale === undefined ? 2 : field.scale)).toString();
-            el.inputMode = 'decimal';
-            el.placeholder = '0.00';
-            el.dataset.kind = 'num';
-            el.dataset.currency = field.currency || formCurrency;
-        } else if (type === 'date') {
-            el = document.createElement('input');
-            el.type = 'date';
-        } else if (type === 'datetime' || type === 'timestamp') {
-            el = document.createElement('input');
-            el.type = 'datetime-local';
-        } else if (type === 'select') {
-            el = document.createElement('select');
-            const ph = document.createElement('option');
-            ph.value = '';
-            ph.innerText = '- Select -';
-            el.appendChild(ph);
-            (Array.isArray(field.options) ? field.options : []).forEach((o) => {
-                const op = document.createElement('option');
-                op.value = o;
-                op.innerText = o;
-                el.appendChild(op);
-            });
-        } else if (type === 'multiselect') {
-            el = document.createElement('div');
-            el.className = 'baserow-ms';
-            el.dataset.multiselect = field.name;
-            (Array.isArray(field.options) ? field.options : []).forEach((o) => {
-                const lab = document.createElement('label');
-                lab.className = 'baserow-ms-opt';
-                const c = document.createElement('input');
-                c.type = 'checkbox';
-                c.value = o;
-                c.dataset.name = field.name;
-                lab.appendChild(c);
-                lab.appendChild(document.createTextNode(' ' + o));
-                el.appendChild(lab);
-            });
-            return el;
-        } else if (type === 'file' || type === 'media') {
-            el = document.createElement('input');
-            el.type = 'file';
-        } else if (type === 'reference' || type === 'relation') {
-            return createReferenceCombobox(field);
-        } else if (type === 'calculated' || type === 'formula') {
-            el = document.createElement('input');
-            el.type = 'text';
-            el.readOnly = true;
-            el.dataset.expr = field.expression;
-            el.dataset.kind = 'calc';
-        } else if (type === 'systemid') {
-            el = document.createElement('input');
-            el.type = 'text';
-            el.readOnly = true;
-            el.dataset.kind = 'sysid';
-            el.value = generateShortId();
-        } else if (type === 'email') {
-            el = document.createElement('input');
-            el.type = 'email';
-        } else if (type === 'url') {
-            el = document.createElement('input');
-            el.type = 'url';
-        } else if (type === 'time') {
-            el = document.createElement('input');
-            el.type = 'time';
-        } else if (type === 'password') {
-            el = document.createElement('input');
-            el.type = 'password';
-        } else if (type === 'slug') {
-            el = document.createElement('input');
-            el.type = 'text';
-            el.placeholder = 'auto-generated if left blank';
-        } else if (type === 'richtext') {
-            el = document.createElement('textarea');
-            el.rows = 4;
-        } else if (type === 'json') {
-            el = document.createElement('textarea');
-            el.rows = 4;
-            el.placeholder = '{ }';
-            el.dataset.kind = 'json';
-        } else if (type === 'array') {
-            el = document.createElement('textarea');
-            el.rows = 3;
-            el.placeholder = '["a", "b"]';
-            el.dataset.kind = 'json';
-        } else {
-            el = document.createElement('input');
-            el.type = 'text';
-        }
-
-        el.dataset.name = field.name;
-
-        if (field.isRequired && type !== 'calculated' && type !== 'systemid') el.required = true;
-        if (field.pattern && el.tagName === 'INPUT' && ['text', 'url', 'search', 'email', 'tel'].includes(el.type))
-            el.pattern = field.pattern;
-        if (field.min !== null && field.min !== undefined) {
-            if (el.type === 'number') el.min = field.min;
-            else if (TEXT_LENGTH_TYPES.has(type)) el.minLength = field.min;
-        }
-        if (field.max !== null && field.max !== undefined) {
-            if (el.type === 'number') el.max = field.max;
-            else if (TEXT_LENGTH_TYPES.has(type)) el.maxLength = field.max;
-        }
-        if (field.defaultValue && !el.value && el.type !== 'checkbox') el.value = field.defaultValue;
-        if (field.defaultValue && el.type === 'checkbox') el.checked = field.defaultValue === 'true';
-
-        return el;
-    }
-
-    function createReferenceCombobox(field) {
-        const wrap = document.createElement('div');
-        wrap.className = 'baserow-combobox';
-        wrap.dataset.standalone = 'true';
-
-        const search = document.createElement('input');
-        search.type = 'text';
-        search.placeholder = 'Search…';
-        search.autocomplete = 'off';
-
-        const hidden = document.createElement('input');
-        hidden.type = 'hidden';
-        hidden.dataset.name = field.name;
-
-        const chip = document.createElement('div');
-        chip.className = 'baserow-combobox-chip';
-        chip.hidden = true;
-        const chipLabel = document.createElement('span');
-        chipLabel.className = 'baserow-combobox-chip-label';
-        const chipRemove = document.createElement('button');
-        chipRemove.type = 'button';
-        chipRemove.className = 'baserow-combobox-chip-remove';
-        chipRemove.setAttribute('aria-label', 'Remove');
-        chipRemove.innerText = '×';
-        chip.append(chipLabel, chipRemove);
-
-        const list = document.createElement('ul');
-        list.className = 'baserow-combobox-list';
-        list.hidden = true;
-
-        wrap.append(chip, search, hidden, list);
-
-        let debounceTimer = null;
-        let controller = null;
-        let active = -1;
-
-        function closeList() {
-            list.hidden = true;
-            list.innerHTML = '';
-            active = -1;
-        }
-
-        function showChip(label) {
-            chipLabel.innerText = label;
-            chip.hidden = false;
-            search.hidden = true;
-            search.value = '';
-        }
-
-        function hideChip() {
-            chip.hidden = true;
-            search.hidden = false;
-        }
-
-        function selectOption(id, label) {
-            hidden.value = id;
-            hidden.dispatchEvent(new Event('change', {
-                bubbles: true
-            }));
-            showChip(label);
-            search.classList.remove('baserow-invalid');
-            closeList();
-        }
-
-        chipRemove.addEventListener('click', (e) => {
-            e.preventDefault();
-            hidden.value = '';
-            hidden.dispatchEvent(new Event('change', {
-                bubbles: true
-            }));
-            hideChip();
-            search.focus();
-        });
-
-        function renderOptions(rows) {
-            list.innerHTML = '';
-            if (!rows.length) {
-                const li = document.createElement('li');
-                li.className = 'baserow-combobox-empty';
-                li.innerText = 'No matches.';
-                list.appendChild(li);
-            } else {
-                rows.forEach((r) => {
-                    const li = document.createElement('li');
-                    li.innerText = r.label;
-                    li.addEventListener('mousedown', (e) => {
-                        e.preventDefault();
-                        selectOption(r.id, r.label);
-                    });
-                    list.appendChild(li);
-                });
-            }
-            active = -1;
-            list.hidden = false;
-        }
-
-        search.addEventListener('input', () => {
-            if (hidden.value) {
-                hidden.value = '';
-                hidden.dispatchEvent(new Event('change', {
-                    bubbles: true
-                }));
-            }
-            clearTimeout(debounceTimer);
-            const query = search.value.trim();
-            if (!query) {
-                closeList();
-                return;
-            }
-            debounceTimer = setTimeout(() => {
-                if (controller) controller.abort();
-                controller = new AbortController();
-                fetch(`${apiBase}/api/forms/${formId}/reference/${encodeURIComponent(field.name)}?q=${encodeURIComponent(query)}`, {
-                        signal: controller.signal,
-                    })
-                    .then((r) => r.json())
-                    .then((data) => renderOptions((data && data.rows) || []))
-                    .catch((err) => {
-                        if (err.name !== 'AbortError') closeList();
-                    });
-            }, 250);
-        });
-
-        search.addEventListener('keydown', (e) => {
-            const items = Array.from(list.children).filter((li) => !li.classList.contains('baserow-combobox-empty'));
-            if (e.key === 'ArrowDown' && items.length) {
-                e.preventDefault();
-                active = (active + 1) % items.length;
-            } else if (e.key === 'ArrowUp' && items.length) {
-                e.preventDefault();
-                active = (active - 1 + items.length) % items.length;
-            } else if (e.key === 'Enter') {
-                if (active >= 0 && items[active]) {
-                    e.preventDefault();
-                    items[active].dispatchEvent(new Event('mousedown'));
-                }
-                return;
-            } else if (e.key === 'Escape') {
-                closeList();
-                return;
-            } else {
-                return;
-            }
-            items.forEach((li, i) => li.classList.toggle('active', i === active));
-            if (items[active]) items[active].scrollIntoView({
-                block: 'nearest'
-            });
-        });
-
-        search.addEventListener('blur', () => setTimeout(closeList, 100));
-
-        return wrap;
-    }
-
-    function extractFormData() {
-        const groups = {};
-        formEl.querySelectorAll('input, select, textarea').forEach((el) => {
-            if (!el.dataset.name) return;
-            (groups[el.dataset.name] = groups[el.dataset.name] || []).push(el);
-        });
-        const data = {};
-        Object.keys(groups).forEach((name) => {
-            const els = groups[name];
-            if (els.length === 1) {
-                const el = els[0];
-                if (el.type === 'checkbox') data[name] = el.checked;
-                else if (el.type === 'file') data[name] = el.files[0] || null;
-                else if (el.dataset.kind === 'num' || el.dataset.kind === 'calc') {
-                    const v = el.value;
-                    data[name] = v !== '' && !isNaN(Number(v)) ? Number(v) : v;
-                } else if (el.dataset.kind === 'json') {
-                    if (el.value === '') data[name] = '';
-                    else {
-                        try {
-                            data[name] = JSON.parse(el.value);
-                        } catch (e) {
-                            data[name] = el.value; // not valid json, let the server reject it
+        async function flushChildTables(headerId) {
+            const errors = [];
+            for (const entry of pendingChildTables) {
+                for (const row of entry.rows()) {
+                    const res = await fetch(
+                        `${apiBase}/api/forms/${formId}/child/${entry.table}?refId=${encodeURIComponent(headerId)}`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(row)
                         }
+                    );
+                    if (!res.ok) {
+                        const body = await res.json().catch(() => ({}));
+                        errors.push(...(body.errors && body.errors.length ? body.errors : ['A row failed to save.']));
                     }
-                } else data[name] = el.value;
-            } else {
-                data[name] = els.filter((el) => el.type === 'checkbox' && el.checked).map((el) => el.value);
+                }
             }
-        });
-        return data;
-    }
-
-    function toFormData(data) {
-        const fd = new FormData();
-        const compound = new Set((tableSchema.fields || []).filter((f) => f.dataType === 'json' || f.dataType === 'array').map((f) => f.name));
-        Object.keys(data).forEach((name) => {
-            const v = data[name];
-            if (v === null || v === undefined || v === '') return;
-            if (compound.has(name)) fd.append(name, JSON.stringify(v));
-            else if (Array.isArray(v)) v.forEach((item) => fd.append(name, item));
-            else if (typeof v === 'boolean') fd.append(name, String(v));
-            else fd.append(name, v);
-        });
-        return fd;
-    }
-
-    function sumOverColumn(arr, col) {
-        return (Array.isArray(arr) ? arr : []).reduce((total, row) => total + (Number(row && row[col]) || 0), 0);
-    }
-
-    function safeEval(expr, data) {
-        const sData = new Proxy(data || {}, {
-            get: (t, p) => (t[p] === undefined ? '' : t[p])
-        });
-        try {
-            const rewritten = (expr || '').replace(/\bSUM\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,/g, 'SUM(data.$1,');
-            const val = new Function('data', 'SUM', `return ${rewritten}`)(sData, sumOverColumn);
-            if (typeof val === 'number' && !Number.isInteger(val)) return Math.round(val * 100) / 100;
-            return val;
-        } catch (e) {
-            return '';
+            return errors;
         }
-    }
 
-    function fmtCurrency(n, code) {
-        const num = Number(n);
-        if (isNaN(num)) return '';
-        const currency = code || formCurrency || 'EUR';
-        try {
-            return new Intl.NumberFormat(navigator.language || 'en', {
-                style: 'currency',
-                currency
-            }).format(num);
-        } catch (e) {
-            return currency + ' ' + num.toFixed(2);
+        function renderLayoutRow(row, table) {
+            const node = renderLayoutRowInner(row, table);
+            if (node && row.showIf) node.dataset.showIf = row.showIf;
+            return node;
         }
-    }
 
-    function triggerReactiveUpdate() {
-        if (!formEl) return;
-        const data = extractFormData();
-        formEl.querySelectorAll('[data-show-if]').forEach((el) => {
-            el.hidden = !safeEval(el.dataset.showIf, data);
-        });
-        formEl.querySelectorAll('input[data-expr], .baserow-subtotal-value[data-expr]').forEach((el) => {
-            if (el.dataset.expr === 'GETDATE()') {
-                el.value = new Date().toISOString().split('T')[0];
-                return;
+        function renderLayoutRowInner(row, table) {
+            if (row.t === 'subtotal') {
+                const div = document.createElement('div');
+                div.className = 'baserow-subtotal';
+                const lab = document.createElement('span');
+                lab.innerText = row.label || 'Total';
+                const val = document.createElement('strong');
+                val.className = 'baserow-subtotal-value';
+                val.dataset.expr = row.expr || '0';
+                val.dataset.format = row.format || '';
+                if (row.currency) val.dataset.currency = row.currency;
+                div.appendChild(lab);
+                div.appendChild(val);
+                return div;
             }
-            const val = safeEval(el.dataset.expr, data);
-            if (el.classList.contains('baserow-subtotal-value')) {
-                el.innerText =
-                    el.dataset.format === 'currency' && typeof val === 'number' ? fmtCurrency(val, el.dataset.currency) : val;
-            } else if (el.dataset.kind === 'num') el.value = val === '' ? '' : val;
-            else el.value = val;
-        });
-    }
 
-    function markInvalid(names) {
-        (names || []).forEach((name) => {
-            formEl.querySelectorAll('input, select, textarea').forEach((el) => {
-                if (el.dataset.name === name) el.classList.add('baserow-invalid');
+            if (row.t === 'button') return buildActionButton(row);
+
+            if (row.t === 'button_bar') {
+                const bar = document.createElement('div');
+                bar.style.display = 'flex';
+                bar.style.gap = '.5rem';
+                bar.style.flexWrap = 'wrap';
+                bar.style.justifyContent = row.align || 'flex-end';
+                (row.buttons || []).forEach((btnCfg) => bar.appendChild(buildActionButton(btnCfg)));
+                return bar;
+            }
+
+            if (row.t === 'container') {
+                const wrap = document.createElement('fieldset');
+                wrap.className = 'baserow-group';
+                if (row.title) {
+                    const leg = document.createElement('legend');
+                    leg.innerText = row.title;
+                    wrap.appendChild(leg);
+                }
+                (row.rows || []).forEach((nrow) => {
+                    const node = renderLayoutRow(nrow, table);
+                    if (node) wrap.appendChild(node);
+                });
+                return wrap;
+            }
+
+            if (row.t === 'line_items') return renderLineItems(row, table);
+            if (row.t === 'child_table') return renderChildTable(row, table);
+
+            if (row.t !== 'row' && row.t !== 'group') return null;
+
+            const wrap = document.createElement(row.t === 'group' ? 'fieldset' : 'div');
+            wrap.className = row.t === 'group' ? 'baserow-group' : 'baserow-row';
+            if (row.t === 'group' && row.title) {
+                const leg = document.createElement('legend');
+                leg.innerText = row.title;
+                wrap.appendChild(leg);
+            }
+            (row.cols || []).forEach((col) => {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'baserow-col';
+                const total = row.cols.length || 1;
+                colDiv.style.flexGrow = col.w || 12 / total;
+                (col.items || []).forEach((item) => {
+                    if (typeof item === 'string') renderField(item, table, colDiv);
+                });
+                wrap.appendChild(colDiv);
             });
-        });
-    }
+            return wrap;
+        }
 
-    function validate() {
-        const errors = [];
-        const invalid = [];
-        const els = formEl.querySelectorAll('input, select, textarea');
-        (tableSchema.fields || []).forEach((field) => {
-            if (
-                field.dataType === 'calculated' ||
-                field.dataType === 'systemid' ||
-                field.dataType === 'derived' ||
-                field.isHidden
-            )
-                return;
-            const group = Array.from(els).filter((el) => el.dataset.name === field.name);
-            if (!group.length) return;
-            if (field.dataType === 'boolean') {
-                if (field.isRequired && !group.some((el) => el.type === 'checkbox' && el.checked)) {
-                    errors.push(field.name + ' is required.');
-                    invalid.push(field.name);
-                }
-                return;
-            }
-            const empty = group.every((el) => (el.type === 'checkbox' ? !el.checked : el.value === ''));
-            if (empty) {
-                const slugAutoFills = field.dataType === 'slug' && slugSourceField(field);
-                if (field.isRequired && !slugAutoFills) {
-                    errors.push(field.name + ' is required.');
-                    invalid.push(field.name);
-                }
+        function renderField(name, table, parent) {
+            const field = table.fields.find((f) => f.name === name);
+            if (!field) return;
+            if (field.isHidden || field.dataType === 'derived') return;
+            field.options = parseOptions(field);
+
+            if (formIsReadOnly || field.isReadOnly) {
+                const row = document.createElement('div');
+                row.className = 'baserow-readonly';
+                const label = document.createElement('span');
+                label.className = 'baserow-readonly-label';
+                label.innerText = fieldLabel(field);
+                const value = document.createElement('span');
+                value.className = 'baserow-readonly-value';
+                value.dataset.name = field.name;
+                const raw = readOnlyData ? readOnlyData[field.name] : null;
+                value.innerText =
+                    field.dataType === 'currency' && raw !== null && raw !== undefined && raw !== ''
+                        ? fmtCurrency(raw, field.currency)
+                        : displayValue(raw);
+                row.appendChild(label);
+                row.appendChild(value);
+                parent.appendChild(row);
                 return;
             }
-            if (field.dataType === 'json') {
-                try {
-                    const parsed = JSON.parse(group[0].value);
-                    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw 0;
-                } catch (e) {
-                    errors.push(field.name + ' must be a JSON object.');
-                    invalid.push(field.name);
+            const label = document.createElement('label');
+            label.innerText = fieldLabel(field) + (field.isRequired ? ' *' : '');
+            const input = createFieldInput(field);
+
+            const help = field.helpText ? document.createElement('small') : null;
+            if (help) {
+                help.innerText = field.helpText;
+                help.id = 'help-' + field.name;
+                input.setAttribute('aria-describedby', help.id);
+            }
+
+            if (input.dataset && (input.dataset.multiselect || input.dataset.standalone)) {
+                parent.appendChild(label);
+                parent.appendChild(input);
+            } else {
+                label.appendChild(input);
+                parent.appendChild(label);
+            }
+            if (help) parent.appendChild(help);
+        }
+
+        function parseOptions(field) {
+            try {
+                const o = JSON.parse(field.optionsJson || '[]');
+                return Array.isArray(o) ? o : o || {};
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function slugSourceField(field) {
+            try {
+                return JSON.parse(field.optionsJson || '{}').sourceField || '';
+            } catch (e) {
+                return '';
+            }
+        }
+
+        function createFieldInput(field) {
+            const type = field.dataType || 'text';
+            let el;
+
+            if (type === 'longtext' || type === 'markdown') {
+                el = document.createElement('textarea');
+                el.rows = 3;
+            } else if (type === 'boolean' || type === 'checkbox') {
+                el = document.createElement('input');
+                el.type = 'checkbox';
+            } else if (type === 'number') {
+                el = document.createElement('input');
+                el.type = 'number';
+                el.step =
+                    field.scale === null || field.scale === undefined
+                        ? 'any'
+                        : (1 / Math.pow(10, field.scale)).toString();
+                el.dataset.kind = 'num';
+            } else if (type === 'currency' || type === 'price') {
+                el = document.createElement('input');
+                el.type = 'number';
+                el.step = (
+                    1 / Math.pow(10, field.scale === null || field.scale === undefined ? 2 : field.scale)
+                ).toString();
+                el.inputMode = 'decimal';
+                el.placeholder = '0.00';
+                el.dataset.kind = 'num';
+                el.dataset.currency = field.currency || formCurrency;
+            } else if (type === 'date') {
+                el = document.createElement('input');
+                el.type = 'date';
+            } else if (type === 'datetime' || type === 'timestamp') {
+                el = document.createElement('input');
+                el.type = 'datetime-local';
+            } else if (type === 'select') {
+                el = document.createElement('select');
+                const ph = document.createElement('option');
+                ph.value = '';
+                ph.innerText = '- Select -';
+                el.appendChild(ph);
+                (Array.isArray(field.options) ? field.options : []).forEach((o) => {
+                    const op = document.createElement('option');
+                    op.value = o;
+                    op.innerText = o;
+                    el.appendChild(op);
+                });
+            } else if (type === 'multiselect') {
+                el = document.createElement('div');
+                el.className = 'baserow-ms';
+                el.dataset.multiselect = field.name;
+                (Array.isArray(field.options) ? field.options : []).forEach((o) => {
+                    const lab = document.createElement('label');
+                    lab.className = 'baserow-ms-opt';
+                    const c = document.createElement('input');
+                    c.type = 'checkbox';
+                    c.value = o;
+                    c.dataset.name = field.name;
+                    lab.appendChild(c);
+                    lab.appendChild(document.createTextNode(' ' + o));
+                    el.appendChild(lab);
+                });
+                return el;
+            } else if (type === 'file' || type === 'media') {
+                el = document.createElement('input');
+                el.type = 'file';
+            } else if (type === 'reference' || type === 'relation') {
+                return createReferenceCombobox(field);
+            } else if (type === 'calculated' || type === 'formula') {
+                el = document.createElement('input');
+                el.type = 'text';
+                el.readOnly = true;
+                el.dataset.expr = field.expression;
+                el.dataset.kind = 'calc';
+            } else if (type === 'systemid') {
+                el = document.createElement('input');
+                el.type = 'text';
+                el.readOnly = true;
+                el.dataset.kind = 'sysid';
+                el.value = generateShortId();
+            } else if (type === 'email') {
+                el = document.createElement('input');
+                el.type = 'email';
+            } else if (type === 'url') {
+                el = document.createElement('input');
+                el.type = 'url';
+            } else if (type === 'time') {
+                el = document.createElement('input');
+                el.type = 'time';
+            } else if (type === 'password') {
+                el = document.createElement('input');
+                el.type = 'password';
+            } else if (type === 'slug') {
+                el = document.createElement('input');
+                el.type = 'text';
+                el.placeholder = 'auto-generated if left blank';
+            } else if (type === 'richtext') {
+                el = document.createElement('textarea');
+                el.rows = 4;
+            } else if (type === 'json') {
+                el = document.createElement('textarea');
+                el.rows = 4;
+                el.placeholder = '{ }';
+                el.dataset.kind = 'json';
+            } else if (type === 'array') {
+                el = document.createElement('textarea');
+                el.rows = 3;
+                el.placeholder = '["a", "b"]';
+                el.dataset.kind = 'json';
+            } else {
+                el = document.createElement('input');
+                el.type = 'text';
+            }
+
+            el.dataset.name = field.name;
+
+            if (field.isRequired && type !== 'calculated' && type !== 'systemid') el.required = true;
+            if (field.pattern && el.tagName === 'INPUT' && ['text', 'url', 'search', 'email', 'tel'].includes(el.type))
+                el.pattern = field.pattern;
+            if (field.min !== null && field.min !== undefined) {
+                if (el.type === 'number') el.min = field.min;
+                else if (TEXT_LENGTH_TYPES.has(type)) el.minLength = field.min;
+            }
+            if (field.max !== null && field.max !== undefined) {
+                if (el.type === 'number') el.max = field.max;
+                else if (TEXT_LENGTH_TYPES.has(type)) el.maxLength = field.max;
+            }
+            if (field.defaultValue && !el.value && el.type !== 'checkbox') el.value = field.defaultValue;
+            if (field.defaultValue && el.type === 'checkbox') el.checked = field.defaultValue === 'true';
+
+            return el;
+        }
+
+        function createReferenceCombobox(field) {
+            const wrap = document.createElement('div');
+            wrap.className = 'baserow-combobox';
+            wrap.dataset.standalone = 'true';
+
+            const search = document.createElement('input');
+            search.type = 'text';
+            search.placeholder = 'Search…';
+            search.autocomplete = 'off';
+
+            const hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.dataset.name = field.name;
+
+            const chip = document.createElement('div');
+            chip.className = 'baserow-combobox-chip';
+            chip.hidden = true;
+            const chipLabel = document.createElement('span');
+            chipLabel.className = 'baserow-combobox-chip-label';
+            const chipRemove = document.createElement('button');
+            chipRemove.type = 'button';
+            chipRemove.className = 'baserow-combobox-chip-remove';
+            chipRemove.setAttribute('aria-label', 'Remove');
+            chipRemove.innerText = '×';
+            chip.append(chipLabel, chipRemove);
+
+            const list = document.createElement('ul');
+            list.className = 'baserow-combobox-list';
+            list.hidden = true;
+
+            wrap.append(chip, search, hidden, list);
+
+            let debounceTimer = null;
+            let controller = null;
+            let active = -1;
+
+            function closeList() {
+                list.hidden = true;
+                list.innerHTML = '';
+                active = -1;
+            }
+
+            function showChip(label) {
+                chipLabel.innerText = label;
+                chip.hidden = false;
+                search.hidden = true;
+                search.value = '';
+            }
+
+            function hideChip() {
+                chip.hidden = true;
+                search.hidden = false;
+            }
+
+            function selectOption(id, label) {
+                hidden.value = id;
+                hidden.dispatchEvent(
+                    new Event('change', {
+                        bubbles: true
+                    })
+                );
+                showChip(label);
+                search.classList.remove('baserow-invalid');
+                closeList();
+            }
+
+            chipRemove.addEventListener('click', (e) => {
+                e.preventDefault();
+                hidden.value = '';
+                hidden.dispatchEvent(
+                    new Event('change', {
+                        bubbles: true
+                    })
+                );
+                hideChip();
+                search.focus();
+            });
+
+            function renderOptions(rows) {
+                list.innerHTML = '';
+                if (!rows.length) {
+                    const li = document.createElement('li');
+                    li.className = 'baserow-combobox-empty';
+                    li.innerText = 'No matches.';
+                    list.appendChild(li);
+                } else {
+                    rows.forEach((r) => {
+                        const li = document.createElement('li');
+                        li.innerText = r.label;
+                        li.addEventListener('mousedown', (e) => {
+                            e.preventDefault();
+                            selectOption(r.id, r.label);
+                        });
+                        list.appendChild(li);
+                    });
+                }
+                active = -1;
+                list.hidden = false;
+            }
+
+            search.addEventListener('input', () => {
+                if (hidden.value) {
+                    hidden.value = '';
+                    hidden.dispatchEvent(
+                        new Event('change', {
+                            bubbles: true
+                        })
+                    );
+                }
+                clearTimeout(debounceTimer);
+                const query = search.value.trim();
+                if (!query) {
+                    closeList();
                     return;
                 }
-            }
-            if (field.dataType === 'array') {
-                try {
-                    const parsed = JSON.parse(group[0].value);
-                    if (!Array.isArray(parsed) || parsed.some((x) => x !== null && typeof x === 'object')) throw 0;
-                } catch (e) {
-                    errors.push(field.name + ' must be a JSON array of text/number/boolean values.');
-                    invalid.push(field.name);
+                debounceTimer = setTimeout(() => {
+                    if (controller) controller.abort();
+                    controller = new AbortController();
+                    fetch(
+                        `${apiBase}/api/forms/${formId}/reference/${encodeURIComponent(field.name)}?q=${encodeURIComponent(query)}`,
+                        {
+                            signal: controller.signal
+                        }
+                    )
+                        .then((r) => r.json())
+                        .then((data) => renderOptions((data && data.rows) || []))
+                        .catch((err) => {
+                            if (err.name !== 'AbortError') closeList();
+                        });
+                }, 250);
+            });
+
+            search.addEventListener('keydown', (e) => {
+                const items = Array.from(list.children).filter(
+                    (li) => !li.classList.contains('baserow-combobox-empty')
+                );
+                if (e.key === 'ArrowDown' && items.length) {
+                    e.preventDefault();
+                    active = (active + 1) % items.length;
+                } else if (e.key === 'ArrowUp' && items.length) {
+                    e.preventDefault();
+                    active = (active - 1 + items.length) % items.length;
+                } else if (e.key === 'Enter') {
+                    if (active >= 0 && items[active]) {
+                        e.preventDefault();
+                        items[active].dispatchEvent(new Event('mousedown'));
+                    }
+                    return;
+                } else if (e.key === 'Escape') {
+                    closeList();
+                    return;
+                } else {
                     return;
                 }
+                items.forEach((li, i) => li.classList.toggle('active', i === active));
+                if (items[active])
+                    items[active].scrollIntoView({
+                        block: 'nearest'
+                    });
+            });
+
+            search.addEventListener('blur', () => setTimeout(closeList, 100));
+
+            return wrap;
+        }
+
+        function extractFormData() {
+            const groups = {};
+            formEl.querySelectorAll('input, select, textarea').forEach((el) => {
+                if (!el.dataset.name) return;
+                (groups[el.dataset.name] = groups[el.dataset.name] || []).push(el);
+            });
+            const data = {};
+            Object.keys(groups).forEach((name) => {
+                const els = groups[name];
+                if (els.length === 1) {
+                    const el = els[0];
+                    if (el.type === 'checkbox') data[name] = el.checked;
+                    else if (el.type === 'file') data[name] = el.files[0] || null;
+                    else if (el.dataset.kind === 'num' || el.dataset.kind === 'calc') {
+                        const v = el.value;
+                        data[name] = v !== '' && !isNaN(Number(v)) ? Number(v) : v;
+                    } else if (el.dataset.kind === 'json') {
+                        if (el.value === '') data[name] = '';
+                        else {
+                            try {
+                                data[name] = JSON.parse(el.value);
+                            } catch (e) {
+                                data[name] = el.value; // not valid json, let the server reject it
+                            }
+                        }
+                    } else data[name] = el.value;
+                } else {
+                    data[name] = els.filter((el) => el.type === 'checkbox' && el.checked).map((el) => el.value);
+                }
+            });
+            return data;
+        }
+
+        function toFormData(data) {
+            const fd = new FormData();
+            const compound = new Set(
+                (tableSchema.fields || [])
+                    .filter((f) => f.dataType === 'json' || f.dataType === 'array')
+                    .map((f) => f.name)
+            );
+            Object.keys(data).forEach((name) => {
+                const v = data[name];
+                if (v === null || v === undefined || v === '') return;
+                if (compound.has(name)) fd.append(name, JSON.stringify(v));
+                else if (Array.isArray(v)) v.forEach((item) => fd.append(name, item));
+                else if (typeof v === 'boolean') fd.append(name, String(v));
+                else fd.append(name, v);
+            });
+            return fd;
+        }
+
+        function sumOverColumn(arr, col) {
+            return (Array.isArray(arr) ? arr : []).reduce((total, row) => total + (Number(row && row[col]) || 0), 0);
+        }
+
+        function safeEval(expr, data) {
+            const sData = new Proxy(data || {}, {
+                get: (t, p) => (t[p] === undefined ? '' : t[p])
+            });
+            try {
+                const rewritten = (expr || '').replace(/\bSUM\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,/g, 'SUM(data.$1,');
+                const val = new Function('data', 'SUM', `return ${rewritten}`)(sData, sumOverColumn);
+                if (typeof val === 'number' && !Number.isInteger(val)) return Math.round(val * 100) / 100;
+                return val;
+            } catch (e) {
+                return '';
             }
-            if (field.pattern) {
-                try {
-                    if (!group.every((el) => el.type === 'checkbox' || new RegExp(field.pattern).test(el.value))) {
-                        errors.push(field.name + ' does not match the required format.');
+        }
+
+        function fmtCurrency(n, code) {
+            const num = Number(n);
+            if (isNaN(num)) return '';
+            const currency = code || formCurrency || 'EUR';
+            try {
+                return new Intl.NumberFormat(navigator.language || 'en', {
+                    style: 'currency',
+                    currency
+                }).format(num);
+            } catch (e) {
+                return currency + ' ' + num.toFixed(2);
+            }
+        }
+
+        function triggerReactiveUpdate() {
+            if (!formEl) return;
+            const data = extractFormData();
+            formEl.querySelectorAll('[data-show-if]').forEach((el) => {
+                el.hidden = !safeEval(el.dataset.showIf, data);
+            });
+            formEl.querySelectorAll('input[data-expr], .baserow-subtotal-value[data-expr]').forEach((el) => {
+                if (el.dataset.expr === 'GETDATE()') {
+                    el.value = new Date().toISOString().split('T')[0];
+                    return;
+                }
+                const val = safeEval(el.dataset.expr, data);
+                if (el.classList.contains('baserow-subtotal-value')) {
+                    el.innerText =
+                        el.dataset.format === 'currency' && typeof val === 'number'
+                            ? fmtCurrency(val, el.dataset.currency)
+                            : val;
+                } else if (el.dataset.kind === 'num') el.value = val === '' ? '' : val;
+                else el.value = val;
+            });
+        }
+
+        function markInvalid(names) {
+            (names || []).forEach((name) => {
+                formEl.querySelectorAll('input, select, textarea').forEach((el) => {
+                    if (el.dataset.name === name) el.classList.add('baserow-invalid');
+                });
+            });
+        }
+
+        function validate() {
+            const errors = [];
+            const invalid = [];
+            const els = formEl.querySelectorAll('input, select, textarea');
+            (tableSchema.fields || []).forEach((field) => {
+                if (
+                    field.dataType === 'calculated' ||
+                    field.dataType === 'systemid' ||
+                    field.dataType === 'derived' ||
+                    field.isHidden
+                )
+                    return;
+                const group = Array.from(els).filter((el) => el.dataset.name === field.name);
+                if (!group.length) return;
+                if (field.dataType === 'boolean') {
+                    if (field.isRequired && !group.some((el) => el.type === 'checkbox' && el.checked)) {
+                        errors.push(field.name + ' is required.');
                         invalid.push(field.name);
                     }
-                } catch (e) {}
-            }
-            if (
-                (field.dataType === 'number' || field.dataType === 'currency') &&
-                !group.every((el) => el.value === '' || !isNaN(Number(el.value)))
-            ) {
-                errors.push(field.name + ' must be a number.');
-                invalid.push(field.name);
-            }
-            if (field.dataType === 'select') {
-                const sel = group.find((el) => el.tagName === 'SELECT');
-                if (sel && sel.value && !(field.options || []).includes(sel.value)) {
-                    errors.push(field.name + ' has an invalid selection.');
+                    return;
+                }
+                const empty = group.every((el) => (el.type === 'checkbox' ? !el.checked : el.value === ''));
+                if (empty) {
+                    const slugAutoFills = field.dataType === 'slug' && slugSourceField(field);
+                    if (field.isRequired && !slugAutoFills) {
+                        errors.push(field.name + ' is required.');
+                        invalid.push(field.name);
+                    }
+                    return;
+                }
+                if (field.dataType === 'json') {
+                    try {
+                        const parsed = JSON.parse(group[0].value);
+                        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw 0;
+                    } catch (e) {
+                        errors.push(field.name + ' must be a JSON object.');
+                        invalid.push(field.name);
+                        return;
+                    }
+                }
+                if (field.dataType === 'array') {
+                    try {
+                        const parsed = JSON.parse(group[0].value);
+                        if (!Array.isArray(parsed) || parsed.some((x) => x !== null && typeof x === 'object')) throw 0;
+                    } catch (e) {
+                        errors.push(field.name + ' must be a JSON array of text/number/boolean values.');
+                        invalid.push(field.name);
+                        return;
+                    }
+                }
+                if (field.pattern) {
+                    try {
+                        if (!group.every((el) => el.type === 'checkbox' || new RegExp(field.pattern).test(el.value))) {
+                            errors.push(field.name + ' does not match the required format.');
+                            invalid.push(field.name);
+                        }
+                    } catch (e) {}
+                }
+                if (
+                    (field.dataType === 'number' || field.dataType === 'currency') &&
+                    !group.every((el) => el.value === '' || !isNaN(Number(el.value)))
+                ) {
+                    errors.push(field.name + ' must be a number.');
                     invalid.push(field.name);
                 }
-            }
-            if (field.dataType === 'multiselect') {
-                const chosen = group.filter((el) => el.type === 'checkbox' && el.checked).map((el) => el.value);
-                if (chosen.some((v) => !(field.options || []).includes(v))) {
-                    errors.push(field.name + ' has an invalid selection.');
-                    invalid.push(field.name);
+                if (field.dataType === 'select') {
+                    const sel = group.find((el) => el.tagName === 'SELECT');
+                    if (sel && sel.value && !(field.options || []).includes(sel.value)) {
+                        errors.push(field.name + ' has an invalid selection.');
+                        invalid.push(field.name);
+                    }
                 }
-            }
-        });
-        return {
-            errors,
-            invalid
-        };
-    }
+                if (field.dataType === 'multiselect') {
+                    const chosen = group.filter((el) => el.type === 'checkbox' && el.checked).map((el) => el.value);
+                    if (chosen.some((v) => !(field.options || []).includes(v))) {
+                        errors.push(field.name + ' has an invalid selection.');
+                        invalid.push(field.name);
+                    }
+                }
+            });
+            return {
+                errors,
+                invalid
+            };
+        }
 
-    function generateShortId(len) {
-        len = len || 10;
-        const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-';
-        const arr = new Uint8Array(len);
-        if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(arr);
-        else
-            for (let i = 0; i < len; i++) arr[i] = Math.floor(Math.random() * 256);
-        let out = '';
-        for (let i = 0; i < len; i++) out += chars[arr[i] % chars.length];
-        return out;
-    }
+        function generateShortId(len) {
+            len = len || 10;
+            const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-';
+            const arr = new Uint8Array(len);
+            if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(arr);
+            else for (let i = 0; i < len; i++) arr[i] = Math.floor(Math.random() * 256);
+            let out = '';
+            for (let i = 0; i < len; i++) out += chars[arr[i] % chars.length];
+            return out;
+        }
     } // end mountBaseportForm
 
     window.Baseport = window.Baseport || {};

@@ -2,11 +2,13 @@ const ui = (() => {
     /* toasts */
 
     const ICONS = {
-        success: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg>',
+        success:
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg>',
         error: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
         info: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16v-5M12 8h.01"/><circle cx="12" cy="12" r="9"/></svg>',
         copy: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="12" height="12" x="8" y="8" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
-        dismiss: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+        dismiss:
+            '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>'
     };
 
     function host() {
@@ -39,7 +41,7 @@ const ui = (() => {
         actions.className = 'toast-actions';
         actions.append(
             toastButton('Copy', ICONS.copy, () => copy(el, text)),
-            toastButton('Dismiss', ICONS.dismiss, () => dismiss(el)),
+            toastButton('Dismiss', ICONS.dismiss, () => dismiss(el))
         );
         el.appendChild(actions);
 
@@ -108,11 +110,7 @@ const ui = (() => {
         return track;
     }
 
-    function switchRow(label, {
-        id,
-        checked = false,
-        disabled = false
-    } = {}) {
+    function switchRow(label, { id, checked = false, disabled = false } = {}) {
         const row = el('label', 'switch-row');
         const input = el('input', '', {
             type: 'checkbox'
@@ -120,25 +118,32 @@ const ui = (() => {
         if (id) input.id = id;
         input.checked = !!checked;
         input.disabled = !!disabled;
-        row.append(switchTrack(input), el('span', null, {
-            textContent: label
-        }));
+        row.append(
+            switchTrack(input),
+            el('span', null, {
+                textContent: label
+            })
+        );
         row.ctrl = input;
         return row;
     }
 
     function methodSwitches(methods, selected, help) {
         const wrap = el('div', 'field');
-        wrap.append(el('span', 'field-label-text', {
-            textContent: 'Methods'
-        }));
+        wrap.append(
+            el('span', 'field-label-text', {
+                textContent: 'Methods'
+            })
+        );
         const list = el('ul', 'api-table-list');
         const boxes = {};
         methods.forEach((method) => {
             const row = el('li', 'api-table-row');
-            row.append(el('span', 'api-table-name mono', {
-                textContent: method
-            }));
+            row.append(
+                el('span', 'api-table-name mono', {
+                    textContent: method
+                })
+            );
             const label = el('label', 'switch');
             const box = el('input', null, {
                 type: 'checkbox',
@@ -150,9 +155,12 @@ const ui = (() => {
             boxes[method] = box;
         });
         wrap.append(list);
-        if (help) wrap.append(el('span', 'field-help', {
-            textContent: help
-        }));
+        if (help)
+            wrap.append(
+                el('span', 'field-help', {
+                    textContent: help
+                })
+            );
         wrap.boxes = boxes;
         wrap.selected = () => methods.filter((m) => boxes[m].checked);
         return wrap;
@@ -188,10 +196,7 @@ const ui = (() => {
         });
     }
 
-    async function handle(res, {
-        success,
-        failure = 'Something went wrong.'
-    } = {}) {
+    async function handle(res, { success, failure = 'Something went wrong.' } = {}) {
         let body = null;
         try {
             body = await res.json();
@@ -211,12 +216,7 @@ const ui = (() => {
     }
 
     // fetch + handle, for the common case.
-    async function send(url, {
-        method = 'GET',
-        body,
-        success,
-        failure
-    } = {}) {
+    async function send(url, { method = 'GET', body, success, failure } = {}) {
         const init = {
             method
         };
@@ -238,7 +238,7 @@ const ui = (() => {
 
     function reportError(source, error) {
         const message = (error && (error.message || error)) || 'Unknown error';
-        const frame = (error && error.stack || '').split('\n')[1];
+        const frame = ((error && error.stack) || '').split('\n')[1];
         const text = `${source}: ${message}` + (frame ? ` (${frame.trim()})` : '');
         if (text === lastError) return;
         lastError = text;
@@ -254,14 +254,21 @@ const ui = (() => {
     function sendError(text) {
         if (!navigator.sendBeacon) return;
         try {
-            navigator.sendBeacon('/api/client-errors', new Blob([JSON.stringify({
-                message: text,
-                page: location.pathname,
-            })], {
-                type: 'application/json'
-            }));
-        } catch (e) {
-        }
+            navigator.sendBeacon(
+                '/api/client-errors',
+                new Blob(
+                    [
+                        JSON.stringify({
+                            message: text,
+                            page: location.pathname
+                        })
+                    ],
+                    {
+                        type: 'application/json'
+                    }
+                )
+            );
+        } catch (e) {}
     }
 
     window.addEventListener('error', (ev) => {
@@ -292,9 +299,7 @@ const ui = (() => {
         return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
 
-    function setTheme(next, {
-        remember = true
-    } = {}) {
+    function setTheme(next, { remember = true } = {}) {
         const system = next === 'system';
         document.documentElement.dataset.theme = system ? systemTheme() : next === 'dark' ? 'dark' : 'light';
         if (!remember) return;
@@ -317,9 +322,10 @@ const ui = (() => {
             try {
                 stored = localStorage.getItem(THEME_KEY);
             } catch (e) {}
-            if (!stored) setTheme(ev.matches ? 'dark' : 'light', {
-                remember: false
-            });
+            if (!stored)
+                setTheme(ev.matches ? 'dark' : 'light', {
+                    remember: false
+                });
         };
         if (system.addEventListener) system.addEventListener('change', follow);
         else if (system.addListener) system.addListener(follow);
@@ -331,7 +337,7 @@ const ui = (() => {
             const decimals = raw.includes('.') ? raw.split('.')[1].length : 0;
             el.textContent = new Intl.NumberFormat(navigator.language || undefined, {
                 minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals,
+                maximumFractionDigits: decimals
             }).format(Number(raw));
         });
     }
@@ -343,14 +349,15 @@ const ui = (() => {
         try {
             const res = await fetch(
                 url,
-                options.body === undefined ?
-                undefined : {
-                    method: options.method || 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(options.body),
-                },
+                options.body === undefined
+                    ? undefined
+                    : {
+                          method: options.method || 'POST',
+                          headers: {
+                              'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify(options.body)
+                      }
             );
             if (!res.ok) {
                 if (options.onError) {
@@ -374,7 +381,7 @@ const ui = (() => {
                 totalPages: n('X-Total-Pages'),
                 hasMore: res.headers.get('X-Has-More') === '1',
                 countExact: res.headers.get('X-Count-Exact') !== '0',
-                header: (h) => res.headers.get(h),
+                header: (h) => res.headers.get(h)
             };
         } catch (e) {
             if (options.onError) options.onError(failure);
@@ -401,21 +408,16 @@ const ui = (() => {
         return node;
     }
 
-    function field(label, {
-        id,
-        type = 'text',
-        value = '',
-        placeholder = '',
-        help = '',
-        options,
-        mono,
-        rows = 3,
-        name
-    } = {}) {
+    function field(
+        label,
+        { id, type = 'text', value = '', placeholder = '', help = '', options, mono, rows = 3, name } = {}
+    ) {
         const wrap = el('label', 'field');
-        wrap.append(el('span', 'field-label-text', {
-            textContent: label
-        }));
+        wrap.append(
+            el('span', 'field-label-text', {
+                textContent: label
+            })
+        );
 
         let input;
         if (type === 'textarea') {
@@ -424,10 +426,14 @@ const ui = (() => {
             });
         } else if (type === 'select') {
             input = el('select', 'input');
-            (options || []).forEach(([v, l]) => input.append(el('option', null, {
-                value: v,
-                textContent: l
-            })));
+            (options || []).forEach(([v, l]) =>
+                input.append(
+                    el('option', null, {
+                        value: v,
+                        textContent: l
+                    })
+                )
+            );
         } else {
             input = el('input', type === 'checkbox' ? '' : 'input' + (mono ? ' mono' : ''), {
                 type
@@ -440,32 +446,33 @@ const ui = (() => {
         else input.value = value ?? '';
 
         wrap.append(type === 'checkbox' ? switchTrack(input) : input);
-        if (help) wrap.append(el('span', 'field-help', {
-            textContent: help
-        }));
+        if (help)
+            wrap.append(
+                el('span', 'field-help', {
+                    textContent: help
+                })
+            );
         wrap.ctrl = input;
         return wrap;
     }
 
-    function combobox(label, {
-        id,
-        value = '',
-        valueLabel = '',
-        placeholder = '',
-        help = '',
-        fetchOptions,
-        browseAll = false
-    } = {}) {
+    function combobox(
+        label,
+        { id, value = '', valueLabel = '', placeholder = '', help = '', fetchOptions, browseAll = false } = {}
+    ) {
         const wrap = el('label', 'field combobox');
-        if (label) wrap.append(el('span', 'field-label-text', {
-            textContent: label
-        }));
+        if (label)
+            wrap.append(
+                el('span', 'field-label-text', {
+                    textContent: label
+                })
+            );
 
         const box = el('div', 'combobox-box');
         const search = el('input', 'input' + (value ? ' hidden' : ''), {
             type: 'text',
             placeholder,
-            autocomplete: 'off',
+            autocomplete: 'off'
         });
         const hidden = el('input', null, {
             type: 'hidden',
@@ -488,9 +495,12 @@ const ui = (() => {
         const list = el('ul', 'combobox-list hidden');
         box.append(chip, search, hidden, spinner, list);
         wrap.append(box);
-        if (help) wrap.append(el('span', 'field-help', {
-            textContent: help
-        }));
+        if (help)
+            wrap.append(
+                el('span', 'field-help', {
+                    textContent: help
+                })
+            );
         wrap.ctrl = hidden;
 
         let controller = null;
@@ -524,9 +534,11 @@ const ui = (() => {
 
         function selectOption(v, l) {
             hidden.value = v;
-            hidden.dispatchEvent(new Event('change', {
-                bubbles: true
-            }));
+            hidden.dispatchEvent(
+                new Event('change', {
+                    bubbles: true
+                })
+            );
             showChip(l);
             closeList();
             markValidity();
@@ -540,9 +552,11 @@ const ui = (() => {
             pendingValue = hidden.value;
             pendingLabel = chipLabel.textContent;
             hidden.value = '';
-            hidden.dispatchEvent(new Event('change', {
-                bubbles: true
-            }));
+            hidden.dispatchEvent(
+                new Event('change', {
+                    bubbles: true
+                })
+            );
             hideChip();
             search.classList.remove('input-invalid'); // an explicit clear, not an error
             search.focus();
@@ -551,20 +565,29 @@ const ui = (() => {
         function renderOptions(rows) {
             list.innerHTML = '';
             if (!rows.length) {
-                list.append(el('li', 'combobox-empty', {
-                    textContent: 'No matches.'
-                }));
+                list.append(
+                    el('li', 'combobox-empty', {
+                        textContent: 'No matches.'
+                    })
+                );
             } else {
                 rows.forEach((r) => {
                     if (r.group) {
-                        list.append(el('li', 'combobox-group', {
-                            textContent: r.label
-                        }));
+                        list.append(
+                            el('li', 'combobox-group', {
+                                textContent: r.label
+                            })
+                        );
                         return;
                     }
-                    const li = el('li', 'combobox-option' + (String(r.id) === String(hidden.value) && hidden.value !== '' ? ' selected' : ''), {
-                        textContent: r.label
-                    });
+                    const li = el(
+                        'li',
+                        'combobox-option' +
+                            (String(r.id) === String(hidden.value) && hidden.value !== '' ? ' selected' : ''),
+                        {
+                            textContent: r.label
+                        }
+                    );
                     li.addEventListener('mousedown', (e) => {
                         e.preventDefault();
                         selectOption(r.id, r.label);
@@ -575,9 +598,10 @@ const ui = (() => {
             active = -1;
             list.classList.remove('hidden');
             const selected = list.querySelector('.combobox-option.selected');
-            if (selected) selected.scrollIntoView({
-                block: 'nearest'
-            });
+            if (selected)
+                selected.scrollIntoView({
+                    block: 'nearest'
+                });
         }
 
         function runSearch(query) {
@@ -598,9 +622,11 @@ const ui = (() => {
         search.addEventListener('input', () => {
             if (hidden.value) {
                 hidden.value = '';
-                hidden.dispatchEvent(new Event('change', {
-                    bubbles: true
-                }));
+                hidden.dispatchEvent(
+                    new Event('change', {
+                        bubbles: true
+                    })
+                );
             }
             search.classList.remove('input-invalid'); // reds only on blur, not while still typing
             clearTimeout(debounceTimer);
@@ -621,7 +647,7 @@ const ui = (() => {
                 e.preventDefault();
                 active = (active - 1 + options.length) % options.length;
             } else if (e.key === 'Enter') {
-                const idx = active >= 0 ? active : (search.value.trim() ? 0 : -1);
+                const idx = active >= 0 ? active : search.value.trim() ? 0 : -1;
                 if (idx >= 0 && options[idx]) {
                     e.preventDefault();
                     options[idx].dispatchEvent(new Event('mousedown'));
@@ -634,9 +660,10 @@ const ui = (() => {
                 return;
             }
             options.forEach((li, i) => li.classList.toggle('active', i === active));
-            if (options[active]) options[active].scrollIntoView({
-                block: 'nearest'
-            });
+            if (options[active])
+                options[active].scrollIntoView({
+                    block: 'nearest'
+                });
         });
 
         search.addEventListener('blur', () => {
@@ -644,9 +671,11 @@ const ui = (() => {
                 closeList();
                 if (!hidden.value && pendingValue) {
                     hidden.value = pendingValue;
-                    hidden.dispatchEvent(new Event('change', {
-                        bubbles: true
-                    }));
+                    hidden.dispatchEvent(
+                        new Event('change', {
+                            bubbles: true
+                        })
+                    );
                     showChip(pendingLabel);
                     pendingValue = null;
                     pendingLabel = null;
@@ -665,12 +694,7 @@ const ui = (() => {
         return wrap;
     }
 
-    function button(label, onClick, {
-        variant = '',
-        size = '',
-        type = 'button',
-        title
-    } = {}) {
+    function button(label, onClick, { variant = '', size = '', type = 'button', title } = {}) {
         const b = el('button', ['btn', variant, size].filter(Boolean).join(' '), {
             type,
             textContent: label
@@ -729,7 +753,7 @@ const ui = (() => {
             button('×', attemptCloseSheet, {
                 variant: 'btn-ghost',
                 size: 'btn-sm'
-            }),
+            })
         );
 
         const body = el('div', 'sheet-body');
@@ -775,9 +799,9 @@ const ui = (() => {
         panel.append(
             el('h3', 'select-none', {
                 textContent: title
-            }),
+            })
         );
-        
+
         const body = el('div', 'modal-body');
         body.append(bodyEl);
         panel.append(body);
@@ -804,15 +828,7 @@ const ui = (() => {
         if (ev.key === 'Escape') closeModal();
     }
 
-    function ask({
-        title,
-        label,
-        value = '',
-        placeholder = '',
-        confirmLabel = 'Save',
-        type = 'text',
-        help = ''
-    }) {
+    function ask({ title, label, value = '', placeholder = '', confirmLabel = 'Save', type = 'text', help = '' }) {
         return new Promise((resolve) => {
             const body = el('div');
             const input = field(label, {
@@ -837,7 +853,7 @@ const ui = (() => {
                 button('Cancel', () => done(null), {
                     variant: 'btn-outline'
                 }),
-                button(confirmLabel, () => done(input.ctrl.value.trim() || null)),
+                button(confirmLabel, () => done(input.ctrl.value.trim() || null))
             );
             input.ctrl.addEventListener('keydown', (ev) => {
                 if (ev.key === 'Enter') {
@@ -915,20 +931,18 @@ const ui = (() => {
         const list = options.slice();
         if (value && !list.some(([v]) => v === value)) list.unshift([value, value]);
         select.innerHTML = '';
-        list.forEach(([v, label]) => select.append(el('option', null, {
-            value: v,
-            textContent: label
-        })));
+        list.forEach(([v, label]) =>
+            select.append(
+                el('option', null, {
+                    value: v,
+                    textContent: label
+                })
+            )
+        );
         select.value = value || (list[0] ? list[0][0] : '');
     }
 
-    function confirm({
-        title,
-        message,
-        confirmLabel = 'Confirm',
-        cancelLabel = 'Cancel',
-        danger = false
-    }) {
+    function confirm({ title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false }) {
         return new Promise((resolve) => {
             const body = el('p', 'muted', {
                 textContent: message
@@ -941,19 +955,21 @@ const ui = (() => {
                     () => {
                         close();
                         resolve(false);
-                    }, {
-                        variant: 'btn-outline'
                     },
+                    {
+                        variant: 'btn-outline'
+                    }
                 ),
                 button(
                     confirmLabel,
                     () => {
                         close();
                         resolve(true);
-                    }, {
-                        variant: danger ? 'btn-danger' : ''
                     },
-                ),
+                    {
+                        variant: danger ? 'btn-danger' : ''
+                    }
+                )
             );
             renderModal(title, body, actions);
         });
@@ -990,7 +1006,7 @@ const ui = (() => {
         theme,
         themeChoice,
         setTheme,
-        toggleTheme,
+        toggleTheme
     };
 })();
 

@@ -38,18 +38,21 @@ async function loadRecords(page) {
     });
 
     const sort = sortState(sortKey, '__created');
-    const sortParams = sort.key === '__created' ? `&order=${sort.dir}` : `&sort=${encodeURIComponent(sort.key)}&order=${sort.dir}`;
+    const sortParams =
+        sort.key === '__created' ? `&order=${sort.dir}` : `&sort=${encodeURIComponent(sort.key)}&order=${sort.dir}`;
 
     const meta = await ui.fragment(
         'recordsBody',
         `/api/_admin/fragments/records/${currentTablePublicId}?page=${recordPage}&pageSize=25` +
-        (q ? `&q=${encodeURIComponent(q)}` : '') + sortParams,
+            (q ? `&q=${encodeURIComponent(q)}` : '') +
+            sortParams
     );
     if (!meta) return;
 
     document.getElementById('recordsEmpty').classList.toggle('hidden', meta.total > 0);
-    document.getElementById('recordsEmpty').innerText =
-        q ? 'No records match that search. Try a whole word, or the start of one.' : 'No records yet.';
+    document.getElementById('recordsEmpty').innerText = q
+        ? 'No records match that search. Try a whole word, or the start of one.'
+        : 'No records yet.';
     renderRecordPager(meta);
 }
 
@@ -83,22 +86,24 @@ function deleteRecord(rid, label) {
             });
             await loadRecords();
             await loadTables();
-        },
+        }
     });
 }
 
 const NON_WRITABLE_TYPES = new Set(['calculated', 'formula', 'derived', 'internal', 'systemid', 'system_id']);
 
 function normalizeFieldType(t) {
-    return ({
-        markdown: 'longtext',
-        price: 'currency',
-        checkbox: 'boolean',
-        timestamp: 'datetime',
-        tags: 'multiselect',
-        media: 'file',
-        relation: 'reference'
-    } [t] || t);
+    return (
+        {
+            markdown: 'longtext',
+            price: 'currency',
+            checkbox: 'boolean',
+            timestamp: 'datetime',
+            tags: 'multiselect',
+            media: 'file',
+            relation: 'reference'
+        }[t] || t
+    );
 }
 
 function parseFieldOptions(json) {
@@ -130,17 +135,21 @@ function refTableId(json) {
 
 function fetchReferenceOptions(targetId, query, signal) {
     return fetch(`/api/_admin/tables/${targetId}/records?q=${encodeURIComponent(query)}&pageSize=20`, {
-            signal
-        })
+        signal
+    })
         .then((r) => r.json())
-        .then((data) => (data.rows || []).map((rec) => ({
-            id: rec.id,
-            label: recordLabel(rec)
-        })));
+        .then((data) =>
+            (data.rows || []).map((rec) => ({
+                id: rec.id,
+                label: recordLabel(rec)
+            }))
+        );
 }
 
 function recordLabel(rec) {
-    const vals = Object.values(rec.data || {}).map((v) => String(v)).filter(Boolean);
+    const vals = Object.values(rec.data || {})
+        .map((v) => String(v))
+        .filter(Boolean);
     return (vals[0] || 'Record').slice(0, 40);
 }
 
@@ -162,45 +171,49 @@ function openNewRecordModal() {
         const label = (f.label || f.name) + (f.isRequired ? ' *' : '');
         const id = 'rf_' + f.name;
         let row;
-        if (type === 'longtext') row = ui.field(label, {
-            id,
-            type: 'textarea',
-            help: f.helpText
-        });
-        else if (type === 'boolean') row = ui.field(label, {
-            id,
-            type: 'checkbox',
-            help: f.helpText
-        });
-        else if (type === 'number') row = ui.field(label, {
-            id,
-            type: 'number',
-            help: f.helpText
-        });
-        else if (type === 'currency') row = ui.field(label, {
-            id,
-            type: 'number',
-            placeholder: '0.00',
-            help: f.helpText || f.currency || ''
-        });
-        else if (type === 'date') row = ui.field(label, {
-            id,
-            type: 'date',
-            help: f.helpText
-        });
-        else if (type === 'datetime') row = ui.field(label, {
-            id,
-            type: 'datetime-local',
-            help: f.helpText
-        });
+        if (type === 'longtext')
+            row = ui.field(label, {
+                id,
+                type: 'textarea',
+                help: f.helpText
+            });
+        else if (type === 'boolean')
+            row = ui.field(label, {
+                id,
+                type: 'checkbox',
+                help: f.helpText
+            });
+        else if (type === 'number')
+            row = ui.field(label, {
+                id,
+                type: 'number',
+                help: f.helpText
+            });
+        else if (type === 'currency')
+            row = ui.field(label, {
+                id,
+                type: 'number',
+                placeholder: '0.00',
+                help: f.helpText || f.currency || ''
+            });
+        else if (type === 'date')
+            row = ui.field(label, {
+                id,
+                type: 'date',
+                help: f.helpText
+            });
+        else if (type === 'datetime')
+            row = ui.field(label, {
+                id,
+                type: 'datetime-local',
+                help: f.helpText
+            });
         else if (type === 'select') {
             const opts = parseFieldOptions(f.optionsJson);
             row = ui.field(label, {
                 id,
                 type: 'select',
-                options: [
-                    ['', '- Select -']
-                ].concat(opts.map((o) => [o, o])),
+                options: [['', '- Select -']].concat(opts.map((o) => [o, o])),
                 help: f.helpText
             });
         } else if (type === 'multiselect') {
@@ -223,28 +236,32 @@ function openNewRecordModal() {
                 id,
                 placeholder: 'Search…',
                 help: f.helpText,
-                fetchOptions: (query, signal) => fetchReferenceOptions(targetId, query, signal),
+                fetchOptions: (query, signal) => fetchReferenceOptions(targetId, query, signal)
             });
-        } else if (type === 'email') row = ui.field(label, {
-            id,
-            type: 'email',
-            help: f.helpText
-        });
-        else if (type === 'url') row = ui.field(label, {
-            id,
-            type: 'url',
-            help: f.helpText
-        });
-        else if (type === 'time') row = ui.field(label, {
-            id,
-            type: 'time',
-            help: f.helpText
-        });
-        else if (type === 'password') row = ui.field(label, {
-            id,
-            type: 'password',
-            help: f.helpText
-        });
+        } else if (type === 'email')
+            row = ui.field(label, {
+                id,
+                type: 'email',
+                help: f.helpText
+            });
+        else if (type === 'url')
+            row = ui.field(label, {
+                id,
+                type: 'url',
+                help: f.helpText
+            });
+        else if (type === 'time')
+            row = ui.field(label, {
+                id,
+                type: 'time',
+                help: f.helpText
+            });
+        else if (type === 'password')
+            row = ui.field(label, {
+                id,
+                type: 'password',
+                help: f.helpText
+            });
         else if (type === 'slug') {
             row = ui.field(label, {
                 id,
@@ -264,8 +281,10 @@ function openNewRecordModal() {
                 id,
                 type: 'textarea',
                 placeholder: members.length ? `{ "${members[0]}": ... }` : '{ }',
-                help: ((f.helpText ? f.helpText + ' ' : '') +
-                    (members.length ? `Members: ${members.join(', ')}.` : 'Raw JSON object.')).trim()
+                help: (
+                    (f.helpText ? f.helpText + ' ' : '') +
+                    (members.length ? `Members: ${members.join(', ')}.` : 'Raw JSON object.')
+                ).trim()
             });
         } else if (type === 'array') {
             const members = schemaMembers(f);
@@ -273,8 +292,10 @@ function openNewRecordModal() {
                 id,
                 type: 'textarea',
                 placeholder: members.length ? `[{ "${members[0]}": ... }]` : '["a", "b"]',
-                help: ((f.helpText ? f.helpText + ' ' : '') +
-                    (members.length ? `Rows of: ${members.join(', ')}.` : 'JSON array of text/number/boolean values.')).trim()
+                help: (
+                    (f.helpText ? f.helpText + ' ' : '') +
+                    (members.length ? `Rows of: ${members.join(', ')}.` : 'JSON array of text/number/boolean values.')
+                ).trim()
             });
         } else {
             row = ui.field(label, {
@@ -295,17 +316,22 @@ function openNewRecordModal() {
         body.appendChild(row);
     });
 
-    if (!fields.length) body.appendChild(Object.assign(document.createElement('p'), {
-        className: 'muted',
-        innerText: 'This table has no editable fields.'
-    }));
+    if (!fields.length)
+        body.appendChild(
+            Object.assign(document.createElement('p'), {
+                className: 'muted',
+                innerText: 'This table has no editable fields.'
+            })
+        );
 
     const actions = document.createElement('div');
     actions.className = 'form-actions';
     const createBtn = ui.button('Create', () => ui.busy(createBtn, () => submitNewRecord(inputs)));
-    actions.appendChild(ui.button('Cancel', closeSheet, {
-        variant: 'btn-outline'
-    }));
+    actions.appendChild(
+        ui.button('Cancel', closeSheet, {
+            variant: 'btn-outline'
+        })
+    );
     actions.appendChild(createBtn);
 
     openSheet('New record', body, actions);
@@ -319,10 +345,7 @@ async function submitNewRecord(inputs) {
     if (hasFile) {
         const fd = new FormData();
         for (const name in inputs) {
-            const {
-                type,
-                ctrl
-            } = inputs[name];
+            const { type, ctrl } = inputs[name];
             if (type === 'file') {
                 if (ctrl.files[0]) fd.append(name, ctrl.files[0]);
             } else if (type === 'boolean') {
@@ -340,10 +363,7 @@ async function submitNewRecord(inputs) {
     } else {
         const payload = {};
         for (const name in inputs) {
-            const {
-                type,
-                ctrl
-            } = inputs[name];
+            const { type, ctrl } = inputs[name];
             if (type === 'boolean') {
                 payload[name] = ctrl.checked;
                 continue;
@@ -390,7 +410,7 @@ async function saveTableSettings(btn) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(tableSettingsPayload()),
+            body: JSON.stringify(tableSettingsPayload())
         });
         saved = await ui.handle(res, {
             success: 'Table settings saved.',

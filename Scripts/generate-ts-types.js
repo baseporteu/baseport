@@ -48,7 +48,7 @@ async function main() {
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     console.log(`[generate-ts-types] generating ${path.relative(root, outPath)}`);
     const result = spawnSync('npx', ['--yes', 'openapi-typescript', tmpFile, '-o', outPath], {
-        stdio: 'inherit',
+        stdio: 'inherit'
     });
     fs.rmSync(tmpFile, { force: true });
 

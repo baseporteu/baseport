@@ -1,13 +1,14 @@
-
 const SECTION_ICONS = {
     tables: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><rect x='3' y='3' width='16' height='16' rx='2'/><path d='M3 9h18M9 21V9'/></svg>",
     forms: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><rect x='4' y='3' width='16' height='18' rx='2'/><path d='M8 8h8M8 12h8M8 16h4'/></svg>",
-    actions: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><path d='M13 2 3 14h8l-1 8 10-12h-8z'/></svg>",
+    actions:
+        "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><path d='M13 2 3 14h8l-1 8 10-12h-8z'/></svg>",
     sql: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><path d='M17 3a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6M3 21l9-9M12.2 6.3 11 5l-3.5 3.5 1.2 1.2z'/><path d='M5 3l1.5 1.5M5 3 3.5 4.5M12.8 17.3 14 18.6l3.5-3.5-1.2-1.2zM14.5 12.5h2M17 21l-1.5-1.5M17 21l1.5-1.5'/></svg>",
     schema: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><circle cx='12' cy='5' r='2'/><circle cx='5' cy='19' r='2'/><circle cx='19' cy='19' r='2'/><path d='M12 7v6M5 17l2.5-4M19 17l-2.5-4M12 13l-4.5 4M12 13l4.5 4'/></svg>",
     auth: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><path d='M5 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.85'/></svg>",
     logs: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><path d='m4 16 6-7 5 5 5-6'/><path d='M15 14a1 1 0 1 0 2 0 1 1 0 1 0-2 0M9 9a1 1 0 1 0 2 0 1 1 0 1 0-2 0M3 16a1 1 0 1 0 2 0 1 1 0 1 0-2 0M19 8a1 1 0 1 0 2 0 1 1 0 1 0-2 0'/></svg>",
-    settings: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>",
+    settings:
+        "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>"
 };
 
 const OBJECT_ICONS = {
@@ -15,29 +16,37 @@ const OBJECT_ICONS = {
     form: SECTION_ICONS.forms,
     list: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><circle cx='4' cy='6' r='1' fill='currentColor' stroke='none'/><circle cx='4' cy='12' r='1' fill='currentColor' stroke='none'/><circle cx='4' cy='18' r='1' fill='currentColor' stroke='none'/><path d='M9 6h11M9 12h11M9 18h11'/></svg>",
     query: SECTION_ICONS.sql,
-    folder: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><path d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/></svg>",
+    folder: "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='16' height='16'><path d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/></svg>"
 };
 
 const SECTION_GROUPS = [
-    ['Workspace', [
-        ['tables', 'Tables'],
-        ['forms', 'Forms'],
-        ['actions', 'Actions'],
-        ['sql', 'Query'],
-    ]],
-    ['System', [
-        ['schema', 'Schema'],
-        ['auth', 'Users'],
-        ['logs', 'Logs'],
-        ['settings', 'Settings'],
-    ]],
+    [
+        'Workspace',
+        [
+            ['tables', 'Tables'],
+            ['forms', 'Forms'],
+            ['actions', 'Actions'],
+            ['sql', 'Query']
+        ]
+    ],
+    [
+        'System',
+        [
+            ['schema', 'Schema'],
+            ['auth', 'Users'],
+            ['logs', 'Logs'],
+            ['settings', 'Settings']
+        ]
+    ]
 ];
 
 const SECTIONS = SECTION_GROUPS.flatMap(([, rows]) => rows);
 
-const SORT_ICON = "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='13' height='13'><path d='M7 4v16m0 0-3.5-3.5M7 20l3.5-3.5M17 20V4m0 0-3.5 3.5M17 4l3.5 3.5'/></svg>";
+const SORT_ICON =
+    "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' viewBox='0 0 24 24' width='13' height='13'><path d='M7 4v16m0 0-3.5-3.5M7 20l3.5-3.5M17 20V4m0 0-3.5 3.5M17 4l3.5 3.5'/></svg>";
 
-const CLEAR = "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='12' height='12'><path d='m6 6 12 12M18 6 6 18'/></svg>";
+const CLEAR =
+    "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='12' height='12'><path d='m6 6 12 12M18 6 6 18'/></svg>";
 
 const navSort = readNavStore('baseport.nav.sort');
 const navOrder = readNavStore('baseport.nav.order');
@@ -72,7 +81,7 @@ function byName(a, b) {
 function sortsFor(objects) {
     const sorts = [
         ['name', 'Name A to Z'],
-        ['created', 'Newest first'],
+        ['created', 'Newest first']
     ];
     if (objects.some((i) => typeof i.count === 'number')) sorts.push(['records', 'Most records']);
     sorts.push(['manual', 'Manual']);
@@ -82,7 +91,8 @@ function sortsFor(objects) {
 function sortObjects(section, objects) {
     const mode = navSort[section] || 'name';
     const list = [...objects];
-    if (mode === 'created') return list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || byName(a, b));
+    if (mode === 'created')
+        return list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || byName(a, b));
     if (mode === 'records') return list.sort((a, b) => (b.count || 0) - (a.count || 0) || byName(a, b));
     if (mode !== 'manual') return list.sort(byName);
 
@@ -99,83 +109,115 @@ function sortObjects(section, objects) {
 
 function withRoot(section, mapped, active, path) {
     return [
-        { id: '__all', label: 'Show all', icon: OBJECT_ICONS.folder, root: true, active, onSelect: () => navigate(path) },
-        ...sortObjects(section, mapped),
+        {
+            id: '__all',
+            label: 'Show all',
+            icon: OBJECT_ICONS.folder,
+            root: true,
+            active,
+            onSelect: () => navigate(path)
+        },
+        ...sortObjects(section, mapped)
     ];
 }
 
 const SIDEBARS = {
     tables: {
         group: 'Tables',
-        items: () => withRoot('tables', currentTables.map((t) => ({
-            id: t.id,
-            label: t.name,
-            icon: OBJECT_ICONS.table,
-            badge: t.isProxy ? 'proxy' : null,
-            createdAt: t.createdAt,
-            count: t.recordCount,
-            active: t.id === currentTablePublicId,
-            onSelect: () => navigate(`/tables/${t.id}`),
-        })), !currentTablePublicId, '/tables'),
+        items: () =>
+            withRoot(
+                'tables',
+                currentTables.map((t) => ({
+                    id: t.id,
+                    label: t.name,
+                    icon: OBJECT_ICONS.table,
+                    badge: t.isProxy ? 'proxy' : null,
+                    createdAt: t.createdAt,
+                    count: t.recordCount,
+                    active: t.id === currentTablePublicId,
+                    onSelect: () => navigate(`/tables/${t.id}`)
+                })),
+                !currentTablePublicId,
+                '/tables'
+            )
     },
 
     forms: {
         group: 'Forms',
-        items: () => withRoot('forms', (typeof formsAll === 'undefined' ? [] : formsAll).map((f) => ({
-            id: f.id,
-            label: f.title || 'Untitled form',
-            icon: f.kind === 'list' ? OBJECT_ICONS.list : OBJECT_ICONS.form,
-            createdAt: f.createdAt,
-            active: f.id === formEditingId,
-            onSelect: () => navigate(`/forms/${f.id}`),
-        })), !formEditingId, '/forms'),
+        items: () =>
+            withRoot(
+                'forms',
+                (typeof formsAll === 'undefined' ? [] : formsAll).map((f) => ({
+                    id: f.id,
+                    label: f.title || 'Untitled form',
+                    icon: f.kind === 'list' ? OBJECT_ICONS.list : OBJECT_ICONS.form,
+                    createdAt: f.createdAt,
+                    active: f.id === formEditingId,
+                    onSelect: () => navigate(`/forms/${f.id}`)
+                })),
+                !formEditingId,
+                '/forms'
+            )
     },
 
     actions: {
         group: 'Actions',
-        items: () => withRoot('actions', (typeof actionsAll === 'undefined' ? [] : actionsAll).map((a) => ({
-            id: a.id,
-            label: a.name || 'Untitled action',
-            icon: SECTION_ICONS.actions,
-            createdAt: a.createdAt,
-            active: a.id === actionEditingId,
-            onSelect: () => navigate(`/actions/${a.id}`),
-        })), !actionEditingId, '/actions'),
+        items: () =>
+            withRoot(
+                'actions',
+                (typeof actionsAll === 'undefined' ? [] : actionsAll).map((a) => ({
+                    id: a.id,
+                    label: a.name || 'Untitled action',
+                    icon: SECTION_ICONS.actions,
+                    createdAt: a.createdAt,
+                    active: a.id === actionEditingId,
+                    onSelect: () => navigate(`/actions/${a.id}`)
+                })),
+                !actionEditingId,
+                '/actions'
+            )
     },
 
     sql: {
         group: 'Saved queries',
-        items: () => withRoot('sql', savedQueries.map((q) => ({
-            id: q.id,
-            label: q.name,
-            icon: OBJECT_ICONS.query,
-            createdAt: q.createdAt,
-            active: q.id === currentQueryId,
-            onSelect: () => navigate(`/sql/${q.id}`),
-        })), !currentQueryId, '/sql'),
+        items: () =>
+            withRoot(
+                'sql',
+                savedQueries.map((q) => ({
+                    id: q.id,
+                    label: q.name,
+                    icon: OBJECT_ICONS.query,
+                    createdAt: q.createdAt,
+                    active: q.id === currentQueryId,
+                    onSelect: () => navigate(`/sql/${q.id}`)
+                })),
+                !currentQueryId,
+                '/sql'
+            )
     },
 
     settings: {
-        items: () => [
-            ['host', 'Host'],
-            ['auth', 'Authentication'],
-            ['providers', 'Providers'],
-            ['sites', 'Sites'],
-            ['secrets', 'Secrets'],
-            ['connections', 'Connections'],
-            ['jobs', 'Jobs'],
-            ['backups', 'Backups'],
-        ].map(([page, label]) => ({
-            id: page,
-            label,
-            active: settingsCurrentPage === page,
-            onSelect: () => navigate(`/settings/${page}`),
-        })),
+        items: () =>
+            [
+                ['host', 'Host'],
+                ['auth', 'Authentication'],
+                ['providers', 'Providers'],
+                ['sites', 'Sites'],
+                ['secrets', 'Secrets'],
+                ['connections', 'Connections'],
+                ['jobs', 'Jobs'],
+                ['backups', 'Backups']
+            ].map(([page, label]) => ({
+                id: page,
+                label,
+                active: settingsCurrentPage === page,
+                onSelect: () => navigate(`/settings/${page}`)
+            }))
     },
 
     schema: { items: () => [] },
     auth: { items: () => [] },
-    logs: { items: () => [] },
+    logs: { items: () => [] }
 };
 
 function sectionItems(section) {
@@ -213,20 +255,25 @@ function renderSectionNav(current) {
 function sectionButton(section, label, objects, active) {
     const b = ui.el('button', 'side-nav-btn', {
         type: 'button',
-        title: label,
+        title: label
     });
     b.dataset.section = section;
     if (active) {
         b.classList.add('active');
         b.setAttribute('aria-current', 'page');
     }
-    b.append(ui.el('span', 'nav-icon', {
-        innerHTML: SECTION_ICONS[section]
-    }));
+    b.append(
+        ui.el('span', 'nav-icon', {
+            innerHTML: SECTION_ICONS[section]
+        })
+    );
     b.append(navLabel(label));
-    if (objects.length && SIDEBARS[section].group) b.append(ui.el('span', 'nav-count', {
-        textContent: String(objects.length)
-    }));
+    if (objects.length && SIDEBARS[section].group)
+        b.append(
+            ui.el('span', 'nav-count', {
+                textContent: String(objects.length)
+            })
+        );
     b.onclick = () => goSection(section);
     return b;
 }
@@ -256,9 +303,12 @@ function renderSubbar(section) {
         next.append(pill);
     });
 
-    if (term && matching.length === 0) next.append(ui.el('p', 'subbar-empty', {
-        textContent: `Nothing matches "${term}".`
-    }));
+    if (term && matching.length === 0)
+        next.append(
+            ui.el('p', 'subbar-empty', {
+                textContent: `Nothing matches "${term}".`
+            })
+        );
 
     const scroll = bar.scrollTop;
     bar.replaceChildren(...next.childNodes);
@@ -268,28 +318,39 @@ function renderSubbar(section) {
 function navLabel(text) {
     const wrap = ui.el('span', 'nav-label');
     const tail = text.length > 8 ? text.slice(-7) : '';
-    wrap.append(ui.el('span', 'nav-label-head', {
-        textContent: tail ? text.slice(0, -7) : text
-    }));
-    if (tail) wrap.append(ui.el('span', 'nav-label-tail', {
-        textContent: tail
-    }));
+    wrap.append(
+        ui.el('span', 'nav-label-head', {
+            textContent: tail ? text.slice(0, -7) : text
+        })
+    );
+    if (tail)
+        wrap.append(
+            ui.el('span', 'nav-label-tail', {
+                textContent: tail
+            })
+        );
     return wrap;
 }
 
 function sidebarItem(item) {
     const b = ui.el('button', 'subbar-pill' + (item.active ? ' active' : ''), {
         type: 'button',
-        title: item.label,
+        title: item.label
     });
     if (item.active) b.setAttribute('aria-current', 'page');
-    if (item.icon) b.append(ui.el('span', 'nav-icon', {
-        innerHTML: item.icon
-    }));
+    if (item.icon)
+        b.append(
+            ui.el('span', 'nav-icon', {
+                innerHTML: item.icon
+            })
+        );
     b.append(navLabel(item.label));
-    if (item.badge) b.append(ui.el('span', 'nav-count', {
-        textContent: item.badge
-    }));
+    if (item.badge)
+        b.append(
+            ui.el('span', 'nav-count', {
+                textContent: item.badge
+            })
+        );
     if (item.onSelect) b.onclick = item.onSelect;
     return b;
 }
@@ -300,7 +361,7 @@ function filterBar(section, group, objects) {
     const input = ui.el('input', 'input input-sm', {
         type: 'search',
         value: subbarFilters[section] || '',
-        placeholder: 'Filter…',
+        placeholder: 'Filter…'
     });
     input.setAttribute('aria-label', `Filter ${group.toLowerCase()}`);
     input.oninput = () => setFilter(section, input.value);
@@ -315,7 +376,7 @@ function filterBar(section, group, objects) {
         const clear = ui.el('button', 'nav-clear', {
             type: 'button',
             title: 'Clear filter',
-            innerHTML: CLEAR,
+            innerHTML: CLEAR
         });
         clear.setAttribute('aria-label', 'Clear filter');
         clear.onclick = () => setFilter(section, '');
@@ -328,7 +389,7 @@ function filterBar(section, group, objects) {
     const sort = ui.el('button', 'nav-sort' + (open ? ' open' : ''), {
         type: 'button',
         title: `Sort: ${label}`,
-        innerHTML: SORT_ICON,
+        innerHTML: SORT_ICON
     });
     sort.setAttribute('aria-label', `Sort: ${label}`);
     sort.setAttribute('aria-expanded', String(open));
@@ -349,7 +410,7 @@ function sortMenu(section, objects) {
     sortsFor(objects).forEach(([id, label]) => {
         const b = ui.el('button', 'nav-sort-option' + (id === mode ? ' checked' : ''), {
             type: 'button',
-            textContent: label,
+            textContent: label
         });
         b.setAttribute('role', 'menuitemradio');
         b.setAttribute('aria-checked', String(id === mode));
@@ -404,7 +465,8 @@ function attachOrdering(b, section, id) {
 }
 
 function clearDropMarks() {
-    document.querySelectorAll('.subbar-pill.drop-before, .subbar-pill.drop-after')
+    document
+        .querySelectorAll('.subbar-pill.drop-before, .subbar-pill.drop-after')
         .forEach((el) => el.classList.remove('drop-before', 'drop-after'));
 }
 
@@ -418,7 +480,9 @@ function commitOrder(section, ids, focusId) {
 }
 
 function moveBeside(section, id, targetId, after) {
-    const ids = sectionItems(section).filter((i) => !i.root).map((i) => i.id);
+    const ids = sectionItems(section)
+        .filter((i) => !i.root)
+        .map((i) => i.id);
     const from = ids.indexOf(id);
     if (from < 0) return;
     ids.splice(from, 1);
@@ -429,7 +493,9 @@ function moveBeside(section, id, targetId, after) {
 }
 
 function moveBy(section, id, delta) {
-    const ids = sectionItems(section).filter((i) => !i.root).map((i) => i.id);
+    const ids = sectionItems(section)
+        .filter((i) => !i.root)
+        .map((i) => i.id);
     const from = ids.indexOf(id);
     const to = from + delta;
     if (from < 0 || to < 0 || to >= ids.length) return;
@@ -468,7 +534,7 @@ function renderBreadcrumb(route) {
         crumbs.push('New form');
     } else if (route.section === 'forms' && route.id) {
         const f = (typeof formsAll === 'undefined' ? [] : formsAll).find((f) => f.id === route.id);
-        crumbs.push(f ? (f.title || 'Untitled form') : 'Form');
+        crumbs.push(f ? f.title || 'Untitled form' : 'Form');
     } else if (route.section === 'sql' && route.id) {
         const q = savedQueries.find((q) => q.id === route.id);
         crumbs.push(q ? q.name : 'Query');
@@ -484,9 +550,9 @@ function isNarrowViewport() {
 }
 
 function setNavExpanded(open) {
-    document.querySelectorAll('.brand-trigger, .topbar-trigger').forEach((el) =>
-        el.setAttribute('aria-expanded', String(open)),
-    );
+    document
+        .querySelectorAll('.brand-trigger, .topbar-trigger')
+        .forEach((el) => el.setAttribute('aria-expanded', String(open)));
 }
 
 function toggleSidebar() {

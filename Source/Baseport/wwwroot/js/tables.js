@@ -13,9 +13,7 @@ function selectTable(table) {
     document.getElementById('tableDescription').value = table.description || '';
     applyProxySettings(table);
     document.getElementById('tableFormsHint').innerText =
-        (table.formCount || 0) === 0 ?
-        '' :
-        `${table.formCount} form(s) associated with this table.`;
+        (table.formCount || 0) === 0 ? '' : `${table.formCount} form(s) associated with this table.`;
     document.getElementById('saveTableBtn').disabled = true;
     document.getElementById('fieldName').value = '';
     setTypeComboboxValue('fieldType', 'text');
@@ -33,9 +31,9 @@ function applyProxySettings(table) {
     const token = document.getElementById('proxyToken');
     token.value = '';
     delete token.dataset.clear;
-    document.getElementById('proxyTokenState').innerText = table.hasProxyToken ?
-        'A token is set. Type a new one to replace it; the current one is never shown.' :
-        'No token set. The remote API will be called unauthenticated.';
+    document.getElementById('proxyTokenState').innerText = table.hasProxyToken
+        ? 'A token is set. Type a new one to replace it; the current one is never shown.'
+        : 'No token set. The remote API will be called unauthenticated.';
 }
 
 function clearProxyToken() {
@@ -73,15 +71,15 @@ function paintTableName(table) {
     document.getElementById('detailTableName').innerText = name;
     document.getElementById('settingsTableName').innerText = name;
     const safe = ui.escape(name);
-    document.getElementById('page-sub').innerHTML = table.isProxy ?
-        `Building <strong>${safe}</strong>, a proxy to <code>${ui.escape((table.proxyMethod || 'POST') + ' ' + (table.proxyUrl || ''))}</code>.` :
-        `Building <strong>${safe}</strong>, configure fields, tune API exposure, and inspect submissions.`;
+    document.getElementById('page-sub').innerHTML = table.isProxy
+        ? `Building <strong>${safe}</strong>, a proxy to <code>${ui.escape((table.proxyMethod || 'POST') + ' ' + (table.proxyUrl || ''))}</code>.`
+        : `Building <strong>${safe}</strong>, configure fields, tune API exposure, and inspect submissions.`;
 }
 
 function tableSettingsPayload() {
     const body = {
         name: document.getElementById('tableName').value.trim(),
-        description: document.getElementById('tableDescription').value,
+        description: document.getElementById('tableDescription').value
     };
     const table = currentTables.find((t) => t.id === currentTablePublicId);
     if (table && table.isProxy) {
@@ -105,7 +103,7 @@ function settingSwitch(id, checked, label, desc) {
         }),
         ui.el('p', 'muted', {
             textContent: desc
-        }),
+        })
     );
     const sw = ui.el('label', 'switch');
     const box = ui.el('input', null, {
@@ -138,7 +136,7 @@ function openEndpointSheet(id) {
         id: 'sheetApiName',
         value: table.apiName || '',
         placeholder: 'e.g. sales-orders',
-        help: 'The route this table answers at: /api/v1/{name}.',
+        help: 'The route this table answers at: /api/v1/{name}.'
     });
     const apiNameHelp = apiName.querySelector('.field-help');
     const apiNameHelpDefault = apiNameHelp.textContent;
@@ -146,11 +144,11 @@ function openEndpointSheet(id) {
         const name = apiName.ctrl.value.trim();
         const valid = apiNameIsValid(name, exposed.ctrl.checked);
         saveBtn.disabled = !valid;
-        apiNameHelp.textContent = valid ?
-            apiNameHelpDefault :
-            name ?
-            'Lowercase letters, digits and hyphens only, starting with a letter.' :
-            "Required while this table's API is enabled.";
+        apiNameHelp.textContent = valid
+            ? apiNameHelpDefault
+            : name
+              ? 'Lowercase letters, digits and hyphens only, starting with a letter.'
+              : "Required while this table's API is enabled.";
         apiNameHelp.style.color = valid ? '' : '#d63d3d';
     }
     apiName.ctrl.addEventListener('input', () => {
@@ -173,32 +171,37 @@ function openEndpointSheet(id) {
     const displayName = ui.field('Name', {
         value: table.apiDisplayName || '',
         placeholder: table.apiName || 'Sales orders',
-        help: 'Shown in the reference instead of the route name.',
+        help: 'Shown in the reference instead of the route name.'
     });
     const namespace = ui.field('Namespace', {
         value: table.apiNamespace || '',
         placeholder: 'Sales',
-        help: 'Groups this endpoint with others under one heading.',
+        help: 'Groups this endpoint with others under one heading.'
     });
     const documentation = ui.field('Documentation', {
         type: 'textarea',
         rows: 10,
         value: table.apiDocumentation || '',
-        placeholder: 'What this endpoint is for, and how to use it.',
+        placeholder: 'What this endpoint is for, and how to use it.'
     });
 
     const scopeField = ui.field('Scope by', {
         type: 'select',
         value: table.scopeField || '',
-        options: [['', 'Not scoped']].concat((table.fields || [])
-            .filter((f) => SCOPE_FIELD_TYPES.includes(f.dataType))
-            .map((f) => [f.name, f.label || f.name])),
-        help: "Limits each account to rows whose field matches the account's scope.",
+        options: [['', 'Not scoped']].concat(
+            (table.fields || [])
+                .filter((f) => SCOPE_FIELD_TYPES.includes(f.dataType))
+                .map((f) => [f.name, f.label || f.name])
+        ),
+        help: "Limits each account to rows whose field matches the account's scope."
     });
     scopeField.ctrl.disabled = Boolean(table.isProxy);
 
-    const methods = ui.methodSwitches(['GET', 'POST', 'PATCH', 'PUT', 'DELETE'], table.apiMethods,
-        'When a method is turned off, it is removed from the documentation and rejected by the API.');
+    const methods = ui.methodSwitches(
+        ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+        table.apiMethods,
+        'When a method is turned off, it is removed from the documentation and rejected by the API.'
+    );
 
     body.append(exposed, apiName, docsEnabled, displayName, namespace, documentation, scopeField, methods);
 
@@ -215,18 +218,21 @@ function openEndpointSheet(id) {
                     apiNamespace: namespace.ctrl.value,
                     apiDocumentation: documentation.ctrl.value,
                     apiMethods: methods.selected(),
-                    scopeField: scopeField.ctrl.value,
+                    scopeField: scopeField.ctrl.value
                 },
-                success: 'Endpoint updated.',
+                success: 'Endpoint updated.'
             });
             if (!saved) return;
             ui.closeSheet();
             await loadTables();
-        }),
+        })
     );
-    actions.append(ui.button('Cancel', ui.closeSheet, {
-        variant: 'btn-outline'
-    }), saveBtn);
+    actions.append(
+        ui.button('Cancel', ui.closeSheet, {
+            variant: 'btn-outline'
+        }),
+        saveBtn
+    );
     refreshEndpointSaveState();
 
     ui.sheet(`${table.name} endpoint`, body, actions);
@@ -278,7 +284,10 @@ function syncComputedGuards(type) {
         if (computed) el.checked = false;
         el.disabled = computed;
         const row = el.closest('.setting-row') || el.parentElement;
-        if (row) row.title = computed ? `The server fills a ${type} field in, so it cannot be required or a lookup identifier.` : '';
+        if (row)
+            row.title = computed
+                ? `The server fills a ${type} field in, so it cannot be required or a lookup identifier.`
+                : '';
     }
 }
 
@@ -297,10 +306,13 @@ function setFieldTypes(types, groups) {
 
 function fieldTypeOptions(query) {
     const q = (query || '').trim().toLowerCase();
-    const matches = fieldTypeRows.filter((t) => !q ||
-        t.label.toLowerCase().includes(q) ||
-        t.name.includes(q) ||
-        (t.aliases || []).some((a) => a.toLowerCase().includes(q)));
+    const matches = fieldTypeRows.filter(
+        (t) =>
+            !q ||
+            t.label.toLowerCase().includes(q) ||
+            t.name.includes(q) ||
+            (t.aliases || []).some((a) => a.toLowerCase().includes(q))
+    );
 
     const rows = [];
     for (const group of fieldTypeGroups) {
@@ -329,28 +341,35 @@ function initFieldTypeCombobox() {
         valueLabel: TYPE_LABELS.get('text'),
         placeholder: 'Data type',
         browseAll: true,
-        fetchOptions: (q) => fieldTypeOptions(q),
+        fetchOptions: (q) => fieldTypeOptions(q)
     });
     mount.replaceWith(row);
     row.id = 'fieldTypeRow';
 }
 
 const TYPE_ICON_FAMILY = {
-    text: 'text', longtext: 'text', richtext: 'text', slug: 'text',
-    number: 'hash', currency: 'hash',
+    text: 'text',
+    longtext: 'text',
+    richtext: 'text',
+    slug: 'text',
+    number: 'hash',
+    currency: 'hash',
     boolean: 'toggle',
-    date: 'calendar', datetime: 'calendar',
+    date: 'calendar',
+    datetime: 'calendar',
     time: 'clock',
-    select: 'list', multiselect: 'list',
+    select: 'list',
+    multiselect: 'list',
     file: 'paperclip',
     reference: 'arrow',
-    calculated: 'fx', derived: 'fx',
+    calculated: 'fx',
+    derived: 'fx',
     systemid: 'key',
     email: 'at',
     url: 'link',
     json: 'braces',
     array: 'brackets',
-    password: 'lock',
+    password: 'lock'
 };
 
 const TYPE_ICON_PATHS = {
@@ -368,7 +387,7 @@ const TYPE_ICON_PATHS = {
     link: '<path d="M9 15 15 9M11 6l1-1a4 4 0 0 1 6 6l-1 1M13 18l-1 1a4 4 0 0 1-6-6l1-1"/>',
     braces: '<path d="M8 4C6 4 5 5 5 7v3c0 1-.5 2-2 2 1.5 0 2 1 2 2v3c0 2 1 3 3 3M16 4c2 0 3 1 3 3v3c0 1 .5 2 2 2-1.5 0-2 1-2 2v3c0 2-1 3-3 3"/>',
     brackets: '<path d="M8 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h2M16 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2"/>',
-    lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'
 };
 
 function typeIcon(dataType) {
@@ -395,7 +414,8 @@ const TEXT_LENGTH_TYPES = new Set(['text', 'longtext', 'richtext', 'slug', 'emai
 
 function fieldLimits(f) {
     const unit = TEXT_LENGTH_TYPES.has(f.dataType) ? ' chars' : '';
-    if (f.min !== null && f.min !== undefined && f.max !== null && f.max !== undefined) return `${f.min}-${f.max}${unit}`;
+    if (f.min !== null && f.min !== undefined && f.max !== null && f.max !== undefined)
+        return `${f.min}-${f.max}${unit}`;
     if (f.min !== null && f.min !== undefined) return `≥ ${f.min}${unit}`;
     if (f.max !== null && f.max !== undefined) return `≤ ${f.max}${unit}`;
     return '';
@@ -403,7 +423,7 @@ function fieldLimits(f) {
 
 const SYSTEM_COLUMNS = [
     ['Created', 'System column, set once when the record is written.', 'Date.now()'],
-    ['Modified', 'System column, restamped on every change.', 'Date.now()'],
+    ['Modified', 'System column, restamped on every change.', 'Date.now()']
 ];
 
 function renderFields(fields) {
@@ -461,7 +481,9 @@ function wireFieldDrag(tr) {
     });
     tr.addEventListener('dragend', () => {
         dragFrom = null;
-        document.querySelectorAll('.field-row').forEach((r) => r.classList.remove('dragging', 'drop-above', 'drop-below'));
+        document
+            .querySelectorAll('.field-row')
+            .forEach((r) => r.classList.remove('dragging', 'drop-above', 'drop-below'));
     });
     tr.addEventListener('dragover', (ev) => {
         if (dragFrom === null) return;
@@ -503,13 +525,16 @@ async function moveFieldTo(from, to) {
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify(saved),
+        body: JSON.stringify(saved)
     });
 }
 
 async function addField() {
     const typeEl = document.getElementById('fieldType');
-    if (!typeEl) { ui.toast('The page is out of date. Reload and try again.', 'error'); return; }
+    if (!typeEl) {
+        ui.toast('The page is out of date. Reload and try again.', 'error');
+        return;
+    }
     const name = document.getElementById('fieldName').value.trim();
     const dataType = typeEl.value;
     if (!currentTablePublicId) return;
@@ -525,17 +550,19 @@ async function addField() {
     }
 
     // staged locally; committed via "Save field changes"
-    fieldDraft.push(cloneField({
-        id: null,
-        key: 'tmp-' + ++fieldSeq,
-        name,
-        dataType,
-        expression: '',
-        optionsJson: '[]',
-        isRequired: false,
-        pattern: '',
-        isHidden: false,
-    }));
+    fieldDraft.push(
+        cloneField({
+            id: null,
+            key: 'tmp-' + ++fieldSeq,
+            name,
+            dataType,
+            expression: '',
+            optionsJson: '[]',
+            isRequired: false,
+            pattern: '',
+            isHidden: false
+        })
+    );
     document.getElementById('fieldName').value = '';
     renderFields(fieldDraft);
     markFieldsDirty();
@@ -558,7 +585,7 @@ window.addEventListener('popstate', async () => {
             title: 'Discard changes?',
             message: 'You have unsaved changes here. Leave without saving?',
             confirmLabel: 'Discard',
-            danger: true,
+            danger: true
         });
         if (!leave) {
             history.pushState({}, '', lastRenderedUrl);
@@ -570,14 +597,7 @@ window.addEventListener('popstate', async () => {
 
 /* reusable modal */
 
-function openModal({
-    title,
-    message,
-    confirmLabel,
-    cancelLabel,
-    danger,
-    onConfirm
-}) {
+function openModal({ title, message, confirmLabel, cancelLabel, danger, onConfirm }) {
     ui.confirm({
         title,
         message,
@@ -623,7 +643,13 @@ function subSchemaEditor(f, isList) {
     let cols = [];
     try {
         const o = JSON.parse(f.optionsJson || '{}');
-        if (Array.isArray(o.fields)) cols = o.fields.map((c) => ({ name: c.name || '', label: c.label || '', dataType: c.dataType || 'text', isRequired: !!c.isRequired }));
+        if (Array.isArray(o.fields))
+            cols = o.fields.map((c) => ({
+                name: c.name || '',
+                label: c.label || '',
+                dataType: c.dataType || 'text',
+                isRequired: !!c.isRequired
+            }));
     } catch (e) {}
 
     const wrap = document.createElement('div');
@@ -667,28 +693,46 @@ function subSchemaEditor(f, isList) {
             nameInp.className = 'input input-sm';
             nameInp.placeholder = isList ? 'Column name, e.g. Qty' : 'Member name, e.g. Street';
             nameInp.value = c.name;
-            nameInp.onchange = () => { c.name = nameInp.value.trim(); sync(); };
+            nameInp.onchange = () => {
+                c.name = nameInp.value.trim();
+                sync();
+            };
 
             const labelInp = document.createElement('input');
             labelInp.className = 'input input-sm';
             labelInp.placeholder = 'Label (optional)';
             labelInp.value = c.label;
-            labelInp.onchange = () => { c.label = labelInp.value.trim(); sync(); };
+            labelInp.onchange = () => {
+                c.label = labelInp.value.trim();
+                sync();
+            };
 
             const typeSel = document.createElement('select');
             typeSel.className = 'input input-sm';
-            typeSel.innerHTML = NESTABLE_TYPES.map((t) => `<option value="${t}" ${c.dataType === t ? 'selected' : ''}>${TYPE_LABELS.get(t) || t}</option>`).join('');
-            typeSel.onchange = () => { c.dataType = typeSel.value; sync(); };
+            typeSel.innerHTML = NESTABLE_TYPES.map(
+                (t) => `<option value="${t}" ${c.dataType === t ? 'selected' : ''}>${TYPE_LABELS.get(t) || t}</option>`
+            ).join('');
+            typeSel.onchange = () => {
+                c.dataType = typeSel.value;
+                sync();
+            };
 
             const req = ui.switchRow('Required', { checked: !!c.isRequired });
-            req.ctrl.onchange = () => { c.isRequired = req.ctrl.checked; sync(); };
+            req.ctrl.onchange = () => {
+                c.isRequired = req.ctrl.checked;
+                sync();
+            };
 
             const rm = document.createElement('button');
             rm.type = 'button';
             rm.className = 'btn btn-ghost btn-sm';
             rm.innerText = '✕';
             rm.title = isList ? 'Remove column' : 'Remove member';
-            rm.onclick = () => { cols.splice(i, 1); sync(); render(); };
+            rm.onclick = () => {
+                cols.splice(i, 1);
+                sync();
+                render();
+            };
 
             line.append(nameInp, labelInp, typeSel, req, rm);
             list.appendChild(line);
@@ -719,7 +763,7 @@ function openFieldEditor(fieldId) {
         valueLabel: TYPE_LABELS.get(f.dataType) || f.dataType,
         placeholder: 'Search types…',
         browseAll: true,
-        fetchOptions: (q) => fieldTypeOptions(q),
+        fetchOptions: (q) => fieldTypeOptions(q)
     });
     const typeSel = typeRow.ctrl; // hidden input, .value works like the old <select>
     const owningTable = currentTables.find((t) => t.id === currentTablePublicId);
@@ -737,22 +781,30 @@ function openFieldEditor(fieldId) {
     cfgRow.id = 'feCfgRow';
     wrap.appendChild(cfgRow);
 
-    wrap.appendChild(settingSwitch('feRequired', f.isRequired, 'Required', 'Submissions without a value are rejected.'));
+    wrap.appendChild(
+        settingSwitch('feRequired', f.isRequired, 'Required', 'Submissions without a value are rejected.')
+    );
 
     const defaultRow = document.createElement('div');
     defaultRow.id = 'feDefaultRow';
     wrap.appendChild(defaultRow);
     const instanceCurrency = (settingsData && settingsData.currency) || 'EUR';
-    wrap.appendChild(fieldSelectRow('Currency code', 'feCurrency', f.currency,
-        [['', `Instance default (${instanceCurrency})`]].concat(ui.currencyOptions())));
+    wrap.appendChild(
+        fieldSelectRow(
+            'Currency code',
+            'feCurrency',
+            f.currency,
+            [['', `Instance default (${instanceCurrency})`]].concat(ui.currencyOptions())
+        )
+    );
 
     const boundsRow = document.createElement('div');
     boundsRow.className = 'grid-form two';
     boundsRow.appendChild(
-        fieldInputRow('Minimum', 'feMin', f.min === null || f.min === undefined ? '' : String(f.min), ''),
+        fieldInputRow('Minimum', 'feMin', f.min === null || f.min === undefined ? '' : String(f.min), '')
     );
     boundsRow.appendChild(
-        fieldInputRow('Maximum', 'feMax', f.max === null || f.max === undefined ? '' : String(f.max), ''),
+        fieldInputRow('Maximum', 'feMax', f.max === null || f.max === undefined ? '' : String(f.max), '')
     );
     wrap.appendChild(boundsRow);
     const boundsHint = document.createElement('p');
@@ -760,12 +812,17 @@ function openFieldEditor(fieldId) {
     boundsHint.id = 'feBoundsHint';
     wrap.appendChild(boundsHint);
 
-    const scaleRow = fieldInputRow('Decimal places', 'feScale', f.scale === null || f.scale === undefined ? '' : String(f.scale), 'Leave blank for no limit');
+    const scaleRow = fieldInputRow(
+        'Decimal places',
+        'feScale',
+        f.scale === null || f.scale === undefined ? '' : String(f.scale),
+        'Leave blank for no limit'
+    );
     scaleRow.id = 'feScaleRow';
     wrap.appendChild(scaleRow);
 
     wrap.appendChild(
-        fieldInputRow('Validation pattern (regex, optional)', 'fePattern', f.pattern, 'e.g. ^[A-Z]{2}[0-9]{9}$', true),
+        fieldInputRow('Validation pattern (regex, optional)', 'fePattern', f.pattern, 'e.g. ^[A-Z]{2}[0-9]{9}$', true)
     );
     const patHint = document.createElement('p');
     patHint.className = 'sheet-note';
@@ -774,18 +831,36 @@ function openFieldEditor(fieldId) {
     wrap.appendChild(patHint);
 
     wrap.appendChild(
-        fieldInputRow('Validation rule (JS expression, optional)', 'feValidationExpr', f.validationExpr, "data.Qty <= data.Stock", true),
+        fieldInputRow(
+            'Validation rule (JS expression, optional)',
+            'feValidationExpr',
+            f.validationExpr,
+            'data.Qty <= data.Stock',
+            true
+        )
     );
     const valExprHint = document.createElement('p');
     valExprHint.className = 'expr-status';
     valExprHint.id = 'feValidationExprStatus';
     wrap.appendChild(valExprHint);
     wrap.appendChild(
-        fieldInputRow('Validation message', 'feValidationMessage', f.validationMessage, 'Shown when the rule above is false'),
+        fieldInputRow(
+            'Validation message',
+            'feValidationMessage',
+            f.validationMessage,
+            'Shown when the rule above is false'
+        )
     );
 
-    wrap.appendChild(settingSwitch('feUnique', f.isUnique, 'Unique', 'Reject a submission whose value already exists.'));
-    const identifierRow = settingSwitch('feIdentifier', f.isIdentifier, 'Identifier', 'Offer this field as a match key in lookup forms. Requires Required.');
+    wrap.appendChild(
+        settingSwitch('feUnique', f.isUnique, 'Unique', 'Reject a submission whose value already exists.')
+    );
+    const identifierRow = settingSwitch(
+        'feIdentifier',
+        f.isIdentifier,
+        'Identifier',
+        'Offer this field as a match key in lookup forms. Requires Required.'
+    );
     identifierRow.ctrl.addEventListener('change', () => {
         if (!identifierRow.ctrl.checked) return;
         const required = document.getElementById('feRequired');
@@ -795,7 +870,9 @@ function openFieldEditor(fieldId) {
         }
     });
     wrap.appendChild(identifierRow);
-    wrap.appendChild(settingSwitch('feHidden', f.isHidden, 'Hidden', 'Not rendered in forms; value set via API or server only.'));
+    wrap.appendChild(
+        settingSwitch('feHidden', f.isHidden, 'Hidden', 'Not rendered in forms; value set via API or server only.')
+    );
     wrap.appendChild(fieldInputRow('Read rule', 'feReadRule', f.readRule, "_USER_.role = 'consumer'", true));
     wrap.appendChild(fieldInputRow('Write rule', 'feWriteRule', f.writeRule, '_ROW_.owner = _USER_.id', true));
 
@@ -818,7 +895,8 @@ function openFieldEditor(fieldId) {
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn';
     saveBtn.innerText = 'Save';
-    saveBtn.title = 'Updates this field in the draft below. Nothing reaches the server until you click Save on the table page.';
+    saveBtn.title =
+        'Updates this field in the draft below. Nothing reaches the server until you click Save on the table page.';
     saveBtn.onclick = () => saveFieldChanges();
     const actions = document.createElement('div');
     actions.className = 'form-actions';
@@ -838,8 +916,9 @@ function openFieldEditor(fieldId) {
         validateValidationExprLive();
     });
     debounceValidationExprValidate();
-    attachFieldExprAutocomplete(document.getElementById('feValidationExpr'),
-        () => fieldDraft.filter((x) => String(fieldKey(x)) !== String(editingFieldId)).map((x) => x.name));
+    attachFieldExprAutocomplete(document.getElementById('feValidationExpr'), () =>
+        fieldDraft.filter((x) => String(fieldKey(x)) !== String(editingFieldId)).map((x) => x.name)
+    );
     return;
 
     function syncFeDefault() {
@@ -869,7 +948,9 @@ function openFieldEditor(fieldId) {
             row.appendChild(hint);
             return;
         }
-        row.appendChild(fieldInputRow('Default value', 'feDefault', current, 'Applied when the submission omits this field'));
+        row.appendChild(
+            fieldInputRow('Default value', 'feDefault', current, 'Applied when the submission omits this field')
+        );
     }
 
     function currentOptionDraft() {
@@ -916,15 +997,15 @@ function openFieldEditor(fieldId) {
         const hint = document.getElementById('feBoundsHint');
         if (!hint) return;
         hint.innerText =
-            t === 'number' || t === 'currency' ?
-            'Smallest and largest accepted value. Leave blank for no bound.' :
-            t === 'text' || t === 'longtext' || t === 'richtext' ?
-            'Shortest and longest accepted length in characters. Leave blank for no bound.' :
-            t === 'slug' || t === 'password' || t === 'json' ?
-            'Longest accepted length in characters (Minimum is ignored). Leave blank for no bound.' :
-            t === 'array' ?
-            'Most items accepted (Minimum is ignored). Leave blank for no bound.' :
-            'Bounds do not apply to this type.';
+            t === 'number' || t === 'currency'
+                ? 'Smallest and largest accepted value. Leave blank for no bound.'
+                : t === 'text' || t === 'longtext' || t === 'richtext'
+                  ? 'Shortest and longest accepted length in characters. Leave blank for no bound.'
+                  : t === 'slug' || t === 'password' || t === 'json'
+                    ? 'Longest accepted length in characters (Minimum is ignored). Leave blank for no bound.'
+                    : t === 'array'
+                      ? 'Most items accepted (Minimum is ignored). Leave blank for no bound.'
+                      : 'Bounds do not apply to this type.';
     }
 
     function syncFeConfig() {
@@ -939,8 +1020,8 @@ function openFieldEditor(fieldId) {
                     'feConfig',
                     f.expression,
                     t === 'derived' ? 'data.Name ? "complete" : "incomplete"' : 'data.Qty * 2',
-                    true,
-                ),
+                    true
+                )
             );
             const hint = document.createElement('p');
             hint.className = 'expr-status';
@@ -953,7 +1034,9 @@ function openFieldEditor(fieldId) {
                 validateExprLive();
             });
             debounceExprValidate();
-            attachFieldExprAutocomplete(inp, () => fieldDraft.filter((x) => String(fieldKey(x)) !== String(editingFieldId)).map((x) => x.name));
+            attachFieldExprAutocomplete(inp, () =>
+                fieldDraft.filter((x) => String(fieldKey(x)) !== String(editingFieldId)).map((x) => x.name)
+            );
         } else if (t === 'select' || t === 'multiselect') {
             row.appendChild(
                 fieldInputRow(
@@ -967,8 +1050,8 @@ function openFieldEditor(fieldId) {
                             return '';
                         }
                     })(),
-                    'red, blue, green',
-                ),
+                    'red, blue, green'
+                )
             );
             document.getElementById('feConfig').addEventListener('input', syncFeDefault);
         } else if (t === 'reference') {
@@ -1052,7 +1135,7 @@ function openFieldEditor(fieldId) {
         const r = await fetch('/api/_admin/validate-expression', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ expression: expr, fieldNames }),
+            body: JSON.stringify({ expression: expr, fieldNames })
         }).then((res) => res.json());
         if (id !== valExprRequestId) return;
         if (r.valid) {
@@ -1086,7 +1169,7 @@ function openFieldEditor(fieldId) {
                 expression: expr,
                 fieldNames,
                 tableId: currentTablePublicId
-            }),
+            })
         }).then((res) => res.json());
         if (id !== exprRequestId) return; // a newer request already landed; this reply is stale
         if (r.valid) {
@@ -1110,17 +1193,20 @@ function openFieldEditor(fieldId) {
         const cfg = document.getElementById('feConfig');
         const val = cfg ? cfg.value.trim() : '';
         let optionsJson = '[]';
-        if (type === 'select' || type === 'multiselect')
-            optionsJson = JSON.stringify(splitOptions(val));
+        if (type === 'select' || type === 'multiselect') optionsJson = JSON.stringify(splitOptions(val));
         else if (type === 'reference') {
             const target = currentTables.find((t) => t.name === val);
-            optionsJson = target ? JSON.stringify({
-                tableId: target.id
-            }) : '{}';
+            optionsJson = target
+                ? JSON.stringify({
+                      tableId: target.id
+                  })
+                : '{}';
         } else if (type === 'slug') {
-            optionsJson = val ? JSON.stringify({
-                sourceField: val
-            }) : '{}';
+            optionsJson = val
+                ? JSON.stringify({
+                      sourceField: val
+                  })
+                : '{}';
         } else if (type === 'array') {
             optionsJson = val || '[]';
         }
@@ -1141,15 +1227,15 @@ function openFieldEditor(fieldId) {
             isUnique: document.getElementById('feUnique').checked,
             isIdentifier: document.getElementById('feIdentifier').checked,
             tableId: currentTablePublicId,
-            fieldId: String(editingFieldId),
+            fieldId: String(editingFieldId)
         };
         const r = await fetch('/api/_admin/validate-field', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body),
-            })
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        })
             .then((res) => res.json())
             .catch(() => null);
         if (!r) {
@@ -1200,7 +1286,7 @@ async function saveFieldChanges() {
             body: JSON.stringify({
                 expression: expr,
                 fieldNames
-            }),
+            })
         }).then((res) => res.json());
         if (!r.valid) {
             ui.toast(r.errors || ['The expression is not valid.'], 'error');
@@ -1229,7 +1315,7 @@ async function saveFieldChanges() {
         const r = await fetch('/api/_admin/validate-expression', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ expression: newValidationExpr, fieldNames }),
+            body: JSON.stringify({ expression: newValidationExpr, fieldNames })
         }).then((res) => res.json());
         if (!r.valid) {
             ui.toast(r.errors || ['The validation rule is not valid.'], 'error');
@@ -1274,7 +1360,10 @@ async function saveFieldChanges() {
     if (draft.id && draft.dataType !== newType) {
         const table = currentTables.find((t) => t.id === currentTablePublicId);
         if ((table?.recordCount || 0) > 0) {
-            ui.toast(`"${draft.name}" already has data in ${table.recordCount} record(s); its type can't be changed.`, 'error');
+            ui.toast(
+                `"${draft.name}" already has data in ${table.recordCount} record(s); its type can't be changed.`,
+                'error'
+            );
             return;
         }
     }
@@ -1302,13 +1391,17 @@ async function saveFieldChanges() {
         draft.optionsJson = JSON.stringify(splitOptions(cfg.value));
     else if (cfg && newType === 'reference') {
         const target = currentTables.find((t) => t.name === cfg.value);
-        draft.optionsJson = target ? JSON.stringify({
-            tableId: target.id
-        }) : '{}';
+        draft.optionsJson = target
+            ? JSON.stringify({
+                  tableId: target.id
+              })
+            : '{}';
     } else if (cfg && newType === 'slug') {
-        draft.optionsJson = cfg.value ? JSON.stringify({
-            sourceField: cfg.value
-        }) : '{}';
+        draft.optionsJson = cfg.value
+            ? JSON.stringify({
+                  sourceField: cfg.value
+              })
+            : '{}';
     } else if (cfg && newType === 'array') {
         draft.optionsJson = cfg.value || '[]';
     }
@@ -1339,7 +1432,7 @@ function fieldPayload(f) {
         isUnique: f.isUnique,
         isIdentifier: f.isIdentifier,
         readRule: f.readRule,
-        writeRule: f.writeRule,
+        writeRule: f.writeRule
     };
 }
 
@@ -1374,7 +1467,9 @@ async function commitFields() {
             let opts = [];
             try {
                 opts = JSON.parse(f.optionsJson || '[]');
-            } catch (e) { /* falls through to the empty-options message below */ }
+            } catch (e) {
+                /* falls through to the empty-options message below */
+            }
             if (!Array.isArray(opts) || !opts.length) {
                 ui.toast(`"${f.name}": at least one option is required for this field type.`, 'error');
                 return;
@@ -1387,14 +1482,14 @@ async function commitFields() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(fieldPayload(f)),
+                body: JSON.stringify(fieldPayload(f))
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
                 openModal({
                     title: 'Could not save fields',
                     message: `"${f.name}": ` + (data.errors || ['Failed to add a field.']).join('\n'),
-                    confirmLabel: 'OK',
+                    confirmLabel: 'OK'
                 });
                 return;
             }
@@ -1405,14 +1500,14 @@ async function commitFields() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(fieldPayload(f)),
+                body: JSON.stringify(fieldPayload(f))
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
                 openModal({
                     title: 'Could not save fields',
                     message: `"${f.name}": ` + (data.errors || ['Failed to update a field.']).join('\n'),
-                    confirmLabel: 'OK',
+                    confirmLabel: 'OK'
                 });
                 return;
             }
@@ -1426,7 +1521,7 @@ async function commitFields() {
                 openModal({
                     title: 'Could not delete field',
                     message: `"${o.name}": ` + (data.errors || ['Field could not be deleted.']).join('\n'),
-                    confirmLabel: 'OK',
+                    confirmLabel: 'OK'
                 });
                 return;
             }
@@ -1458,7 +1553,7 @@ function deleteField(fieldId) {
             if (String(editingFieldId) === String(fieldId)) closeSheet();
             renderFields(fieldDraft);
             markFieldsDirty();
-        },
+        }
     });
 }
 

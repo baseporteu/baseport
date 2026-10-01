@@ -1,4 +1,3 @@
-
 function bootstrap() {
     const el = document.getElementById('bootstrap');
     if (!el) return null;
@@ -14,7 +13,11 @@ function isAuthPage() {
 }
 
 async function boot() {
-    const me = bootstrap() || (await fetch('/api/auth/me').then((r) => r.json()).catch(() => null));
+    const me =
+        bootstrap() ||
+        (await fetch('/api/auth/me')
+            .then((r) => r.json())
+            .catch(() => null));
     if (!me) return;
     if (!me.authenticated) {
         if (!isAuthPage()) {
@@ -61,10 +64,11 @@ async function boot() {
     if (me.sql) savedQueries = me.sql;
     // server-rendered alongside the tables
     if (me.stats) summaryStats = me.stats;
-    if (me.settings) settingsData = {
-        ...(settingsData || {}),
-        ...me.settings
-    };
+    if (me.settings)
+        settingsData = {
+            ...(settingsData || {}),
+            ...me.settings
+        };
     if (settingsData) ui.timeZone(settingsData.timeZone || 'UTC');
 
     if (me.fieldTypes && typeof setFieldTypes === 'function') setFieldTypes(me.fieldTypes, me.fieldTypeGroups);
@@ -124,23 +128,27 @@ function changeProblem(live) {
     const next = document.getElementById('newPass').value;
     const again = document.getElementById('newPass2').value;
     if (live && !next) return null;
-    if (next.length < PASSWORD_MIN) return {
-        field: 'newPass',
-        message: `Use at least ${PASSWORD_MIN} characters.`
-    };
-    if (next.length > PASSWORD_MAX) return {
-        field: 'newPass',
-        message: `Use at most ${PASSWORD_MAX} characters.`
-    };
-    if (next === current) return {
-        field: 'newPass',
-        message: 'The new password must be different from the current one.'
-    };
+    if (next.length < PASSWORD_MIN)
+        return {
+            field: 'newPass',
+            message: `Use at least ${PASSWORD_MIN} characters.`
+        };
+    if (next.length > PASSWORD_MAX)
+        return {
+            field: 'newPass',
+            message: `Use at most ${PASSWORD_MAX} characters.`
+        };
+    if (next === current)
+        return {
+            field: 'newPass',
+            message: 'The new password must be different from the current one.'
+        };
     if (live && !again) return null;
-    if (again !== next) return {
-        field: 'newPass2',
-        message: 'The two new passwords do not match.'
-    };
+    if (again !== next)
+        return {
+            field: 'newPass2',
+            message: 'The two new passwords do not match.'
+        };
     return null;
 }
 
@@ -169,16 +177,21 @@ async function changePassword(ev) {
         },
         body: JSON.stringify({
             currentPassword: document.getElementById('curPass').value,
-            newPassword: document.getElementById('newPass').value,
-        }),
+            newPassword: document.getElementById('newPass').value
+        })
     });
-    if (!(await ui.handle(res, {
+    if (
+        !(await ui.handle(res, {
             failure: 'Could not change the password.'
-        }))) {
-        hintChange({
-            field: 'curPass',
-            message: 'The current password is incorrect.'
-        }, true);
+        }))
+    ) {
+        hintChange(
+            {
+                field: 'curPass',
+                message: 'The current password is incorrect.'
+            },
+            true
+        );
         return false;
     }
     for (const field of CHANGE_FIELDS) document.getElementById(field).value = '';
@@ -253,7 +266,7 @@ async function signIn(ev) {
                 body: {
                     username
                 },
-                failure: 'Could not request a code.',
+                failure: 'Could not request a code.'
             });
             if (!sent) return false;
             otpRequested = true;
@@ -281,22 +294,27 @@ async function signIn(ev) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(
-                authMode() === 'otp' ?
-                {
-                    username,
-                    otp: document.getElementById('otpCode').value
-                } :
-                {
-                    username,
-                    password: document.getElementById('loginPass').value,
-                    code: document.getElementById('totpCode').value
-                },
-            ),
+                authMode() === 'otp'
+                    ? {
+                          username,
+                          otp: document.getElementById('otpCode').value
+                      }
+                    : {
+                          username,
+                          password: document.getElementById('loginPass').value,
+                          code: document.getElementById('totpCode').value
+                      }
+            )
         });
-        const reply = await res.clone().json().catch(() => null);
-        if (!(await ui.handle(res, {
+        const reply = await res
+            .clone()
+            .json()
+            .catch(() => null);
+        if (
+            !(await ui.handle(res, {
                 failure: 'Sign-in failed.'
-            }))) {
+            }))
+        ) {
             const totpShown = !document.getElementById('totpContainer').hidden;
             if (totpShown) flagField('totpCode');
             else if (reply?.totp) showTotpField();
@@ -349,9 +367,11 @@ async function openTwoFactor() {
 
 function twoFactorIntroSheet() {
     const body = ui.el('div', 'token-panel');
-    body.append(ui.el('p', 'muted', {
-        textContent: 'Ask for a code from an authenticator app after your password, at every sign-in.'
-    }));
+    body.append(
+        ui.el('p', 'muted', {
+            textContent: 'Ask for a code from an authenticator app after your password, at every sign-in.'
+        })
+    );
     const actions = ui.el('div', 'form-actions');
     const start = ui.button('Set up', () => ui.busy(start, twoFactorSetup));
     actions.append(ui.button('Cancel', ui.closeSheet, { variant: 'btn-outline' }), start);
@@ -363,9 +383,11 @@ async function twoFactorSetup() {
     if (!setup) return;
 
     const body = ui.el('div', 'token-panel');
-    body.append(ui.el('p', 'muted', {
-        textContent: 'Add this key to your authenticator app, then enter the code it shows.'
-    }));
+    body.append(
+        ui.el('p', 'muted', {
+            textContent: 'Add this key to your authenticator app, then enter the code it shows.'
+        })
+    );
     const key = ui.el('pre', 'code-block', { textContent: setup.secret });
     body.append(ui.copyable(key, setup.secret));
     const uri = ui.el('pre', 'code-block', { textContent: setup.uri });
@@ -376,15 +398,17 @@ async function twoFactorSetup() {
     body.append(code);
 
     const actions = ui.el('div', 'form-actions');
-    const confirm = ui.button('Turn on', () => ui.busy(confirm, async () => {
-        const done = await ui.send('/api/auth/totp/confirm', {
-            method: 'POST',
-            body: { code: code.ctrl.value.trim() },
-            success: 'Two-factor sign-in is on. Other sessions were signed out.',
-            failure: 'Could not turn on two-factor sign-in.'
-        });
-        if (done) ui.closeSheet();
-    }));
+    const confirm = ui.button('Turn on', () =>
+        ui.busy(confirm, async () => {
+            const done = await ui.send('/api/auth/totp/confirm', {
+                method: 'POST',
+                body: { code: code.ctrl.value.trim() },
+                success: 'Two-factor sign-in is on. Other sessions were signed out.',
+                failure: 'Could not turn on two-factor sign-in.'
+            });
+            if (done) ui.closeSheet();
+        })
+    );
     actions.append(ui.button('Cancel', ui.closeSheet, { variant: 'btn-outline' }), confirm);
     ui.sheet('Two-factor', body, actions);
     code.ctrl.focus();
@@ -392,9 +416,11 @@ async function twoFactorSetup() {
 
 function twoFactorOffSheet() {
     const body = ui.el('div', 'token-panel');
-    body.append(ui.el('p', 'muted', {
-        textContent: 'Two-factor sign-in is on. Turning it off needs your password and a current code.'
-    }));
+    body.append(
+        ui.el('p', 'muted', {
+            textContent: 'Two-factor sign-in is on. Turning it off needs your password and a current code.'
+        })
+    );
     const password = ui.field('Password', { id: 'totpOffPassword', type: 'password' });
     password.ctrl.autocomplete = 'current-password';
     const code = ui.field('Code', { id: 'totpOffCode', placeholder: '123456' });
@@ -403,15 +429,20 @@ function twoFactorOffSheet() {
     body.append(password, code);
 
     const actions = ui.el('div', 'form-actions');
-    const off = ui.button('Turn off', () => ui.busy(off, async () => {
-        const done = await ui.send('/api/auth/totp', {
-            method: 'DELETE',
-            body: { password: password.ctrl.value, code: code.ctrl.value.trim() },
-            success: 'Two-factor sign-in is off.',
-            failure: 'Could not turn off two-factor sign-in.'
-        });
-        if (done) ui.closeSheet();
-    }), { variant: 'btn-danger' });
+    const off = ui.button(
+        'Turn off',
+        () =>
+            ui.busy(off, async () => {
+                const done = await ui.send('/api/auth/totp', {
+                    method: 'DELETE',
+                    body: { password: password.ctrl.value, code: code.ctrl.value.trim() },
+                    success: 'Two-factor sign-in is off.',
+                    failure: 'Could not turn off two-factor sign-in.'
+                });
+                if (done) ui.closeSheet();
+            }),
+        { variant: 'btn-danger' }
+    );
     actions.append(off, ui.button('Cancel', ui.closeSheet, { variant: 'btn-outline' }));
     ui.sheet('Two-factor', body, actions);
 }
@@ -421,7 +452,7 @@ async function signOut() {
         title: 'Sign out',
         message: 'End this session?',
         confirmLabel: 'Sign out',
-        danger: true,
+        danger: true
     });
     if (!ok) return;
     await fetch('/api/auth/logout', {

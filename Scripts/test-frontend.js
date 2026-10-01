@@ -1,11 +1,7 @@
-
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const {
-    install,
-    element
-} = require('./dom-stub');
+const { install, element } = require('./dom-stub');
 
 const SRC = path.join(__dirname, '..', 'Source', 'Baseport');
 const wwwroot = path.join(SRC, 'wwwroot');
@@ -14,20 +10,40 @@ const readSource = (...parts) => {
     if (!fs.existsSync(file)) throw new Error(`missing ${path.relative(SRC, file)}; update the path in this test`);
     return fs.readFileSync(file, 'utf8');
 };
-const ADMIN_SCRIPTS = ['ui.js', 'js/core.js', 'js/proxy.js', 'js/tables.js', 'js/records.js', 'js/import.js', 'js/remote.js',
-    'js/sidebar.js', 'js/schema.js', 'js/sql.js', 'js/accounts.js', 'js/actions.js',
-    'js/settings.js', 'forms.js', 'js/auth.js'
+const ADMIN_SCRIPTS = [
+    'ui.js',
+    'js/core.js',
+    'js/proxy.js',
+    'js/tables.js',
+    'js/records.js',
+    'js/import.js',
+    'js/remote.js',
+    'js/sidebar.js',
+    'js/schema.js',
+    'js/sql.js',
+    'js/accounts.js',
+    'js/actions.js',
+    'js/settings.js',
+    'forms.js',
+    'js/auth.js'
 ];
 const readAll = () => ADMIN_SCRIPTS.map(read).join('\n');
 
-const HTML_PARTS = ['admin/_shell.html', 'admin/views/tables.html', 'admin/views/forms.html',
-    'admin/views/sql.html', 'admin/views/schema.html', 'admin/views/auth.html',
-    'admin/views/logs.html', 'admin/views/settings.html', 'admin/views/actions.html',
+const HTML_PARTS = [
+    'admin/_shell.html',
+    'admin/views/tables.html',
+    'admin/views/forms.html',
+    'admin/views/sql.html',
+    'admin/views/schema.html',
+    'admin/views/auth.html',
+    'admin/views/logs.html',
+    'admin/views/settings.html',
+    'admin/views/actions.html',
     'admin/_footer.html'
 ];
 const AUTH_PART = ['admin/_auth.html'];
 const readHtml = () => [...HTML_PARTS, ...AUTH_PART].map(read).join('\n');
-const read = f => fs.readFileSync(path.join(wwwroot, f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(wwwroot, f), 'utf8');
 
 let passed = 0,
     failed = 0;
@@ -41,14 +57,43 @@ function test(name, fn) {
 /* forms.js: which panel the editor shows */
 
 function loadFormsModule() {
-    const ids = ['kindSubmit', 'kindLookup', 'kindList', 'formKinds', 'formActions',
-        'formKindHint', 'formKindBadge', 'formProxyNote', 'listSortField', 'listSortDir',
-        'listPageSize', 'lookupNotFound', 'listFilters', 'listPalette', 'listCanvas',
-        'formTable', 'formLayout', 'layoutCanvas', 'paletteFields', 'submitInactiveHint',
-        'lookupMatchFields', 'listSearchFields', 'lookupResultPalette', 'lookupResultCanvas',
-        'lookupOnboardNav', 'lookupOnboardBack', 'lookupOnboardNext', 'lookupOnboardSkip',
-        'lookupStepMatch', 'lookupStepShow', 'lookupStepNotFound', 'formSuccessRedirect',
-        'listUndo', 'listRedo', 'lookupResultUndo', 'lookupResultRedo',
+    const ids = [
+        'kindSubmit',
+        'kindLookup',
+        'kindList',
+        'formKinds',
+        'formActions',
+        'formKindHint',
+        'formKindBadge',
+        'formProxyNote',
+        'listSortField',
+        'listSortDir',
+        'listPageSize',
+        'lookupNotFound',
+        'listFilters',
+        'listPalette',
+        'listCanvas',
+        'formTable',
+        'formLayout',
+        'layoutCanvas',
+        'paletteFields',
+        'submitInactiveHint',
+        'lookupMatchFields',
+        'listSearchFields',
+        'lookupResultPalette',
+        'lookupResultCanvas',
+        'lookupOnboardNav',
+        'lookupOnboardBack',
+        'lookupOnboardNext',
+        'lookupOnboardSkip',
+        'lookupStepMatch',
+        'lookupStepShow',
+        'lookupStepNotFound',
+        'formSuccessRedirect',
+        'listUndo',
+        'listRedo',
+        'lookupResultUndo',
+        'lookupResultRedo'
     ];
     const dom = install(ids);
     global.ui = {
@@ -59,7 +104,7 @@ function loadFormsModule() {
             return e;
         }
     };
-    global.escapeHtml = s => String(s == null ? '' : s);
+    global.escapeHtml = (s) => String(s == null ? '' : s);
     global.currentTables = [];
     global.refreshSidebar = () => {};
     global.navigate = () => {};
@@ -76,7 +121,9 @@ function loadFormsModule() {
         applyFormShape: null,
         normalizeActions: null
     };
-    eval(src + `
+    eval(
+        src +
+            `
 ;module.applyFormShape = applyFormShape;
 module.normalizeActions = normalizeActions;
 module.applyKindConfig = applyKindConfig;
@@ -97,7 +144,8 @@ module.undoListColumns = undoListColumns;
 module.redoListColumns = redoListColumns;
 module.undoLookupResult = undoLookupResult;
 module.redoLookupResult = redoLookupResult;
-`);
+`
+    );
     return {
         dom,
         module
@@ -105,22 +153,19 @@ module.redoLookupResult = redoLookupResult;
 }
 
 test('LookupOnlyShowsInactiveBuilder', () => {
-    const {
-        dom,
-        module
-    } = loadFormsModule();
+    const { dom, module } = loadFormsModule();
     module.applyFormShape('form', ['lookup']);
     assert.ok(dom.byId.kindLookup.classList.contains('hidden') === false, 'lookup panel hidden');
     assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'), 'submit builder hidden for a lookup-only form');
-    assert.ok(!dom.byId.submitInactiveHint.classList.contains('hidden'), 'no hint that the layout is currently inactive');
+    assert.ok(
+        !dom.byId.submitInactiveHint.classList.contains('hidden'),
+        'no hint that the layout is currently inactive'
+    );
     assert.ok(dom.byId.kindList.classList.contains('hidden'), 'list panel shown');
 });
 
 test('SubmitOnlyHasNoInactiveHint', () => {
-    const {
-        dom,
-        module
-    } = loadFormsModule();
+    const { dom, module } = loadFormsModule();
     module.applyFormShape('form', ['submit']);
     assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'));
     assert.ok(dom.byId.kindLookup.classList.contains('hidden'));
@@ -128,9 +173,7 @@ test('SubmitOnlyHasNoInactiveHint', () => {
 });
 
 test('EnumFilterCollectsSelect', () => {
-    const {
-        module
-    } = loadFormsModule();
+    const { module } = loadFormsModule();
     const row = global.document.createElement('div');
     row.className = 'filter-row';
     const field = global.document.createElement('select');
@@ -144,36 +187,32 @@ test('EnumFilterCollectsSelect', () => {
     row.querySelector = (sel) => (sel === '.filter-value' ? val : null);
     row.querySelectorAll = () => [field, op];
     global.document.querySelectorAll = (sel) => (sel === '#listFilters .filter-row' ? [row] : []);
-    assert.deepStrictEqual(module.collectListFilters(),
+    assert.deepStrictEqual(
+        module.collectListFilters(),
         [{ field: 'status', op: 'eq', value: 'open' }],
-        'an enum filter value select was not collected');
+        'an enum filter value select was not collected'
+    );
 });
 
 test('FilterValueInputHasClass', () => {
-    const {
-        module
-    } = loadFormsModule();
+    const { module } = loadFormsModule();
     module.setTableFields([{ name: 'note', dataType: 'text' }]);
     const row = module.filterRow({ field: 'note', op: 'contains', value: '' }, 0);
-    assert.ok(row.children.some((c) => (c.className || '').split(/\s+/).includes('filter-value')),
-        'the text value input lacks the filter-value class');
+    assert.ok(
+        row.children.some((c) => (c.className || '').split(/\s+/).includes('filter-value')),
+        'the text value input lacks the filter-value class'
+    );
 });
 
 test('BothActionsShowBothPanels', () => {
-    const {
-        dom,
-        module
-    } = loadFormsModule();
+    const { dom, module } = loadFormsModule();
     module.applyFormShape('form', ['submit', 'lookup']);
     assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'), 'submit panel hidden');
     assert.ok(!dom.byId.kindLookup.classList.contains('hidden'), 'lookup panel hidden');
 });
 
 test('ListShowsOnlyListPanel', () => {
-    const {
-        dom,
-        module
-    } = loadFormsModule();
+    const { dom, module } = loadFormsModule();
     module.applyFormShape('list', []);
     assert.ok(!dom.byId.kindList.classList.contains('hidden'));
     assert.ok(dom.byId.kindSubmit.classList.contains('hidden'));
@@ -181,10 +220,7 @@ test('ListShowsOnlyListPanel', () => {
 });
 
 test('SecondActionRepopulatesPanel', () => {
-    const {
-        dom,
-        module
-    } = loadFormsModule();
+    const { dom, module } = loadFormsModule();
     module.applyFormShape('form', ['submit']);
     module.applyFormShape('form', ['submit', 'lookup']);
     assert.ok(!dom.byId.kindSubmit.classList.contains('hidden'), 'submit panel hidden');
@@ -193,9 +229,7 @@ test('SecondActionRepopulatesPanel', () => {
 });
 
 test('FormKeepsOneAction', () => {
-    const {
-        module
-    } = loadFormsModule();
+    const { module } = loadFormsModule();
     assert.deepStrictEqual(module.normalizeActions([]), ['submit']);
     assert.deepStrictEqual(module.normalizeActions(['nonsense']), ['submit']);
     assert.deepStrictEqual(module.normalizeActions(['lookup']), ['lookup']);
@@ -207,28 +241,44 @@ function chooseRenderer(form) {
     if (form.kind === 'list') return 'list';
     const actions = form.actions || ['submit'];
     return [actions.includes('lookup') ? 'lookup' : null, actions.includes('submit') ? 'form' : null]
-        .filter(Boolean).join('+');
+        .filter(Boolean)
+        .join('+');
 }
 
 test('EmbedDispatchesKindThenActions', () => {
-    assert.strictEqual(chooseRenderer({
-        kind: 'list'
-    }), 'list');
-    assert.strictEqual(chooseRenderer({
-        kind: 'form',
-        actions: ['lookup']
-    }), 'lookup');
-    assert.strictEqual(chooseRenderer({
-        kind: 'form',
-        actions: ['submit']
-    }), 'form');
-    assert.strictEqual(chooseRenderer({
-        kind: 'form',
-        actions: ['submit', 'lookup']
-    }), 'lookup+form');
-    assert.strictEqual(chooseRenderer({
-        kind: 'form'
-    }), 'form');
+    assert.strictEqual(
+        chooseRenderer({
+            kind: 'list'
+        }),
+        'list'
+    );
+    assert.strictEqual(
+        chooseRenderer({
+            kind: 'form',
+            actions: ['lookup']
+        }),
+        'lookup'
+    );
+    assert.strictEqual(
+        chooseRenderer({
+            kind: 'form',
+            actions: ['submit']
+        }),
+        'form'
+    );
+    assert.strictEqual(
+        chooseRenderer({
+            kind: 'form',
+            actions: ['submit', 'lookup']
+        }),
+        'lookup+form'
+    );
+    assert.strictEqual(
+        chooseRenderer({
+            kind: 'form'
+        }),
+        'form'
+    );
 });
 
 test('EmbedIgnoresOldModeField', () => {
@@ -244,13 +294,13 @@ test('EmbedToastsCapAndStack', () => {
     assert.ok(src.includes('host.firstChild.remove()'), 'oldest toast is not trimmed');
     assert.ok(src.includes('host.appendChild(el)'), 'newest toast is not appended last');
     assert.ok(src.includes("kind === 'error' ? 8000 : 4500"), 'dismissal is not per-kind');
-    assert.ok(src.includes("window.isSecureContext"), 'https clipboard path missing');
+    assert.ok(src.includes('window.isSecureContext'), 'https clipboard path missing');
     assert.ok(src.includes("document.execCommand('copy')"), 'plain-http copy fallback missing');
 });
 
 test('EmbedMarksInvalidFields', () => {
     const src = read('embed.js');
-    assert.ok(src.includes("markInvalid(result.invalid)"), 'client-side invalid fields are not marked');
+    assert.ok(src.includes('markInvalid(result.invalid)'), 'client-side invalid fields are not marked');
     assert.ok(src.includes('markInvalid(res.invalid || [])'), 'server invalid fields are not marked');
     assert.ok(src.includes("el.classList.add('baserow-invalid')"), 'invalid class is never added');
     assert.ok(src.includes("classList.remove('baserow-invalid')"), 'invalid class is never cleared on input');
@@ -275,7 +325,9 @@ test('ThemeChoicePersists', () => {
         document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     };
     const quiet = { ...console, error() {} };
-    const ui = eval('(function (console) {' + read('ui.js').replace(/if \(typeof window[^\n]*\n/g, '') + '; return ui; })')(quiet);
+    const ui = eval(
+        '(function (console) {' + read('ui.js').replace(/if \(typeof window[^\n]*\n/g, '') + '; return ui; })'
+    )(quiet);
 
     boot();
     assert.strictEqual(document.documentElement.dataset.theme, 'dark', 'should follow the system');
@@ -293,12 +345,19 @@ test('ThemeChoicePersists', () => {
 test('ReadIdsExist', () => {
     const html = readHtml();
     const js = readAll();
-    const runtime = new Set(['toasts', 'sheetOverlay', 'pwCurrent', 'pwNew', 'fieldEditError',
-        'bootstrap', 'fieldType'
+    const runtime = new Set([
+        'toasts',
+        'sheetOverlay',
+        'pwCurrent',
+        'pwNew',
+        'fieldEditError',
+        'bootstrap',
+        'fieldType'
     ]);
-    const present = new Set([...html.matchAll(/id=['"]([\w-]+)['"]/g)].map(m => m[1]));
-    const missing = [...new Set([...js.matchAll(/getElementById\('([\w-]+)'\)/g)].map(m => m[1]))]
-        .filter(id => !present.has(id) && !runtime.has(id) && !/^(fe|px|acc)/.test(id));
+    const present = new Set([...html.matchAll(/id=['"]([\w-]+)['"]/g)].map((m) => m[1]));
+    const missing = [...new Set([...js.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]))].filter(
+        (id) => !present.has(id) && !runtime.has(id) && !/^(fe|px|acc)/.test(id)
+    );
     assert.deepStrictEqual(missing, [], `ids read but never rendered: ${missing.join(', ')}`);
 });
 
@@ -306,25 +365,26 @@ test('InlineHandlersDefined', () => {
     const html = readHtml();
     const js = readAll();
 
-    const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).join('\n');
-    const defined = new Set([...(js + inline).matchAll(/function\s+([A-Za-z_$][\w$]*)/g)].map(m => m[1]));
+    const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
+    const defined = new Set([...(js + inline).matchAll(/function\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
     defined.add('toggleTheme');
-    const missing = [...new Set([...html.matchAll(/on\w+='([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]))]
-        .filter(fn => !defined.has(fn));
+    const missing = [...new Set([...html.matchAll(/on\w+='([A-Za-z_$][\w$]*)\(/g)].map((m) => m[1]))].filter(
+        (fn) => !defined.has(fn)
+    );
     assert.deepStrictEqual(missing, [], `handlers referenced but not defined: ${missing.join(', ')}`);
 });
 
 test('LoadedScriptsExist', () => {
     const html = readHtml();
     const missing = [...html.matchAll(/<script src='([^']+)'/g)]
-        .map(m => m[1].replace(/^\//, ''))
-        .filter(src => !fs.existsSync(path.join(wwwroot, src)));
+        .map((m) => m[1].replace(/^\//, ''))
+        .filter((src) => !fs.existsSync(path.join(wwwroot, src)));
     assert.deepStrictEqual(missing, [], `index.html loads scripts that do not exist: ${missing.join(', ')}`);
 });
 
 test('ScriptLoadOrder', () => {
     const consoleHtml = HTML_PARTS.map(read).join('\n');
-    const order = [...consoleHtml.matchAll(/<script src='\/([^']+)'/g)].map(m => m[1]);
+    const order = [...consoleHtml.matchAll(/<script src='\/([^']+)'/g)].map((m) => m[1]);
     assert.ok(order.indexOf('ui.js') === 0, 'ui.js must load first: every other file calls it');
     assert.ok(order.indexOf('js/auth.js') === order.length - 1, 'auth.js must load last: it boots the app');
     assert.ok(order.indexOf('forms.js') < order.indexOf('js/auth.js'), 'forms.js must precede auth.js');
@@ -333,27 +393,31 @@ test('ScriptLoadOrder', () => {
 
 test('ScriptsReadApiIds', () => {
     const js = readAll() + read('embed.js');
-    const stale = [...js.matchAll(/\.(publicId|PublicId)\b/g)].map(m => m[0]);
+    const stale = [...js.matchAll(/\.(publicId|PublicId)\b/g)].map((m) => m[0]);
     assert.deepStrictEqual(stale, [], `scripts still read a property the API no longer returns: ${stale.join(', ')}`);
 });
 
 test('EmbedClassOutranksElementRule', () => {
     const css = read('embed.js');
-    const componentClasses = [...new Set([...read('embed.js').matchAll(/className = '(baserow-[\w-]+)'/g)].map(m => m[1]))];
+    const componentClasses = [
+        ...new Set([...read('embed.js').matchAll(/className = '(baserow-[\w-]+)'/g)].map((m) => m[1]))
+    ];
 
     const hasElementRule = /\.baserow-embed (button|input|table)\s*\{/.test(css);
     if (!hasElementRule) return;
 
-    const unscoped = componentClasses.filter(c =>
-        (c === 'baserow-btn' || c === 'baserow-search') &&
-        !new RegExp(`\\.baserow-embed \\.${c}(?![\\w-])`).test(css));
+    const unscoped = componentClasses.filter(
+        (c) =>
+            (c === 'baserow-btn' || c === 'baserow-search') &&
+            !new RegExp(`\\.baserow-embed \\.${c}(?![\\w-])`).test(css)
+    );
     assert.deepStrictEqual(unscoped, [], `component classes an element rule outranks: ${unscoped.join(', ')}`);
 });
 
 test('FeatureCssKeepsPrimitives', () => {
-    const primitives = [...read('ui.css').matchAll(/^\.([\w-]+)\s*\{/gm)].map(m => m[1]);
-    const appRules = new Set([...read('app.css').matchAll(/^\s*\.([\w-]+)\s*\{/gm)].map(m => m[1]));
-    const clashes = primitives.filter(p => appRules.has(p));
+    const primitives = [...read('ui.css').matchAll(/^\.([\w-]+)\s*\{/gm)].map((m) => m[1]);
+    const appRules = new Set([...read('app.css').matchAll(/^\s*\.([\w-]+)\s*\{/gm)].map((m) => m[1]));
+    const clashes = primitives.filter((p) => appRules.has(p));
     assert.deepStrictEqual(clashes, [], `app.css redefines ui.css primitives: ${clashes.join(', ')}`);
 });
 
@@ -361,7 +425,7 @@ test('FeatureCssKeepsPrimitives', () => {
 
 function loadRouter(pathname) {
     const core = read('js/core.js');
-    const slice = core.slice(core.indexOf("const BASE = "), core.indexOf('const SECTION_ROUTES'));
+    const slice = core.slice(core.indexOf('const BASE = '), core.indexOf('const SECTION_ROUTES'));
     const module = {};
     const written = [];
     global.location = {
@@ -415,19 +479,70 @@ test('ScopePickerMatchesServer', () => {
 test('SqlProtocolsMatchServer', () => {
     const js = read('js/remote.js').match(/const SQL_PROTOCOLS = \[([^\]]*)\]/)[1];
     const models = readSource('Data', 'Models.cs');
-    const cs = models.match(/IsSql\(string protocol\) => protocol is ([^;]*);/)[1]
-        .split(' or ').map((name) => models.match(new RegExp(`const string ${name.trim()} = "([a-z]+)"`))[1]);
+    const cs = models
+        .match(/IsSql\(string protocol\) => protocol is ([^;]*);/)[1]
+        .split(' or ')
+        .map((name) => models.match(new RegExp(`const string ${name.trim()} = "([a-z]+)"`))[1]);
     const choices = read('js/remote.js').match(/const COLUMN_CHOICES = \[([^;]*)\];/)[1];
     const list = (s) => [...s.matchAll(/'([a-z]+)'/g)].map((m) => m[1]).sort();
     assert.deepStrictEqual(list(js), cs.sort(), 'console and server disagree on which protocols are SQL sources');
-    const enumNames = [...readSource('Engine', 'SqlSource.cs').matchAll(/JsonStringEnumMemberName\("([a-z]+)"\)\] (Text|Skip)/g)].map((m) => m[1]).sort();
-    assert.deepStrictEqual(list(choices).filter((c) => c !== 'choose'), enumNames, 'column choices offered do not match the server names');
+    const enumNames = [
+        ...readSource('Engine', 'SqlSource.cs').matchAll(/JsonStringEnumMemberName\("([a-z]+)"\)\] (Text|Skip)/g)
+    ]
+        .map((m) => m[1])
+        .sort();
+    assert.deepStrictEqual(
+        list(choices).filter((c) => c !== 'choose'),
+        enumNames,
+        'column choices offered do not match the server names'
+    );
+});
+
+test('SchemaFlowsLeftToRight', () => {
+    const schema = read('js/schema.js');
+    const slice = schema.slice(
+        schema.indexOf('// referencing tables left of'),
+        schema.indexOf('function renderSchemaLinks')
+    );
+    const module = {};
+    let schemaRefs = {
+        lines: { Order: 'orders', Product: 'products' },
+        orders: { Customer: 'customers', Self: 'orders' },
+        customers: {},
+        products: {},
+        a: { B: 'b' },
+        b: { A: 'a' }
+    };
+    eval(slice + '\n;module.layoutSchema = layoutSchema;');
+    const tables = ['lines', 'orders', 'customers', 'products', 'a', 'b'].map((id) => ({ id, name: id }));
+    const nodes = module.layoutSchema(tables, () => 100);
+    assert.ok(
+        nodes.lines.x < nodes.orders.x && nodes.orders.x < nodes.customers.x,
+        'a reference does not point to the right'
+    );
+    assert.ok(nodes.lines.x < nodes.products.x, 'a referenced table sits left of the table referencing it');
+    assert.strictEqual(
+        nodes.customers.x,
+        nodes.products.x,
+        'tables that reference nothing do not share the rightmost column'
+    );
+    assert.ok(Number.isFinite(nodes.a.x) && Number.isFinite(nodes.b.x), 'a reference cycle broke the layout');
+    const column = Object.values(nodes)
+        .filter((n) => n.x === nodes.customers.x)
+        .map((n) => n.y)
+        .sort((x, y) => x - y);
+    assert.ok(
+        column.every((y, i) => i === 0 || y - column[i - 1] >= 100),
+        'cards in one column overlap'
+    );
 });
 
 function loadApiNameGuard() {
     const tables = read('js/tables.js');
-    const slice = tables.slice(tables.indexOf('const API_NAME_PATTERN'),
-        tables.indexOf('function tableSettingsPayload'));
+    const slice = tables.slice(
+        tables.indexOf('const API_NAME_PATTERN'),
+        tables.indexOf('function tableSettingsPayload')
+    );
     const module = {};
     global.markTableDirty = () => {};
     eval(slice + '\n;module.apiNameIsValid = apiNameIsValid; module.normalizeApiName = normalizeApiName;');
@@ -452,7 +567,10 @@ test('UnpublishedNeedsNoApiName', () => {
 test('EndpointSheetGuardsSave', () => {
     const tables = read('js/tables.js');
     const fn = tables.slice(tables.indexOf('function openEndpointSheet'), tables.indexOf('const OPTIONS_SHOWN'));
-    assert.ok(/apiNameIsValid\(name, exposed\.ctrl\.checked\)/.test(fn), 'openEndpointSheet no longer checks apiNameIsValid');
+    assert.ok(
+        /apiNameIsValid\(name, exposed\.ctrl\.checked\)/.test(fn),
+        'openEndpointSheet no longer checks apiNameIsValid'
+    );
     assert.ok(/saveBtn\.disabled = !valid/.test(fn), 'openEndpointSheet no longer disables Save on an invalid name');
 });
 
@@ -475,7 +593,10 @@ test('OptionListKeepsCommas', () => {
     eval(slice + '\n;module.splitOptions = splitOptions; module.joinOptions = joinOptions;');
 
     assert.deepStrictEqual(module.splitOptions('red, blue, green'), ['red', 'blue', 'green']);
-    assert.deepStrictEqual(module.splitOptions('Rotterdam\\, Zuid-Holland, Utrecht'), ['Rotterdam, Zuid-Holland', 'Utrecht']);
+    assert.deepStrictEqual(module.splitOptions('Rotterdam\\, Zuid-Holland, Utrecht'), [
+        'Rotterdam, Zuid-Holland',
+        'Utrecht'
+    ]);
     assert.deepStrictEqual(module.splitOptions(''), []);
     const withCommas = ['Rotterdam, Zuid-Holland', 'a\\b', 'plain'];
     assert.deepStrictEqual(module.splitOptions(module.joinOptions(withCommas)), withCommas);
@@ -491,8 +612,9 @@ test('ApiNamePatternMirrorsServer', () => {
 
 function loadRemoteHeaders() {
     const remote = read('js/remote.js');
-    const slice = remote.slice(remote.indexOf('const SECRET_REF'), remote.indexOf('let connectionData'))
-        + remote.slice(remote.indexOf('function headersToText'), remote.indexOf('async function openConnectionSheet'));
+    const slice =
+        remote.slice(remote.indexOf('const SECRET_REF'), remote.indexOf('let connectionData')) +
+        remote.slice(remote.indexOf('function headersToText'), remote.indexOf('async function openConnectionSheet'));
     const module = {};
     eval(slice + '\n;module.headersToText = headersToText; module.headersFromText = headersFromText;');
     return module;
@@ -502,35 +624,68 @@ test('SecretHeaderSendsId', () => {
     const module = loadRemoteHeaders();
     const secrets = [{ id: 's1', name: 'crm-key' }];
     const parsed = module.headersFromText('X-Api-Key: {{crm-key}}\nAccept-Language: nl', secrets);
-    assert.deepStrictEqual(parsed.headers, [{ name: 'X-Api-Key', secretId: 's1' }, { name: 'Accept-Language', value: 'nl' }]);
+    assert.deepStrictEqual(parsed.headers, [
+        { name: 'X-Api-Key', secretId: 's1' },
+        { name: 'Accept-Language', value: 'nl' }
+    ]);
     assert.strictEqual(module.headersToText(parsed.headers, secrets), 'X-Api-Key: {{crm-key}}\nAccept-Language: nl');
 });
 
 test('UnknownSecretHeaderRefused', () => {
     const module = loadRemoteHeaders();
-    assert.ok(module.headersFromText('X-Api-Key: {{missing}}', []).error, 'an unknown secret was sent as a literal value');
+    assert.ok(
+        module.headersFromText('X-Api-Key: {{missing}}', []).error,
+        'an unknown secret was sent as a literal value'
+    );
     assert.ok(module.headersFromText('no colon here', []).error, 'a line without a name was accepted');
 });
 
 test('BracesInHeaderStayLiteral', () => {
     const module = loadRemoteHeaders();
-    assert.deepStrictEqual(module.headersFromText('X-Tag: a {{b}} c', []).headers, [{ name: 'X-Tag', value: 'a {{b}} c' }]);
+    assert.deepStrictEqual(module.headersFromText('X-Tag: a {{b}} c', []).headers, [
+        { name: 'X-Tag', value: 'a {{b}} c' }
+    ]);
 });
 
 test('ApiImportBesideFileImport', () => {
-    assert.ok(read('admin/views/tables.html').includes("openRemoteImport()'>Import from API"), 'the tables menu lost Import from API');
-    assert.ok(read('admin/views/settings.html').includes("data-pane='connections'"), 'Settings lost the connections pane');
+    assert.ok(
+        read('admin/views/tables.html').includes("openRemoteImport()'>Import from API"),
+        'the tables menu lost Import from API'
+    );
+    assert.ok(
+        read('admin/views/settings.html').includes("data-pane='connections'"),
+        'Settings lost the connections pane'
+    );
     assert.ok(read('admin/views/settings.html').includes("id='cloneBody'"), 'the jobs pane lost its clones');
-    assert.ok(!/type:\s*'password'/.test(read('js/remote.js')), 'a connection sheet asks for a secret value instead of a stored secret');
+    assert.ok(
+        !/type:\s*'password'/.test(read('js/remote.js')),
+        'a connection sheet asks for a secret value instead of a stored secret'
+    );
 });
 
 /* the OTP login flow */
 
 function loadAuthModule() {
-    const dom = install(['curPass', 'newPass', 'newPass2', 'changeHint',
-        'loginScreen', 'loginForm', 'forgotCard', 'changeCard',
-        'tabPassword', 'tabOtp', 'passwordContainer', 'otpContainer',
-        'loginUser', 'loginPass', 'otpCode', 'otpCodeRow', 'loginBtn', 'totpContainer', 'totpCode'
+    const dom = install([
+        'curPass',
+        'newPass',
+        'newPass2',
+        'changeHint',
+        'loginScreen',
+        'loginForm',
+        'forgotCard',
+        'changeCard',
+        'tabPassword',
+        'tabOtp',
+        'passwordContainer',
+        'otpContainer',
+        'loginUser',
+        'loginPass',
+        'otpCode',
+        'otpCodeRow',
+        'loginBtn',
+        'totpContainer',
+        'totpCode'
     ]);
     global.ui = {
         toast() {},
@@ -539,8 +694,10 @@ function loadAuthModule() {
     global.ssoInit = () => {};
     global.ssoProviders = () => [];
     const module = {};
-    eval(read('js/auth.js').replace(/\bboot\(\);\s*$/, '') +
-        '\n;module.changeProblem = changeProblem; module.refreshChangeState = refreshChangeState; module.signIn = signIn;');
+    eval(
+        read('js/auth.js').replace(/\bboot\(\);\s*$/, '') +
+            '\n;module.changeProblem = changeProblem; module.refreshChangeState = refreshChangeState; module.signIn = signIn;'
+    );
     return {
         dom,
         module
@@ -559,7 +716,10 @@ test('TwoFactorAsksForCode', async () => {
     await module.signIn({ preventDefault() {} });
     assert.strictEqual(dom.byId.totpContainer.hidden, false, 'the code field stayed hidden');
     assert.ok('code' in sent[0], 'the sign-in does not send the code');
-    assert.ok(read('admin/_auth.html').includes("id='totpContainer' hidden"), 'the code field is visible before it is asked for');
+    assert.ok(
+        read('admin/_auth.html').includes("id='totpContainer' hidden"),
+        'the code field is visible before it is asked for'
+    );
 });
 
 test('RefusedPasswordMarksField', async () => {
@@ -577,7 +737,10 @@ test('SignInBackdropIsStatic', () => {
     const page = read('admin/_auth.html');
     const css = read('app.css');
     assert.ok(/class='signin-rows' aria-hidden='true'/.test(page), 'the backdrop is exposed to assistive tech');
-    assert.ok(/prefers-reduced-motion: no-preference\) \{\s*\.signin-rows i/.test(css), 'the rows animate under reduced motion');
+    assert.ok(
+        /prefers-reduced-motion: no-preference\) \{\s*\.signin-rows i/.test(css),
+        'the rows animate under reduced motion'
+    );
     assert.ok(/\.signin-theme\s*{[^}]*z-index:\s*[1-9]/.test(css), 'the theme toggle sits under the sign-in pane');
 });
 
@@ -611,7 +774,10 @@ test('RequestedCodeExpiresOnClient', () => {
     assert.ok(auth.includes('otpExpiryTimer'), 'the code has no expiry timer');
     assert.ok(auth.includes('clearTimeout(otpExpiryTimer)'), 'a stale timer outlives a reset');
     assert.ok(auth.includes('expiresInSeconds'), 'the expiry no longer counts down');
-    assert.ok(auth.includes("placeholder = `Enter the code in ${seconds}s.`"), 'the countdown is not in the placeholder');
+    assert.ok(
+        auth.includes('placeholder = `Enter the code in ${seconds}s.`'),
+        'the countdown is not in the placeholder'
+    );
     assert.ok(auth.includes("placeholder = 'Expired'"), 'an expired code does not say so in the placeholder');
 });
 
@@ -634,13 +800,19 @@ test('ForgotLinkSwapsCard', () => {
     assert.ok(!/e-?mail|inbox|link will be sent/i.test(forgot), 'the card implies a reset email Baseport cannot send');
     assert.ok(auth.includes('function showForgot'), 'showForgot is gone');
     assert.ok(auth.includes('function backToLogin'), 'backToLogin is gone');
-    assert.ok(/function backToLogin\(\) \{[\s\S]*resetOtpFlow\(\)/.test(auth), 'returning no longer clears a pending code');
+    assert.ok(
+        /function backToLogin\(\) \{[\s\S]*resetOtpFlow\(\)/.test(auth),
+        'returning no longer clears a pending code'
+    );
 });
 
 test('PasswordFormTabOrder', () => {
     const page = read('admin/_auth.html');
     assert.ok(!/field-label-row/.test(page), 'the forgot link is back inside the password label');
-    assert.ok(page.indexOf("id='loginBtn'") < page.indexOf('forgot-password'), 'the forgot link tabs before the submit button');
+    assert.ok(
+        page.indexOf("id='loginBtn'") < page.indexOf('forgot-password'),
+        'the forgot link tabs before the submit button'
+    );
 });
 
 test('PasswordTabInitialised', () => {
@@ -663,7 +835,10 @@ test('ChangeCardIsForm', () => {
     const card = page.slice(page.indexOf("id='changeCard'"));
     assert.ok(/<form[^>]*id='changeCard'/.test(page), 'the change card is not a form');
     assert.ok(/onsubmit='return changePassword\(event\)'/.test(page), 'the change card has no submit handler');
-    assert.ok(/<button[^>]*type='submit'/.test(card.slice(0, card.indexOf('</form>'))), 'the set-password button never submits');
+    assert.ok(
+        /<button[^>]*type='submit'/.test(card.slice(0, card.indexOf('</form>'))),
+        'the set-password button never submits'
+    );
     assert.ok(/id='newPass2'/.test(page), 'the new password is confirmed only once');
     assert.ok(/onclick='signOut\(\)'>Cancel/.test(card), 'the change card has no way out');
 });
@@ -682,7 +857,10 @@ test('ToastIsCopyable', () => {
     assert.ok(/el\.onclick = \(\) => copy\(el, text\)/.test(js), 'clicking a toast no longer copies it');
     assert.ok(/toastButton\('Copy'/.test(js), 'copying is mouse-only again');
     assert.ok(/ev\.stopPropagation\(\)/.test(js), 'dismissing a toast also copies it');
-    assert.ok(/\.toast-text\s*{[^}]*user-select:\s*text/.test(css), 'the page-wide selection bar still applies to a toast');
+    assert.ok(
+        /\.toast-text\s*{[^}]*user-select:\s*text/.test(css),
+        'the page-wide selection bar still applies to a toast'
+    );
     assert.ok(/\.toast\s*{[^}]*cursor:\s*pointer/.test(css), 'a toast does not look clickable');
     assert.ok(/\.toast-btn:focus-visible\s*{[^}]*outline/.test(css), 'the toast buttons have no focus ring');
 });
@@ -691,13 +869,19 @@ test('DoubleClickCopiesCell', () => {
     const js = read('ui.js');
     assert.ok(/addEventListener\('dblclick'/.test(js), 'table cells no longer copy on double click');
     assert.ok(/closest\('\.table td'\)/.test(js), 'the copy shortcut is not scoped to table cells');
-    assert.ok(/querySelector\('button, input, select, textarea, a'\)/.test(js), 'an action cell copies its button labels');
+    assert.ok(
+        /querySelector\('button, input, select, textarea, a'\)/.test(js),
+        'an action cell copies its button labels'
+    );
 });
 
 test('FieldConfigShowsStructure', () => {
     const js = read('js/tables.js');
     const css = read('app.css');
-    assert.ok(!/<code>\$\{escapeHtml\(fieldConfig\(f\)\)\}<\/code>/.test(js), 'the config cell is a single code pill again');
+    assert.ok(
+        !/<code>\$\{escapeHtml\(fieldConfig\(f\)\)\}<\/code>/.test(js),
+        'the config cell is a single code pill again'
+    );
     assert.ok(/OPTIONS_SHOWN/.test(js), 'every select option is listed again');
     assert.ok(/title="\$\{escapeHtml\(o\.join/.test(js), 'the truncated options have no way to be read in full');
     assert.ok(/\.field-config\s*{[^}]*max-width/.test(css), 'the config column can stretch the table again');
@@ -708,15 +892,15 @@ test('ToastKindInTokens', () => {
     const css = read('ui.css');
     const app = read('app.css');
     assert.ok(!/border-left:\s*3px/.test(css), 'the alert stripe is back');
-    assert.ok(!/#[0-9a-f]{6}/i.test(css.slice(css.indexOf('.toast'), css.indexOf('.field {'))), 'a toast colour bypasses the tokens');
+    assert.ok(
+        !/#[0-9a-f]{6}/i.test(css.slice(css.indexOf('.toast'), css.indexOf('.field {'))),
+        'a toast colour bypasses the tokens'
+    );
     assert.ok(/--success:/.test(app), 'the success hue has no token');
 });
 
 test('ChangeCardMarksWrongField', () => {
-    const {
-        dom,
-        module
-    } = loadAuthModule();
+    const { dom, module } = loadAuthModule();
     const set = (id, value) => {
         dom.byId[id].value = value;
     };
@@ -745,10 +929,7 @@ test('ChangeCardMarksWrongField', () => {
 });
 
 test('TypingDoesNotMarkUnfinished', () => {
-    const {
-        dom,
-        module
-    } = loadAuthModule();
+    const { dom, module } = loadAuthModule();
     dom.byId.curPass.value = 'one-time-pass';
     assert.strictEqual(module.changeProblem(true), null, 'an empty new password is called wrong while typing');
     dom.byId.newPass.value = 'a-real-password';
@@ -802,15 +983,18 @@ test('JobsPaneListsJobs', () => {
 test('ScheduleSavesExplicitly', () => {
     const settings = read('js/settings.js');
     assert.ok(!settings.includes("addEventListener('change', () => saveJob"), 'schedule still auto-saves on blur');
-    assert.ok(settings.includes("ui.button('Save'"), 'the jobs table has no explicit Save button');
-    assert.ok(settings.includes('save.disabled = schedule.value === job.schedule'), 'Save is not gated on an actual edit');
+    assert.ok(/ui\.button\(\s*'Save'/.test(settings), 'the jobs table has no explicit Save button');
+    assert.ok(
+        settings.includes('save.disabled = schedule.value === job.schedule'),
+        'Save is not gated on an actual edit'
+    );
     assert.ok(settings.includes("ev.key !== 'Enter'"), 'Enter no longer commits a schedule edit');
 });
 
 test('BackupsPaneRetention', () => {
     const html = read('admin/views/settings.html');
     const settings = read('js/settings.js');
-    assert.ok(html.includes('id=\'settingsBackupRetention\''), 'the retention input is gone');
+    assert.ok(html.includes("id='settingsBackupRetention'"), 'the retention input is gone');
     assert.ok(html.includes("onclick='triggerBackup()'>Trigger backup"), 'the trigger control is gone');
     assert.ok(/<tbody id='backupsBody'><\/tbody>/.test(html), 'the backups table body is gone');
     assert.ok(settings.includes("'/api/_admin/backups'"), 'backups no longer read the store');
@@ -825,7 +1009,10 @@ test('BackupsPaneLayout', () => {
     const pane = html.slice(html.indexOf("data-pane='backups'"));
     assert.ok(pane.includes('<h2>Backup settings</h2>'), 'the retention form lost its own card');
     assert.ok(pane.includes('<h2>Archives</h2>'), 'the snapshot list lost its own card');
-    assert.ok(pane.indexOf('<h2>Backup settings</h2>') < pane.indexOf('<h2>Archives</h2>'), 'the settings card no longer leads');
+    assert.ok(
+        pane.indexOf('<h2>Backup settings</h2>') < pane.indexOf('<h2>Archives</h2>'),
+        'the settings card no longer leads'
+    );
     assert.ok(pane.includes("onclick='triggerBackup()'>Trigger backup"), 'the trigger control is gone');
     assert.ok(/\.settings-form-footer\s*\{[^}]*gap:\s*\.5rem/.test(css), 'footer buttons can still touch');
 });
@@ -850,7 +1037,10 @@ test('UsersPageLayout', () => {
     assert.ok(/<div class='page-actions'>/.test(auth), 'the users header has no actions');
     assert.ok(/onclick='loadAccounts\(\)'>Refresh/.test(auth), 'the users header lost its refresh button');
     assert.ok(/onclick='openAccountForm\(\)'>New user/.test(auth), 'the add-user control is no longer next to refresh');
-    assert.ok(/accounts-toolbar[\s\S]*?<div class='table-pager' id='accountsPager'>/.test(auth), 'the pager is no longer inside the toolbar');
+    assert.ok(
+        /accounts-toolbar[\s\S]*?<div class='table-pager' id='accountsPager'>/.test(auth),
+        'the pager is no longer inside the toolbar'
+    );
 });
 
 test('AccountShowsRole', () => {
@@ -858,7 +1048,10 @@ test('AccountShowsRole', () => {
     assert.ok(/<th>Role<\/th>/.test(read('admin/views/auth.html')), 'the accounts list no longer shows a role column');
     assert.ok(/id: 'accRole'[\s\S]*?type: 'select'/.test(accounts), 'the role is no longer a two-option control');
     assert.ok(/\['admin',[\s\S]*?\['consumer',/.test(accounts), 'the role control lost admin or consumer');
-    assert.ok(/body\.role = document\.getElementById\('accRole'\)\.value/.test(accounts), 'the account editor no longer sends a role');
+    assert.ok(
+        /body\.role = document\.getElementById\('accRole'\)\.value/.test(accounts),
+        'the account editor no longer sends a role'
+    );
     assert.ok(!/isAdmin/.test(accounts), 'the isAdmin flag came back');
 });
 
@@ -871,12 +1064,12 @@ test('CreateControlsInHeader', () => {
     assert.ok(/onclick='saveQuery\(\)'[\s\S]*>Save/.test(sql), 'the sql header lost its save button');
     assert.ok(/onclick='runSql\(\)'[\s\S]*>Execute/.test(sql), 'the sql header lost its execute button');
     assert.ok(!/class='sql-actions'/.test(sql), 'the sql actions still live in the card bar');
-    assert.ok(/onclick='renameCurrentQuery\(\)'[\s\S]*>Rename/.test(sql),
-        'Rename is not in the sql header actions');
-    assert.ok(/title='Delete query'[^>]*onclick='deleteCurrentQuery\(\)'/.test(sql),
-        'Delete is not an icon-only action in the sql header');
-    assert.ok(!/deleteCurrentQuery\(\)'[\s\S]*>Delete\b/.test(sql),
-        'Delete still includes its text label');
+    assert.ok(/onclick='renameCurrentQuery\(\)'[\s\S]*>Rename/.test(sql), 'Rename is not in the sql header actions');
+    assert.ok(
+        /title='Delete query'[^>]*onclick='deleteCurrentQuery\(\)'/.test(sql),
+        'Delete is not an icon-only action in the sql header'
+    );
+    assert.ok(!/deleteCurrentQuery\(\)'[\s\S]*>Delete\b/.test(sql), 'Delete still includes its text label');
     assert.ok(!/actions: \[/.test(sidebar), 'the subbar still includes per-item action buttons');
 });
 
@@ -889,11 +1082,18 @@ test('ConsoleChromeLayout', () => {
     assert.ok(!shell.includes("class='rail'"), 'the icon rail survived the merge');
     assert.ok(!shell.includes('sidebarAdd'), 'the sidebar quick-add survived the merge');
     assert.ok(!shell.includes('sidebar-context'), 'the per-section list is still glued to the sidebar');
-    assert.ok(/<main class='main'>[\s\S]*id='subbar'[\s\S]*class='main-content'/.test(shell),
-        'the per-section list is not a left subbar inside main, ahead of the content');
-    assert.ok(/<\/div>\s*<\/main>\s*<\/div>\s*<\/div>/s.test(footer),
-        'the footer no longer closes the main-content wrapper, the workspace and the shell');
-    assert.ok(!/createTable|toggleCreateMenu|closeCreateMenu/.test(readAll()), 'a create-menu handler survived in a script');
+    assert.ok(
+        /<main class='main'>[\s\S]*id='subbar'[\s\S]*class='main-content'/.test(shell),
+        'the per-section list is not a left subbar inside main, ahead of the content'
+    );
+    assert.ok(
+        /<\/div>\s*<\/main>\s*<\/div>\s*<\/div>/s.test(footer),
+        'the footer no longer closes the main-content wrapper, the workspace and the shell'
+    );
+    assert.ok(
+        !/createTable|toggleCreateMenu|closeCreateMenu/.test(readAll()),
+        'a create-menu handler survived in a script'
+    );
 });
 
 test('NewTableFromOverview', () => {
@@ -911,8 +1111,10 @@ test('SqlActionsNeedSavedQuery', () => {
     const src = read('js/sql.js');
     eval(src + '\n;global.__sql = { applyQuery, clearQuery };');
     const actions = global.document.getElementById('sqlQueryActions');
-    assert.ok(/id='sqlQueryActions'[\s\S]*class='hidden'/.test(read('admin/views/sql.html')),
-        'query actions do not start hidden in the markup');
+    assert.ok(
+        /id='sqlQueryActions'[\s\S]*class='hidden'/.test(read('admin/views/sql.html')),
+        'query actions do not start hidden in the markup'
+    );
     actions.classList.add('hidden');
     global.__sql.applyQuery({ id: 'q1', name: 'Counts', sql: 'select 1' });
     assert.ok(!actions.classList.contains('hidden'), 'query actions hidden while a query is open');
@@ -922,32 +1124,42 @@ test('SqlActionsNeedSavedQuery', () => {
 
 test('FormEditorHasDelete', () => {
     const forms = read('admin/views/forms.html');
-    assert.ok(/class='[^']*hidden[^']*' id='formDeleteBtn' onclick='deleteCurrentForm\(\)'[\s\S]*>Delete/.test(forms),
-        'the form editor header lost its Delete button');
+    assert.ok(
+        /class='[^']*hidden[^']*' id='formDeleteBtn' onclick='deleteCurrentForm\(\)'[\s\S]*>Delete/.test(forms),
+        'the form editor header lost its Delete button'
+    );
     const formsJs = read('forms.js');
     assert.ok(/function\s+deleteCurrentForm/.test(formsJs), 'deleteCurrentForm is gone');
-    assert.ok(/getElementById\('formDeleteBtn'\)\.classList\.remove\('hidden'\)/.test(formsJs),
-        'Delete is not revealed when editing');
-    assert.ok(/getElementById\('formDeleteBtn'\)\.classList\.add\('hidden'\)/.test(formsJs),
-        'Delete is not hidden for a new form');
+    assert.ok(
+        /getElementById\('formDeleteBtn'\)\.classList\.remove\('hidden'\)/.test(formsJs),
+        'Delete is not revealed when editing'
+    );
+    assert.ok(
+        /getElementById\('formDeleteBtn'\)\.classList\.add\('hidden'\)/.test(formsJs),
+        'Delete is not hidden for a new form'
+    );
     const tables = read('admin/views/tables.html');
     assert.ok(!/btn-ghost/.test(tables), 'the endpoint Configure button still uses the ghost variant');
 });
 
 test('FormsRowHasOpen', () => {
     const fragments = readSource('Api', 'Endpoints', 'FragmentEndpoints.cs');
-    const formsRow = fragments.slice(fragments.indexOf("fragments/forms"), fragments.indexOf("fragments/accounts"));
-    assert.ok(/class=\\"row-link\\" onclick=\\"navigate\('\/forms\//.test(formsRow),
-        'the forms row is not a row-link that navigates to the editor');
-    assert.ok(/btn-ghost btn-sm[^>]*>Open<\/button>/.test(formsRow),
-        'the forms row no longer includes the single Open button');
-    assert.ok(!/Html\.Button/.test(formsRow),
-        'Preview, Edit and Delete still sit in the forms row actions');
-    const tablesRow = fragments.slice(fragments.indexOf("fragments/tables"), fragments.indexOf("fragments/records"));
-    assert.ok(/btn-ghost btn-sm[^>]*>Open<\/button>/.test(tablesRow),
-        'the tables row Open button is not the same pattern');
-    assert.ok(!/function\s+selectForm/.test(read('forms.js')),
-        'selectForm survived as a dead navigation alias');
+    const formsRow = fragments.slice(fragments.indexOf('fragments/forms'), fragments.indexOf('fragments/accounts'));
+    assert.ok(
+        /class=\\"row-link\\" onclick=\\"navigate\('\/forms\//.test(formsRow),
+        'the forms row is not a row-link that navigates to the editor'
+    );
+    assert.ok(
+        /btn-ghost btn-sm[^>]*>Open<\/button>/.test(formsRow),
+        'the forms row no longer includes the single Open button'
+    );
+    assert.ok(!/Html\.Button/.test(formsRow), 'Preview, Edit and Delete still sit in the forms row actions');
+    const tablesRow = fragments.slice(fragments.indexOf('fragments/tables'), fragments.indexOf('fragments/records'));
+    assert.ok(
+        /btn-ghost btn-sm[^>]*>Open<\/button>/.test(tablesRow),
+        'the tables row Open button is not the same pattern'
+    );
+    assert.ok(!/function\s+selectForm/.test(read('forms.js')), 'selectForm survived as a dead navigation alias');
 });
 
 test('HeaderActionOrder', () => {
@@ -981,25 +1193,37 @@ test('FormsSubbarIsFlat', () => {
         { id: 'form-search', title: 'Customers - Search', kind: 'form', tableName: 'Customers' },
         { id: 'form-overview', title: 'Orders - Overview status open', kind: 'list', tableName: 'Orders' },
         { id: 'form-create', title: 'Customers - Create new', kind: 'form', tableName: 'Customers' },
-        { id: 'form-worklist', title: 'Orders - Worklist', kind: 'list', tableName: 'Orders' },
+        { id: 'form-worklist', title: 'Orders - Worklist', kind: 'list', tableName: 'Orders' }
     ];
     const src = read('js/sidebar.js');
     eval(src + '\n;global.__sidebar = { SIDEBARS, sidebarItem, OBJECT_ICONS };');
     const items = global.__sidebar.SIDEBARS.forms.items();
     const structure = items.map((i) => i.label);
-    assert.deepStrictEqual(structure, [
-        'Show all', 'Customers - Create new', 'Customers - Search',
-        'Orders - Overview status open', 'Orders - Worklist',
-    ], 'forms are not a flat, title-sorted list');
+    assert.deepStrictEqual(
+        structure,
+        [
+            'Show all',
+            'Customers - Create new',
+            'Customers - Search',
+            'Orders - Overview status open',
+            'Orders - Worklist'
+        ],
+        'forms are not a flat, title-sorted list'
+    );
     assert.ok(!items.some((i) => i.header), 'a group header came back');
     const builder = src.slice(src.indexOf('function sidebarItem'), src.indexOf('function filterBar'));
     assert.ok(!/subbar-group|subbar-sep/.test(builder), 'sidebarItem still builds group headers');
-    assert.strictEqual(items[0].icon, global.__sidebar.OBJECT_ICONS.folder,
-        'Show all does not carry the folder icon');
-    assert.strictEqual(items.find((i) => i.label === 'Orders - Overview status open').icon,
-        global.__sidebar.OBJECT_ICONS.list, 'a list form does not carry the list icon');
-    assert.strictEqual(items.find((i) => i.label === 'Customers - Search').icon,
-        global.__sidebar.OBJECT_ICONS.form, 'a submit form does not carry the form icon');
+    assert.strictEqual(items[0].icon, global.__sidebar.OBJECT_ICONS.folder, 'Show all does not carry the folder icon');
+    assert.strictEqual(
+        items.find((i) => i.label === 'Orders - Overview status open').icon,
+        global.__sidebar.OBJECT_ICONS.list,
+        'a list form does not carry the list icon'
+    );
+    assert.strictEqual(
+        items.find((i) => i.label === 'Customers - Search').icon,
+        global.__sidebar.OBJECT_ICONS.form,
+        'a submit form does not carry the form icon'
+    );
 });
 
 test('SubbarPillHasTooltip', () => {
@@ -1007,15 +1231,30 @@ test('SubbarPillHasTooltip', () => {
     install([]);
     global.ui = {
         el: (tag, cls, attrs) => {
-            const n = { tagName: tag, className: cls, ...attrs, children: [], append(c) { this.children.push(c); } };
+            const n = {
+                tagName: tag,
+                className: cls,
+                ...attrs,
+                children: [],
+                append(c) {
+                    this.children.push(c);
+                }
+            };
             return n;
-        },
+        }
     };
     const src = read('js/sidebar.js');
     eval(src + '\n;global.__sidebar = { SIDEBARS, sidebarItem, OBJECT_ICONS };');
-    const pill = global.__sidebar.sidebarItem({ label: 'Orders - Overview status open', badge: 'List', onSelect: () => {} });
-    assert.strictEqual(pill.title, 'Orders - Overview status open',
-        'the pill does not carry the original name as its tooltip');
+    const pill = global.__sidebar.sidebarItem({
+        label: 'Orders - Overview status open',
+        badge: 'List',
+        onSelect: () => {}
+    });
+    assert.strictEqual(
+        pill.title,
+        'Orders - Overview status open',
+        'the pill does not carry the original name as its tooltip'
+    );
     assert.ok(!pill.onmouseenter, 'a hover handler still toasts the name');
 });
 
@@ -1034,32 +1273,40 @@ test('TablesSubbarMarksProxy', () => {
     global.currentTables = [
         { id: 't-orders', name: 'Orders', isProxy: false },
         { id: 't-customers', name: 'Customers', isProxy: false },
-        { id: 't-portway', name: 'Portway', isProxy: true },
+        { id: 't-portway', name: 'Portway', isProxy: true }
     ];
     const src = read('js/sidebar.js');
     eval(src + '\n;global.__sidebar = { SIDEBARS, OBJECT_ICONS };');
     const items = global.__sidebar.SIDEBARS.tables.items();
-    assert.deepStrictEqual(items.map((i) => i.label),
-        ['Show all', 'Customers', 'Orders', 'Portway'], 'tables are not name-sorted');
+    assert.deepStrictEqual(
+        items.map((i) => i.label),
+        ['Show all', 'Customers', 'Orders', 'Portway'],
+        'tables are not name-sorted'
+    );
     assert.strictEqual(items[0].active, false, 'Show all is not inactive while a table is open');
-    assert.strictEqual(items.find((i) => i.label === 'Customers').active, true,
-        'the open table is not marked active');
-    assert.strictEqual(items.find((i) => i.label === 'Portway').badge, 'proxy',
-        'the proxy table is not badged');
-    assert.strictEqual(items[0].icon, global.__sidebar.OBJECT_ICONS.folder,
-        'Show all does not carry the folder icon');
-    assert.ok(items.slice(1).every((i) => i.icon === global.__sidebar.OBJECT_ICONS.table),
-        'a table item lacks the table icon');
+    assert.strictEqual(items.find((i) => i.label === 'Customers').active, true, 'the open table is not marked active');
+    assert.strictEqual(items.find((i) => i.label === 'Portway').badge, 'proxy', 'the proxy table is not badged');
+    assert.strictEqual(items[0].icon, global.__sidebar.OBJECT_ICONS.folder, 'Show all does not carry the folder icon');
+    assert.ok(
+        items.slice(1).every((i) => i.icon === global.__sidebar.OBJECT_ICONS.table),
+        'a table item lacks the table icon'
+    );
 });
 
 test('TopbarLinksReference', () => {
     const shell = read('admin/_shell.html');
-    assert.ok(/class='topbar-actions'[\s\S]*window\.open\('\/docs'/.test(shell),
-        'the topbar no longer links the API reference');
-    assert.ok(/onclick='toggleAccountMenu\(event\)'/.test(shell),
-        'the account trigger drops the click event, the popout closes instantly');
-    assert.ok(/id='accountMenu'[\s\S]*onclick='signOut\(\)'/.test(shell),
-        'the account popout lost its Sign out action');
+    assert.ok(
+        /class='topbar-actions'[\s\S]*window\.open\('\/docs'/.test(shell),
+        'the topbar no longer links the API reference'
+    );
+    assert.ok(
+        /onclick='toggleAccountMenu\(event\)'/.test(shell),
+        'the account trigger drops the click event, the popout closes instantly'
+    );
+    assert.ok(
+        /id='accountMenu'[\s\S]*onclick='signOut\(\)'/.test(shell),
+        'the account popout lost its Sign out action'
+    );
 });
 
 test('SidebarCollapsePersists', () => {
@@ -1077,7 +1324,10 @@ test('SqlEditorIsCodeMirror', () => {
     assert.ok(/sqlEditor = CodeMirror\.fromTextArea/.test(sql), 'the editor is no longer a CodeMirror instance');
     assert.ok(/extraKeys:\s*\{\s*'Ctrl-Enter': \(\) => runSql\(\)/.test(sql), 'Ctrl+Enter no longer runs the query');
     assert.ok(/const sql = sqlValue\(\)/.test(sql), 'runSql reads a raw textarea value again');
-    assert.ok(!/onkeydown='handleSqlKey\(event\)'/.test(read('admin/views/sql.html')), 'keyboard handling is still a markup attribute');
+    assert.ok(
+        !/onkeydown='handleSqlKey\(event\)'/.test(read('admin/views/sql.html')),
+        'keyboard handling is still a markup attribute'
+    );
 });
 
 test('SchemaCanvasLayout', () => {
@@ -1095,14 +1345,19 @@ test('SchemaCanvasLayout', () => {
 
 test('ReferenceServedLocally', () => {
     const docs = read('docs.html');
-    const external = [...docs.matchAll(/(?:src|href)=['"](https?:)?\/\//g)].map(m => m[0]);
+    const external = [...docs.matchAll(/(?:src|href)=['"](https?:)?\/\//g)].map((m) => m[0]);
     assert.deepStrictEqual(external, [], `docs.html loads something off-origin: ${external.join(', ')}`);
     assert.ok(docs.includes("src='/js/vendor/scalar-api-reference.js'"), 'the vendored Scalar bundle is not loaded');
-    assert.ok(fs.existsSync(path.join(wwwroot, 'js/vendor/scalar-api-reference.js')),
-        'the vendored bundle is missing; run Scripts/pull-vendors.sh');
+    assert.ok(
+        fs.existsSync(path.join(wwwroot, 'js/vendor/scalar-api-reference.js')),
+        'the vendored bundle is missing; run Scripts/pull-vendors.sh'
+    );
     assert.ok(/withDefaultFonts:\s*false/.test(docs), 'Scalar would fetch fonts from fonts.scalar.com');
-    assert.ok(/proxyUrl:\s*''/.test(docs), "Scalar would route try-it requests through proxy.scalar.com");
-    assert.ok(/agent:\s*\{\s*disabled:\s*true\s*\}/.test(docs), 'Scalar would offer Ask AI, which sends the document to scalar.com');
+    assert.ok(/proxyUrl:\s*''/.test(docs), 'Scalar would route try-it requests through proxy.scalar.com');
+    assert.ok(
+        /agent:\s*\{\s*disabled:\s*true\s*\}/.test(docs),
+        'Scalar would offer Ask AI, which sends the document to scalar.com'
+    );
     assert.ok(/mcp:\s*\{\s*disabled:\s*true\s*\}/.test(docs), 'Scalar would offer Generate MCP through scalar.com');
     assert.ok(/telemetry:\s*false/.test(docs), 'Scalar telemetry is on by default');
     assert.ok(/showDeveloperTools:\s*'never'/.test(docs), 'Scalar would show its hosted-service toolbar');
@@ -1110,7 +1365,10 @@ test('ReferenceServedLocally', () => {
 
 test('ReferenceDocumentsPublishedSpec', () => {
     const docs = read('docs.html');
-    assert.ok(docs.includes("data-url='/api/openapi.json'"), 'docs.html points somewhere other than the published spec');
+    assert.ok(
+        docs.includes("data-url='/api/openapi.json'"),
+        'docs.html points somewhere other than the published spec'
+    );
 });
 
 test('ConsoleLinksToReference', () => {
@@ -1122,54 +1380,57 @@ test('ConsoleLinksToReference', () => {
 test('RowHandlersDefined', () => {
     const fragments = readSource('Api', 'Endpoints', 'FragmentEndpoints.cs');
     const js = readAll();
-    const defined = new Set([...js.matchAll(/function\s+([A-Za-z_$][\w$]*)/g)].map(m => m[1]));
+    const defined = new Set([...js.matchAll(/function\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
 
     const called = new Set([
-        ...[...fragments.matchAll(/Html\.Button\("[^"]*",\s*"(\w+)"/g)].map(m => m[1]),
-        ...[...fragments.matchAll(/Html\.IconButton\([^,]+,\s*"[^"]*",\s*"(\w+)"/g)].map(m => m[1]),
+        ...[...fragments.matchAll(/Html\.Button\("[^"]*",\s*"(\w+)"/g)].map((m) => m[1]),
+        ...[...fragments.matchAll(/Html\.IconButton\([^,]+,\s*"[^"]*",\s*"(\w+)"/g)].map((m) => m[1]),
         // onclick written inline in the fragment markup
-        ...[...fragments.matchAll(/onclick=\\"(?:event\.stopPropagation\(\);\s*)?(\w+)\(/g)].map(m => m[1])
+        ...[...fragments.matchAll(/onclick=\\"(?:event\.stopPropagation\(\);\s*)?(\w+)\(/g)].map((m) => m[1])
     ]);
 
-    const missing = [...called].filter(fn => !defined.has(fn) && fn !== 'this');
+    const missing = [...called].filter((fn) => !defined.has(fn) && fn !== 'this');
     assert.deepStrictEqual(missing, [], `server-rendered rows call functions that do not exist: ${missing.join(', ')}`);
 });
 
 test('EndpointSheetIsShared', () => {
-    assert.ok(read('admin/views/tables.html').includes("onclick='openEndpointSheet()'"), "a table's own settings page has no endpoint button");
+    assert.ok(
+        read('admin/views/tables.html').includes("onclick='openEndpointSheet()'"),
+        "a table's own settings page has no endpoint button"
+    );
     assert.ok(read('js/settings.js').includes('openEndpointSheet(t.id)'), 'Settings > API has no endpoint button');
     const definitions = [...readAll().matchAll(/function\s+openEndpointSheet\b/g)];
     assert.strictEqual(definitions.length, 1, 'openEndpointSheet is defined more than once');
 });
 
 test('RenderExpressionCannotInject', () => {
-    const embed = fs.readFileSync(
-        path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'embed.js'), 'utf8');
+    const embed = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'embed.js'), 'utf8');
 
-    assert.ok(!/innerHTML\s*=\s*renderCell/.test(embed),
-        'renderCell output is assigned straight to innerHTML again');
-    assert.ok(/setSafeHtml\(td,\s*renderCell\(/.test(embed),
-        'the render expression no longer goes through setSafeHtml');
-    assert.ok(/new DOMParser\(\)\.parseFromString/.test(embed),
-        'sanitising no longer parses to an inert document first');
+    assert.ok(!/innerHTML\s*=\s*renderCell/.test(embed), 'renderCell output is assigned straight to innerHTML again');
+    assert.ok(
+        /setSafeHtml\(td,\s*renderCell\(/.test(embed),
+        'the render expression no longer goes through setSafeHtml'
+    );
+    assert.ok(
+        /new DOMParser\(\)\.parseFromString/.test(embed),
+        'sanitising no longer parses to an inert document first'
+    );
 
-    for (const guard of ['SCRIPT', 'IFRAME', 'OBJECT', "startsWith('on')", "javascript:"]) {
+    for (const guard of ['SCRIPT', 'IFRAME', 'OBJECT', "startsWith('on')", 'javascript:']) {
         assert.ok(embed.includes(guard), `sanitiser no longer guards ${guard}`);
     }
 });
 
 test('SqlEditorBuiltWhenVisible', () => {
-    const sql = fs.readFileSync(
-        path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'js', 'sql.js'), 'utf8');
-    const core = fs.readFileSync(
-        path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'js', 'core.js'), 'utf8');
+    const sql = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'js', 'sql.js'), 'utf8');
+    const core = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'js', 'core.js'), 'utf8');
 
-    assert.ok(!/^initSqlEditor\(\);\s*$/m.test(sql),
-        'initSqlEditor runs at load again, before the view is visible');
-    assert.ok(/sql:\s*async[^}]*initSqlEditor\(\)/s.test(core),
-        'the sql route no longer builds the editor');
-    assert.ok(/function initSqlEditor\(\)\s*\{\s*if \(sqlEditor\) return;/.test(sql),
-        'initSqlEditor is no longer idempotent, revisiting /sql would rebuild it');
+    assert.ok(!/^initSqlEditor\(\);\s*$/m.test(sql), 'initSqlEditor runs at load again, before the view is visible');
+    assert.ok(/sql:\s*async[^}]*initSqlEditor\(\)/s.test(core), 'the sql route no longer builds the editor');
+    assert.ok(
+        /function initSqlEditor\(\)\s*\{\s*if \(sqlEditor\) return;/.test(sql),
+        'initSqlEditor is no longer idempotent, revisiting /sql would rebuild it'
+    );
 });
 
 test('ButtonActionOptions', () => {
@@ -1185,25 +1446,35 @@ test('ButtonActionRevealsField', () => {
     const btn = forms.slice(forms.indexOf("row.t === 'button'"), forms.indexOf("row.t === 'group'"));
     assert.ok(/row\.action === 'cancel'[\s\S]*?'href'/.test(btn), 'cancel never gets an href field');
     assert.ok(/row\.action === 'link'[\s\S]*?'hrefExpr'/.test(btn), 'link never gets an hrefExpr field');
-    assert.ok(/actionSel\.onchange = \(\) => \{[\s\S]*?renderCanvas\(\)/.test(forms),
-        'the action select does not re-render, switching to link/cancel would not reveal its field');
+    assert.ok(
+        /actionSel\.onchange = \(\) => \{[\s\S]*?renderCanvas\(\)/.test(forms),
+        'the action select does not re-render, switching to link/cancel would not reveal its field'
+    );
 });
 
 test('ColumnWidthWritesValue', () => {
     const forms = read('forms.js');
-    assert.ok(/widthSel\.onchange = \(\) => \{\s*col\.w = Number\(widthSel\.value\)/.test(forms),
-        'the width picker no longer writes col.w');
-    assert.ok(forms.includes("colEl.style.flexGrow = col.w || 12"), 'the admin canvas no longer mirrors the ratio it will render');
+    assert.ok(
+        /widthSel\.onchange = \(\) => \{\s*col\.w = Number\(widthSel\.value\)/.test(forms),
+        'the width picker no longer writes col.w'
+    );
+    assert.ok(
+        forms.includes('colEl.style.flexGrow = col.w || 12'),
+        'the admin canvas no longer mirrors the ratio it will render'
+    );
 });
 
 test('PaletteBlocksClickToAdd', () => {
     const forms = read('forms.js');
     const wiring = forms.slice(
         forms.indexOf("querySelectorAll('.builder-palette [data-block]')"),
-        forms.indexOf("wireCanvasDrops"));
+        forms.indexOf('wireCanvasDrops')
+    );
     assert.ok(wiring.includes("addEventListener('dragstart'"), 'drag-to-add is gone');
-    assert.ok(wiring.includes("addEventListener('click'") && wiring.includes('addRow('),
-        'a palette block can only be dragged in, never clicked');
+    assert.ok(
+        wiring.includes("addEventListener('click'") && wiring.includes('addRow('),
+        'a palette block can only be dragged in, never clicked'
+    );
 });
 
 test('RedirectOnlyAfterSuccess', () => {
@@ -1221,7 +1492,7 @@ test('EmbedGuardsUnsafeHrefs', () => {
         /row\.action === 'cancel'[\s\S]{0,200}isUnsafeUrl\(url\)/,
         /row\.action === 'link'[\s\S]{0,200}isUnsafeUrl\(url\)/,
         /b\.onclick = \(\) => \{[\s\S]{0,200}isUnsafeUrl\(url\)/,
-        /cfg\.onSuccessRedirect[\s\S]{0,300}isUnsafeUrl\(url\)/,
+        /cfg\.onSuccessRedirect[\s\S]{0,300}isUnsafeUrl\(url\)/
     ];
     guarded.forEach((re, i) => assert.ok(re.test(embed), `href call site ${i} is missing the isUnsafeUrl guard`));
 });
@@ -1236,7 +1507,10 @@ test('LookupAutoRunsFromQuery', () => {
 
 test('RowActionsReadRawData', () => {
     const embed = read('embed.js');
-    const actionBlock = embed.slice(embed.indexOf('actions.forEach((a) => {'), embed.indexOf('tr.appendChild(td);', embed.indexOf('actions.forEach((a) => {')));
+    const actionBlock = embed.slice(
+        embed.indexOf('actions.forEach((a) => {'),
+        embed.indexOf('tr.appendChild(td);', embed.indexOf('actions.forEach((a) => {'))
+    );
     assert.ok(actionBlock.includes('safeEval(a.hrefExpr, row.data)'), 'list actions no longer read row.data directly');
 });
 
@@ -1248,26 +1522,28 @@ test('FieldTypePickersReadServer', () => {
     assert.strictEqual(
         [...js.matchAll(/fetchOptions:\s*\(q\)\s*=>\s*fieldTypeOptions\(q\)/g)].length,
         2,
-        'quick-add and the field editor no longer share one type list',
+        'quick-add and the field editor no longer share one type list'
     );
 });
 
 function loadUserAuth(stored, statusAuthenticated) {
-    const store = stored ? {
-        'baseport.user.tokens': JSON.stringify(stored)
-    } : {};
+    const store = stored
+        ? {
+              'baseport.user.tokens': JSON.stringify(stored)
+          }
+        : {};
     global.localStorage = {
-        getItem: k => (k in store ? store[k] : null),
+        getItem: (k) => (k in store ? store[k] : null),
         setItem: (k, v) => {
             store[k] = String(v);
         },
-        removeItem: k => {
+        removeItem: (k) => {
             delete store[k];
         }
     };
     const replaced = [];
     global.location = {
-        replace: u => replaced.push(u),
+        replace: (u) => replaced.push(u),
         href: '/auth/login'
     };
     global.fetch = async () => ({
@@ -1285,32 +1561,26 @@ function loadUserAuth(stored, statusAuthenticated) {
 }
 
 test('TokenHolderNotAskedToSignIn', async () => {
-    const {
-        module,
-        replaced
-    } = loadUserAuth({
-        auth_token: 't',
-        refresh_token: 'r',
-        expires_at: 9999999999
-    }, false);
+    const { module, replaced } = loadUserAuth(
+        {
+            auth_token: 't',
+            refresh_token: 'r',
+            expires_at: 9999999999
+        },
+        false
+    );
     await module.bpGuestOnly();
     assert.deepStrictEqual(replaced, ['/auth/profile'], '/auth/login keeps a signed-in user on the login card');
 });
 
 test('CookieSessionRecognised', async () => {
-    const {
-        module,
-        replaced
-    } = loadUserAuth(null, true);
+    const { module, replaced } = loadUserAuth(null, true);
     await module.bpGuestOnly();
     assert.deepStrictEqual(replaced, ['/auth/profile'], 'a cookie session still gets the login card');
 });
 
 test('GuestStaysOnLogin', async () => {
-    const {
-        module,
-        replaced
-    } = loadUserAuth(null, false);
+    const { module, replaced } = loadUserAuth(null, false);
     await module.bpGuestOnly();
     assert.deepStrictEqual(replaced, [], 'a visitor with no session is bounced to a profile they cannot load');
 });
@@ -1323,7 +1593,7 @@ test('SignOutReachesServer', () => {
 });
 
 test('GuestPagesCallGuard', () => {
-    ['auth/login.html', 'auth/register.html'].forEach(page => {
+    ['auth/login.html', 'auth/register.html'].forEach((page) => {
         assert.ok(read(page).includes('bpGuestOnly()'), `${page} never calls bpGuestOnly`);
     });
 });
@@ -1332,7 +1602,10 @@ test('AdminSheetGreysRefusedFields', () => {
     const js = read('js/accounts.js');
     const open = js.slice(js.indexOf('function openAccountForm'), js.indexOf('function adminNotice'));
     assert.ok(/const locked = !!a && a\.role === 'admin'/.test(open), 'an admin is no longer detected');
-    assert.ok(!/if \(a && a\.role === 'admin'\) return/.test(open), 'the sheet returns early and hides the token panel');
+    assert.ok(
+        !/if \(a && a\.role === 'admin'\) return/.test(open),
+        'the sheet returns early and hides the token panel'
+    );
     assert.ok(open.includes('apiTokenPanel(a)'), 'the token panel is gone');
     assert.ok(/input\.disabled = true/.test(open), 'the refused fields are not greyed out');
     assert.ok(open.includes('adminNotice(a)'), 'nothing points an operator at the CLI');
@@ -1341,14 +1614,17 @@ test('AdminSheetGreysRefusedFields', () => {
 test('AdminLockScope', () => {
     const js = read('js/accounts.js');
     const open = js.slice(js.indexOf('function openAccountForm'), js.indexOf('function adminNotice'));
-    const greyed = open.match(/\[([^\]]*)\]\s*\n\s*\.forEach\(\(id\) => \{/);
+    const greyed = open.match(/\[([^\]]*)\]\s*\.forEach\(\(id\) => \{/);
     assert.ok(greyed, 'the greyed list is gone');
     assert.ok(!/accUsername|accEmail/.test(greyed[1]), 'the name or the address is greyed again');
     for (const id of ['accRole', 'accPassword', 'accDisabled'])
         assert.ok(greyed[1].includes(id), `${id} is no longer greyed on an admin`);
 
     const submit = js.slice(js.indexOf('async function submitAccount'));
-    assert.ok(/const locked =[\s\S]{0,120}role === 'admin'/.test(submit), 'the save no longer knows it is editing an admin');
+    assert.ok(
+        /const locked =[\s\S]{0,120}role === 'admin'/.test(submit),
+        'the save no longer knows it is editing an admin'
+    );
     assert.ok(/if \(!locked\) \{[\s\S]*?body\.role/.test(submit), 'a refused role is sent anyway');
     assert.ok(/if \(!locked\) \{[\s\S]*?body\.isDisabled/.test(submit), 'a refused disabled switch is sent anyway');
     assert.ok(/if \(!locked\) \{[\s\S]*?body\.password/.test(submit), 'a refused password is sent anyway');
@@ -1358,7 +1634,7 @@ test('AdminLockScope', () => {
 
 test('AdminRoleOnlyOnCreate', () => {
     const js = read('js/accounts.js');
-    const roleField = js.slice(js.indexOf("id: 'accRole'"), js.indexOf("if (a) {"));
+    const roleField = js.slice(js.indexOf("id: 'accRole'"), js.indexOf('if (a) {'));
     const adminOption = roleField.indexOf("['admin',");
     const branch = roleField.indexOf('options: a');
     assert.ok(branch >= 0 && adminOption > branch, 'admin is offered unconditionally on the role select');
@@ -1367,7 +1643,10 @@ test('AdminRoleOnlyOnCreate', () => {
 test('BlankPasswordNotSent', () => {
     const js = read('js/accounts.js');
     const submit = js.slice(js.indexOf('async function submitAccount'), js.indexOf('async function deleteAccount'));
-    assert.ok(/if \(password(?: && password\.value|\?\.value)\) body\.password/.test(submit), 'an empty password field is submitted');
+    assert.ok(
+        /if \(password(?: && password\.value|\?\.value)\) body\.password/.test(submit),
+        'an empty password field is submitted'
+    );
 });
 
 test('GeneratedPasswordMeetsMinimum', () => {
@@ -1432,15 +1711,25 @@ test('PaletteOffersBlocks', () => {
 test('AddRowShapesBlocks', () => {
     const forms = read('forms.js');
     const addRow = forms.slice(forms.indexOf('function addRow('), forms.indexOf('function moveRowIn('));
-    assert.ok(/type === 'container'[\s\S]*?rows:\s*\[/.test(addRow), "container is not created with a nested 'rows' array");
+    assert.ok(
+        /type === 'container'[\s\S]*?rows:\s*\[/.test(addRow),
+        "container is not created with a nested 'rows' array"
+    );
     assert.ok(/type === 'line_items'[\s\S]*?field:/.test(addRow), "line_items is not created with a 'field' property");
-    assert.ok(/type === 'button_bar'[\s\S]*?buttons:\s*\[/.test(addRow), "button_bar is not created with a 'buttons' array");
+    assert.ok(
+        /type === 'button_bar'[\s\S]*?buttons:\s*\[/.test(addRow),
+        "button_bar is not created with a 'buttons' array"
+    );
 });
 
 test('LineItemsOfferArrayFields', () => {
     const forms = read('forms.js');
-    assert.ok(/function lineItemFieldCandidates\(\)\s*\{\s*return formTableFields\.filter\(\(f\) => f\.dataType === 'array' && clientArrayColumns\(f\.optionsJson\)\)/.test(forms),
-        'lineItemFieldCandidates no longer filters on array type + configured columns');
+    assert.ok(
+        /function lineItemFieldCandidates\(\)\s*\{\s*return formTableFields\.filter\(\(f\) => f\.dataType === 'array' && clientArrayColumns\(f\.optionsJson\)\)/.test(
+            forms
+        ),
+        'lineItemFieldCandidates no longer filters on array type + configured columns'
+    );
 });
 
 /* child_table builder block  */
@@ -1452,15 +1741,19 @@ test('PaletteOffersChildTable', () => {
 test('AddRowBuildsChildTable', () => {
     const forms = read('forms.js');
     const addRow = forms.slice(forms.indexOf('function addRow('), forms.indexOf('function moveRowIn('));
-    assert.ok(/type === 'child_table'[\s\S]*?table:\s*''[\s\S]*?refField:\s*''[\s\S]*?columns:\s*\[\]/.test(addRow),
-        "child_table is not created with 'table', 'refField' and 'columns'");
+    assert.ok(
+        /type === 'child_table'[\s\S]*?table:\s*''[\s\S]*?refField:\s*''[\s\S]*?columns:\s*\[\]/.test(addRow),
+        "child_table is not created with 'table', 'refField' and 'columns'"
+    );
 });
 
 test('ChildTableOffersBackReferences', () => {
     const forms = read('forms.js');
     assert.ok(/function childTableCandidates\(\)\s*\{/.test(forms), 'childTableCandidates is missing');
-    assert.ok(/f\.dataType === 'reference' && refTargetId\(f\.optionsJson\) === formTableId/.test(forms),
-        'childTableCandidates no longer filters on a reference field pointing back at this table');
+    assert.ok(
+        /f\.dataType === 'reference' && refTargetId\(f\.optionsJson\) === formTableId/.test(forms),
+        'childTableCandidates no longer filters on a reference field pointing back at this table'
+    );
 });
 
 test('EmbedRendersChildTable', () => {
@@ -1468,18 +1761,27 @@ test('EmbedRendersChildTable', () => {
     assert.ok(embed.includes("row.t === 'child_table'"), 'embed.js does not render child_table blocks');
     assert.ok(embed.includes('function renderChildTable('), 'renderChildTable is missing');
     assert.ok(embed.includes('function flushChildTables('), 'flushChildTables is missing');
-    assert.ok(embed.includes('pendingChildTables.push('), 'renderChildTable does not stage its rows for the post-submit flush');
-    assert.ok(/api\/forms\/\$\{formId\}\/child\/\$\{entry\.table\}\?refId=/.test(embed),
-        'flushChildTables does not post to the per-form child-table route with the new header id');
+    assert.ok(
+        embed.includes('pendingChildTables.push('),
+        'renderChildTable does not stage its rows for the post-submit flush'
+    );
+    assert.ok(
+        /api\/forms\/\$\{formId\}\/child\/\$\{entry\.table\}\?refId=/.test(embed),
+        'flushChildTables does not post to the per-form child-table route with the new header id'
+    );
 });
 
 test('LookupShowsChildRows', () => {
     const embed = read('embed.js');
-    assert.ok(/if \(!body\.proxy && body\.id\) renderChildRows\(table, body\.id, result\)/.test(embed),
-        'a found lookup no longer lists the rows of its child tables');
+    assert.ok(
+        /if \(!body\.proxy && body\.id\) renderChildRows\(table, body\.id, result\)/.test(embed),
+        'a found lookup no longer lists the rows of its child tables'
+    );
     const rows = embed.slice(embed.indexOf('function renderChildRows('), embed.indexOf('function renderRecordTable('));
-    assert.ok(/\/child\/\$\{encodeURIComponent\(child\.id\)\}\?refId=\$\{encodeURIComponent\(headerId\)\}/.test(rows),
-        'the read view does not ask the per-form child route for the found record');
+    assert.ok(
+        /\/child\/\$\{encodeURIComponent\(child\.id\)\}\?refId=\$\{encodeURIComponent\(headerId\)\}/.test(rows),
+        'the read view does not ask the per-form child route for the found record'
+    );
     assert.ok(!rows.includes('innerHTML'), 'child row values must be written as text, never as markup');
     assert.ok(rows.includes('cellText(c, row[c.name])'), 'child cells skip the shared value formatting');
 });
@@ -1488,29 +1790,57 @@ test('EmbedLoadsPreact', () => {
     const embed = read('embed.js');
     assert.ok(embed.includes('function ensurePreactHtm('), 'ensurePreactHtm is missing');
     assert.ok(embed.includes('function loadVendorScript('), 'loadVendorScript is missing');
-    assert.ok(/js\/vendor\/preact\.min\.js/.test(embed) && /js\/vendor\/htm\.js/.test(embed),
-        'embed.js no longer points at the vendored preact/htm files');
+    assert.ok(
+        /js\/vendor\/preact\.min\.js/.test(embed) && /js\/vendor\/htm\.js/.test(embed),
+        'embed.js no longer points at the vendored preact/htm files'
+    );
     assert.ok(embed.includes('function usesPreact('), 'usesPreact is missing');
     assert.ok(/line_items\|child_table/.test(embed), 'usesPreact no longer checks for both Preact-based block types');
-    assert.ok(/usesPreact\(data\.form\.layoutJson\) \? ensurePreactHtm\(apiBase\)/.test(embed),
-        'the schema fetch no longer waits for ensurePreactHtm before rendering');
+    assert.ok(
+        /usesPreact\(data\.form\.layoutJson\) \? ensurePreactHtm\(apiBase\)/.test(embed),
+        'the schema fetch no longer waits for ensurePreactHtm before rendering'
+    );
 });
 
 test('UndoSnapshotsAtChokePoint', () => {
     const forms = read('forms.js');
     assert.ok(forms.includes('function createHistory(undoBtnId, redoBtnId)'), 'the shared history factory is missing');
 
-    const renderCanvas = forms.slice(forms.indexOf('function renderCanvas('), forms.indexOf('function buildRowElement('));
+    const renderCanvas = forms.slice(
+        forms.indexOf('function renderCanvas('),
+        forms.indexOf('function buildRowElement(')
+    );
     assert.ok(renderCanvas.includes('layoutHistory.push()'), 'renderCanvas no longer snapshots layout history');
-    assert.ok(forms.includes('function undoLayout()') && forms.includes('function redoLayout()'), 'layout undo/redo entry points are missing');
+    assert.ok(
+        forms.includes('function undoLayout()') && forms.includes('function redoLayout()'),
+        'layout undo/redo entry points are missing'
+    );
 
-    const renderListBuilder = forms.slice(forms.indexOf('function renderListBuilder('), forms.indexOf('const LINK_EXPR_PLACEHOLDER'));
-    assert.ok(renderListBuilder.includes('listColumnsHistory.push()'), 'renderListBuilder no longer snapshots list-column history');
-    assert.ok(forms.includes('function undoListColumns()') && forms.includes('function redoListColumns()'), 'list-column undo/redo entry points are missing');
+    const renderListBuilder = forms.slice(
+        forms.indexOf('function renderListBuilder('),
+        forms.indexOf('const LINK_EXPR_PLACEHOLDER')
+    );
+    assert.ok(
+        renderListBuilder.includes('listColumnsHistory.push()'),
+        'renderListBuilder no longer snapshots list-column history'
+    );
+    assert.ok(
+        forms.includes('function undoListColumns()') && forms.includes('function redoListColumns()'),
+        'list-column undo/redo entry points are missing'
+    );
 
-    const renderLookupResultBuilder = forms.slice(forms.indexOf('function renderLookupResultBuilder('), forms.indexOf('function wireLookupResultDrag('));
-    assert.ok(renderLookupResultBuilder.includes('lookupResultHistory.push()'), 'renderLookupResultBuilder no longer snapshots lookup-result history');
-    assert.ok(forms.includes('function undoLookupResult()') && forms.includes('function redoLookupResult()'), 'lookup-result undo/redo entry points are missing');
+    const renderLookupResultBuilder = forms.slice(
+        forms.indexOf('function renderLookupResultBuilder('),
+        forms.indexOf('function wireLookupResultDrag(')
+    );
+    assert.ok(
+        renderLookupResultBuilder.includes('lookupResultHistory.push()'),
+        'renderLookupResultBuilder no longer snapshots lookup-result history'
+    );
+    assert.ok(
+        forms.includes('function undoLookupResult()') && forms.includes('function redoLookupResult()'),
+        'lookup-result undo/redo entry points are missing'
+    );
 });
 
 test('EmbedRendersBlocks', () => {
@@ -1520,23 +1850,35 @@ test('EmbedRendersBlocks', () => {
     assert.ok(embed.includes("row.t === 'button_bar'"), 'embed.js does not render button_bar blocks');
     const definitions = [...embed.matchAll(/function\s+buildActionButton\b/g)];
     assert.strictEqual(definitions.length, 1, 'buildActionButton is defined more than once');
-    assert.ok(/row\.t === 'button'\)\s*return buildActionButton\(row\)/.test(embed), "the standalone button no longer reuses buildActionButton");
-    assert.ok(/\(row\.buttons \|\| \[\]\)\.forEach\(\(btnCfg\) => bar\.appendChild\(buildActionButton\(btnCfg\)\)\)/.test(embed),
-        'button_bar no longer reuses buildActionButton for each of its buttons');
+    assert.ok(
+        /row\.t === 'button'\)\s*return buildActionButton\(row\)/.test(embed),
+        'the standalone button no longer reuses buildActionButton'
+    );
+    assert.ok(
+        /\(row\.buttons \|\| \[\]\)\.forEach\(\(btnCfg\) => bar\.appendChild\(buildActionButton\(btnCfg\)\)\)/.test(
+            embed
+        ),
+        'button_bar no longer reuses buildActionButton for each of its buttons'
+    );
 });
 
 test('ButtonBarSubmitSuppressesDefault', () => {
     const embed = read('embed.js');
     const loop = embed.slice(embed.indexOf('layout.rows.forEach((row) => {'), embed.indexOf('if (!hasSubmitButton)'));
-    assert.ok(/row\.t === 'button_bar'[\s\S]*?some\(\(b\) => b\.action === 'submit'\)/.test(loop),
-        "hasSubmitButton does not look inside a button_bar's buttons");
+    assert.ok(
+        /row\.t === 'button_bar'[\s\S]*?some\(\(b\) => b\.action === 'submit'\)/.test(loop),
+        "hasSubmitButton does not look inside a button_bar's buttons"
+    );
 });
 
 test('SumRewrittenToPropertyAccess', () => {
     const embed = read('embed.js');
     assert.ok(embed.includes('function sumOverColumn('), 'sumOverColumn helper is missing');
     assert.ok(/replace\(\/\\bSUM\\\(/.test(embed), 'safeEval no longer rewrites bare-identifier SUM(...) calls');
-    assert.ok(/new Function\('data', 'SUM',/.test(embed), 'SUM is no longer injected into the evaluated function scope');
+    assert.ok(
+        /new Function\('data', 'SUM',/.test(embed),
+        'SUM is no longer injected into the evaluated function scope'
+    );
 });
 
 test('UndoButtonsShowDisabled', () => {
@@ -1544,23 +1886,34 @@ test('UndoButtonsShowDisabled', () => {
     [
         ['builderUndo', 'builderRedo'], // submit layout
         ['listUndo', 'listRedo'], // list columns
-        ['lookupResultUndo', 'lookupResultRedo'], // lookup show fields
+        ['lookupResultUndo', 'lookupResultRedo'] // lookup show fields
     ].forEach(([undoId, redoId]) => {
         assert.ok(new RegExp(`id='${undoId}'[^>]*disabled`).test(html), `${undoId} does not start disabled`);
         assert.ok(new RegExp(`id='${redoId}'[^>]*disabled`).test(html), `${redoId} does not start disabled`);
     });
     const forms = read('forms.js');
-    assert.ok(/undoBtn\.disabled = index <= 0/.test(forms), 'the shared history factory does not disable undo at the start of history');
-    assert.ok(/redoBtn\.disabled = index >= stack\.length - 1/.test(forms), 'the shared history factory does not disable redo at the end of history');
+    assert.ok(
+        /undoBtn\.disabled = index <= 0/.test(forms),
+        'the shared history factory does not disable undo at the start of history'
+    );
+    assert.ok(
+        /redoBtn\.disabled = index >= stack\.length - 1/.test(forms),
+        'the shared history factory does not disable redo at the end of history'
+    );
     const appCss = read('app.css');
-    assert.ok(/\.seg-btn:disabled\s*\{/.test(appCss), 'a disabled seg-btn (Undo/Redo, viewport toggle) has no visual treatment');
+    assert.ok(
+        /\.seg-btn:disabled\s*\{/.test(appCss),
+        'a disabled seg-btn (Undo/Redo, viewport toggle) has no visual treatment'
+    );
 });
 
 test('BlocksHeadingSpacing', () => {
     const appCss = read('app.css');
     assert.ok(!/\.builder-palette h4\+h4/.test(appCss), 'the dead h4+h4 selector is still there');
-    assert.ok(/\.builder-palette h4:not\(:first-child\)\s*\{\s*margin-top:\s*1rem;/.test(appCss),
-        'Blocks has no rule giving it top spacing away from the Fields list above it');
+    assert.ok(
+        /\.builder-palette h4:not\(:first-child\)\s*\{\s*margin-top:\s*1rem;/.test(appCss),
+        'Blocks has no rule giving it top spacing away from the Fields list above it'
+    );
 });
 
 test('RawJsonInsideBuilder', () => {
@@ -1568,7 +1921,7 @@ test('RawJsonInsideBuilder', () => {
     const builderMain = html.slice(html.indexOf("class='builder-main'"), html.indexOf('Redirect on success'));
     assert.ok(builderMain.includes("id='layoutCanvas'"), 'sanity: builder-main no longer contains the canvas');
     assert.ok(builderMain.includes("id='formLayout'"), 'the raw layout JSON textarea moved out of builder-main');
-    assert.ok(builderMain.includes("class='builder-raw-json'"), "the raw JSON details lost its container class");
+    assert.ok(builderMain.includes("class='builder-raw-json'"), 'the raw JSON details lost its container class');
     const appCss = read('app.css');
     assert.ok(/\.builder-raw-json\s*\{/.test(appCss), 'builder-raw-json has no spacing/border of its own');
 });
@@ -1577,35 +1930,45 @@ test('FormsSidebarIcons', () => {
     const sidebar = read('js/sidebar.js');
     const formsSpec = sidebar.slice(sidebar.indexOf('forms: {'), sidebar.indexOf('sql: {'));
     assert.ok(!/badge:/.test(formsSpec), 'a redundant Form/List text tag is still built for every forms sidebar item');
-    assert.ok(/icon: f\.kind === 'list' \? OBJECT_ICONS\.list : OBJECT_ICONS\.form/.test(formsSpec),
-        'the sidebar item no longer picks a kind-specific icon');
+    assert.ok(
+        /icon: f\.kind === 'list' \? OBJECT_ICONS\.list : OBJECT_ICONS\.form/.test(formsSpec),
+        'the sidebar item no longer picks a kind-specific icon'
+    );
     const formIcon = /form: SECTION_ICONS\.forms/.test(sidebar);
     assert.ok(formIcon, 'sanity: form icon definition moved');
-    assert.ok(!sidebar.includes("list: \"<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M8 9h8M8 13h8M8 17h4'/></svg>\""),
-        'the list icon is still a near-duplicate of the form icon (rect + 3 lines)');
+    assert.ok(
+        !sidebar.includes(
+            "list: \"<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' width='18' height='18'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M8 9h8M8 13h8M8 17h4'/></svg>\""
+        ),
+        'the list icon is still a near-duplicate of the form icon (rect + 3 lines)'
+    );
 });
 
 test('SaveKeepsLayout', () => {
     const forms = read('forms.js');
-    assert.ok(!/layoutJson:\s*formKind === 'form' && formActions\.includes\('submit'\)/.test(forms),
-        "formSnapshot still zeroes the layout to '[]' whenever submit is off");
-    assert.ok(/layoutJson:\s*formKind === 'form' \? JSON\.stringify\(layout\) : '\[\]'/.test(forms),
-        'formSnapshot no longer saves the layout for every form kind, regardless of which actions are on');
+    assert.ok(
+        !/layoutJson:\s*formKind === 'form' && formActions\.includes\('submit'\)/.test(forms),
+        "formSnapshot still zeroes the layout to '[]' whenever submit is off"
+    );
+    assert.ok(
+        /layoutJson:\s*formKind === 'form' \? JSON\.stringify\(layout\) : '\[\]'/.test(forms),
+        'formSnapshot no longer saves the layout for every form kind, regardless of which actions are on'
+    );
 });
 
 test('NewLookupStartsWizard', () => {
-    const {
-        dom,
-        module
-    } = loadFormsModule();
-    module.setTableFields([{
-        name: 'Sku',
-        dataType: 'text',
-        isIdentifier: true
-    }, {
-        name: 'Name',
-        dataType: 'text'
-    }]);
+    const { dom, module } = loadFormsModule();
+    module.setTableFields([
+        {
+            name: 'Sku',
+            dataType: 'text',
+            isIdentifier: true
+        },
+        {
+            name: 'Name',
+            dataType: 'text'
+        }
+    ]);
     module.applyFormShape('form', ['lookup']);
 
     module.applyKindConfig({});
@@ -1620,25 +1983,28 @@ test('NewLookupStartsWizard', () => {
         resultFields: ['Name']
     });
     assert.strictEqual(module.getLookupOnboardStep(), -1, 'an already-configured lookup should skip onboarding');
-    assert.ok(dom.byId.lookupOnboardNav.classList.contains('hidden'), 'onboarding nav should hide once already configured');
+    assert.ok(
+        dom.byId.lookupOnboardNav.classList.contains('hidden'),
+        'onboarding nav should hide once already configured'
+    );
     assert.ok(!dom.byId.lookupStepMatch.classList.contains('hidden'), 'the flat panel should show Match on');
     assert.ok(!dom.byId.lookupStepShow.classList.contains('hidden'), 'the flat panel should show Show');
     assert.ok(!dom.byId.lookupStepNotFound.classList.contains('hidden'), 'the flat panel should show Not-found');
 });
 
 test('WizardNextIsGated', () => {
-    const {
-        dom,
-        module
-    } = loadFormsModule();
-    module.setTableFields([{
-        name: 'Sku',
-        dataType: 'text',
-        isIdentifier: true
-    }, {
-        name: 'Name',
-        dataType: 'text'
-    }]);
+    const { dom, module } = loadFormsModule();
+    module.setTableFields([
+        {
+            name: 'Sku',
+            dataType: 'text',
+            isIdentifier: true
+        },
+        {
+            name: 'Name',
+            dataType: 'text'
+        }
+    ]);
     module.applyFormShape('form', ['lookup']);
     module.applyKindConfig({});
 
@@ -1647,7 +2013,11 @@ test('WizardNextIsGated', () => {
     assert.strictEqual(dom.byId.lookupOnboardNext.disabled, true, 'Next is enabled with nothing chosen to show yet');
 
     module.insertLookupResultField('Name');
-    assert.strictEqual(dom.byId.lookupOnboardNext.disabled, false, 'Next stays disabled once a field is chosen to show');
+    assert.strictEqual(
+        dom.byId.lookupOnboardNext.disabled,
+        false,
+        'Next stays disabled once a field is chosen to show'
+    );
 
     module.lookupOnboardBack();
     assert.strictEqual(module.getLookupOnboardStep(), 0, 'Back did not return to the previous step');
@@ -1658,59 +2028,92 @@ test('WizardNextIsGated', () => {
 });
 
 test('ShowFieldOrderRoundTrips', () => {
-    const {
-        module
-    } = loadFormsModule();
-    module.setTableFields([{
-        name: 'Sku',
-        dataType: 'text'
-    }, {
-        name: 'Name',
-        dataType: 'text'
-    }, {
-        name: 'Category',
-        dataType: 'text'
-    }]);
+    const { module } = loadFormsModule();
+    module.setTableFields([
+        {
+            name: 'Sku',
+            dataType: 'text'
+        },
+        {
+            name: 'Name',
+            dataType: 'text'
+        },
+        {
+            name: 'Category',
+            dataType: 'text'
+        }
+    ]);
     module.applyFormShape('form', ['lookup']);
     module.applyKindConfig({
         matchFields: ['Sku'],
         resultFields: ['Category', 'Name']
     });
-    assert.deepStrictEqual(module.getLookupResultOrder(), ['Category', 'Name'], 'the saved Show order was not preserved on load');
+    assert.deepStrictEqual(
+        module.getLookupResultOrder(),
+        ['Category', 'Name'],
+        'the saved Show order was not preserved on load'
+    );
 });
 
 test('ChipDropReorders', () => {
     const forms = read('forms.js');
-    assert.ok(forms.includes('function dropFieldAt(ev, targetIndex)'), 'the shared reorder-aware drop handler is missing');
+    assert.ok(
+        forms.includes('function dropFieldAt(ev, targetIndex)'),
+        'the shared reorder-aware drop handler is missing'
+    );
     assert.ok(/col\.items\.forEach\(\(item, itemIdx\) => \{/.test(forms), "each chip's own index is no longer tracked");
-    assert.ok(/chip\.addEventListener\('drop', \(ev\) => \{[\s\S]{0,250}dropFieldAt\(ev, itemIdx\)/.test(forms),
-        'a chip no longer has its own drop handler inserting before itself');
-    assert.ok(/colEl\.addEventListener\('drop', \(ev\) => \{[\s\S]{0,150}dropFieldAt\(ev, undefined\)/.test(forms),
-        'the column background no longer appends to the end');
-    assert.ok(!/JSON\.stringify\(moved\.path\) === JSON\.stringify\(path\)\)\s*\{\s*renderCanvas\(\);\s*return;\s*\}/.test(forms),
-        'a same-column drop still just re-renders without reordering');
+    assert.ok(
+        /chip\.addEventListener\('drop', \(ev\) => \{[\s\S]{0,250}dropFieldAt\(ev, itemIdx\)/.test(forms),
+        'a chip no longer has its own drop handler inserting before itself'
+    );
+    assert.ok(
+        /colEl\.addEventListener\('drop', \(ev\) => \{[\s\S]{0,150}dropFieldAt\(ev, undefined\)/.test(forms),
+        'the column background no longer appends to the end'
+    );
+    assert.ok(
+        !/JSON\.stringify\(moved\.path\) === JSON\.stringify\(path\)\)\s*\{\s*renderCanvas\(\);\s*return;\s*\}/.test(
+            forms
+        ),
+        'a same-column drop still just re-renders without reordering'
+    );
 });
 
 test('DragShowsIndicator', () => {
     const forms = read('forms.js');
-    assert.ok(/chip\.addEventListener\('dragover', \(ev\) => \{[\s\S]{0,80}chip\.classList\.add\('drop-before'\)/.test(forms),
-        'a chip no longer marks itself as a drop target while dragged over');
-    assert.ok(/chip\.addEventListener\('dragleave'[\s\S]{0,300}chip\.classList\.remove\('drop-before'\)/.test(forms),
-        'the drop indicator is never cleared on dragleave');
-    assert.ok(/chip\.addEventListener\('dragend', \(\) => \{[\s\S]{0,120}drop-before/.test(forms),
-        'a cancelled drag has no cleanup sweep for a stuck drop indicator');
+    assert.ok(
+        /chip\.addEventListener\('dragover', \(ev\) => \{[\s\S]{0,80}chip\.classList\.add\('drop-before'\)/.test(forms),
+        'a chip no longer marks itself as a drop target while dragged over'
+    );
+    assert.ok(
+        /chip\.addEventListener\('dragleave'[\s\S]{0,300}chip\.classList\.remove\('drop-before'\)/.test(forms),
+        'the drop indicator is never cleared on dragleave'
+    );
+    assert.ok(
+        /chip\.addEventListener\('dragend', \(\) => \{[\s\S]{0,120}drop-before/.test(forms),
+        'a cancelled drag has no cleanup sweep for a stuck drop indicator'
+    );
     const appCss = read('app.css');
     assert.ok(/\.chip\.drop-before\s*\{/.test(appCss), 'the drop-before marker has no visual style');
 });
 
 test('DropBorderDoesNotFlicker', () => {
     const forms = read('forms.js');
-    assert.ok(/colEl\.addEventListener\('dragleave', \(ev\) => \{[\s\S]{0,400}colEl\.contains\(ev\.relatedTarget\)[\s\S]{0,150}colEl\.classList\.remove\('drop-hover'\)/.test(forms),
-        "the column's dragleave still clears drop-hover on every child-boundary crossing");
-    assert.ok(/chip\.addEventListener\('dragleave', \(ev\) => \{[\s\S]{0,400}chip\.contains\(ev\.relatedTarget\)[\s\S]{0,150}chip\.classList\.remove\('drop-before'\)/.test(forms),
-        "a chip's dragleave still clears drop-before on every child-boundary crossing (e.g. its own x button)");
-    assert.ok(/chip\.addEventListener\('dragend', \(\) => \{[\s\S]{0,300}bcol\.drop-hover/.test(forms),
-        'the dragend safety sweep no longer clears a stuck column border too');
+    assert.ok(
+        /colEl\.addEventListener\('dragleave', \(ev\) => \{[\s\S]{0,400}colEl\.contains\(ev\.relatedTarget\)[\s\S]{0,150}colEl\.classList\.remove\('drop-hover'\)/.test(
+            forms
+        ),
+        "the column's dragleave still clears drop-hover on every child-boundary crossing"
+    );
+    assert.ok(
+        /chip\.addEventListener\('dragleave', \(ev\) => \{[\s\S]{0,400}chip\.contains\(ev\.relatedTarget\)[\s\S]{0,150}chip\.classList\.remove\('drop-before'\)/.test(
+            forms
+        ),
+        "a chip's dragleave still clears drop-before on every child-boundary crossing (e.g. its own x button)"
+    );
+    assert.ok(
+        /chip\.addEventListener\('dragend', \(\) => \{[\s\S]{0,300}bcol\.drop-hover/.test(forms),
+        'the dragend safety sweep no longer clears a stuck column border too'
+    );
 });
 
 test('RunButtonRevealsExpression', () => {
@@ -1719,28 +2122,46 @@ test('RunButtonRevealsExpression', () => {
         assert.ok(forms.includes(needle), `${needle} editor branch is missing`);
     });
     const btnEditor = forms.slice(forms.indexOf("row.t === 'button'"), forms.indexOf("row.t === 'group'"));
-    assert.ok(/row\.action === 'run'\)[\s\S]{0,150}labeledInput\('Expression', row, 'expr'/.test(btnEditor),
-        "the standalone button's run action has no expression input");
+    assert.ok(
+        /row\.action === 'run'\)[\s\S]{0,150}labeledInput\('Expression', row, 'expr'/.test(btnEditor),
+        "the standalone button's run action has no expression input"
+    );
     const barEditor = forms.slice(forms.indexOf('function buttonBarEditor'), forms.indexOf('function renderCanvas('));
-    assert.ok(/btn\.action === 'run'\)[\s\S]{0,150}labeledInput\('Expression', btn, 'expr'/.test(barEditor),
-        "a button_bar button's run action has no expression input");
+    assert.ok(
+        /btn\.action === 'run'\)[\s\S]{0,150}labeledInput\('Expression', btn, 'expr'/.test(barEditor),
+        "a button_bar button's run action has no expression input"
+    );
 });
 
 test('RunButtonShowsToast', () => {
     const embed = read('embed.js');
-    assert.ok(/row\.action === 'run'\)[\s\S]{0,350}toast\(String\(result\), 'info'\)/.test(embed),
-        "the run action does not surface its expression's result as a toast");
-    assert.ok(!/row\.action === 'run'\)[\s\S]{0,350}window\.location\.href/.test(embed),
-        'the run action forces navigation like a link, defeating the point of a blank button');
+    assert.ok(
+        /row\.action === 'run'\)[\s\S]{0,350}toast\(String\(result\), 'info'\)/.test(embed),
+        "the run action does not surface its expression's result as a toast"
+    );
+    assert.ok(
+        !/row\.action === 'run'\)[\s\S]{0,350}window\.location\.href/.test(embed),
+        'the run action forces navigation like a link, defeating the point of a blank button'
+    );
 });
 
 test('CanvasFieldLabels', () => {
     const forms = read('forms.js');
-    assert.ok(!forms.includes("label.className = 'brow-type';"), "a field-name label still borrows the block-type eyebrow style");
+    assert.ok(
+        !forms.includes("label.className = 'brow-type';"),
+        'a field-name label still borrows the block-type eyebrow style'
+    );
     const matches = forms.match(/label\.className = 'brow-field-name';/g) || [];
-    assert.strictEqual(matches.length, 2, 'expected exactly the list-column and lookup-result canvases to use brow-field-name');
+    assert.strictEqual(
+        matches.length,
+        2,
+        'expected exactly the list-column and lookup-result canvases to use brow-field-name'
+    );
     const appCss = read('app.css');
-    assert.ok(/\.brow-field-name\s*\{[^}]*text-transform/.test(appCss) === false, 'brow-field-name still forces a text-transform like the eyebrow tag it replaced');
+    assert.ok(
+        /\.brow-field-name\s*\{[^}]*text-transform/.test(appCss) === false,
+        'brow-field-name still forces a text-transform like the eyebrow tag it replaced'
+    );
 });
 
 test('StepIndicatorIsControl', () => {
@@ -1749,14 +2170,14 @@ test('StepIndicatorIsControl', () => {
     assert.ok(/data-step='1' onclick='goToLookupStep\(1\)'/.test(html), 'step 1 indicator has no click handler');
     assert.ok(/data-step='2' onclick='goToLookupStep\(2\)'/.test(html), 'step 2 indicator has no click handler');
 
-    const {
-        module
-    } = loadFormsModule();
-    module.setTableFields([{
-        name: 'Sku',
-        dataType: 'text',
-        isIdentifier: true
-    }]);
+    const { module } = loadFormsModule();
+    module.setTableFields([
+        {
+            name: 'Sku',
+            dataType: 'text',
+            isIdentifier: true
+        }
+    ]);
     module.applyFormShape('form', ['lookup']);
     module.applyKindConfig({});
     assert.strictEqual(module.getLookupOnboardStep(), 0);
@@ -1769,24 +2190,27 @@ test('StepIndicatorIsControl', () => {
 });
 
 test('ListAndLookupUndo', () => {
-    const {
-        dom,
-        module
-    } = loadFormsModule();
-    module.setTableFields([{
-        name: 'Sku',
-        dataType: 'text'
-    }, {
-        name: 'Name',
-        dataType: 'text'
-    }]);
+    const { dom, module } = loadFormsModule();
+    module.setTableFields([
+        {
+            name: 'Sku',
+            dataType: 'text'
+        },
+        {
+            name: 'Name',
+            dataType: 'text'
+        }
+    ]);
 
     module.applyFormShape('list', []);
     module.applyKindConfig({});
     assert.strictEqual(dom.byId.listUndo.disabled, true, 'list undo is not disabled with nothing to undo yet');
 
     module.insertColumn('Sku');
-    assert.deepStrictEqual(module.getListColumns().map((c) => c.name), ['Sku']);
+    assert.deepStrictEqual(
+        module.getListColumns().map((c) => c.name),
+        ['Sku']
+    );
     assert.strictEqual(dom.byId.listUndo.disabled, false, 'inserting a column does not enable list undo');
 
     module.undoListColumns();
@@ -1794,30 +2218,42 @@ test('ListAndLookupUndo', () => {
     assert.strictEqual(dom.byId.listRedo.disabled, false, 'undoing does not enable list redo');
 
     module.redoListColumns();
-    assert.deepStrictEqual(module.getListColumns().map((c) => c.name), ['Sku'], 'list redo did not restore the column');
+    assert.deepStrictEqual(
+        module.getListColumns().map((c) => c.name),
+        ['Sku'],
+        'list redo did not restore the column'
+    );
 });
 
 test('LookupUndoIndependent', () => {
-    const {
-        dom,
-        module
-    } = loadFormsModule();
-    module.setTableFields([{
-        name: 'Sku',
-        dataType: 'text'
-    }, {
-        name: 'Name',
-        dataType: 'text'
-    }]);
+    const { dom, module } = loadFormsModule();
+    module.setTableFields([
+        {
+            name: 'Sku',
+            dataType: 'text'
+        },
+        {
+            name: 'Name',
+            dataType: 'text'
+        }
+    ]);
     module.applyFormShape('form', ['lookup']);
     module.applyKindConfig({
         matchFields: ['Sku'],
         resultFields: []
     });
-    assert.strictEqual(dom.byId.lookupResultUndo.disabled, true, 'lookup-result undo is not disabled with nothing to undo yet');
+    assert.strictEqual(
+        dom.byId.lookupResultUndo.disabled,
+        true,
+        'lookup-result undo is not disabled with nothing to undo yet'
+    );
 
     module.insertLookupResultField('Name');
-    assert.strictEqual(dom.byId.lookupResultUndo.disabled, false, 'inserting a Show field does not enable lookup-result undo');
+    assert.strictEqual(
+        dom.byId.lookupResultUndo.disabled,
+        false,
+        'inserting a Show field does not enable lookup-result undo'
+    );
 
     module.undoLookupResult();
     assert.deepStrictEqual(module.getLookupResultOrder(), [], 'lookup-result undo did not remove the inserted field');
@@ -1840,8 +2276,14 @@ test('SignInIsColumn', () => {
 test('WordmarkIsMasked', () => {
     const css = read('app.css');
     const svg = read('baseport.svg');
-    assert.ok(/\.signin-mark\s*{[\s\S]*?mask:\s*url\('\/baseport\.svg'\)/.test(css), 'the wordmark is not painted through a mask');
-    assert.ok(/\.signin-mark\s*{[\s\S]*?background-color:\s*hsl\(var\(--foreground\)\)/.test(css), 'the wordmark ignores the foreground token');
+    assert.ok(
+        /\.signin-mark\s*{[\s\S]*?mask:\s*url\('\/baseport\.svg'\)/.test(css),
+        'the wordmark is not painted through a mask'
+    );
+    assert.ok(
+        /\.signin-mark\s*{[\s\S]*?background-color:\s*hsl\(var\(--foreground\)\)/.test(css),
+        'the wordmark ignores the foreground token'
+    );
     assert.ok(!/<text/.test(svg), 'the wordmark is text again, not paths');
     assert.ok(!/#000155/.test(svg), 'the wordmark includes a hard-coded colour');
 });
@@ -1850,10 +2292,16 @@ test('SignInProvidersShared', () => {
     const consolePage = read('admin/_auth.html');
     const publicPage = read('auth/login.html');
     for (const page of [consolePage, publicPage]) {
-        assert.ok(/id='ssoBlock' hidden/.test(page), 'the provider block is shown before it is known to have anything in it');
+        assert.ok(
+            /id='ssoBlock' hidden/.test(page),
+            'the provider block is shown before it is known to have anything in it'
+        );
         assert.ok(page.includes("id='ssoProviders'"), 'the provider block has nowhere to render into');
         assert.ok(page.includes("src='/js/sso.js'"), 'the page does not load the provider script');
-        assert.ok(page.includes('<!--__BOOTSTRAP__-->'), 'the page has no server-rendered payload to read the providers from');
+        assert.ok(
+            page.includes('<!--__BOOTSTRAP__-->'),
+            'the page has no server-rendered payload to read the providers from'
+        );
     }
     assert.ok(/ssoInit\('public'\)/.test(publicPage), 'the end-user screen does not say which door it is');
     assert.ok(/ssoInit\('console'\)/.test(read('js/auth.js')), 'the console screen does not say which door it is');
@@ -1863,8 +2311,14 @@ test('ProvidersFromPayload', () => {
     const sso = read('js/sso.js');
     assert.ok(!/fetch\(/.test(sso), 'the sign-in screen asks the server for its providers');
     assert.ok(/getElementById\('bootstrap'\)/.test(sso), 'the providers are not read from the rendered payload');
-    assert.ok(/\/api\/auth\/oidc\/\$\{encodeURIComponent\(provider\.slug\)\}\/start\?surface=/.test(sso), 'a button does not point at the start route for its surface');
-    assert.ok(/textContent = `Continue with/.test(sso), 'a provider name is interpolated as HTML instead of set as text');
+    assert.ok(
+        /\/api\/auth\/oidc\/\$\{encodeURIComponent\(provider\.slug\)\}\/start\?surface=/.test(sso),
+        'a button does not point at the start route for its surface'
+    );
+    assert.ok(
+        /textContent = `Continue with/.test(sso),
+        'a provider name is interpolated as HTML instead of set as text'
+    );
 });
 
 test('FailedSignInClearsCode', () => {
@@ -1881,13 +2335,19 @@ test('OnePanelAtATime', () => {
     assert.ok(/function showPanel/.test(auth), 'the panels are toggled ad hoc again');
     assert.ok(/ssoBlock[\s\S]{0,120}name !== 'login'/.test(auth), 'the provider block outlives the sign-in panel');
     for (const panel of ['loginForm', 'forgotCard', 'changeCard'])
-        assert.ok(new RegExp(`getElementById\\('${panel}'\\).hidden`).test(auth), `${panel} is not part of the panel switch`);
+        assert.ok(
+            new RegExp(`getElementById\\('${panel}'\\).hidden`).test(auth),
+            `${panel} is not part of the panel switch`
+        );
 });
 
 test('UsernameLocksAfterCode', () => {
     const auth = read('js/auth.js');
     assert.ok(/function lockUsername/.test(auth), 'nothing locks the username field');
-    assert.ok(/otpRequested = true;\s*\n\s*lockUsername\(true\)/.test(auth), 'the field stays editable while a code is pending');
+    assert.ok(
+        /otpRequested = true;\s*\n\s*lockUsername\(true\)/.test(auth),
+        'the field stays editable while a code is pending'
+    );
     for (const flow of ['resetOtpFlow', 'expireOtpFlow']) {
         const body = auth.slice(auth.indexOf(`function ${flow}`), auth.indexOf('}', auth.indexOf(`function ${flow}`)));
         assert.ok(/lockUsername\(false\)/.test(body), `${flow} leaves the username locked with no code to use`);
@@ -1901,7 +2361,10 @@ test('ConfirmIsModal', () => {
     assert.ok(/renderModal\(title, body, actions\)/.test(confirm), 'a confirmation does not render as a modal');
     assert.ok(!/sheet\(title, body, actions\)/.test(confirm), 'a confirmation still renders as a sheet');
     assert.ok(!/modal = false/.test(confirm), 'the sheet path is still reachable through an option');
-    assert.ok(/function sheet\([\s\S]{0,80}closeSheet\(\)/.test(ui), 'sheet() no longer closes the open sheet, which was the reason');
+    assert.ok(
+        /function sheet\([\s\S]{0,80}closeSheet\(\)/.test(ui),
+        'sheet() no longer closes the open sheet, which was the reason'
+    );
     const css = read('ui.css');
     const z = (sel) => Number(css.slice(css.indexOf(sel)).match(/z-index:\s*(\d+)/)[1]);
     assert.ok(z('.modal-overlay {') > z('.sheet {'), 'a confirmation renders behind the sheet that asked for it');
@@ -1913,20 +2376,38 @@ test('CurrencyAndZonesFromBrowser', () => {
     const html = read('admin/views/settings.html');
     assert.ok(/<select class='input' id='settingsCurrency'>/.test(html), 'the currency is typed in again');
     assert.ok(/<select class='input' id='settingsTimeZone'>/.test(html), 'there is nowhere to set the instance zone');
-    assert.ok(/ui\.fillOptions\(document\.getElementById\('settingsCurrency'\), ui\.currencyOptions\(\)/.test(settings), 'the currency list is not filled from the browser');
-    assert.ok(/ui\.fillOptions\(document\.getElementById\('settingsTimeZone'\), ui\.timeZoneOptions\(\)/.test(settings), 'the zone list is not filled from the browser');
-    assert.ok(/timeZone: document\.getElementById\('settingsTimeZone'\)\.value/.test(settings), 'the zone is never saved');
+    assert.ok(
+        /ui\.fillOptions\(document\.getElementById\('settingsCurrency'\), ui\.currencyOptions\(\)/.test(settings),
+        'the currency list is not filled from the browser'
+    );
+    assert.ok(
+        /ui\.fillOptions\(document\.getElementById\('settingsTimeZone'\), ui\.timeZoneOptions\(\)/.test(settings),
+        'the zone list is not filled from the browser'
+    );
+    assert.ok(
+        /timeZone: document\.getElementById\('settingsTimeZone'\)\.value/.test(settings),
+        'the zone is never saved'
+    );
     assert.ok(/supportedValuesOf/.test(read('ui.js')), 'the lists are carried in our own source');
     assert.ok(/function when\(iso\)/.test(read('ui.js')), 'there is no shared timestamp formatter');
     for (const file of ['js/settings.js', 'js/sql.js', 'js/accounts.js'])
-        assert.ok(!/new Date\([^)]*\)\.toLocale/.test(read(file)), `${file} formats a timestamp in the reader's own zone`);
+        assert.ok(
+            !/new Date\([^)]*\)\.toLocale/.test(read(file)),
+            `${file} formats a timestamp in the reader's own zone`
+        );
 });
 
 test('NewProviderOffered', () => {
     const settings = read('js/settings.js');
     const sheet = settings.slice(settings.indexOf('function openOidcSheet'), settings.indexOf('function callbackFor'));
-    assert.ok(/oidcIsEnabled'[\s\S]{0,80}checked: p \? p\.isEnabled : true/.test(sheet), 'a new provider is added switched off');
-    assert.ok(/oidcConsoleEnabled'[\s\S]{0,80}checked: p \? p\.consoleEnabled : true/.test(sheet), 'a new provider is offered nowhere');
+    assert.ok(
+        /oidcIsEnabled'[\s\S]{0,80}checked: p \? p\.isEnabled : true/.test(sheet),
+        'a new provider is added switched off'
+    );
+    assert.ok(
+        /oidcConsoleEnabled'[\s\S]{0,80}checked: p \? p\.consoleEnabled : true/.test(sheet),
+        'a new provider is offered nowhere'
+    );
     assert.ok(/!p\.isEnabled \? 'Off'/.test(settings), 'a parked provider still reads as misconfigured');
 });
 
@@ -1934,7 +2415,10 @@ test('ProviderSheetNeverReadsSecret', () => {
     const settings = read('js/settings.js');
     assert.ok(/hasClientSecret/.test(settings), 'the sheet cannot tell whether a secret is set');
     assert.ok(!/value: p \? p\.clientSecret/.test(settings), 'the sheet renders the stored secret');
-    assert.ok(/clientSecret\.ctrl\.value \? \{ clientSecret/.test(settings), 'an untouched secret field is sent, which would clear the stored one');
+    assert.ok(
+        /clientSecret\.ctrl\.value \? \{ clientSecret/.test(settings),
+        'an untouched secret field is sent, which would clear the stored one'
+    );
 });
 
 /* the account menu behind the avatar */
@@ -1960,10 +2444,12 @@ function loadAccountMenu(stored) {
 
     global.ui = eval(read('ui.js').replace(/if \(typeof window[^\n]*\n/g, '') + '; ui');
     const module = {};
-    eval(read('js/sidebar.js') +
-        '\n;module.toggleAccountMenu = toggleAccountMenu; module.closeAccountMenu = closeAccountMenu;' +
-        'module.toggleAppearance = toggleAppearance; module.chooseAppearance = chooseAppearance;' +
-        'module.markAppearance = markAppearance;');
+    eval(
+        read('js/sidebar.js') +
+            '\n;module.toggleAccountMenu = toggleAccountMenu; module.closeAccountMenu = closeAccountMenu;' +
+            'module.toggleAppearance = toggleAppearance; module.chooseAppearance = chooseAppearance;' +
+            'module.markAppearance = markAppearance;'
+    );
     return { dom, module, rows };
 }
 
@@ -2001,11 +2487,19 @@ test('SubmenuClosesWithMenu', () => {
     module.toggleAccountMenu();
     module.toggleAppearance();
     assert.ok(open(dom.byId.accountMenu) && open(dom.byId.appearanceMenu), 'the submenu did not open');
-    assert.strictEqual(dom.byId.appearanceTrigger.getAttribute('aria-expanded'), 'true', 'the trigger does not report its submenu');
+    assert.strictEqual(
+        dom.byId.appearanceTrigger.getAttribute('aria-expanded'),
+        'true',
+        'the trigger does not report its submenu'
+    );
 
     module.closeAccountMenu();
     assert.ok(!open(dom.byId.appearanceMenu), 'the submenu survived its menu');
-    assert.strictEqual(dom.byId.appearanceTrigger.getAttribute('aria-expanded'), 'false', 'the trigger still claims a submenu is open');
+    assert.strictEqual(
+        dom.byId.appearanceTrigger.getAttribute('aria-expanded'),
+        'false',
+        'the trigger still claims a submenu is open'
+    );
 
     module.toggleAccountMenu();
     assert.ok(open(dom.byId.accountMenu) && !open(dom.byId.appearanceMenu), 'reopening restored a stale submenu');
@@ -2017,7 +2511,10 @@ test('SubmenuClosesWithMenu', () => {
 
 test('MenuHasKeyboardExit', () => {
     const sidebar = read('js/sidebar.js');
-    assert.ok(/keydown[\s\S]{0,120}Escape[\s\S]{0,80}closeAccountMenu/.test(sidebar), 'Escape does not close the account menu');
+    assert.ok(
+        /keydown[\s\S]{0,120}Escape[\s\S]{0,80}closeAccountMenu/.test(sidebar),
+        'Escape does not close the account menu'
+    );
 });
 
 /* uncaught script failures reach the server */
@@ -2046,14 +2543,17 @@ function loadReporter() {
     };
 
     const quiet = { ...console, error() {} };
-    const ui = eval('(function (console) {' + read('ui.js').replace(/if \(typeof window[^\n]*\n/g, '') + '; return ui; })')(quiet);
+    const ui = eval(
+        '(function (console) {' + read('ui.js').replace(/if \(typeof window[^\n]*\n/g, '') + '; return ui; })'
+    )(quiet);
     return { ui, sent, listeners, dom };
 }
 
 test('UncaughtFailureReported', () => {
     const { sent, listeners } = loadReporter();
     const reason = new Error('ui.themeChoice is not a function');
-    reason.stack = 'TypeError: ui.themeChoice is not a function\n    at markAppearance (http://host/js/sidebar.js:251:26)';
+    reason.stack =
+        'TypeError: ui.themeChoice is not a function\n    at markAppearance (http://host/js/sidebar.js:251:26)';
 
     listeners.unhandledrejection({ reason });
 
@@ -2097,7 +2597,8 @@ test('SubbarRowMatchesNavRow', () => {
         assert.strictEqual(
             (pill.match(new RegExp(`${prop}:([^;]*);`)) || [])[1],
             (nav.match(new RegExp(`${prop}:([^;]*);`)) || [])[1],
-            `the subbar row and the nav row disagree on ${prop}`);
+            `the subbar row and the nav row disagree on ${prop}`
+        );
 });
 
 function loadSidebar() {
@@ -2109,7 +2610,7 @@ function loadSidebar() {
             Object.assign(e, props || {});
             return e;
         },
-        escape: s => String(s == null ? '' : s),
+        escape: (s) => String(s == null ? '' : s)
     };
     global.navigate = () => {};
     global.routePath = () => '/';
@@ -2126,11 +2627,14 @@ function loadSidebar() {
     const js = read('js/sidebar.js');
     const src = js.slice(js.indexOf('const SECTION_ICONS'), js.indexOf('function refreshSidebar'));
     const module = {};
-    eval(src + `
+    eval(
+        src +
+            `
 ;module.renderSidebar = renderSidebar;
 module.filters = subbarFilters;
 module.sections = SIDEBARS;
-`);
+`
+    );
     return { dom, module, subbar: dom.byId.subbar };
 }
 
@@ -2138,15 +2642,17 @@ const pills = (bar) => bar.children.filter((c) => c.classList.contains('subbar-p
 
 test('SectionRootNotPeer', () => {
     const { module, subbar } = loadSidebar();
-    global.currentTables = [{ id: 't1', name: 'Orders' }, { id: 't2', name: 'Customers' }];
+    global.currentTables = [
+        { id: 't1', name: 'Orders' },
+        { id: 't2', name: 'Customers' }
+    ];
 
     module.renderSidebar('tables');
 
     assert.strictEqual(subbar.children[0].className.includes('subbar-pill'), true, 'the root is not rendered first');
     assert.strictEqual(pills(subbar).length, 3, 'the root and both tables should each be a row');
 
-    assert.ok(!subbar.children[1].classList.contains('subbar-pill'),
-        'the root and its list run together');
+    assert.ok(!subbar.children[1].classList.contains('subbar-pill'), 'the root and its list run together');
 });
 
 test('SectionsHaveGroups', () => {
@@ -2164,8 +2670,11 @@ test('ShortListHasFilter', () => {
 
     module.renderSidebar('sql');
 
-    assert.strictEqual(subbar.children.filter((c) => c.classList.contains('subbar-filter')).length, 1,
-        'a short list is left without the box its longer siblings get');
+    assert.strictEqual(
+        subbar.children.filter((c) => c.classList.contains('subbar-filter')).length,
+        1,
+        'a short list is left without the box its longer siblings get'
+    );
 });
 
 test('EmptyFilterSaysSo', () => {
@@ -2176,8 +2685,10 @@ test('EmptyFilterSaysSo', () => {
     module.renderSidebar('tables');
 
     assert.strictEqual(pills(subbar).length, 1, 'a non-matching table is still listed');
-    assert.ok(subbar.children.some((c) => c.classList.contains('subbar-empty')),
-        'a filter that matches nothing leaves the list silently empty');
+    assert.ok(
+        subbar.children.some((c) => c.classList.contains('subbar-empty')),
+        'a filter that matches nothing leaves the list silently empty'
+    );
 });
 
 test('FilterKeepsCaret', () => {
@@ -2189,9 +2700,15 @@ test('SummaryPaintsFromPayload', () => {
     const auth = read('js/auth.js');
     const core = read('js/core.js');
     assert.ok(/me\.stats[\s\S]{0,60}summaryStats = me\.stats/.test(auth), 'the payload stats are never read');
-    assert.ok(/if \(me\.tables\) currentTables = me\.tables/.test(auth), 'the payload tables are no longer read either');
+    assert.ok(
+        /if \(me\.tables\) currentTables = me\.tables/.test(auth),
+        'the payload tables are no longer read either'
+    );
     assert.ok(/updateSummary\(currentTables\)/.test(core), 'the overview no longer paints its summary');
-    assert.ok(/summaryStats = await fetch\('\/api\/_admin\/settings'\)/.test(core), 'an in-session reload no longer refreshes the stats');
+    assert.ok(
+        /summaryStats = await fetch\('\/api\/_admin\/settings'\)/.test(core),
+        'an in-session reload no longer refreshes the stats'
+    );
 });
 
 test('SettingsRowBorderCleared', () => {
@@ -2199,8 +2716,10 @@ test('SettingsRowBorderCleared', () => {
     assert.ok(/\.setting-row \+ \.field \{[^}]*margin-top/.test(css), 'a field after a settings row has no top margin');
 
     const sheet = read('js/tables.js');
-    assert.ok(/body\.append\(exposed, apiName, docsEnabled, displayName/.test(sheet),
-        'the endpoint sheet no longer appends fields as siblings of its settings rows');
+    assert.ok(
+        /body\.append\(exposed, apiName, docsEnabled, displayName/.test(sheet),
+        'the endpoint sheet no longer appends fields as siblings of its settings rows'
+    );
 });
 
 test('ImportSheetStoresRows', () => {
@@ -2213,15 +2732,15 @@ test('ImportSheetStoresRows', () => {
 test('WhitelistHasNoRealElements', () => {
     const html = readHtml();
     const runtime = ['toasts', 'sheetOverlay', 'pwCurrent', 'pwNew', 'fieldEditError', 'bootstrap', 'fieldType'];
-    const present = new Set([...html.matchAll(/id=['"]([\w-]+)['"]/g)].map(m => m[1]));
-    const clashes = runtime.filter(id => present.has(id));
+    const present = new Set([...html.matchAll(/id=['"]([\w-]+)['"]/g)].map((m) => m[1]));
+    const clashes = runtime.filter((id) => present.has(id));
     assert.deepStrictEqual(clashes, [], `whitelisted as runtime but rendered in markup: ${clashes.join(', ')}`);
 });
 
 test('IdsAreUnique', () => {
-    const ids = [...readHtml().matchAll(/id=['"]([\w-]+)['"]/g)].map(m => m[1]);
+    const ids = [...readHtml().matchAll(/id=['"]([\w-]+)['"]/g)].map((m) => m[1]);
     const seen = new Set();
-    const dupes = [...new Set(ids.filter(id => !seen.add(id)))];
+    const dupes = [...new Set(ids.filter((id) => !seen.add(id)))];
     assert.deepStrictEqual(dupes, [], `id used more than once: ${dupes.join(', ')}`);
 });
 
@@ -2250,20 +2769,35 @@ test('IdentifierTicksRequired', () => {
     const editor = src.slice(src.indexOf("settingSwitch('feUnique'"), src.indexOf("settingSwitch('feHidden'"));
     assert.ok(/required\.checked = true/.test(editor), 'ticking Identifier no longer ticks Required');
 
-    const body = src.slice(src.indexOf('async function validateFieldEditor'), src.indexOf("fetch('/api/_admin/validate-field'"));
+    const body = src.slice(
+        src.indexOf('async function validateFieldEditor'),
+        src.indexOf("fetch('/api/_admin/validate-field'")
+    );
     assert.ok(/isUnique: document\.getElementById\('feUnique'\)/.test(body), 'Validate never sends isUnique');
-    assert.ok(/isIdentifier: document\.getElementById\('feIdentifier'\)/.test(body), 'Validate never sends isIdentifier');
+    assert.ok(
+        /isIdentifier: document\.getElementById\('feIdentifier'\)/.test(body),
+        'Validate never sends isIdentifier'
+    );
 });
 
 test('OpenApiSwitchNeedsExposure', () => {
     const tables = read('js/tables.js');
     const sheet = tables.slice(tables.indexOf("'sheetApiDocsEnabled'"), tables.indexOf('const displayName'));
     assert.ok(!/Hides endpoint/.test(sheet), 'the help text still describes the off state as the action');
-    assert.ok(/docsEnabled\.ctrl\.disabled = !exposed\.ctrl\.checked/.test(tables), 'the sheet no longer greys the docs switch');
+    assert.ok(
+        /docsEnabled\.ctrl\.disabled = !exposed\.ctrl\.checked/.test(tables),
+        'the sheet no longer greys the docs switch'
+    );
 
     const settings = read('js/settings.js');
-    assert.ok(/docsToggle\.querySelector\('input'\)\.disabled = !t\.apiEnabled/.test(settings), 'the settings list no longer greys the docs switch');
-    assert.ok(/await loadApiTables\(\);\s*\n\s*await loadTables\(\);/.test(settings), 'flipping the API switch never repaints the docs switch');
+    assert.ok(
+        /docsToggle\.querySelector\('input'\)\.disabled = !t\.apiEnabled/.test(settings),
+        'the settings list no longer greys the docs switch'
+    );
+    assert.ok(
+        /await loadApiTables\(\);\s*\n\s*await loadTables\(\);/.test(settings),
+        'flipping the API switch never repaints the docs switch'
+    );
 });
 
 test('ReferencePreselectsScheme', () => {
@@ -2272,19 +2806,25 @@ test('ReferencePreselectsScheme', () => {
     assert.ok(match, 'OpenApiSpec no longer defines ApiTokenScheme');
 
     const docs = fs.readFileSync(path.join(__dirname, '..', 'Source', 'Baseport', 'wwwroot', 'docs.html'), 'utf8');
-    assert.ok(
-        docs.includes(`preferredSecurityScheme: '${match[1]}'`),
-        `docs.html does not preselect '${match[1]}'`,
-    );
+    assert.ok(docs.includes(`preferredSecurityScheme: '${match[1]}'`), `docs.html does not preselect '${match[1]}'`);
 });
 
 test('ComputedTypesFromPayload', () => {
     const src = read('js/tables.js');
-    assert.ok(/if \(t\.computed\) COMPUTED_TYPES\.push\(t\.name\)/.test(src), 'the console no longer reads computed from the payload');
-    assert.ok(!/\['calculated', ?'derived', ?'systemid'\]/.test(src), 'the console keeps its own list of computed types');
+    assert.ok(
+        /if \(t\.computed\) COMPUTED_TYPES\.push\(t\.name\)/.test(src),
+        'the console no longer reads computed from the payload'
+    );
+    assert.ok(
+        !/\['calculated', ?'derived', ?'systemid'\]/.test(src),
+        'the console keeps its own list of computed types'
+    );
 
     const console_ = readSource('Api', 'Endpoints', 'ConsoleEndpoints.cs');
-    assert.ok(/fieldTypes = FieldTypes\.All\.Select[^\n]*t\.Computed/.test(console_), 'the bootstrap payload no longer carries Computed');
+    assert.ok(
+        /fieldTypes = FieldTypes\.All\.Select[^\n]*t\.Computed/.test(console_),
+        'the bootstrap payload no longer carries Computed'
+    );
 });
 
 test('TableRenameRepaints', () => {
@@ -2300,7 +2840,10 @@ test('TableRenameRepaints', () => {
 
 test('TableNameEscaped', () => {
     const tables = read('js/tables.js');
-    const sub = tables.slice(tables.indexOf('function paintTableName'), tables.indexOf('function tableSettingsPayload'));
+    const sub = tables.slice(
+        tables.indexOf('function paintTableName'),
+        tables.indexOf('function tableSettingsPayload')
+    );
     assert.ok(/ui\.escape\(name\)/.test(sub), 'the table name goes into innerHTML unescaped');
     assert.ok(!/\$\{table\.name\}/.test(sub), 'a raw table name is still interpolated into markup');
 });
@@ -2341,7 +2884,10 @@ test('DropdownCaretFollowsMenu', () => {
     const carets = (html.match(/class='dropdown-caret'/g) || []).length;
     assert.ok(triggers > 0, 'no dropdown triggers left to check');
     assert.strictEqual(carets, triggers, 'a dropdown trigger is missing its caret');
-    assert.ok(/\.dropdown:has\(\.dropdown-menu:not\(\.hidden\)\) \.dropdown-caret/.test(css), 'the caret never rotates');
+    assert.ok(
+        /\.dropdown:has\(\.dropdown-menu:not\(\.hidden\)\) \.dropdown-caret/.test(css),
+        'the caret never rotates'
+    );
     assert.ok(!/dropdown-caret/.test(read('js/tables.js')), 'a handler took over rotating the caret');
 });
 
@@ -2361,16 +2907,24 @@ test('ActionEditorOffersHttp', () => {
 test('AddActionStepBuildsHttp', () => {
     const js = read('js/actions.js');
     const addStep = js.slice(js.indexOf('function addActionStep('), js.indexOf('const STEP_LABELS'));
-    assert.ok(/type:\s*'httpRequest'.*url:\s*''.*method:\s*'POST'.*headers:\s*\{\}.*bodyTemplate:\s*\{\}/.test(addStep),
-        "httpRequest is not created with url/method/headers/bodyTemplate");
+    assert.ok(
+        /type:\s*'httpRequest'.*url:\s*''.*method:\s*'POST'.*headers:\s*\{\}.*bodyTemplate:\s*\{\}/.test(addStep),
+        'httpRequest is not created with url/method/headers/bodyTemplate'
+    );
 });
 
 test('HttpStepEditorKeyValues', () => {
     const js = read('js/actions.js');
     assert.ok(js.includes('function actionHttpRequestEditor('), 'actionHttpRequestEditor is missing');
     assert.ok(js.includes('function actionKeyValueList('), 'actionKeyValueList is missing');
-    assert.ok(/actionKeyValueList\('Headers', step\.headers/.test(js), 'headers is not rendered through the key/value list');
-    assert.ok(/actionKeyValueList\('Body', step\.bodyTemplate/.test(js), 'bodyTemplate is not rendered through the key/value list');
+    assert.ok(
+        /actionKeyValueList\('Headers', step\.headers/.test(js),
+        'headers is not rendered through the key/value list'
+    );
+    assert.ok(
+        /actionKeyValueList\('Body', step\.bodyTemplate/.test(js),
+        'bodyTemplate is not rendered through the key/value list'
+    );
 });
 
 test('KeyRenameKeepsRow', () => {
@@ -2378,7 +2932,10 @@ test('KeyRenameKeepsRow', () => {
     const list = js.slice(js.indexOf('function actionKeyValueList('), js.indexOf('async function saveAction('));
     const onchange = list.slice(list.indexOf('keyInp.onchange'), list.indexOf('row.appendChild(keyInp)'));
     assert.ok(!onchange.includes('renderRows()'), 'renaming a key still rebuilds every row in the list');
-    assert.ok(/let currentKey = initialKey/.test(list), 'each row no longer tracks its own current key across a rename');
+    assert.ok(
+        /let currentKey = initialKey/.test(list),
+        'each row no longer tracks its own current key across a rename'
+    );
 });
 
 // runs embed.js functions by name
@@ -2394,12 +2951,16 @@ function embedFunctions(...names) {
         }
         throw new Error(`unbalanced braces in ${name}`);
     });
-    return new Function(`const displayValue = (v) => String(v); ${bodies.join('\n')} return { ${names.join(', ')} };`)();
+    return new Function(
+        `const displayValue = (v) => String(v); ${bodies.join('\n')} return { ${names.join(', ')} };`
+    )();
 }
 
 test('MultiselectCannotInject', () => {
     const { renderCell } = embedFunctions('renderCell', 'escapeDeep', 'escapeHtml');
-    const out = renderCell("'<td>' + data.tags + '</td>'", { tags: ['ok', '<a href=https://evil.example style=position:fixed>win</a>'] });
+    const out = renderCell("'<td>' + data.tags + '</td>'", {
+        tags: ['ok', '<a href=https://evil.example style=position:fixed>win</a>']
+    });
 
     assert.ok(!out.includes('<a '), `array item reached the markup raw: ${out}`);
     assert.ok(out.includes('ok'), 'the harmless item was lost');
@@ -2420,7 +2981,7 @@ test('SafeHtmlStripsStyle', () => {
 
 let stray = 0;
 process.on('unhandledRejection', (reason) => {
-    console.log(`  FAIL unhandled rejection outside a test\n       ${reason && reason.message || reason}`);
+    console.log(`  FAIL unhandled rejection outside a test\n       ${(reason && reason.message) || reason}`);
     stray++;
 });
 

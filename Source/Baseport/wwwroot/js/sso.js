@@ -1,4 +1,3 @@
-
 const SSO_PROBLEMS = {
     failed: 'Sign-in failed. Please try again or check the server logs for details.',
     denied: 'Sign-in was cancelled by the provider.',
@@ -6,7 +5,7 @@ const SSO_PROBLEMS = {
     disabled: 'This account has been disabled.',
     no_console: 'Your account does not have access to the console.',
     not_linked: 'Unable to link identity. It may already be connected to another account or the session expired.',
-    insecure: 'Sign-in needs HTTPS on this address.',
+    insecure: 'Sign-in needs HTTPS on this address.'
 };
 
 // server-rendered into the page

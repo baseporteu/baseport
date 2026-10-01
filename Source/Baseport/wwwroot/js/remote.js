@@ -1,7 +1,17 @@
-const PROTOCOLS = [['rest', 'REST'], ['odata', 'OData'], ['baseport', 'Baseport'],
-    ['sqlite', 'SQLite'], ['sqlserver', 'SQL Server'], ['postgres', 'PostgreSQL']];
+const PROTOCOLS = [
+    ['rest', 'REST'],
+    ['odata', 'OData'],
+    ['baseport', 'Baseport'],
+    ['sqlite', 'SQLite'],
+    ['sqlserver', 'SQL Server'],
+    ['postgres', 'PostgreSQL']
+];
 const SQL_PROTOCOLS = ['sqlite', 'sqlserver', 'postgres'];
-const COLUMN_CHOICES = [['', 'Choose'], ['text', 'Store as text'], ['skip', 'Skip']];
+const COLUMN_CHOICES = [
+    ['', 'Choose'],
+    ['text', 'Store as text'],
+    ['skip', 'Skip']
+];
 
 function isSql(protocol) {
     return SQL_PROTOCOLS.includes(protocol);
@@ -10,10 +20,27 @@ function isSql(protocol) {
 function connectionById(id) {
     return connectionData.find((x) => x.id === id);
 }
-const AUTH_KINDS = [['none', 'None'], ['bearer', 'Bearer token'], ['basic', 'Basic'], ['header', 'Header']];
-const PAGING = [['auto', 'Detect'], ['odata', 'OData next link'], ['link', 'Link header'], ['next', 'Next URL in body'],
-    ['cursor', 'Cursor'], ['page', 'Page number'], ['offset', 'Offset'], ['none', 'Single page']];
-const CLONE_MODES = [['upsert', 'Upsert'], ['mirror', 'Mirror'], ['append', 'Append']];
+const AUTH_KINDS = [
+    ['none', 'None'],
+    ['bearer', 'Bearer token'],
+    ['basic', 'Basic'],
+    ['header', 'Header']
+];
+const PAGING = [
+    ['auto', 'Detect'],
+    ['odata', 'OData next link'],
+    ['link', 'Link header'],
+    ['next', 'Next URL in body'],
+    ['cursor', 'Cursor'],
+    ['page', 'Page number'],
+    ['offset', 'Offset'],
+    ['none', 'Single page']
+];
+const CLONE_MODES = [
+    ['upsert', 'Upsert'],
+    ['mirror', 'Mirror'],
+    ['append', 'Append']
+];
 const SECRET_REF = /^\{\{([a-z][a-z0-9-]*)\}\}$/;
 
 let connectionData = [];
@@ -39,7 +66,8 @@ async function loadConnections() {
             ui.el('td', 'muted mono', { textContent: isSql(c.protocol) ? 'Connection string in a secret' : c.baseUrl }),
             ui.el('td', null, { textContent: label(PROTOCOLS, c.protocol) }),
             ui.el('td', 'muted', { textContent: label(AUTH_KINDS, c.authKind) }),
-            ui.el('td'));
+            ui.el('td')
+        );
         body.append(tr);
     });
 }
@@ -57,11 +85,13 @@ async function secretsForSelect() {
 }
 
 function headersToText(headers, secrets) {
-    return (headers || []).map((h) => {
-        if (!h.secretId) return `${h.name}: ${h.value || ''}`;
-        const s = secrets.find((x) => x.id === h.secretId);
-        return `${h.name}: {{${s ? s.name : h.secretId}}}`;
-    }).join('\n');
+    return (headers || [])
+        .map((h) => {
+            if (!h.secretId) return `${h.name}: ${h.value || ''}`;
+            const s = secrets.find((x) => x.id === h.secretId);
+            return `${h.name}: {{${s ? s.name : h.secretId}}}`;
+        })
+        .join('\n');
 }
 
 function headersFromText(text, secrets) {
@@ -91,10 +121,22 @@ async function openConnectionSheet(id) {
     const body = ui.el('div');
 
     const name = ui.field('Name', { value: c ? c.name : '', placeholder: 'crm' });
-    const baseUrl = ui.field('Base URL', { value: c ? c.baseUrl : '', placeholder: 'https://api.example.com/v1', mono: true });
+    const baseUrl = ui.field('Base URL', {
+        value: c ? c.baseUrl : '',
+        placeholder: 'https://api.example.com/v1',
+        mono: true
+    });
     const protocol = ui.field('Protocol', { type: 'select', options: PROTOCOLS, value: c ? c.protocol : 'rest' });
-    const authKind = ui.field('Authentication', { type: 'select', options: AUTH_KINDS, value: c ? c.authKind : 'none' });
-    const headerName = ui.field('Header name', { value: c ? c.authHeaderName : '', placeholder: 'X-Api-Key', mono: true });
+    const authKind = ui.field('Authentication', {
+        type: 'select',
+        options: AUTH_KINDS,
+        value: c ? c.authKind : 'none'
+    });
+    const headerName = ui.field('Header name', {
+        value: c ? c.authHeaderName : '',
+        placeholder: 'X-Api-Key',
+        mono: true
+    });
     const username = ui.field('Username', { value: c ? c.basicUsername : '' });
     const secret = ui.field('Secret', {
         type: 'select',
@@ -123,7 +165,9 @@ async function openConnectionSheet(id) {
         secret.hidden = !sql && kind === 'none';
         secretHelp.textContent = sql
             ? 'Holds the connection string. SQLite: Data Source=/path/to/file.db.'
-            : (secrets.length ? '' : 'Add one under Settings › Secrets first.');
+            : secrets.length
+              ? ''
+              : 'Add one under Settings › Secrets first.';
     };
     authKind.ctrl.addEventListener('change', sync);
     protocol.ctrl.addEventListener('change', sync);
@@ -152,40 +196,49 @@ async function openConnectionSheet(id) {
 
     const actions = ui.el('div', 'form-actions');
     if (c) {
-        actions.append(ui.button('Delete', async () => {
-            const ok = await ui.confirm({
-                title: 'Delete connection',
-                message: `Remove ${c.name}?`,
-                confirmLabel: 'Delete',
-                danger: true,
-            });
-            if (!ok) return;
-            const done = await ui.send(`/api/_admin/connections/${c.id}`, {
-                method: 'DELETE',
-                success: 'Connection deleted.',
-                failure: 'Could not delete the connection.',
-            });
-            if (!done) return;
-            ui.closeSheet();
-            await loadConnections();
-        }, { variant: 'btn-danger' }), ui.el('div', 'form-actions-spacer'));
+        actions.append(
+            ui.button(
+                'Delete',
+                async () => {
+                    const ok = await ui.confirm({
+                        title: 'Delete connection',
+                        message: `Remove ${c.name}?`,
+                        confirmLabel: 'Delete',
+                        danger: true
+                    });
+                    if (!ok) return;
+                    const done = await ui.send(`/api/_admin/connections/${c.id}`, {
+                        method: 'DELETE',
+                        success: 'Connection deleted.',
+                        failure: 'Could not delete the connection.'
+                    });
+                    if (!done) return;
+                    ui.closeSheet();
+                    await loadConnections();
+                },
+                { variant: 'btn-danger' }
+            ),
+            ui.el('div', 'form-actions-spacer')
+        );
         const test = ui.button('Test', () => ui.busy(test, () => testConnection(c)), { variant: 'btn-outline' });
         actions.append(test);
     }
     actions.append(ui.button('Cancel', ui.closeSheet, { variant: 'btn-outline' }));
-    const save = ui.button(c ? 'Save' : 'Add connection', () => ui.busy(save, async () => {
-        const payload = read();
-        if (!payload) return;
-        const saved = await ui.send(c ? `/api/_admin/connections/${c.id}` : '/api/_admin/connections', {
-            method: c ? 'PATCH' : 'POST',
-            body: payload,
-            success: c ? 'Connection saved.' : 'Connection added.',
-            failure: 'Could not save the connection.',
-        });
-        if (!saved) return;
-        ui.closeSheet();
-        await loadConnections();
-    }));
+    const save = ui.button(c ? 'Save' : 'Add connection', () =>
+        ui.busy(save, async () => {
+            const payload = read();
+            if (!payload) return;
+            const saved = await ui.send(c ? `/api/_admin/connections/${c.id}` : '/api/_admin/connections', {
+                method: c ? 'PATCH' : 'POST',
+                body: payload,
+                success: c ? 'Connection saved.' : 'Connection added.',
+                failure: 'Could not save the connection.'
+            });
+            if (!saved) return;
+            ui.closeSheet();
+            await loadConnections();
+        })
+    );
     actions.append(save);
 
     ui.sheet(c ? c.name : 'Add connection', body, actions);
@@ -197,7 +250,11 @@ async function testConnection(c) {
             method: 'GET',
             failure: 'The connection did not answer.'
         });
-        if (tables) ui.toast(`Connected. ${tables.length} ${c.protocol === 'baseport' ? 'published ' : ''}table(s).`, 'success');
+        if (tables)
+            ui.toast(
+                `Connected. ${tables.length} ${c.protocol === 'baseport' ? 'published ' : ''}table(s).`,
+                'success'
+            );
         return;
     }
     const result = await ui.send(`/api/_admin/connections/${c.id}/test`, {
@@ -218,14 +275,20 @@ async function pathField(connectionSelect, apiOnly) {
         const c = connectionById(connectionSelect.value);
         const sql = Boolean(c) && isSql(c.protocol);
         path.querySelector('.field-label-text').textContent = sql ? 'Table' : 'Path';
-        path.querySelector('.field-help').textContent = sql ? 'From the database catalog.' : 'Relative to the base URL.';
-        apiOnly.forEach((f) => { f.hidden = sql; });
+        path.querySelector('.field-help').textContent = sql
+            ? 'From the database catalog.'
+            : 'Relative to the base URL.';
+        apiOnly.forEach((f) => {
+            f.hidden = sql;
+        });
         if (!c || (c.protocol !== 'baseport' && !sql)) return;
         const tables = await ui.send(`/api/_admin/connections/${c.id}/tables`, {
             method: 'GET',
             failure: 'Could not list the tables.'
         });
-        (tables || []).forEach((t) => list.append(ui.el('option', null, { value: t.apiName, textContent: t.title || t.apiName })));
+        (tables || []).forEach((t) =>
+            list.append(ui.el('option', null, { value: t.apiName, textContent: t.title || t.apiName }))
+        );
     };
     connectionSelect.addEventListener('change', refresh);
     await refresh();
@@ -245,7 +308,11 @@ async function openRemoteImport() {
         value: connectionData[0].id
     });
     const paging = ui.field('Paging', { type: 'select', options: PAGING, value: 'auto' });
-    const pointer = ui.field('Records at', { placeholder: 'Detected', mono: true, help: 'Property holding the list, such as data/items.' });
+    const pointer = ui.field('Records at', {
+        placeholder: 'Detected',
+        mono: true,
+        help: 'Property holding the list, such as data/items.'
+    });
     const path = await pathField(connection.ctrl, [paging, pointer]);
     const choices = columnChoices([]);
     const target = ui.field('Into', {
@@ -253,7 +320,9 @@ async function openRemoteImport() {
         options: [['', 'A new table'], ...currentTables.filter((t) => !t.isProxy).map((t) => [t.id, t.name])]
     });
     const tableName = ui.field('Table name', { placeholder: 'Taken from the connection' });
-    target.ctrl.addEventListener('change', () => { tableName.hidden = !!target.ctrl.value; });
+    target.ctrl.addEventListener('change', () => {
+        tableName.hidden = !!target.ctrl.value;
+    });
     const preview = ui.el('div');
     body.append(connection, path, paging, pointer, target, tableName, choices.el, preview);
 
@@ -263,35 +332,44 @@ async function openRemoteImport() {
         paging: paging.ctrl.value,
         recordsPointer: pointer.ctrl.value.trim(),
         columns: choices.value(),
-        ...(target.ctrl.value ? { tableId: target.ctrl.value } : { tableName: tableName.ctrl.value.trim() || undefined })
+        ...(target.ctrl.value
+            ? { tableId: target.ctrl.value }
+            : { tableName: tableName.ctrl.value.trim() || undefined })
     });
 
     const actions = ui.el('div', 'form-actions');
     actions.append(ui.button('Cancel', ui.closeSheet, { variant: 'btn-outline' }));
-    const check = ui.button('Preview', () => ui.busy(check, async () => {
-        const data = await ui.send('/api/_admin/imports/preview', {
-            method: 'POST',
-            body: payload(),
-            failure: 'The API could not be read.'
-        });
-        if (!data) return;
-        choices.show(data.columns || []);
-        renderImportPreview(preview, { ...data, rowCount: data.firstPageRows });
-        if (!tableName.ctrl.value.trim()) tableName.ctrl.value = data.name || '';
-    }), { variant: 'btn-outline' });
-    const run = ui.button('Import', () => ui.busy(run, async () => {
-        const started = await ui.send('/api/_admin/imports', {
-            method: 'POST',
-            body: payload(),
-            failure: 'The import could not start.'
-        });
-        if (!started) return;
-        ui.closeSheet();
-        ui.toast('Import started.', 'success');
-        await loadTables();
-        selectTable(started.table);
-        await followRun(started.run.id);
-    }));
+    const check = ui.button(
+        'Preview',
+        () =>
+            ui.busy(check, async () => {
+                const data = await ui.send('/api/_admin/imports/preview', {
+                    method: 'POST',
+                    body: payload(),
+                    failure: 'The API could not be read.'
+                });
+                if (!data) return;
+                choices.show(data.columns || []);
+                renderImportPreview(preview, { ...data, rowCount: data.firstPageRows });
+                if (!tableName.ctrl.value.trim()) tableName.ctrl.value = data.name || '';
+            }),
+        { variant: 'btn-outline' }
+    );
+    const run = ui.button('Import', () =>
+        ui.busy(run, async () => {
+            const started = await ui.send('/api/_admin/imports', {
+                method: 'POST',
+                body: payload(),
+                failure: 'The import could not start.'
+            });
+            if (!started) return;
+            ui.closeSheet();
+            ui.toast('Import started.', 'success');
+            await loadTables();
+            selectTable(started.table);
+            await followRun(started.run.id);
+        })
+    );
     actions.append(check, run);
     ui.sheet('Import from API', body, actions);
 }
@@ -347,7 +425,8 @@ async function loadClones() {
             ui.el('td', 'mono', { textContent: c.schedule }),
             ui.el('td', 'muted', { textContent: c.enabled ? formatWhen(c.nextRunAt) : 'Paused' }),
             ui.el('td', 'muted', { textContent: formatWhen(c.lastRunAt) }),
-            actions);
+            actions
+        );
         body.append(tr);
     });
 }
@@ -381,18 +460,29 @@ async function openCloneSheet(id) {
     });
     const paging = ui.field('Paging', { type: 'select', options: PAGING, value: c ? c.paging : 'auto' });
     const pointer = ui.field('Records at', { value: c ? c.recordsPointer : '', placeholder: 'Detected', mono: true });
-    const inconsistent = ui.switchRow('Allow an inconsistent source (SQL Server without snapshot isolation)', { checked: c ? c.allowInconsistentSource : false });
+    const inconsistent = ui.switchRow('Allow an inconsistent source (SQL Server without snapshot isolation)', {
+        checked: c ? c.allowInconsistentSource : false
+    });
     const path = await pathField(connection.ctrl, [paging, pointer]);
     path.ctrl.value = c ? c.path : '';
     const choices = columnChoices(c ? c.columns : []);
-    const columnsButton = ui.button('Columns', () => ui.busy(columnsButton, async () => {
-        const data = await ui.send('/api/_admin/imports/preview', {
-            method: 'POST',
-            body: { connectionId: connection.ctrl.value, path: path.ctrl.value.trim(), columns: choices.value() },
-            failure: 'The table could not be read.'
-        });
-        if (data) choices.show(data.columns || []);
-    }), { variant: 'btn-outline', size: 'btn-sm' });
+    const columnsButton = ui.button(
+        'Columns',
+        () =>
+            ui.busy(columnsButton, async () => {
+                const data = await ui.send('/api/_admin/imports/preview', {
+                    method: 'POST',
+                    body: {
+                        connectionId: connection.ctrl.value,
+                        path: path.ctrl.value.trim(),
+                        columns: choices.value()
+                    },
+                    failure: 'The table could not be read.'
+                });
+                if (data) choices.show(data.columns || []);
+            }),
+        { variant: 'btn-outline', size: 'btn-sm' }
+    );
     const syncSql = () => {
         const x = connectionById(connection.ctrl.value);
         const sql = Boolean(x) && isSql(x.protocol);
@@ -417,66 +507,97 @@ async function openCloneSheet(id) {
         const t = tables.find((x) => x.id === table.ctrl.value);
         const current = key.ctrl.value || (c ? c.keyField : '');
         key.ctrl.innerHTML = '';
-        [['', 'None'], ...((t && t.fields) || []).map((f) => [f.name, f.label || f.name])]
-            .forEach(([v, l]) => key.ctrl.append(ui.el('option', null, { value: v, textContent: l })));
+        [['', 'None'], ...((t && t.fields) || []).map((f) => [f.name, f.label || f.name])].forEach(([v, l]) =>
+            key.ctrl.append(ui.el('option', null, { value: v, textContent: l }))
+        );
         key.ctrl.value = current;
         key.hidden = mode.ctrl.value === 'append';
     };
     table.ctrl.addEventListener('change', fillKeys);
     mode.ctrl.addEventListener('change', fillKeys);
     fillKeys();
-    const schedule = ui.field('Schedule', { value: c ? c.schedule : '0 0 * * * *', mono: true, help: 'Cron with seconds.' });
+    const schedule = ui.field('Schedule', {
+        value: c ? c.schedule : '0 0 * * * *',
+        mono: true,
+        help: 'Cron with seconds.'
+    });
     const enabled = ui.switchRow('Enabled', { checked: c ? c.enabled : true });
-    const large = ui.switchRow('Allow a mirror to delete more than half the table', { checked: c ? c.allowLargeDeletes : false });
-    body.append(name, connection, path, columnsButton, choices.el, paging, pointer, table, mode, key, schedule, enabled, large, inconsistent);
+    const large = ui.switchRow('Allow a mirror to delete more than half the table', {
+        checked: c ? c.allowLargeDeletes : false
+    });
+    body.append(
+        name,
+        connection,
+        path,
+        columnsButton,
+        choices.el,
+        paging,
+        pointer,
+        table,
+        mode,
+        key,
+        schedule,
+        enabled,
+        large,
+        inconsistent
+    );
     if (c) body.append(await cloneRuns(c));
 
     const actions = ui.el('div', 'form-actions');
     if (c) {
-        actions.append(ui.button('Delete', async () => {
-            const ok = await ui.confirm({
-                title: 'Delete clone',
-                message: `Remove ${c.name}? The table and its records stay.`,
-                confirmLabel: 'Delete',
-                danger: true,
-            });
-            if (!ok) return;
-            const done = await ui.send(`/api/_admin/clones/${c.id}`, {
-                method: 'DELETE',
-                success: 'Clone deleted.',
-                failure: 'Could not delete the clone.',
-            });
-            if (!done) return;
-            ui.closeSheet();
-            await loadClones();
-        }, { variant: 'btn-danger' }), ui.el('div', 'form-actions-spacer'));
+        actions.append(
+            ui.button(
+                'Delete',
+                async () => {
+                    const ok = await ui.confirm({
+                        title: 'Delete clone',
+                        message: `Remove ${c.name}? The table and its records stay.`,
+                        confirmLabel: 'Delete',
+                        danger: true
+                    });
+                    if (!ok) return;
+                    const done = await ui.send(`/api/_admin/clones/${c.id}`, {
+                        method: 'DELETE',
+                        success: 'Clone deleted.',
+                        failure: 'Could not delete the clone.'
+                    });
+                    if (!done) return;
+                    ui.closeSheet();
+                    await loadClones();
+                },
+                { variant: 'btn-danger' }
+            ),
+            ui.el('div', 'form-actions-spacer')
+        );
     }
     actions.append(ui.button('Cancel', ui.closeSheet, { variant: 'btn-outline' }));
-    const save = ui.button(c ? 'Save' : 'Add clone', () => ui.busy(save, async () => {
-        const saved = await ui.send(c ? `/api/_admin/clones/${c.id}` : '/api/_admin/clones', {
-            method: c ? 'PATCH' : 'POST',
-            body: {
-                name: name.ctrl.value.trim(),
-                connectionId: connection.ctrl.value,
-                path: path.ctrl.value.trim(),
-                paging: paging.ctrl.value,
-                recordsPointer: pointer.ctrl.value.trim(),
-                tableId: table.ctrl.value,
-                mode: mode.ctrl.value,
-                keyField: mode.ctrl.value === 'append' ? '' : key.ctrl.value,
-                schedule: schedule.ctrl.value.trim(),
-                enabled: enabled.ctrl.checked,
-                allowLargeDeletes: large.ctrl.checked,
-                allowInconsistentSource: inconsistent.ctrl.checked,
-                columns: choices.value()
-            },
-            success: c ? 'Clone saved.' : 'Clone added.',
-            failure: 'Could not save the clone.',
-        });
-        if (!saved) return;
-        ui.closeSheet();
-        await loadClones();
-    }));
+    const save = ui.button(c ? 'Save' : 'Add clone', () =>
+        ui.busy(save, async () => {
+            const saved = await ui.send(c ? `/api/_admin/clones/${c.id}` : '/api/_admin/clones', {
+                method: c ? 'PATCH' : 'POST',
+                body: {
+                    name: name.ctrl.value.trim(),
+                    connectionId: connection.ctrl.value,
+                    path: path.ctrl.value.trim(),
+                    paging: paging.ctrl.value,
+                    recordsPointer: pointer.ctrl.value.trim(),
+                    tableId: table.ctrl.value,
+                    mode: mode.ctrl.value,
+                    keyField: mode.ctrl.value === 'append' ? '' : key.ctrl.value,
+                    schedule: schedule.ctrl.value.trim(),
+                    enabled: enabled.ctrl.checked,
+                    allowLargeDeletes: large.ctrl.checked,
+                    allowInconsistentSource: inconsistent.ctrl.checked,
+                    columns: choices.value()
+                },
+                success: c ? 'Clone saved.' : 'Clone added.',
+                failure: 'Could not save the clone.'
+            });
+            if (!saved) return;
+            ui.closeSheet();
+            await loadClones();
+        })
+    );
     actions.append(save);
 
     ui.sheet(c ? c.name : 'Add clone', body, actions);
@@ -485,7 +606,8 @@ async function openCloneSheet(id) {
 async function cloneRuns(c) {
     const wrap = ui.el('div', 'field');
     wrap.append(ui.el('span', 'field-label-text', { textContent: 'Recent runs' }));
-    const runs = await ui.send(`/api/_admin/clones/${c.id}/runs`, { method: 'GET', failure: 'Could not load runs.' }) || [];
+    const runs =
+        (await ui.send(`/api/_admin/clones/${c.id}/runs`, { method: 'GET', failure: 'Could not load runs.' })) || [];
     if (!runs.length) {
         wrap.append(ui.el('p', 'muted', { textContent: 'Not run yet.' }));
         return wrap;
@@ -500,7 +622,11 @@ async function cloneRuns(c) {
         tr.append(
             ui.el('td', 'muted', { textContent: formatWhen(r.createdAt) }),
             ui.el('td', null, { textContent: r.status }),
-            ui.el('td', 'muted', { textContent: r.status === 'failed' ? r.message : runSummary(r), title: r.errors.join('\n') }));
+            ui.el('td', 'muted', {
+                textContent: r.status === 'failed' ? r.message : runSummary(r),
+                title: r.errors.join('\n')
+            })
+        );
         tbody.append(tr);
     });
     table.append(tbody);
@@ -519,7 +645,11 @@ function columnChoices(initial) {
         if (!open.length) return;
         el.append(ui.el('span', 'field-label-text', { textContent: 'Columns Baseport cannot map' }));
         open.forEach((col) => {
-            const f = ui.field(`${col.name} (${col.sourceType})`, { type: 'select', options: COLUMN_CHOICES, value: picked.get(col.name) || '' });
+            const f = ui.field(`${col.name} (${col.sourceType})`, {
+                type: 'select',
+                options: COLUMN_CHOICES,
+                value: picked.get(col.name) || ''
+            });
             f.ctrl.addEventListener('change', () => picked.set(col.name, f.ctrl.value));
             el.append(f);
         });

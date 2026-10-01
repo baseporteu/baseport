@@ -46,23 +46,24 @@ async function initSqlEditor() {
             'Ctrl-S': () => {
                 saveQuery();
                 return false;
-            },
-        },
+            }
+        }
     });
     sqlEditor.on('keyup', (cm, e) => {
         if (e.ctrlKey || e.metaKey || e.altKey) return;
-        if (e.key === ' ' || e.key === '.') cm.showHint({
-            completeSingle: false
-        });
+        if (e.key === ' ' || e.key === '.')
+            cm.showHint({
+                completeSingle: false
+            });
     });
 }
 
 function renderQueryBreadcrumb() {
     const el = document.getElementById('sqlQueryName');
     if (!el) return;
-    el.innerHTML = currentQueryId ?
-        `Editor <span class="muted">›</span> <strong>${escapeHtml(currentQueryName)}</strong>` :
-        `<strong>${escapeHtml(currentQueryName || 'New Query')}</strong>`;
+    el.innerHTML = currentQueryId
+        ? `Editor <span class="muted">›</span> <strong>${escapeHtml(currentQueryName)}</strong>`
+        : `<strong>${escapeHtml(currentQueryName || 'New Query')}</strong>`;
     syncQueryActions();
 }
 
@@ -152,9 +153,9 @@ async function saveSchedule() {
         body: {
             schedule: document.getElementById('sqlScheduleCron').value.trim(),
             webhookUrl: document.getElementById('sqlScheduleWebhook').value.trim(),
-            scheduleEnabled: document.getElementById('sqlScheduleEnabled').checked,
+            scheduleEnabled: document.getElementById('sqlScheduleEnabled').checked
         },
-        success: 'Schedule saved.',
+        success: 'Schedule saved.'
     });
     if (saved) renderSchedule(saved);
 }
@@ -163,7 +164,7 @@ async function runScheduleNow() {
     if (!currentQueryId) return;
     const ran = await ui.send(`/api/_admin/queries/${currentQueryId}/run`, {
         method: 'POST',
-        success: 'Query executed.',
+        success: 'Query executed.'
     });
     if (ran) renderSchedule(ran);
 }
@@ -187,13 +188,13 @@ async function saveQuery() {
         showSqlError('Enter a query to save.');
         return;
     }
-    const name = currentQueryId ?
-        currentQueryName :
-        await ui.ask({
-            title: 'Save query',
-            label: 'Query name',
-            placeholder: 'Field counts'
-        });
+    const name = currentQueryId
+        ? currentQueryName
+        : await ui.ask({
+              title: 'Save query',
+              label: 'Query name',
+              placeholder: 'Field counts'
+          });
     if (!name) return;
     const res = await fetch(currentQueryId ? `/api/_admin/queries/${currentQueryId}` : '/api/_admin/queries', {
         method: currentQueryId ? 'PATCH' : 'POST',
@@ -203,7 +204,7 @@ async function saveQuery() {
         body: JSON.stringify({
             name,
             sql
-        }),
+        })
     });
     const data = await res.json();
     if (!res.ok) {
@@ -249,7 +250,7 @@ function deleteQuery(q) {
             });
             if (currentQueryId === q.id) newQuery();
             else loadSavedQueries();
-        },
+        }
     });
 }
 
@@ -264,7 +265,7 @@ async function runSql() {
             queryId: currentQueryId || null
         },
         failure: 'Query failed.',
-        onError: showSqlError,
+        onError: showSqlError
     });
     if (!meta) return;
 

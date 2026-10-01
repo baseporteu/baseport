@@ -1,4 +1,3 @@
-
 let accountsData = [];
 let accountsPage = 1;
 let accountsPerPage = 10;
@@ -68,7 +67,7 @@ async function renderAccounts() {
     const query = new URLSearchParams({
         page: String(accountsPage),
         pageSize: String(accountsPerPage),
-        ...(term ? { q: term } : {}),
+        ...(term ? { q: term } : {})
     });
 
     const meta = await ui.fragment('accountsBody', `/api/_admin/fragments/accounts?${query}`);
@@ -88,7 +87,7 @@ async function renderAccounts() {
             accountsPerPage = n;
             accountsPage = 1;
             renderAccounts();
-        },
+        }
     });
 }
 
@@ -98,7 +97,9 @@ function openAccountForm(pid) {
 
     const body = document.createElement('div');
     body.appendChild(fieldInputRow('Username', 'accUsername', a ? a.username : '', 'e.g. jane', false, 'username'));
-    body.appendChild(fieldInputRow('Email', 'accEmail', a ? a.email || '' : '', 'e.g. jane@example.com', false, 'email'));
+    body.appendChild(
+        fieldInputRow('Email', 'accEmail', a ? a.email || '' : '', 'e.g. jane@example.com', false, 'email')
+    );
 
     body.appendChild(
         ui.field('Role', {
@@ -106,22 +107,22 @@ function openAccountForm(pid) {
             type: 'select',
             value: a ? a.role : 'consumer',
             options: a
-                ? (a.role === 'admin'
-                      ? [
-                            ['admin', 'Admin (signs in to console)'],
-                            ['consumer', 'Consumer (API token only)'],
-                            ['user', 'User (public API only)'],
-                        ]
-                      : [
-                            ['consumer', 'Consumer (API token only)'],
-                            ['user', 'User (public API only)'],
-                        ])
+                ? a.role === 'admin'
+                    ? [
+                          ['admin', 'Admin (signs in to console)'],
+                          ['consumer', 'Consumer (API token only)'],
+                          ['user', 'User (public API only)']
+                      ]
+                    : [
+                          ['consumer', 'Consumer (API token only)'],
+                          ['user', 'User (public API only)']
+                      ]
                 : [
                       ['admin', 'Admin (signs in to console)'],
-                      ['consumer', 'Consumer (API token only)'],
+                      ['consumer', 'Consumer (API token only)']
                   ],
-            help: a ? 'Promote via CLI: baseport accounts promote <username>' : 'If in doubt, select Consumer.',
-        }),
+            help: a ? 'Promote via CLI: baseport accounts promote <username>' : 'If in doubt, select Consumer.'
+        })
     );
 
     body.appendChild(
@@ -129,8 +130,8 @@ function openAccountForm(pid) {
             id: 'accScope',
             value: a ? a.scope || '' : '',
             placeholder: 'e.g. ACME',
-            help: 'Customer this account is limited to on scoped endpoints.',
-        }),
+            help: 'Customer this account is limited to on scoped endpoints.'
+        })
     );
 
     if (a) {
@@ -140,26 +141,27 @@ function openAccountForm(pid) {
                 type: 'password',
                 value: '',
                 placeholder: 'Leave blank to keep current password',
-                help: 'One-time password. Requires change at next sign-in and ends existing sessions.',
-            }),
+                help: 'One-time password. Requires change at next sign-in and ends existing sessions.'
+            })
         );
 
-        body.appendChild(ui.switchRow('Disabled', {
-            id: 'accDisabled',
-            checked: a.isDisabled,
-            disabled: locked,
-        }));
+        body.appendChild(
+            ui.switchRow('Disabled', {
+                id: 'accDisabled',
+                checked: a.isDisabled,
+                disabled: locked
+            })
+        );
 
         // token operations remain accessible for admin accounts.
         body.appendChild(apiTokenPanel(a));
     }
 
     if (locked) {
-        ['accRole', 'accScope', 'accPassword', 'accDisabled']
-            .forEach((id) => {
-                const input = body.querySelector(`#${id}`);
-                if (input) input.disabled = true;
-            });
+        ['accRole', 'accScope', 'accPassword', 'accDisabled'].forEach((id) => {
+            const input = body.querySelector(`#${id}`);
+            if (input) input.disabled = true;
+        });
         body.appendChild(adminNotice(a));
     }
 
@@ -167,9 +169,11 @@ function openAccountForm(pid) {
     actions.className = 'form-actions';
 
     if (a && !locked) {
-        actions.appendChild(ui.button('Delete', () => deleteAccount(a.id, a.username), {
-            variant: 'btn-danger',
-        }));
+        actions.appendChild(
+            ui.button('Delete', () => deleteAccount(a.id, a.username), {
+                variant: 'btn-danger'
+            })
+        );
     }
     actions.appendChild(ui.button('Cancel', closeSheet, { variant: 'btn-outline' }));
 
@@ -183,21 +187,27 @@ function openAccountForm(pid) {
 function randomPassword() {
     const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
     const bytes = crypto.getRandomValues(new Uint8Array(12));
-    return [...bytes].map((b) => alphabet[b % alphabet.length]).join('').slice(0, 10 + (bytes[0] % 3));
+    return [...bytes]
+        .map((b) => alphabet[b % alphabet.length])
+        .join('')
+        .slice(0, 10 + (bytes[0] % 3));
 }
 
 function adminNotice(a) {
     const wrap = ui.el('div', 'token-panel');
-    
-    wrap.append(ui.el('p', 'muted', {
-        textContent: 'Password, role, and status changes are disabled for admin accounts to prevent console takeovers. Use the shell commands below. Name, address, and API token remain editable here.',
-    }));
+
+    wrap.append(
+        ui.el('p', 'muted', {
+            textContent:
+                'Password, role, and status changes are disabled for admin accounts to prevent console takeovers. Use the shell commands below. Name, address, and API token remain editable here.'
+        })
+    );
 
     // pre-populates runnable commands with the targeted username.
     const commands = ui.el('pre', 'code-block');
     commands.textContent = [
         `baseport accounts password ${a.username} ${randomPassword()}`,
-        `baseport accounts demote ${a.username}`,
+        `baseport accounts demote ${a.username}`
     ].join('\n');
 
     wrap.append(ui.copyable(commands, () => commands.textContent));
@@ -212,17 +222,17 @@ function apiTokenPanel(a) {
     state.textContent = !a.hasApiToken
         ? 'No token active. REST API access is disabled.'
         : a.apiTokenExpired
-        ? 'Token is expired. Generate a new token to restore access.'
-        : a.apiTokenExpiresAt
-        ? `Token active until ${ui.when(a.apiTokenExpiresAt)}.`
-        : 'Token has no expiration date. Regenerate to set one.';
+          ? 'Token is expired. Generate a new token to restore access.'
+          : a.apiTokenExpiresAt
+            ? `Token active until ${ui.when(a.apiTokenExpiresAt)}.`
+            : 'Token has no expiration date. Regenerate to set one.';
     wrap.append(state);
 
     const expiry = ui.field('Expires on', {
         id: 'accTokenExpiry',
         type: 'date',
         value: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
-        help: 'Defaults to 90 days from today (10 year maximum).',
+        help: 'Defaults to 90 days from today (10 year maximum).'
     });
     expiry.ctrl.min = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
     expiry.ctrl.max = new Date(Date.now() + 3650 * 86400000).toISOString().slice(0, 10);
@@ -234,12 +244,12 @@ function apiTokenPanel(a) {
             const created = await ui.send(`/api/_admin/accounts/${a.id}/token`, {
                 method: 'POST',
                 body: { expiresAt: expiry.ctrl.value },
-                failure: 'Could not generate a token.',
+                failure: 'Could not generate a token.'
             });
             if (!created) return;
             showGeneratedToken(created.apiToken, created.expiresAt);
             await loadAccounts();
-        }),
+        })
     );
     row.append(genBtn);
 
@@ -252,21 +262,21 @@ function apiTokenPanel(a) {
                         title: 'Revoke API token',
                         message: `Revoke ${a.username}'s token? Integrations using it will stop working immediately.`,
                         confirmLabel: 'Revoke',
-                        danger: true,
+                        danger: true
                     });
                     if (!confirmed) return;
 
                     const deleted = await ui.send(`/api/_admin/accounts/${a.id}/token`, {
                         method: 'DELETE',
-                        success: 'Token revoked.',
+                        success: 'Token revoked.'
                     });
                     if (!deleted) return;
 
                     closeSheet();
                     await loadAccounts();
                 },
-                { variant: 'btn-outline' },
-            ),
+                { variant: 'btn-outline' }
+            )
         );
     }
 
@@ -278,13 +288,13 @@ function showGeneratedToken(token, expiresAt) {
     const body = ui.el('div');
     body.append(
         ui.el('p', 'muted', {
-            textContent: `Copy this token now. It will not be shown again. Valid until ${ui.when(expiresAt)}.`,
-        }),
+            textContent: `Copy this token now. It will not be shown again. Valid until ${ui.when(expiresAt)}.`
+        })
     );
 
     const box = ui.el('input', 'input embed-input mono', {
         value: token,
-        readOnly: true,
+        readOnly: true
     });
     box.onclick = () => box.select();
     body.append(box);
@@ -295,7 +305,7 @@ function showGeneratedToken(token, expiresAt) {
 async function submitAccount(pid) {
     const body = {
         username: document.getElementById('accUsername').value.trim(),
-        email: document.getElementById('accEmail').value.trim(),
+        email: document.getElementById('accEmail').value.trim()
     };
 
     const locked = pid && accountsData.find((x) => x.id === pid)?.role === 'admin';
@@ -312,7 +322,7 @@ async function submitAccount(pid) {
         method: pid ? 'PATCH' : 'POST',
         body,
         success: pid ? 'Account saved.' : 'Account created.',
-        failure: 'Failed to save account.',
+        failure: 'Failed to save account.'
     });
     if (!saved) return;
 
@@ -325,13 +335,13 @@ async function deleteAccount(pid, username) {
         title: 'Delete account',
         message: `Delete "${username}"? Active sessions and API tokens will terminate immediately. This cannot be undone.`,
         confirmLabel: 'Delete',
-        danger: true,
+        danger: true
     });
     if (!confirmed) return;
 
     const deleted = await ui.send(`/api/_admin/accounts/${pid}`, {
         method: 'DELETE',
-        success: 'Account deleted.',
+        success: 'Account deleted.'
     });
     if (!deleted) return;
 

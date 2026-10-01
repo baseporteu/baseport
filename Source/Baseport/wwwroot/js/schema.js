@@ -91,7 +91,10 @@ async function loadSchema() {
         nodesEl.appendChild(card);
         cards[t.id] = card;
     });
-    Object.assign(schemaNodes, layoutSchema(tables, (id) => cards[id].offsetHeight));
+    Object.assign(
+        schemaNodes,
+        layoutSchema(tables, (id) => cards[id].offsetHeight)
+    );
     positionSchemaNodes();
     schemaLayout = JSON.parse(JSON.stringify(schemaNodes));
     applySchemaTransform();
@@ -101,7 +104,8 @@ async function loadSchema() {
 // referencing tables left of what they reference, so every link runs left to right
 function layoutSchema(tables, heightOf) {
     const ids = tables.map((t) => t.id);
-    const targets = (id) => [...new Set(Object.values(schemaRefs[id] || {}))].filter((x) => x !== id && ids.includes(x));
+    const targets = (id) =>
+        [...new Set(Object.values(schemaRefs[id] || {}))].filter((x) => x !== id && ids.includes(x));
     const level = {};
     const depth = (id, seen) => {
         if (level[id] !== undefined) return level[id];
@@ -125,7 +129,9 @@ function layoutSchema(tables, heightOf) {
             return placed.length ? placed.reduce((sum, x) => sum + rank[x], 0) / placed.length : Infinity;
         };
         column.sort((a, b) => weight(a) - weight(b) || name[a].localeCompare(name[b]));
-        column.forEach((id, i) => { rank[id] = i; });
+        column.forEach((id, i) => {
+            rank[id] = i;
+        });
     });
 
     const nodes = {};
@@ -294,7 +300,7 @@ function exportSchemaWebp() {
             return {
                 el: f,
                 x: n.x + (fr.left - nr.left) / z,
-                y: n.y + (fr.top - nr.top) / z + (fr.height / 2) / z,
+                y: n.y + (fr.top - nr.top) / z + fr.height / 2 / z
             };
         });
         const pid = el.dataset.pid;
@@ -329,7 +335,11 @@ function exportSchemaWebp() {
         ctx.textBaseline = 'middle';
         ctx.fillStyle = fg;
         ctx.font = "600 13px -apple-system, Ubuntu, Roboto, Arial, 'Liberation Sans', sans-serif";
-        ctx.fillText(el.querySelector('.schema-node-name').textContent, n.x + 12, n.y + (hr.top - nr.top) / z + (hr.height / 2) / z);
+        ctx.fillText(
+            el.querySelector('.schema-node-name').textContent,
+            n.x + 12,
+            n.y + (hr.top - nr.top) / z + hr.height / 2 / z
+        );
 
         anchors.forEach((a) => {
             const codeEl = a.el.querySelector('code');
@@ -397,8 +407,9 @@ function exportSchemaWebp() {
             schemaZoomLevel = next;
             applySchemaTransform();
             renderSchemaLinks();
-        }, {
-            passive: false
         },
+        {
+            passive: false
+        }
     );
 })();
